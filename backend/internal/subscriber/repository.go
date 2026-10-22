@@ -16,10 +16,9 @@ import (
 )
 
 const (
-	defaultListLimit    = 50
-	maxListLimit        = 200
-	lowTrafficThreshold = 1
-	defaultPlanID       = "plan_default_10gb"
+	defaultListLimit = 50
+	maxListLimit     = 200
+	defaultPlanID    = "plan_default_10gb"
 )
 
 // Repository provides subscriber data access.
@@ -358,17 +357,25 @@ func toSubscriberRow(
 		sms = normalizeSMS(balanceDoc["sms_total"], balanceDoc["sms_used"], balanceDoc["sms_available"])
 	}
 
+	var balanceThreshold int64
+	if ocsSubDoc != nil && tariffPlanDoc != nil {
+		balanceThreshold = numericInt64(tariffPlanDoc["volume_threshold"])
+	}
+	balanceState := classifyBalance(balanceDoc != nil, traffic.Balance, balanceThreshold)
+
 	return SubscriberRow{
-		IMSI:           imsi,
-		MSISDN:         extractSubscriberMSISDN(xcloudDoc, ocsSubDoc),
-		Status:         statusFromARD(ard),
-		ContractStatus: extractContractStatus(ocsSubDoc),
-		ARD:            ard,
-		PLMN:           plmn,
-		Profile:        extractProfileName(xcloudDoc),
-		Policy:         planID,
-		PolicyName:     planName,
-		PolicyStatus:   planStatus,
+		IMSI:             imsi,
+		MSISDN:           extractSubscriberMSISDN(xcloudDoc, ocsSubDoc),
+		Status:           statusFromARD(ard),
+		ContractStatus:   extractContractStatus(ocsSubDoc),
+		BalanceState:     balanceState,
+		BalanceThreshold: balanceThreshold,
+		ARD:              ard,
+		PLMN:             plmn,
+		Profile:          extractProfileName(xcloudDoc),
+		Policy:           planID,
+		PolicyName:       planName,
+		PolicyStatus:     planStatus,
 		Provisioning: SubscriberProvisioning{
 			Contract:   ocsSubDoc != nil,
 			Balance:    balanceDoc != nil,
@@ -380,10 +387,46 @@ func toSubscriberRow(
 	}
 }
 
+// Balance states are derived from data_available and the assigned plan's
+// volume_threshold. Reserved quota is already excluded from data_available.
+const (
+	balanceStateMissing   = "missing"
+	balanceStateExhausted = "exhausted"
+	balanceStateLow       = "low"
+	balanceStateNormal    = "normal"
+)
+
+// classifyBalance separates "no balance record" from an exhausted balance and
+// applies the plan threshold only when it is configured and positive.
+func classifyBalance(hasBalance bool, available, threshold int64) string {
+	if !hasBalance {
+		return balanceStateMissing
+	}
+	if available <= 0 {
+		return balanceStateExhausted
+	}
+	if threshold > 0 && available <= threshold {
+		return balanceStateLow
+	}
+	return balanceStateNormal
+}
+
+// rowBalanceState keeps legacy rows that predate balanceState readable.
+func rowBalanceState(row SubscriberRow) string {
+	if row.BalanceState != "" {
+		return row.BalanceState
+	}
+	return classifyBalance(row.Provisioning.Balance, row.Traffic.Balance, row.BalanceThreshold)
+}
+
 // isLowTraffic checks if a provisioned balance is exhausted. A missing balance
 // record is an unprovisioned fact, not a zero balance.
 func isLowTraffic(row SubscriberRow) bool {
-	return row.Provisioning.Balance && row.Traffic.Balance < lowTrafficThreshold
+	return rowBalanceState(row) == balanceStateExhausted
+}
+
+func isLowBalance(row SubscriberRow) bool {
+	return rowBalanceState(row) == balanceStateLow
 }
 
 // isUnprovisioned reports whether any of the three OCS provisioning records is
@@ -459,15 +502,25 @@ func matchesFilters(row SubscriberRow, filters SubscriberListFilters) bool {
 	switch filters.BalanceStatus {
 	case "", "all":
 	case "exhausted":
-		if !isLowTraffic(row) {
+		if rowBalanceState(row) != balanceStateExhausted {
+			return false
+		}
+	case "low":
+		if !isLowBalance(row) {
+			return false
+		}
+	case "normal":
+		if rowBalanceState(row) != balanceStateNormal {
 			return false
 		}
 	case "available":
-		if !row.Provisioning.Balance || isLowTraffic(row) {
+		// Legacy alias: any provisioned balance that is not exhausted.
+		state := rowBalanceState(row)
+		if state != balanceStateNormal && state != balanceStateLow {
 			return false
 		}
 	case "missing":
-		if row.Provisioning.Balance {
+		if rowBalanceState(row) != balanceStateMissing {
 			return false
 		}
 	default:
@@ -490,6 +543,9 @@ func buildSummary(rows []SubscriberSummary, allRows []SubscriberRow) SubscriberS
 		}
 		if isLowTraffic(row) {
 			s.LowTraffic++
+		}
+		if isLowBalance(row) {
+			s.LowBalance++
 		}
 		if isUnprovisioned(row) {
 			s.Unprovisioned++
@@ -1443,10 +1499,14 @@ func tariffPlanSnapshot(plan bson.M) map[string]any {
 	planID, _ := plan["plan_id"].(string)
 
 	snapshot := map[string]any{
-		"plan_id":     plan["plan_id"],
-		"name":        nodeAsString(plan["name"], planID),
-		"description": nodeAsString(plan["description"], ""),
-		"rules":       normalizePolicyRules(plan["rules"], planID),
+		"plan_id":          plan["plan_id"],
+		"name":             nodeAsString(plan["name"], planID),
+		"description":      nodeAsString(plan["description"], ""),
+		"rules":            normalizePolicyRules(plan["rules"], planID),
+		"volume_threshold": plan["volume_threshold"],
+	}
+	if validity, ok := plan["validity_time"]; ok {
+		snapshot["validity_time"] = validity
 	}
 	if status, ok := plan["status"]; ok {
 		snapshot["status"] = status

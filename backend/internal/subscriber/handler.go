@@ -165,7 +165,7 @@ func parseSubscriberListFilters(q url.Values) SubscriberListFilters {
 	}
 
 	switch q.Get("balanceStatus") {
-	case "exhausted", "available", "missing":
+	case "exhausted", "low", "normal", "available", "missing":
 		filters.BalanceStatus = q.Get("balanceStatus")
 	}
 

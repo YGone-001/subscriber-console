@@ -24,6 +24,7 @@ type SubscriberSummary struct {
 	Active        int `json:"active"`
 	Restricted    int `json:"restricted"`
 	LowTraffic    int `json:"lowTraffic"`
+	LowBalance    int `json:"lowBalance"`
 	Unprovisioned int `json:"unprovisioned"`
 }
 
@@ -49,20 +50,22 @@ type SubscriberListFilters struct {
 
 // SubscriberRow is the enriched row for detail=true mode.
 type SubscriberRow struct {
-	IMSI           string                 `json:"imsi"`
-	MSISDN         string                 `json:"msisdn"`
-	Status         string                 `json:"status"`
-	ContractStatus string                 `json:"contractStatus,omitempty"`
-	ARD            int                    `json:"ard"`
-	PLMN           string                 `json:"plmn"`
-	Profile        string                 `json:"profile"`
-	Policy         string                 `json:"policy"`
-	PolicyName     string                 `json:"policyName,omitempty"`
-	PolicyStatus   string                 `json:"policyStatus,omitempty"`
-	Provisioning   SubscriberProvisioning `json:"provisioning"`
-	Traffic        TrafficSnapshot        `json:"traffic"`
-	SMS            SMSSnapshot            `json:"sms"`
-	LastActive     string                 `json:"lastActive"`
+	IMSI             string                 `json:"imsi"`
+	MSISDN           string                 `json:"msisdn"`
+	Status           string                 `json:"status"`
+	ContractStatus   string                 `json:"contractStatus,omitempty"`
+	BalanceState     string                 `json:"balanceState"`
+	BalanceThreshold int64                  `json:"balanceThreshold,omitempty"`
+	ARD              int                    `json:"ard"`
+	PLMN             string                 `json:"plmn"`
+	Profile          string                 `json:"profile"`
+	Policy           string                 `json:"policy"`
+	PolicyName       string                 `json:"policyName,omitempty"`
+	PolicyStatus     string                 `json:"policyStatus,omitempty"`
+	Provisioning     SubscriberProvisioning `json:"provisioning"`
+	Traffic          TrafficSnapshot        `json:"traffic"`
+	SMS              SMSSnapshot            `json:"sms"`
+	LastActive       string                 `json:"lastActive"`
 }
 
 // TrafficSnapshot holds traffic balance data.

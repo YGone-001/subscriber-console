@@ -776,8 +776,8 @@ NF 告警规则底座：权威存储 `xcloud_ops.app_nf_alert_rules` + `xcloud_o
 ### 7.6 订阅者与搜索契约
 
 - `GET /api/subscribers` 模式：`detail=false` → `listSubscriberImsis()`；`detail=true` → `listSubscriberRows()`；`msisdn` 有值 → MSISDN 查找模式。query 别名：`detail`、`page`、`limit`、`q`、`status`、`sortField`、`sort`、`sortDirection`、`sortDir`、`order`、`msisdn`、`excludeImsi`。已知状态：`all`、`active`、`restricted`、`lowTraffic`。不要重新设计校验逻辑。
-- 可选筛选：`searchBy=imsi|auto`（`auto` 在 IMSI 前缀无命中时回退到 MSISDN 精确查找，默认 `imsi` 保持旧语义）、`contractStatus=active|suspended|terminated|none`、`provisioning=complete|incomplete|missing_contract|missing_balance|missing_plan`、`planId`、`balanceStatus=exhausted|available|missing`。`status=lowTraffic` 保留为 `balanceStatus=exhausted` 的兼容别名。
-- `detail=true` 行新增 `msisdn`、`contractStatus`、`provisioning{contract,balance,tariffPlan}`；`summary` 新增 `unprovisioned`，列表结果可带 `matchedBy`/`matchSource`。`lowTraffic` 仅统计“已配置余额且可用余额为 0”，缺少余额记录归入未配置，绝不补零；`lastActive` 取候选时间最大值，无证据返回空字符串。
+- 可选筛选：`searchBy=imsi|auto`（`auto` 在 IMSI 前缀无命中时回退到 MSISDN 精确查找，默认 `imsi` 保持旧语义）、`contractStatus=active|suspended|terminated|none`、`provisioning=complete|incomplete|missing_contract|missing_balance|missing_plan`、`planId`、`balanceStatus=exhausted|low|normal|available|missing`。`status=lowTraffic` 保留为 `balanceStatus=exhausted` 的兼容别名；`available` 为包含 low 与 normal 的旧别名。
+- `detail=true` 行新增 `msisdn`、`contractStatus`、`balanceState=missing|exhausted|low|normal`、`balanceThreshold`、`provisioning{contract,balance,tariffPlan}`；`summary` 新增 `lowBalance` 与 `unprovisioned`，列表结果可带 `matchedBy`/`matchSource`。余额状态以 `data_available` 与套餐 `volume_threshold` 推导：`available <= 0` 为 exhausted，`0 < available <= threshold` 为 low，其余为 normal；缺少余额记录归入 missing，绝不补零。`lowTraffic` 仅统计 exhausted；`lastActive` 取候选时间最大值，无证据返回空字符串。
 - 详情 `GET /api/subscribers/{imsi}` 对无 `subscriber_write` 能力的角色移除 `auth4G.k/opc/op`；operator/admin 行为不变。
 - MSISDN 未命中时返回 `{"exists": false, "imsi": null, "source": null}`。
 - `GET /api/subscribers/{imsi}` 使用 `findSubscriberLegacyState(imsi)`；Go 实现必须复现旧 API 表示，而非原始 xCloud BSON。

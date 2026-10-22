@@ -211,6 +211,30 @@ func TestIsLowTraffic(t *testing.T) {
 	}
 }
 
+func TestClassifyBalance(t *testing.T) {
+	tests := []struct {
+		name       string
+		hasBalance bool
+		available  int64
+		threshold  int64
+		want       string
+	}{
+		{"missing record", false, 0, 1073741824, balanceStateMissing},
+		{"exhausted", true, 0, 1073741824, balanceStateExhausted},
+		{"low at threshold", true, 1073741824, 1073741824, balanceStateLow},
+		{"low below threshold", true, 1024, 1073741824, balanceStateLow},
+		{"normal above threshold", true, 1073741825, 1073741824, balanceStateNormal},
+		{"threshold disabled", true, 1024, 0, balanceStateNormal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifyBalance(tt.hasBalance, tt.available, tt.threshold); got != tt.want {
+				t.Fatalf("classifyBalance = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMatchesStatusFilter(t *testing.T) {
 	row := SubscriberRow{Status: "Active", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: SubscriberProvisioning{Balance: true}}
 	if !matchesStatusFilter(row, "all") {
@@ -378,21 +402,28 @@ func TestSummaryPreFilter(t *testing.T) {
 		{IMSI: "460000000000003", Status: "Active", Traffic: TrafficSnapshot{Balance: 0}, Provisioning: provisioned}, // low traffic
 		{IMSI: "460000000000004", Status: "Active", Traffic: TrafficSnapshot{Balance: 200}, Provisioning: provisioned},
 		{IMSI: "460000000000005", Status: "Active"}, // no OCS records: unprovisioned, not low traffic
+		{
+			IMSI: "460000000000006", Status: "Active", Traffic: TrafficSnapshot{Balance: 50},
+			Provisioning: provisioned, BalanceState: balanceStateLow, BalanceThreshold: 100,
+		},
 	}
 
 	// Summary is computed from ALL rows (pre-filter)
 	summary := buildSummary(nil, rows)
-	if summary.Total != 5 {
-		t.Errorf("summary.Total = %d, want 5 (pre-filter)", summary.Total)
+	if summary.Total != 6 {
+		t.Errorf("summary.Total = %d, want 6 (pre-filter)", summary.Total)
 	}
-	if summary.Active != 4 {
-		t.Errorf("summary.Active = %d, want 4 (pre-filter)", summary.Active)
+	if summary.Active != 5 {
+		t.Errorf("summary.Active = %d, want 5 (pre-filter)", summary.Active)
 	}
 	if summary.Restricted != 1 {
 		t.Errorf("summary.Restricted = %d, want 1 (pre-filter)", summary.Restricted)
 	}
 	if summary.LowTraffic != 1 {
 		t.Errorf("summary.LowTraffic = %d, want 1 (pre-filter)", summary.LowTraffic)
+	}
+	if summary.LowBalance != 1 {
+		t.Errorf("summary.LowBalance = %d, want 1 (pre-filter)", summary.LowBalance)
 	}
 	if summary.Unprovisioned != 1 {
 		t.Errorf("summary.Unprovisioned = %d, want 1 (pre-filter)", summary.Unprovisioned)
@@ -405,8 +436,8 @@ func TestSummaryPreFilter(t *testing.T) {
 			filtered = append(filtered, row)
 		}
 	}
-	if len(filtered) != 4 {
-		t.Errorf("filtered count = %d, want 4 (post-filter active)", len(filtered))
+	if len(filtered) != 5 {
+		t.Errorf("filtered count = %d, want 5 (post-filter active)", len(filtered))
 	}
 }
 
@@ -643,6 +674,36 @@ func TestMatchesFiltersContractProvisioningAndBalance(t *testing.T) {
 		t.Fatal("exhausted balance must not match available")
 	}
 
+	lowRow := SubscriberRow{
+		IMSI:             "460000000000003",
+		Status:           "Active",
+		Provisioning:     provisioned,
+		Traffic:          TrafficSnapshot{Balance: 100},
+		BalanceState:     balanceStateLow,
+		BalanceThreshold: 1024,
+	}
+	if !matchesFilters(lowRow, SubscriberListFilters{BalanceStatus: "low"}) {
+		t.Fatal("low balance should match the low filter")
+	}
+	if matchesFilters(lowRow, SubscriberListFilters{BalanceStatus: "exhausted"}) {
+		t.Fatal("low balance must not match exhausted")
+	}
+	if !matchesFilters(lowRow, SubscriberListFilters{BalanceStatus: "available"}) {
+		t.Fatal("legacy available filter should include low balances")
+	}
+
+	normalRow := SubscriberRow{
+		IMSI:             "460000000000004",
+		Status:           "Active",
+		Provisioning:     provisioned,
+		Traffic:          TrafficSnapshot{Balance: 2048},
+		BalanceState:     balanceStateNormal,
+		BalanceThreshold: 1024,
+	}
+	if !matchesFilters(normalRow, SubscriberListFilters{BalanceStatus: "normal"}) {
+		t.Fatal("normal balance should match the normal filter")
+	}
+
 	unprovisioned := SubscriberRow{IMSI: "460000000000002", Status: "Active"}
 	if !matchesFilters(unprovisioned, SubscriberListFilters{Provisioning: "incomplete", ContractStatus: "none", BalanceStatus: "missing"}) {
 		t.Fatal("unprovisioned row should match incomplete/none/missing filters")
@@ -693,11 +754,11 @@ func TestParseSubscriberListFilters(t *testing.T) {
 		"status":         {"active"},
 		"contractStatus": {"suspended"},
 		"provisioning":   {"missing_balance"},
-		"balanceStatus":  {"available"},
+		"balanceStatus":  {"low"},
 		"planId":         {"plan_a"},
 	})
 	if full.SearchBy != "auto" || full.Status != "active" || full.ContractStatus != "suspended" ||
-		full.Provisioning != "missing_balance" || full.BalanceStatus != "available" || full.PlanID != "plan_a" {
+		full.Provisioning != "missing_balance" || full.BalanceStatus != "low" || full.PlanID != "plan_a" {
 		t.Fatalf("full filters = %+v", full)
 	}
 
@@ -725,7 +786,7 @@ func TestToSubscriberRowProvisioningSignals(t *testing.T) {
 		"plan_id": "plan_a",
 	}
 	balance := bson.M{"imsi": "460000000000001", "data_total": int64(100), "data_available": int64(0)}
-	plan := bson.M{"plan_id": "plan_a", "name": "Plan A", "status": "active"}
+	plan := bson.M{"plan_id": "plan_a", "name": "Plan A", "status": "active", "volume_threshold": int64(100)}
 
 	row := toSubscriberRow(doc, ocsSub, balance, plan)
 	if row.MSISDN != "18800000001" {
@@ -737,8 +798,20 @@ func TestToSubscriberRowProvisioningSignals(t *testing.T) {
 	if !row.Provisioning.Contract || !row.Provisioning.Balance || !row.Provisioning.TariffPlan {
 		t.Fatalf("provisioning flags = %+v, want all true", row.Provisioning)
 	}
-	if !isLowTraffic(row) {
-		t.Fatal("provisioned zero balance must be low traffic")
+	if row.BalanceState != balanceStateExhausted || !isLowTraffic(row) {
+		t.Fatalf("zero balance state = %q, want exhausted", row.BalanceState)
+	}
+	if row.BalanceThreshold != 100 {
+		t.Fatalf("BalanceThreshold = %d, want 100", row.BalanceThreshold)
+	}
+
+	lowBalance := bson.M{"imsi": "460000000000001", "data_total": int64(100), "data_available": int64(50)}
+	lowRow := toSubscriberRow(doc, ocsSub, lowBalance, plan)
+	if lowRow.BalanceState != balanceStateLow || !isLowBalance(lowRow) {
+		t.Fatalf("low balance state = %q, want low", lowRow.BalanceState)
+	}
+	if isLowTraffic(lowRow) {
+		t.Fatal("low balance must not be classified as exhausted")
 	}
 
 	orphan := toSubscriberRow(doc, nil, nil, plan)
