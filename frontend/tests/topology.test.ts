@@ -7,6 +7,7 @@
  * reach for the network on their own.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -14,6 +15,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { I18nProvider } from '../src/providers/I18nProvider';
 import { AuthProvider } from '../src/providers/AuthProvider';
 import { TopologyGraph } from '../src/features/topology/components/TopologyGraph';
+import { ActualTopologyCanvas } from '../src/features/topology/components/ActualTopologyCanvas';
 import { TopologyEdgeTable } from '../src/features/topology/components/TopologyEdgeTable';
 import { TopologyEdgeForm } from '../src/features/topology/components/TopologyEdgeForm';
 import { TopologyEdgeDetail } from '../src/features/topology/components/TopologyEdgeDetail';
@@ -33,10 +35,22 @@ import {
 } from '../src/features/topology/topology-types';
 import { en } from '../src/lib/locales/en';
 import { zh } from '../src/lib/locales/zh';
+import { buildActualTopology, groupForResource, nodeMatches } from '../src/features/topology/actual-topology-model';
+import {
+  edgeGeometry,
+  placeEdgeLabels,
+  pointOnGeometry,
+} from '../src/features/topology/actual-topology-labels';
+import {
+  projectNodeHealth,
+  summarizeNodeHealth,
+} from '../src/features/topology/actual-topology-health';
 
 const SMF = '2f1a6a52-6c7f-4f8a-9f2b-0f7d4a1c8e33';
 const PCF = '8c9d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f';
 const AMF = '3a4b5c6d-7e8f-4a1b-9c2d-3e4f5a6b7c8d';
+
+const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
 function render(element: ReactElement): string {
   const originalFetch = globalThis.fetch;
@@ -70,6 +84,10 @@ function renderPage(element: ReactElement, path = '/topology', pattern = '/topol
 
 function projection(resourceId: string, name: string, domain = '5gc'): ResourceProjection {
   return { resourceId, kind: 'network_function', name, displayName: name, domain, role: 'nf', lifecycleState: 'active' };
+}
+
+function roleProjection(resourceId: string, name: string, role: string): ResourceProjection {
+  return { resourceId, kind: 'network_function', name, displayName: name, domain: '5gc', role, lifecycleState: 'active' };
 }
 
 function edge(overrides: Partial<TopologyEdge> = {}): TopologyEdge {
@@ -133,6 +151,270 @@ test('the one-hop graph caps a dense neighbourhood and reports the overflow', ()
   assert.ok(markup.includes('nf-0'), 'the first neighbours must render');
   assert.ok(!markup.includes('nf-8'), 'beyond the cap the node must not be rendered');
   assert.ok(markup.includes('more outbound'), 'the overflow must be reported explicitly');
+});
+
+test('the actual topology graph uses only declared active edges and reveals labels on focus', () => {
+  const layout = buildActualTopology(
+    [
+      edge(),
+      edge({ edgeId: 'retired-edge', lifecycleState: 'retired' }),
+    ],
+    directory,
+  );
+  assert.equal(layout.nodes.length, 2, 'only endpoints of an active relationship become nodes');
+  assert.equal(layout.links.length, 1, 'retired relationships do not render as topology paths');
+  const markup = render(createElement(ActualTopologyCanvas, {
+    layout,
+    selectedResourceId: SMF,
+    search: '',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  assert.ok(markup.includes('smf-01') && markup.includes('pcf-01'), 'Inventory endpoint names must render');
+  assert.ok(markup.includes('depends on'), 'a focused path reveals its relationship name');
+  assert.ok(markup.includes('actual-topology-arrow'), 'declared edges retain direction');
+  assert.ok(markup.includes('role="group"'), 'the interactive canvas must expose its node buttons');
+  assert.ok(markup.includes('tabindex="0"'), 'nodes must be keyboard reachable');
+});
+
+test('actual topology groups resources by role in a deterministic left-to-right order', () => {
+  const amf = roleProjection('aaaaaaaa-1111-4111-8111-111111111111', 'amf-01', 'amf');
+  const smf = roleProjection('bbbbbbbb-2222-4222-8222-222222222222', 'smf-01', 'smf');
+  const nrf = roleProjection('cccccccc-3333-4333-8333-333333333333', 'nrf-01', 'nrf');
+  const upf = roleProjection('dddddddd-4444-4444-8444-444444444444', 'upf-01', 'upf');
+  const roleDirectory: Record<string, ResourceProjection> = {
+    [amf.resourceId]: amf,
+    [smf.resourceId]: smf,
+    [nrf.resourceId]: nrf,
+    [upf.resourceId]: upf,
+  };
+  const layout = buildActualTopology([
+    edge({ edgeId: 'e1', fromResourceId: amf.resourceId, toResourceId: smf.resourceId }),
+    edge({ edgeId: 'e2', fromResourceId: smf.resourceId, toResourceId: nrf.resourceId }),
+    edge({ edgeId: 'e3', fromResourceId: smf.resourceId, toResourceId: upf.resourceId }),
+  ], roleDirectory);
+
+  assert.deepEqual(layout.groups, ['access', 'session', 'discovery', 'user']);
+  const byName = new Map(layout.nodes.map((node) => [node.name, node]));
+  assert.equal(byName.get('amf-01')?.group, 'access');
+  assert.equal(byName.get('smf-01')?.group, 'session');
+  assert.equal(byName.get('nrf-01')?.group, 'discovery');
+  assert.equal(byName.get('upf-01')?.group, 'user');
+  assert.ok((byName.get('amf-01')?.x ?? 0) < (byName.get('smf-01')?.x ?? 0), 'access precedes session');
+  assert.ok((byName.get('nrf-01')?.x ?? 0) < (byName.get('upf-01')?.x ?? 0), 'discovery precedes user plane');
+  assert.equal(groupForResource(roleProjection('eeeeeeee-5555-4555-8555-555555555555', 'custom-01', 'custom')), 'other');
+});
+
+test('parallel relationships stay distinct and layout order does not depend on edge order', () => {
+  const first = edge();
+  const second = edge({ edgeId: '99999999-8888-4777-8666-555555555555', relationshipType: 'connects_to' });
+  const forward = buildActualTopology([first, second], directory);
+  const backward = buildActualTopology([second, first], directory);
+
+  assert.deepEqual(forward.links.map((link) => link.parallelIndex), [0, 1]);
+  assert.deepEqual(forward.links.map((link) => link.parallelCount), [2, 2]);
+  assert.deepEqual(
+    forward.nodes.map((node) => node.resourceId),
+    backward.nodes.map((node) => node.resourceId),
+    'node placement must not depend on relationship order',
+  );
+});
+
+test('focused labels stay attached to their own edge curves and never stack', () => {
+  const smf = roleProjection(SMF, 'smf-01', 'smf');
+  const amf = roleProjection(AMF, 'amf-01', 'amf');
+  const pcf = roleProjection(PCF, 'pcf-01', 'pcf');
+  const upfId = 'dddddddd-4444-4444-8444-444444444444';
+  const upf = roleProjection(upfId, 'upf-01', 'upf');
+  const labelDirectory: Record<string, ResourceProjection> = {
+    [smf.resourceId]: smf,
+    [amf.resourceId]: amf,
+    [pcf.resourceId]: pcf,
+    [upf.resourceId]: upf,
+  };
+  const layout = buildActualTopology([
+    edge({ edgeId: 'edge-1', fromResourceId: SMF, toResourceId: AMF, relationshipType: 'connects_to' }),
+    edge({ edgeId: 'edge-2', fromResourceId: SMF, toResourceId: PCF, relationshipType: 'routes_to' }),
+    edge({ edgeId: 'edge-3', fromResourceId: SMF, toResourceId: upfId, relationshipType: 'uses' }),
+  ], labelDirectory);
+  const labels = new Map([
+    ['edge-1', 'connects to'],
+    ['edge-2', 'routes to'],
+    ['edge-3', 'uses'],
+  ]);
+  const placements = placeEdgeLabels(layout.links, labels, layout.nodes, layout.width, layout.height);
+  assert.equal(placements.length, 3, 'every focused relationship keeps one label');
+
+  for (const placement of placements) {
+    const link = layout.links.find((candidate) => candidate.edgeId === placement.edgeId);
+    assert.ok(link, 'a placement must reference a rendered edge');
+    const point = pointOnGeometry(edgeGeometry(link), placement.t);
+    assert.ok(Math.abs(point.x - placement.labelX) < 0.001, 'the label x must sit on its own curve');
+    assert.ok(Math.abs(point.y - placement.labelY) < 0.001, 'the label y must sit on its own curve');
+  }
+
+  const anchors = new Set(placements.map((placement) => `${placement.labelX.toFixed(2)}:${placement.labelY.toFixed(2)}`));
+  assert.equal(anchors.size, placements.length, 'same-source labels must not collapse onto one anchor');
+
+  for (let index = 0; index < placements.length; index += 1) {
+    for (let other = index + 1; other < placements.length; other += 1) {
+      const left = placements[index];
+      const right = placements[other];
+      const stacked = Math.abs(left.labelX - right.labelX) < (left.width + right.width) / 2
+        && Math.abs(left.labelY - right.labelY) < (left.height + right.height) / 2;
+      assert.ok(!stacked, 'labels for distinct relationships must not stack');
+    }
+  }
+
+  const reversed = placeEdgeLabels([...layout.links].reverse(), labels, layout.nodes, layout.width, layout.height);
+  assert.deepEqual(reversed, placements, 'edge ordering must not move a label');
+});
+
+test('monitoring overlay separates confirmed absence from unresolved association', () => {
+  const unresolvedId = 'eeeeeeee-5555-4555-8555-555555555555';
+  const resourceIds = [AMF, SMF, PCF, unresolvedId];
+  const target = (resourceId: string, overrides: Record<string, unknown> = {}) => ({
+    targetId: `target-${resourceId}`,
+    resourceId,
+    name: resourceId,
+    enabled: true,
+    overallState: 'healthy',
+    statusComplete: true,
+    freshness: { state: 'fresh' },
+    coverage: { l1Measured: true, l2Measured: false, l3Measured: false, l3Available: false },
+    ...overrides,
+  });
+  const targets = [
+    target(AMF),
+    target(SMF, { enabled: false }),
+    target(PCF, { statusComplete: false }),
+  ];
+
+  const resolvedThree = new Set([AMF, SMF, PCF]);
+  const partial = projectNodeHealth(resourceIds, targets, resolvedThree);
+  assert.equal(partial.get(AMF)?.state, 'healthy');
+  assert.equal(partial.get(SMF)?.state, 'disabled');
+  assert.equal(partial.get(PCF)?.state, 'unknown', 'a failed status projection never claims health');
+  assert.equal(partial.get(unresolvedId)?.state, 'unresolved', 'a failed lookup is never reported as unmonitored');
+
+  const complete = projectNodeHealth(resourceIds, targets, new Set(resourceIds));
+  assert.equal(complete.get(unresolvedId)?.state, 'not_monitored', 'a successful lookup without a target is a confirmed absence');
+  const counts = summarizeNodeHealth(complete);
+  assert.equal(counts.monitored, 2, 'healthy and unknown targets are monitored; a disabled target is not');
+  assert.equal(counts.disabled, 1);
+  assert.equal(counts.notMonitored, 1);
+  assert.equal(counts.unresolved, 0);
+
+  const partialCounts = summarizeNodeHealth(partial);
+  assert.equal(partialCounts.unresolved, 1);
+  assert.equal(partialCounts.notMonitored, 0, 'unresolved identifiers must never inflate unmonitored totals');
+});
+
+test('the actual topology canvas announces monitoring state without inventing one', () => {
+  const layout = buildActualTopology([edge()], directory);
+  const health = new Map([
+    [SMF, {
+      state: 'degraded' as const,
+      targetId: 'target-smf',
+      overallState: 'degraded',
+      freshness: 'fresh',
+      statusComplete: true,
+    }],
+    [PCF, {
+      state: 'unresolved' as const,
+      targetId: '',
+      overallState: '',
+      freshness: '',
+      statusComplete: true,
+    }],
+  ]);
+  const markup = render(createElement(ActualTopologyCanvas, {
+    layout,
+    search: '',
+    health,
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  assert.ok(markup.includes('data-health-state="degraded"'), 'a monitored node exposes its projected state');
+  assert.ok(markup.includes('data-health-state="unresolved"'), 'an unresolved association stays distinct');
+  assert.ok(markup.includes('Monitoring: Degraded'), 'the accessible node label carries the monitoring state');
+  assert.ok(markup.includes('Monitoring: Association unresolved'), 'an unresolved association is announced as such');
+  assert.ok(!markup.includes('Monitoring: Not monitored'), 'an unresolved association is never announced as unmonitored');
+});
+
+test('an unresolved endpoint remains an explicit diagnostic node', () => {
+  const layout = buildActualTopology([edge()], { [SMF]: root });
+  const unresolved = layout.nodes.find((node) => node.resourceId === PCF);
+  assert.equal(unresolved?.resolved, false);
+
+  const markup = render(createElement(ActualTopologyCanvas, {
+    layout,
+    search: '',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  assert.ok(markup.includes('Unresolved resource'), 'the node must state that Inventory did not resolve it');
+  assert.ok(markup.includes('actualNodeUnresolved'), 'unresolved nodes must carry a distinct visual state');
+  assert.ok(markup.includes(PCF), 'the identifier stays visible instead of a guessed name');
+});
+
+test('relationship labels stay hidden until a path is focused or hovered', () => {
+  const layout = buildActualTopology([edge()], directory);
+  const props = {
+    layout,
+    search: '',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  };
+  const quiet = render(createElement(ActualTopologyCanvas, props));
+  assert.ok(!quiet.includes('depends on'), 'a quiet graph must not paint every interface name');
+  assert.ok(quiet.includes('data-group-label="other"'));
+  assert.ok(quiet.includes('Other resources'), 'group headers must use localized copy');
+
+  const focused = render(createElement(ActualTopologyCanvas, { ...props, selectedResourceId: SMF }));
+  assert.ok(focused.includes('depends on'), 'focus reveals the relationship name');
+
+  const hovered = render(createElement(ActualTopologyCanvas, { ...props, hoveredEdgeId: edge().edgeId }));
+  assert.ok(hovered.includes('depends on'), 'hover reveals the relationship name');
+});
+
+test('search dims non-matching resources without hiding them', () => {
+  const layout = buildActualTopology([
+    edge(),
+    edge({ edgeId: 'search-edge', fromResourceId: AMF, toResourceId: PCF }),
+  ], directory);
+  assert.ok(nodeMatches(roleProjection(AMF, 'amf-01', 'amf'), 'AMF'));
+  assert.ok(!nodeMatches(roleProjection(AMF, 'amf-01', 'amf'), 'upf'));
+
+  const markup = render(createElement(ActualTopologyCanvas, {
+    layout,
+    search: 'amf',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  assert.ok(markup.includes('amf-01') && markup.includes('smf-01'), 'matching and non-matching nodes both stay in the DOM');
+  assert.ok(markup.includes('actualNodeMatch'), 'the matching node must be visually identified');
+  assert.ok(markup.includes('actualDimmed'), 'non-matching nodes lose visual weight instead of disappearing');
+});
+
+test('the actual view sizes from the layout and exposes fit, zoom, reset and fullscreen', () => {
+  const source = read('../src/features/topology/ActualTopologyView.tsx');
+  for (const action of ['zoom-out', 'zoom-in', 'fit', 'reset', 'fullscreen']) {
+    assert.ok(source.includes(`data-action="${action}"`), `${action} must be an explicit control`);
+  }
+  assert.ok(source.includes('layout.width * zoom'), 'the canvas must use an explicit scale, not fill any width');
+  assert.ok(!source.includes('`${zoom * 100}%`'), 'percentage width stretching would resize the nodes with the viewport');
+});
+
+test('the actual view separates an unavailable read from an empty topology', () => {
+  const source = read('../src/features/topology/ActualTopologyView.tsx');
+  const unavailable = source.indexOf("coverage === 'unavailable'");
+  const empty = source.indexOf('layout.links.length === 0');
+  assert.ok(unavailable >= 0, 'an unavailable read must have its own state');
+  assert.ok(empty >= 0, 'a genuinely empty topology must have its own state');
+  assert.ok(unavailable < empty, 'a failed read must never fall through to the empty state');
+  assert.ok(source.includes("topology_actual_unavailable_title"));
+  assert.ok(source.includes("topology_actual_empty_title"));
 });
 
 /* ------------------------------------------------------------------ table -- */
@@ -275,13 +557,28 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
   const keys = [
     'nav_topology', 'topology_title', 'topology_create_relationship', 'topology_declared_notice',
     'topology_rel_depends_on', 'topology_state_retired', 'topology_stale_revision_body',
+    'topology_view_actual', 'topology_actual_node_count', 'topology_actual_coverage_hint',
+    'topology_actual_partial_notice',
+    'topology_search_matches', 'topology_search_no_match', 'topology_actual_empty_title',
+    'topology_actual_empty_body', 'topology_actual_unavailable_title', 'topology_actual_unavailable_body',
+    'topology_open_ledger', 'topology_zoom_in', 'topology_zoom_out', 'topology_fit_view',
+    'topology_reset_view', 'topology_fullscreen', 'topology_exit_fullscreen', 'topology_clear_focus',
+    'topology_canvas_controls',
   ];
   for (const key of keys) {
     assert.ok(typeof en[key] === 'string' && en[key].length > 0, `en must define ${key}`);
     assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh must define ${key}`);
     assert.notEqual(en[key], zh[key], `${key} must be localized in both languages`);
   }
+  for (const group of ['access', 'session', 'discovery', 'data', 'policy', 'user', 'other']) {
+    const key = `topology_group_${group}`;
+    assert.ok(typeof en[key] === 'string' && en[key].length > 0, `en must define ${key}`);
+    assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh must define ${key}`);
+    assert.notEqual(en[key], zh[key], `${key} must be localized in both languages`);
+  }
   assert.ok(/[\u4e00-\u9fff]/.test(zh.topology_title), 'the Chinese title must contain Chinese characters');
+  assert.match(en.topology_actual_unavailable_body, /not evidence that no relationship exists/);
+  assert.match(zh.topology_actual_unavailable_body, /空图不代表不存在关系/);
 });
 
 test('the relationship presentation covers exactly the nine canonical types', () => {
@@ -294,12 +591,14 @@ test('the relationship presentation covers exactly the nine canonical types', ()
 
 /* ------------------------------------------------------------------ pages -- */
 
-test('the topology page defaults to the architecture view and still renders', () => {
+test('the topology page defaults to actual topology and still renders', () => {
   const markup = renderPage(createElement(TopologyPage));
   assert.ok(markup.includes('Topology'), 'the page title must render');
+  assert.ok(markup.includes('data-topology-view="actual"'), 'the actual topology view must render');
   assert.ok(markup.includes('data-topology-view="architecture"'), 'the view switch must render');
-  // UX-3: the relationship ledger and the runtime tree are exclusive views, so
-  // neither is rendered behind the canvas.
+  assert.ok(markup.includes('actual-topology-title'), 'the actual topology section must be rendered');
+  // The relationship ledger and runtime tree are exclusive views, so neither
+  // is rendered behind the default topology canvas.
   assert.ok(!markup.includes('topology-filter-from'), 'the ledger must not render on the architecture view');
   assert.ok(!markup.includes('data-testid="runtime-discovery"'), 'the runtime surface must not render behind the canvas');
 });
@@ -308,6 +607,12 @@ test('the relationship ledger renders on its own view', () => {
   const markup = renderPage(createElement(TopologyPage), '/topology?view=relationships');
   assert.ok(markup.includes('topology-filter-from'), 'the from-resource filter must render');
   assert.ok(markup.includes('topology-filter-to'), 'the to-resource filter must render');
+});
+
+test('the reference architecture stays reachable without replacing the actual view', () => {
+  const markup = renderPage(createElement(TopologyPage), '/topology?view=architecture');
+  assert.ok(markup.includes('id="architecture-title"'), 'the reference canvas must render on its own view');
+  assert.ok(!markup.includes('id="actual-topology-title"'), 'the actual canvas must not render behind it');
 });
 
 test('the resource topology page renders a loading state for a resource, never fabricated data', () => {

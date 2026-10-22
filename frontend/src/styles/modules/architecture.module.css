@@ -726,3 +726,428 @@
   color: var(--text-muted);
   padding-bottom: var(--space-4);
 }
+
+/* --------------------------------------------------------- actual topology */
+
+.actualSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-bottom: var(--space-24);
+}
+
+.actualToolbar,
+.actualFocus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--sys-color-surface-panel);
+}
+
+.actualSummary,
+.actualControls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.actualSummary strong {
+  color: var(--text-primary, inherit);
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.actualCoverageComplete,
+.actualCoveragePartial {
+  padding: 2px var(--space-8);
+  border: 1px solid currentColor;
+  border-radius: var(--ref-radius-pill);
+}
+
+.actualCoverageComplete {
+  color: var(--sys-color-status-success);
+}
+
+.actualCoveragePartial {
+  color: var(--sys-color-status-warning);
+}
+
+.actualSearch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: min(100%, 220px);
+  padding: 0 var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  color: var(--text-muted);
+  background: var(--surface-field);
+}
+
+.actualSearch:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.actualSearch input {
+  width: 100%;
+  min-height: calc(var(--control-height) - 4px);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.actualControls {
+  gap: var(--space-4);
+}
+
+.actualControls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-small);
+  background: var(--surface-field);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.actualControls button:hover:not(:disabled) {
+  color: var(--text-primary, inherit);
+  background: var(--surface-hover);
+}
+
+.actualControls button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.actualControls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actualControls span {
+  min-width: 34px;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.actualNote {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.actualCoverageNote {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--sys-color-status-warning);
+}
+
+.actualHealthLegend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.actualHealthChip,
+.actualHealthPending,
+.actualHealthWarning {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.actualHealthPending {
+  color: var(--text-muted);
+}
+
+.actualHealthWarning {
+  color: var(--sys-color-status-warning);
+}
+
+.actualSwatch {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+}
+
+.actualSwatchNeutral { background: var(--sys-color-text-muted); }
+.actualSwatchHealthy { background: var(--success, var(--sys-color-status-success)); }
+.actualSwatchWarning { background: var(--warning, var(--sys-color-status-warning)); }
+.actualSwatchDanger { background: var(--danger); }
+.actualSwatchUnknown { background: var(--text-secondary); }
+.actualSwatchDisabled { background: var(--text-muted); opacity: 0.45; }
+.actualSwatchHollow { background: transparent; border-color: var(--text-muted); opacity: 0.65; }
+.actualSwatchUnresolved { background: transparent; border: 1.5px dashed var(--text-muted); }
+
+.actualHealthDot {
+  stroke: var(--sys-color-surface-panel);
+  stroke-width: 1.5;
+}
+
+.actualHealthHealthy { fill: var(--success, var(--sys-color-status-success)); }
+.actualHealthDegraded { fill: var(--warning, var(--sys-color-status-warning)); }
+.actualHealthUnhealthy { fill: var(--danger); }
+.actualHealthStale { fill: var(--warning, var(--sys-color-status-warning)); opacity: 0.72; }
+.actualHealthUnknown { fill: var(--text-secondary); }
+.actualHealthNotConfigured { fill: var(--sys-color-surface-panel); stroke: var(--text-muted); }
+.actualHealthDisabled { fill: var(--text-muted); opacity: 0.45; }
+.actualHealthNotMonitored {
+  fill: var(--sys-color-surface-panel);
+  stroke: var(--text-muted);
+  opacity: 0.65;
+}
+.actualHealthUnresolved {
+  fill: var(--sys-color-surface-panel);
+  stroke: var(--text-muted);
+  stroke-dasharray: 2 2;
+}
+
+.actualFocusHealth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.actualFocusHealthLink {
+  margin-left: var(--space-4);
+  color: var(--sys-color-action-primary);
+  text-decoration: none;
+}
+
+.actualFocusHealthLink:hover {
+  text-decoration: underline;
+}
+
+.actualCanvasViewport {
+  max-height: min(68vh, 680px);
+  overflow: auto;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--sys-color-surface-canvas);
+}
+
+.actualCanvasViewport:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  padding: var(--space-24);
+  border: 0;
+  border-radius: 0;
+  background: var(--sys-color-surface-canvas);
+}
+
+.actualCanvasScale {
+  margin: 0 auto;
+}
+
+.actualCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.actualGroupLabel {
+  fill: var(--sys-color-text-secondary);
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.actualGroupRule {
+  stroke: var(--surface-border);
+  stroke-width: 1;
+}
+
+.actualLinkGroup {
+  cursor: default;
+}
+
+.actualLinkHit {
+  fill: none;
+  stroke: var(--sys-color-action-primary);
+  stroke-width: 16;
+  opacity: 0;
+  pointer-events: stroke;
+}
+
+.actualLink {
+  fill: none;
+  stroke: var(--sys-color-action-primary);
+  stroke-width: 1.5;
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+.actualArrow {
+  fill: var(--sys-color-action-primary);
+}
+
+.actualLinkHovered .actualLink {
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+.actualLinkLabelBackdrop {
+  fill: var(--sys-color-surface-canvas);
+  opacity: 0.96;
+}
+
+.actualLabels {
+  pointer-events: none;
+}
+
+.actualLinkLabel {
+  fill: var(--sys-color-text-primary);
+  font-family: var(--font-data);
+  font-size: 11.5px;
+}
+
+.actualNode {
+  --actual-group: var(--sys-color-text-muted);
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.actualNodeRect {
+  fill: var(--sys-color-surface-panel);
+  stroke: var(--surface-border);
+  stroke-width: 1;
+}
+
+.actualNodeUnresolved .actualNodeRect {
+  stroke-dasharray: 5 3;
+}
+
+.actualNodeUnresolved .actualNodeMeta {
+  fill: var(--sys-color-status-warning);
+}
+
+.actualNodeBar {
+  fill: var(--actual-group);
+}
+
+.actualNode:hover .actualNodeRect,
+.actualNodeSelected .actualNodeRect,
+.actualNodeMatch .actualNodeRect {
+  stroke: var(--actual-group);
+  stroke-width: 2;
+}
+
+.actualNodeMatch .actualNodeRect {
+  stroke: var(--sys-color-action-primary);
+  stroke-width: 2.5;
+}
+
+.actualNode:focus {
+  outline: none;
+}
+
+.actualNode:focus-visible .actualNodeRect {
+  stroke: var(--sys-color-action-primary);
+  stroke-width: 3;
+  stroke-dasharray: 4 2;
+}
+
+.actualNodeRole {
+  fill: var(--actual-group);
+  font-family: var(--font-data);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.actualNodeName {
+  fill: var(--sys-color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.actualNodeMeta {
+  fill: var(--sys-color-text-muted);
+  font-size: 10.5px;
+}
+
+.actualGroupAccess { --actual-group: var(--sys-color-action-primary); }
+.actualGroupSession { --actual-group: var(--sys-color-status-info); }
+.actualGroupDiscovery { --actual-group: var(--sys-color-status-info); }
+.actualGroupData { --actual-group: var(--sys-color-status-warning); }
+.actualGroupPolicy { --actual-group: var(--sys-color-status-warning); }
+.actualGroupUser { --actual-group: var(--sys-color-status-success); }
+.actualGroupOther { --actual-group: var(--sys-color-text-muted); }
+
+.actualDimmed {
+  opacity: 0.2;
+}
+
+.actualFocus {
+  align-items: flex-start;
+}
+
+.actualFocus > div {
+  display: grid;
+  gap: 2px;
+}
+
+.actualFocusActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.actualFocusEyebrow {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.actualFocus strong {
+  color: var(--text-primary, inherit);
+  font-size: 0.86rem;
+}
+
+.actualFocus span:last-child {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .actualToolbar {
+    align-items: stretch;
+  }
+
+  .actualSearch {
+    order: 3;
+    width: 100%;
+  }
+
+  .actualCanvasViewport {
+    max-height: 58vh;
+  }
+}

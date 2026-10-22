@@ -103,7 +103,7 @@ function domainClass(domain: string): string {
 
 export function ArchitectureView() {
   const { t } = useI18n();
-  const [view, setView] = useState<ArchitectureViewMode>('all');
+  const [view, setView] = useState<ArchitectureViewMode>('5gc-sa');
   const [selectedRole, setSelectedRole] = useState<string | undefined>(undefined);
   const [legendOpen, setLegendOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);

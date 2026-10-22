@@ -27,6 +27,7 @@ export type BoundedEdgesOptions = {
 export function useBoundedEdges(options: BoundedEdgesOptions = {}): {
   edges: unknown[];
   coverage: TopologyCoverage;
+  loading: boolean;
   refresh: () => void;
 } {
   const {
@@ -39,6 +40,7 @@ export function useBoundedEdges(options: BoundedEdgesOptions = {}): {
 
   const [edges, setEdges] = useState<unknown[]>([]);
   const [coverage, setCoverage] = useState<TopologyCoverage>('partial');
+  const [loading, setLoading] = useState(enabled);
   const [nonce, setNonce] = useState(0);
   const runIdRef = useRef(0);
 
@@ -50,6 +52,7 @@ export function useBoundedEdges(options: BoundedEdgesOptions = {}): {
     let cancelled = false;
 
     const load = async () => {
+      setLoading(true);
       const collected: unknown[] = [];
       let cursor: string | null = null;
       let pages = 0;
@@ -79,6 +82,8 @@ export function useBoundedEdges(options: BoundedEdgesOptions = {}): {
         // Keep whatever was loaded; a partial read is never authoritative.
         setEdges(collected);
         setCoverage(collected.length > 0 ? 'partial' : 'unavailable');
+      } finally {
+        if (!cancelled && runIdRef.current === runId) setLoading(false);
       }
     };
 
@@ -90,5 +95,5 @@ export function useBoundedEdges(options: BoundedEdgesOptions = {}): {
   }, [enabled, relationshipType, lifecycleState, limit, maxPages, nonce]);
 
   const refresh = useCallback(() => setNonce((value) => value + 1), []);
-  return { edges, coverage, refresh };
+  return { edges, coverage, loading, refresh };
 }

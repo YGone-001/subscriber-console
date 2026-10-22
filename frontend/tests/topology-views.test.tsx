@@ -4,10 +4,11 @@
  * Reference: docs/analyze/cnms-port-assessment-2026-10-18.md section 6.2 and the
  * UX-3 row of section 8.
  *
- * The three views are exclusive: the architecture canvas, the relationship
- * ledger and the runtime hierarchy never render at the same time. The canvas
- * reads the bounded role projection instead of an arbitrary Inventory page, and
- * an ambiguous role claims no binding.
+ * The four views are exclusive: the actual topology canvas, reference
+ * architecture canvas, relationship ledger and runtime hierarchy never render
+ * at the same time. The reference canvas reads the bounded role projection
+ * instead of an arbitrary Inventory page, and an ambiguous role claims no
+ * binding.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -57,20 +58,22 @@ function renderTopology(path: string): string {
 
 /* --------------------------------------------------------------- views -- */
 
-test('the topology page defaults to the architecture view', () => {
+test('the topology page defaults to the actual topology view', () => {
   const markup = renderTopology('/topology');
+  assert.ok(markup.includes('data-topology-view="actual"'), 'the actual view must be present in the switch');
   assert.ok(markup.includes('data-topology-view="architecture"'), 'the view switch must render');
   assert.ok(markup.includes('aria-pressed="true"'), 'the default view must be pressed');
-  assert.ok(markup.includes('id="architecture-title"'), 'the architecture section must render');
+  assert.ok(markup.includes('id="actual-topology-title"'), 'the actual topology section must render');
+  assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render by default');
 });
 
-test('the ledger is not rendered behind the canvas', () => {
+test('the ledger is not rendered behind the actual topology', () => {
   const markup = renderTopology('/topology');
   assert.ok(!markup.includes('topology-filter-from'), 'the from-resource filter belongs to the ledger view');
   assert.ok(!markup.includes('topology-filter-to'), 'the to-resource filter belongs to the ledger view');
 });
 
-test('the runtime hierarchy is not rendered behind the canvas', () => {
+test('the runtime hierarchy is not rendered behind the actual topology', () => {
   const markup = renderTopology('/topology');
   assert.ok(!markup.includes('data-testid="runtime-hierarchy"'), 'the runtime tree belongs to its own view');
 });
@@ -80,7 +83,8 @@ test('the ledger view renders its own filters and no canvas', () => {
   assert.ok(markup.includes('data-topology-view="relationships"'));
   assert.ok(markup.includes('topology-filter-from'));
   assert.ok(markup.includes('topology-filter-to'));
-  assert.ok(!markup.includes('id="architecture-title"'), 'the canvas must not render on the ledger view');
+  assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render on the ledger view');
+  assert.ok(!markup.includes('id="actual-topology-title"'), 'the actual canvas must not render on the ledger view');
 });
 
 test('the runtime view renders its own disclaimer', () => {
@@ -90,11 +94,12 @@ test('the runtime view renders its own disclaimer', () => {
     markup.includes('Observed local runtime hierarchy'),
     'the runtime view must state that it is not a protocol relationship',
   );
-  assert.ok(!markup.includes('id="architecture-title"'), 'the canvas must not render on the runtime view');
+  assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render on the runtime view');
+  assert.ok(!markup.includes('id="actual-topology-title"'), 'the actual canvas must not render on the runtime view');
 });
 
 test('every topology view keeps one tab strip and one refresh control', () => {
-  for (const view of ['architecture', 'relationships', 'runtime']) {
+  for (const view of ['actual', 'architecture', 'relationships', 'runtime']) {
     const markup = renderTopology(`/topology?view=${view}`);
     assert.equal(
       markup.split('data-operations-refresh="page"').length - 1,

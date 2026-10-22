@@ -46,15 +46,17 @@ import { RuntimeHierarchy } from '../runtime/RuntimeHierarchy';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { ArchitectureView } from './ArchitectureView';
+import { ActualTopologyView } from './ActualTopologyView';
 
 const PAGE_LIMIT = 20;
 
 /* UX-3: three exclusive in-page views. No SPA route is added: the workbench
  * keeps one canonical `/topology` route and one tab. */
-const TOPOLOGY_VIEWS = ['architecture', 'relationships', 'runtime'] as const;
+const TOPOLOGY_VIEWS = ['actual', 'architecture', 'relationships', 'runtime'] as const;
 type TopologyView = (typeof TOPOLOGY_VIEWS)[number];
 
 const TOPOLOGY_VIEW_LABEL: Record<TopologyView, string> = {
+  actual: 'topology_view_actual',
   architecture: 'topology_view_architecture',
   relationships: 'topology_view_relationships',
   runtime: 'topology_view_runtime',
@@ -73,7 +75,7 @@ export function TopologyPage() {
   const url = useOperationsUrlState({
     keys: ['state', 'relationship', 'from', 'to'],
     views: TOPOLOGY_VIEWS,
-    defaultView: 'architecture',
+    defaultView: 'actual',
   });
   const topologyView = url.view as TopologyView;
 
@@ -318,6 +320,8 @@ export function TopologyPage() {
         ) : undefined
       }
     >
+      {topologyView === 'actual' ? <ActualTopologyView /> : null}
+
       {topologyView === 'architecture' ? <ArchitectureView /> : null}
 
       {topologyView === 'runtime' ? (

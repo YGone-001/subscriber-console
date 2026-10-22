@@ -1,4 +1,4 @@
-import { getJson } from '../../lib/api/read-client';
+import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
 import { postJson, putJson } from '../../lib/api/mutation-client';
 import type {
   CollectResult,
@@ -47,6 +47,21 @@ export async function fetchNfHealthTargets(
       limit: params.limit,
     }),
   );
+}
+
+/*
+ * Bounded authoritative association lookup. The caller must pass at most
+ * MaxTargetResourceFilterIDs (50) identifiers per request; the server rejects
+ * pagination or filters that could hide a target and fake an absence.
+ */
+export async function fetchNfHealthTargetsByResources(
+  resourceIds: string[],
+  signal?: AbortSignal,
+): Promise<ListTargetsResponse> {
+  const path = `/api/nf-health/targets?resourceIds=${encodeURIComponent(resourceIds.join(','))}`;
+  return signal
+    ? getJsonWithSignal<ListTargetsResponse>(path, signal)
+    : getJson<ListTargetsResponse>(path);
 }
 
 export async function fetchNfHealthInterfaces(
