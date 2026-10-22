@@ -19,6 +19,10 @@ import {
   SENSITIVE_IMPORT_KEYS,
   type ImportRecord,
 } from '../src/features/subscribers/mutation-contract';
+import {
+  ONBOARDING_TEMPLATE,
+  isRecommendedOnboardingPlan,
+} from '../src/features/subscribers/onboarding-template';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -547,4 +551,38 @@ test('import: ALLOWED_IMPORT_RECORD_KEYS and SENSITIVE_IMPORT_KEYS definitions',
   assert.ok(ALLOWED_IMPORT_RECORD_KEYS.has('imsi'));
   assert.equal(SENSITIVE_IMPORT_KEYS.size, 5);
   assert.ok(SENSITIVE_IMPORT_KEYS.has('k'));
+});
+
+test('onboarding template keeps the approved default quotas', () => {
+  assert.deepEqual(ONBOARDING_TEMPLATE, {
+    dataTotal: '10 GB',
+    dataBalance: '10 GB',
+    voiceTotal: '1h',
+    voiceBalance: '1h',
+    smsTotal: '100',
+    smsBalance: '100',
+    recommendedValiditySeconds: 2592000,
+    recommendedVolumeThreshold: 1073741824,
+  });
+});
+
+test('onboarding template prefers an active 30-day 1GB plan', () => {
+  assert.equal(isRecommendedOnboardingPlan({
+    plan_id: 'plan_onboarding',
+    status: 'active',
+    validity_time: 2592000,
+    volume_threshold: 1073741824,
+  }), true);
+  assert.equal(isRecommendedOnboardingPlan({
+    plan_id: 'plan_lab_default',
+    status: 'active',
+    validity_time: 300,
+    volume_threshold: 8388608,
+  }), false);
+  assert.equal(isRecommendedOnboardingPlan({
+    plan_id: 'plan_disabled',
+    status: 'disabled',
+    validity_time: 2592000,
+    volume_threshold: 1073741824,
+  }), false);
 });
