@@ -391,6 +391,17 @@
   transform-origin: top right;
 }
 
+.dropdown-menu.dropdown-menu-portal {
+  position: fixed;
+  right: auto;
+  z-index: 1000;
+  box-shadow: var(--shadow-popover);
+}
+
+.dropdown-menu-portal[data-placement="top"] {
+  transform-origin: bottom right;
+}
+
 @keyframes dropdownFade {
   from {
     opacity: 0;

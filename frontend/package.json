@@ -22,7 +22,8 @@
     "acceptance:discovery-resilience": "node tests/discovery-resilience.mjs",
     "acceptance:nf-health-screenshots": "node tests/nf-health-screenshots.mjs",
     "acceptance:nf-alerts": "node tests/nf-alerts-smoke.mjs",
-    "acceptance:nf-logs": "node tests/nf-logs-smoke.mjs"
+    "acceptance:nf-logs": "node tests/nf-logs-smoke.mjs",
+    "acceptance:subscriber-actions": "npm run typecheck && node tests/subscriber-actions-smoke.mjs"
   },
   "dependencies": {
     "react": "19.2.4",

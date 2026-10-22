@@ -5,7 +5,8 @@
  * provisioning state, shows the MSISDN, and routes destructive actions through
  * the overflow menu.
  */
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Plus, Users, CheckCircle2, Copy, Eye, Trash2, MoreHorizontal, BatteryCharging, AlertTriangle, ExternalLink } from "lucide-react";
 import { useI18n } from '../../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../../components/ui/OperationFeedback';
@@ -13,6 +14,43 @@ import { SortableTableHeader } from '../../../components/ui/SortableTableHeader'
 import { useAppRouter } from '../../../lib/ui-compat/router';
 import { formatBytes } from '../../../lib/unitParser';
 import type { SubscriberRow } from '../types';
+
+const ACTION_MENU_WIDTH = 180;
+const ACTION_MENU_HEIGHT = 136;
+const ACTION_MENU_GAP = 6;
+const ACTION_MENU_VIEWPORT_MARGIN = 8;
+
+type ActionMenuPosition = {
+  top: number;
+  left: number;
+  placement: "top" | "bottom";
+};
+
+type TriggerRect = Pick<DOMRect, "top" | "right" | "bottom">;
+
+export function getSubscriberActionMenuPosition(
+  rect: TriggerRect,
+  viewportWidth: number,
+  viewportHeight: number,
+): ActionMenuPosition {
+  const maxLeft = Math.max(ACTION_MENU_VIEWPORT_MARGIN, viewportWidth - ACTION_MENU_WIDTH - ACTION_MENU_VIEWPORT_MARGIN);
+  const left = Math.max(ACTION_MENU_VIEWPORT_MARGIN, Math.min(rect.right - ACTION_MENU_WIDTH, maxLeft));
+  const belowTop = rect.bottom + ACTION_MENU_GAP;
+  const aboveTop = rect.top - ACTION_MENU_GAP - ACTION_MENU_HEIGHT;
+  const fitsBelow = belowTop + ACTION_MENU_HEIGHT <= viewportHeight - ACTION_MENU_VIEWPORT_MARGIN;
+  const fitsAbove = aboveTop >= ACTION_MENU_VIEWPORT_MARGIN;
+
+  if (!fitsBelow && fitsAbove) {
+    return { top: aboveTop, left, placement: "top" };
+  }
+
+  const maxTop = Math.max(ACTION_MENU_VIEWPORT_MARGIN, viewportHeight - ACTION_MENU_HEIGHT - ACTION_MENU_VIEWPORT_MARGIN);
+  return {
+    top: Math.max(ACTION_MENU_VIEWPORT_MARGIN, Math.min(belowTop, maxTop)),
+    left,
+    placement: "bottom",
+  };
+}
 
 export interface SubscriberTableProps {
   isLoading: boolean;
@@ -69,6 +107,9 @@ function provisioningLabel(t: (key: string, params?: Record<string, string | num
 export function SubscriberTable(props: SubscriberTableProps) {
   const { t } = useI18n();
   const router = useAppRouter();
+  const actionMenuRef = useRef<HTMLDivElement>(null);
+  const actionMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [actionMenuPosition, setActionMenuPosition] = useState<ActionMenuPosition | null>(null);
   const {
     isLoading, totalSubscribers, searchQuery, hasActiveFilters, canEditSubscribers, canAdjustBalance,
     handleOpenNew, isAllPageSelected, selectedOnPageCount, pageImsis,
@@ -78,6 +119,57 @@ export function SubscriberTable(props: SubscriberTableProps) {
     isDeletingSingle, pendingDelete, activeDropdown, setActiveDropdown,
     handleOpenTrafficAdjustment,
   } = props;
+
+  useEffect(() => {
+    if (!activeDropdown || !actionMenuPosition) return;
+
+    const closeMenu = () => {
+      setActiveDropdown(null);
+      setActionMenuPosition(null);
+    };
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (actionMenuRef.current?.contains(target) || actionMenuTriggerRef.current?.contains(target)) return;
+      closeMenu();
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      closeMenu();
+      actionMenuTriggerRef.current?.focus();
+    };
+    const closeOnViewportChange = () => closeMenu();
+    const focusFrame = window.requestAnimationFrame(() => {
+      actionMenuRef.current?.querySelector<HTMLButtonElement>("[role='menuitem']")?.focus();
+    });
+
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", closeOnViewportChange);
+    window.addEventListener("scroll", closeOnViewportChange, true);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", closeOnViewportChange);
+      window.removeEventListener("scroll", closeOnViewportChange, true);
+    };
+  }, [activeDropdown, actionMenuPosition, setActiveDropdown]);
+
+  const toggleActionMenu = (imsi: string, trigger: HTMLButtonElement) => {
+    if (activeDropdown === imsi) {
+      setActiveDropdown(null);
+      setActionMenuPosition(null);
+      return;
+    }
+
+    actionMenuTriggerRef.current = trigger;
+    setActionMenuPosition(getSubscriberActionMenuPosition(
+      trigger.getBoundingClientRect(),
+      window.innerWidth,
+      window.innerHeight,
+    ));
+    setActiveDropdown(imsi);
+  };
 
   if (isLoading) {
     return <LoadingRows columns={canEditSubscribers ? 8 : 7} rows={5} />;
@@ -327,25 +419,32 @@ export function SubscriberTable(props: SubscriberTableProps) {
                         </button>
                       )}
                       <div className="dropdown-container">
-                        <button type="button" className="action-btn action-btn-muted" title={t("action_more")} aria-label={`${t("action_more")}: ${sub.imsi}`} aria-expanded={activeDropdown === sub.imsi} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === sub.imsi ? null : sub.imsi); }}>
+                        <button type="button" className="action-btn action-btn-muted" title={t("action_more")} aria-label={`${t("action_more")}: ${sub.imsi}`} aria-expanded={activeDropdown === sub.imsi} aria-haspopup="menu" aria-controls={activeDropdown === sub.imsi ? "subscriber-row-action-menu" : undefined} onClick={(e) => { e.stopPropagation(); toggleActionMenu(sub.imsi, e.currentTarget); }}>
                           <MoreHorizontal size={18} />
                         </button>
-                        {activeDropdown === sub.imsi && (
-                          <>
-                            <div className="dropdown-backdrop" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }} />
-                            <div className="dropdown-menu">
-                              <button className="dropdown-menu-item" onClick={() => { setActiveDropdown(null); router.push(`/ocs/contracts/${encodeURIComponent(sub.imsi)}`); }}>
+                        {activeDropdown === sub.imsi && actionMenuPosition && typeof document !== "undefined" && createPortal(
+                            <div
+                              id="subscriber-row-action-menu"
+                              ref={actionMenuRef}
+                              className="dropdown-menu dropdown-menu-portal"
+                              role="menu"
+                              aria-label={`${t("action_more")}: ${sub.imsi}`}
+                              data-placement={actionMenuPosition.placement}
+                              style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <button type="button" role="menuitem" className="dropdown-menu-item" onClick={() => { setActiveDropdown(null); setActionMenuPosition(null); router.push(`/ocs/contracts/${encodeURIComponent(sub.imsi)}`); }}>
                                 <ExternalLink size={14} /> {t("sub_view_contract")}
                               </button>
-                              <button className="dropdown-menu-item" onClick={() => { setActiveDropdown(null); router.push(`/ocs/balances/${encodeURIComponent(sub.imsi)}`); }}>
+                              <button type="button" role="menuitem" className="dropdown-menu-item" onClick={() => { setActiveDropdown(null); setActionMenuPosition(null); router.push(`/ocs/balances/${encodeURIComponent(sub.imsi)}`); }}>
                                 <ExternalLink size={14} /> {t("sub_view_balance")}
                               </button>
-                              <button className="dropdown-menu-item danger" onClick={(event) => handleDelete(sub.imsi, event)} disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}>
+                              <button type="button" role="menuitem" className="dropdown-menu-item danger" onClick={(event) => { setActionMenuPosition(null); handleDelete(sub.imsi, event); }} disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}>
                                 <Trash2 size={14} /> {isDeletingSingle === sub.imsi ? t("deleting") : t("action_delete")}
                               </button>
-                            </div>
-                          </>
-                        )}
+                            </div>,
+                            document.body,
+                          )}
                       </div>
                     </div>
                   </td>

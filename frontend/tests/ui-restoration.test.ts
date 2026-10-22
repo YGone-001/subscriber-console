@@ -10,6 +10,7 @@ import {
   SHELL_GEOMETRY,
 } from '../src/lib/navigation';
 import { buildDashboardModel, formatBytes, toChartPoints } from '../src/features/read/dashboard-model';
+import { getSubscriberActionMenuPosition } from '../src/features/subscribers/components/SubscriberTable';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 const identity = (key: string) => key;
@@ -29,6 +30,23 @@ test('compact desktop density preserves the mobile interaction baseline', () => 
   assert.match(styles, /--shell-sidebar-collapsed: 58px/);
   assert.match(styles, /--table-row-height: 43px/);
   assert.match(styles, /@media \(min-width: 981px\) and \(pointer: fine\)/);
+});
+
+test('subscriber row action menu stays inside the viewport and flips above the last row', () => {
+  assert.deepEqual(
+    getSubscriberActionMenuPosition({ top: 760, right: 1180, bottom: 792 }, 1200, 900),
+    { top: 618, left: 1000, placement: 'top' },
+  );
+  assert.deepEqual(
+    getSubscriberActionMenuPosition({ top: 120, right: 70, bottom: 152 }, 1200, 900),
+    { top: 158, left: 8, placement: 'bottom' },
+  );
+
+  const tableSource = read('../src/features/subscribers/components/SubscriberTable.tsx');
+  assert.match(tableSource, /createPortal/);
+  assert.match(tableSource, /document\.body/);
+  assert.match(tableSource, /aria-haspopup="menu"/);
+  assert.match(tableSource, /window\.addEventListener\("scroll", closeOnViewportChange, true\)/);
 });
 
 test('sidebar groups expose the restored navigation hierarchy for an administrator', () => {
