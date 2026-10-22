@@ -30,25 +30,33 @@ import PageHeader from '../../components/ui/PageHeader';
 import SubscriberSummaryPanel from './components/SubscriberSummaryPanel';
 import { SubscriberToolbar } from './components/SubscriberToolbar';
 import { SubscriberTable } from './components/SubscriberTable';
+import { SubscriberFilters, type SubscriberPlanOption } from './components/SubscriberFilters';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useRead } from '../../lib/api/use-read';
 import { deleteJson, postJson } from '../../lib/api/mutation-client';
-import { formatBytes } from '../../lib/unitParser';
 import type {
   FeedbackState,
   PendingDelete,
   PlmnRecord,
   ProfilesResponse,
+  SubscriberFilters as SubscriberFilterState,
   SubscriberRow,
-  SubscriberStatusFilter,
+  SubscriberSummaryKey,
   SubscribersResponse,
-  TrafficAdjustmentMode,
   TrafficAdjustmentTarget,
 } from './types';
 
 const SUBSCRIBER_PAGE_SIZES = [10, 20, 50] as const;
+
+const DEFAULT_FILTERS: SubscriberFilterState = {
+  access: 'all',
+  contract: 'all',
+  provisioning: 'all',
+  planId: '',
+  balance: 'all',
+};
 
 export function SubscribersPage() {
   const { t } = useI18n();
@@ -70,14 +78,15 @@ export function SubscribersPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [statusFilter, setStatusFilter] = useState<SubscriberStatusFilter>('all');
+  const [filters, setFilters] = useState<SubscriberFilterState>(DEFAULT_FILTERS);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
 
   const [modalImsi, setModalImsi] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
 
   const timeAgo = (dateStr: string) => {
-    if (!dateStr) return t('never');
+    if (!dateStr) return t('unknown');
     const time = new Date(dateStr).getTime();
     const now = new Date().getTime();
     const diff = Math.floor((now - time) / 1000);
@@ -96,41 +105,69 @@ export function SubscribersPage() {
   const { data: mccMncDbData } = useRead<PlmnRecord[]>('/data/mcc-mnc-table.json');
   const mccMncDb = useMemo(() => (mccMncDbData || []) as PlmnRecord[], [mccMncDbData]);
 
-  const subscriberQuery = searchQuery.trim();
-  const subscribersUrl = `/api/subscribers?detail=true&page=${currentPage}&limit=${pageSize}${subscriberQuery ? `&q=${encodeURIComponent(subscriberQuery)}` : ''}${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}&sortField=${sortField}&sortDirection=${sortDirection}`;
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearchQuery(searchQuery.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
+  const subscriberQuery = debouncedSearchQuery;
+  const filterParams = new URLSearchParams({
+    detail: 'true',
+    page: String(currentPage),
+    limit: String(pageSize),
+    searchBy: 'auto',
+    sortField,
+    sortDirection,
+  });
+  if (subscriberQuery) filterParams.set('q', subscriberQuery);
+  if (filters.access !== 'all') filterParams.set('status', filters.access);
+  if (filters.contract !== 'all') filterParams.set('contractStatus', filters.contract);
+  if (filters.provisioning !== 'all') filterParams.set('provisioning', filters.provisioning);
+  if (filters.planId) filterParams.set('planId', filters.planId);
+  if (filters.balance !== 'all') filterParams.set('balanceStatus', filters.balance);
+  const subscribersUrl = `/api/subscribers?${filterParams.toString()}`;
   const { data: subscribersData, isLoading, mutate: mutateSubscribers } = useRead<SubscribersResponse>(subscribersUrl);
 
   const subscribers = subscribersData?.subscribers || [];
   const totalSubscribers = subscribersData?.total || 0;
-  const subscriberSummary = subscribersData?.summary || { total: totalSubscribers, active: 0, restricted: 0, lowTraffic: 0 };
+  const subscriberSummary = subscribersData?.summary || { total: totalSubscribers, active: 0, restricted: 0, lowTraffic: 0, unprovisioned: 0 };
 
   const { data: profileData } = useRead<ProfilesResponse>('/api/profiles');
   const profileList = profileData?.profiles || [];
+  const { data: tariffPlanData } = useRead<{ plans?: SubscriberPlanOption[] }>('/api/tariff-plans');
+  const planOptions = tariffPlanData?.plans || [];
+
+  const hasActiveFilters = filters.access !== 'all'
+    || filters.contract !== 'all'
+    || filters.provisioning !== 'all'
+    || filters.balance !== 'all'
+    || filters.planId !== '';
+  const canAdjustBalance = hasPermission(user, 'ocs.balance.adjust');
 
   const handleOpenNew = () => {
     setModalImsi(null);
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (imsi: string, e?: React.MouseEvent) => {
+  const handleOpenView = (imsi: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setModalImsi(imsi);
     setIsModalOpen(true);
   };
 
-  const handleDelete = (imsi: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDelete = (imsi: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setActiveDropdown(null);
     setPendingDelete({ mode: 'single', imsis: [imsi] });
   };
 
-  const handleOpenTrafficAdjustment = (sub: SubscriberRow, mode: TrafficAdjustmentMode, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleOpenTrafficAdjustment = (sub: SubscriberRow, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setActiveDropdown(null);
     const used = sub.traffic?.used || 0;
     const total = sub.traffic?.total || 0;
     const balance = sub.traffic?.balance ?? Math.max(0, total - used);
-    setTrafficAdjustmentTarget({ imsi: sub.imsi, traffic: { used, total, balance }, mode });
+    setTrafficAdjustmentTarget({ imsi: sub.imsi, traffic: { used, total, balance } });
   };
 
   const handleBulkDelete = () => {
@@ -226,19 +263,47 @@ export function SubscribersPage() {
   const handleSort = (field: string) => {
     if (sortField === field) setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDirection('asc'); }
-  };
-
-  const applyStatusFilter = (nextFilter: SubscriberStatusFilter) => {
-    setStatusFilter(nextFilter);
     setCurrentPage(1);
     setSelectedImsis([]);
   };
 
+  const handleFiltersChange = (next: SubscriberFilterState) => {
+    setFilters(next);
+    setCurrentPage(1);
+    setSelectedImsis([]);
+  };
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    setCurrentPage(1);
+    setSelectedImsis([]);
+  };
+
+  const handleSummarySelect = (key: SubscriberSummaryKey) => {
+    if (key === 'all') {
+      resetFilters();
+      return;
+    }
+    if (key === 'unprovisioned') {
+      handleFiltersChange({ ...DEFAULT_FILTERS, provisioning: 'incomplete' });
+      return;
+    }
+    handleFiltersChange({ ...DEFAULT_FILTERS, access: key });
+  };
+
+  const activeCard: SubscriberSummaryKey | null = (() => {
+    if (filters.provisioning === 'incomplete' && filters.access === 'all' && filters.contract === 'all' && filters.balance === 'all' && !filters.planId) return 'unprovisioned';
+    if (filters.access === 'active' && filters.contract === 'all' && filters.provisioning === 'all' && filters.balance === 'all' && !filters.planId) return 'active';
+    if (filters.access === 'restricted' && filters.contract === 'all' && filters.provisioning === 'all' && filters.balance === 'all' && !filters.planId) return 'restricted';
+    if (!hasActiveFilters) return 'all';
+    return null;
+  })();
+
   const summaryCards = [
-    { key: 'all' as const, label: t('subscriber_summary_total'), value: subscriberSummary.total, tone: 'primary' },
+    { key: 'all' as const, label: subscriberQuery ? t('subscriber_summary_matched') : t('subscriber_summary_total'), value: subscriberSummary.total, tone: 'primary' },
     { key: 'active' as const, label: t('subscriber_summary_active'), value: subscriberSummary.active, tone: 'success' },
     { key: 'restricted' as const, label: t('subscriber_summary_restricted'), value: subscriberSummary.restricted, tone: 'danger' },
-    { key: 'lowTraffic' as const, label: t('subscriber_summary_low_traffic'), value: subscriberSummary.lowTraffic, tone: 'warning' },
+    { key: 'unprovisioned' as const, label: t('subscriber_summary_unprovisioned'), value: subscriberSummary.unprovisioned ?? 0, tone: 'warning' },
   ] as const;
 
   const totalPages = Math.max(1, Math.ceil(totalSubscribers / pageSize));
@@ -254,8 +319,8 @@ export function SubscribersPage() {
     if (subscribersData && currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, subscribersData, totalPages]);
 
-  const handleCopyImsi = async (imsi: string, e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
+  const handleCopyImsi = async (imsi: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     try {
       await navigator.clipboard.writeText(imsi);
       setCopiedImsi(imsi);
@@ -284,8 +349,8 @@ export function SubscribersPage() {
 
         <SubscriberSummaryPanel
           summaryCards={summaryCards}
-          statusFilter={statusFilter}
-          applyStatusFilter={applyStatusFilter}
+          activeCard={activeCard}
+          onSelect={handleSummarySelect}
         />
 
         {/* A page-level notice is modal so a destructive action is explicitly
@@ -331,17 +396,23 @@ export function SubscribersPage() {
           pendingDelete={pendingDelete}
           handleOpenNew={handleOpenNew}
           setIsBatchOpen={setIsBatchOpen}
-          mutateSubscribers={() => { void mutateSubscribers(); }}
-          setFeedback={setFeedback}
+        />
+
+        <SubscriberFilters
+          filters={filters}
+          planOptions={planOptions}
+          onChange={handleFiltersChange}
+          onReset={resetFilters}
         />
 
         <div className="dash-card shadow table-card">
           <SubscriberTable
             isLoading={isLoading}
             totalSubscribers={totalSubscribers}
-            searchQuery={searchQuery}
-            statusFilter={statusFilter}
+            searchQuery={subscriberQuery}
+            hasActiveFilters={hasActiveFilters}
             canEditSubscribers={canEditSubscribers}
+            canAdjustBalance={canAdjustBalance}
             handleOpenNew={handleOpenNew}
             isAllPageSelected={isAllPageSelected}
             selectedOnPageCount={selectedOnPageCount}
@@ -357,10 +428,9 @@ export function SubscribersPage() {
             copiedImsi={copiedImsi}
             handleCopyImsi={handleCopyImsi}
             resolveNetwork={resolveNetwork}
-            formatBytes={formatBytes}
             formatFullDate={formatFullDate}
             timeAgo={timeAgo}
-            handleOpenEdit={handleOpenEdit}
+            handleOpenView={handleOpenView}
             handleDelete={handleDelete}
             isDeletingSingle={isDeletingSingle}
             pendingDelete={pendingDelete}
@@ -411,12 +481,11 @@ export function SubscribersPage() {
         <TrafficAdjustmentModal
           imsi={trafficAdjustmentTarget.imsi}
           t={t}
-          defaultMode={trafficAdjustmentTarget.mode}
           currentTraffic={trafficAdjustmentTarget.traffic}
           onClose={() => setTrafficAdjustmentTarget(null)}
           onSuccess={() => {
             void mutateSubscribers();
-            setFeedback({ tone: 'success', title: t('success'), message: t('traffic_adjust_title') });
+            setFeedback({ tone: 'success', title: t('success'), message: t('traffic_success') });
           }}
         />
       )}

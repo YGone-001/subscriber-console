@@ -132,9 +132,9 @@ export default function RatingRuleLinkPanel({
             {t("rating_linkage_title")}
           </div>
           <div className="rating-panel-subtitle">
-            {t("rating_linkage_plan")} <span className="rating-panel-mono">{planId || "plan_default_10gb"}</span>
+            {t("rating_linkage_plan")} <span className="rating-panel-mono">{planId || t("sub_not_configured")}</span>
             <span className="rating-panel-sep">/</span>
-            {t("status")} <span className="rating-panel-mono">{planStatus || t("unknown")}</span>
+            {t("status")} <span className="rating-panel-mono">{planStatus || t("sub_not_configured")}</span>
           </div>
         </div>
         <a

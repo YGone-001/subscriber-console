@@ -1480,3 +1480,185 @@
   font-size: var(--ref-font-size-data-relaxed);
   line-height: 1.5;
 }
+
+/* ---------------------------------------------------------------------------
+ * Subscriber trust and task-efficiency additions
+ * ------------------------------------------------------------------------- */
+
+.subscriber-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-soft-panel);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.subscriber-filter-field {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 150px;
+  flex: 1 1 150px;
+}
+
+.subscriber-filter-field > span {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-weight: 800;
+}
+
+.subscriber-filter-field select {
+  min-height: 38px;
+}
+
+.subscriber-filter-reset {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.subscriber-identity-cell {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.subscriber-secondary-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.subscriber-msisdn {
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: var(--ref-font-size-label);
+  font-weight: 700;
+}
+
+.subscriber-msisdn.muted {
+  color: var(--text-muted);
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.imsi-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-main);
+  font-family: monospace;
+  font-size: var(--ref-font-size-body-emphasis);
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.imsi-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.contract-status-cell {
+  display: grid;
+  gap: 0.3rem;
+  justify-items: start;
+}
+
+.provisioning-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--warning);
+  font-size: var(--ref-font-size-label);
+  font-weight: 700;
+}
+
+.traffic-percent {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-weight: 700;
+}
+
+.config-check-title {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.config-check-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.config-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: var(--ref-font-size-body-compact);
+  font-weight: 700;
+}
+
+.config-check-ok {
+  color: var(--success);
+}
+
+.config-check-missing {
+  color: var(--danger);
+}
+
+.config-check-warning {
+  color: var(--warning);
+}
+
+.config-check-label {
+  color: var(--text-main);
+}
+
+.config-check-detail {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-family: monospace;
+  font-size: var(--ref-font-size-label);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dropdown-menu-item.danger {
+  color: var(--danger);
+}
+
+.dropdown-menu-item.danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.masked-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+@media (max-width: 768px) {
+  .subscriber-filter-bar {
+    align-items: stretch;
+  }
+
+  .subscriber-filter-field {
+    flex-basis: calc(50% - 0.75rem);
+    min-width: 0;
+  }
+
+  .subscriber-filter-reset {
+    width: 100%;
+    justify-content: center;
+  }
+}

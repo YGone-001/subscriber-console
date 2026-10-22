@@ -3,8 +3,9 @@
  * frontend/src/components/subscriber/utils.tsx
  * Adaptations: "use client" dropped; `@/` aliases and CSS-module imports repointed for the Vite runtime.
  */
-import { useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Copy, Check, Eye, EyeOff } from "lucide-react";
+import { useI18n } from '../../../../providers/I18nProvider';
 
 export const AMBR_UNITS = [
   { label: 'bps', val: 0 }, { label: 'Kbps', val: 1 }, { label: 'Mbps', val: 2 }, { label: 'Gbps', val: 3 }, { label: 'Tbps', val: 4 }
@@ -16,17 +17,38 @@ export const Pill = ({ enabled, children }: { enabled: boolean, children: React.
   </span>
 );
 
-export const MaskedValue = ({ label, value, singleLine = false }: { label: string, value: string, singleLine?: boolean }) => {
+export const MaskedValue = ({
+  label,
+  value,
+  singleLine = false,
+  canReveal = true,
+}: {
+  label: string;
+  value: string;
+  singleLine?: boolean;
+  canReveal?: boolean;
+}) => {
+  const { t } = useI18n();
+  const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    if (!revealed) return;
+    const timer = window.setTimeout(() => setRevealed(false), 30000);
+    return () => window.clearTimeout(timer);
+  }, [revealed]);
+
   const handleCopy = () => {
-    if (!value) return;
+    if (!value || !revealed) return;
     navigator.clipboard.writeText(value);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  if (!canReveal) return <span className="masked-na">{t("sub_credentials_no_permission")}</span>;
   if (!value) return <span className="masked-na">N/A</span>;
+
+  const masked = "•".repeat(Math.min(20, Math.max(8, value.length)));
 
   return (
     <div className="masked-row">
@@ -43,9 +65,25 @@ export const MaskedValue = ({ label, value, singleLine = false }: { label: strin
           wordBreak: singleLine ? "normal" : "break-all",
         }}
       >
-        {value}
+        {revealed ? value : masked}
       </span>
-      <button className="copy-btn masked-copy" onClick={handleCopy} title={`Copy full ${label}`}>
+      <button
+        type="button"
+        className="copy-btn masked-copy"
+        onClick={() => setRevealed((current) => !current)}
+        title={revealed ? t("sub_credentials_hide") : t("sub_credentials_reveal", { label })}
+        aria-label={revealed ? t("sub_credentials_hide") : t("sub_credentials_reveal", { label })}
+      >
+        {revealed ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+      <button
+        type="button"
+        className="copy-btn masked-copy"
+        onClick={handleCopy}
+        disabled={!revealed}
+        title={t("sub_credentials_copy", { label })}
+        aria-label={t("sub_credentials_copy", { label })}
+      >
         {copied ? <Check size={16} color="var(--success)" /> : <Copy size={16} />}
       </button>
     </div>

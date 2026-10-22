@@ -1,11 +1,16 @@
 /*
  * Forward-ported from the historical xCloud UI (reference commit 2c40903):
  * frontend/src/components/TrafficAdjustmentModal.tsx
- * Adaptations: "use client" dropped; `@/` aliases and CSS-module imports repointed for the Vite runtime.
+ *
+ * Adaptations: the historical surface posted to a routed placeholder. The
+ * subscription balance is now adjusted through the governed OCS endpoint, so
+ * every outcome is a real write or an explicit error.
  */
-import { BatteryCharging, Save, X } from "lucide-react";
+import { BatteryCharging, ExternalLink, Save, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { BYTE_INPUT_UNITS, composeByteInput, formatBytes, parseBytes, splitByteInput } from '../lib/unitParser';
+import { MutationApiError, postJson } from '../lib/api/mutation-client';
+import { useAppRouter } from '../lib/ui-compat/router';
 import { OperationNotice } from './ui/OperationFeedback';
 import { Dialog } from './ui/Dialog';
 
@@ -30,6 +35,8 @@ const MODE_OPTIONS: Array<{ mode: TrafficAdjustmentMode; icon: typeof BatteryCha
   { mode: "credit", icon: BatteryCharging, labelKey: "traffic_recharge" },
   { mode: "debit", icon: BatteryCharging, labelKey: "traffic_debit" },
 ];
+
+const CAS_CODES = ['BALANCE_PRECONDITION_CHANGED', 'PRECONDITION_FAILED'];
 
 function ByteInput({
   label,
@@ -74,6 +81,7 @@ export default function TrafficAdjustmentModal({
   onSuccess,
   t,
 }: TrafficAdjustmentModalProps) {
+  const router = useAppRouter();
   const total = Math.max(0, Number(currentTraffic.total || 0));
   const used = Math.max(0, Number(currentTraffic.used || 0));
   const balance = Math.max(0, Number(currentTraffic.balance ?? Math.max(0, total - used)));
@@ -96,35 +104,53 @@ export default function TrafficAdjustmentModal({
   };
 
   const handleSubmit = async () => {
+    const amount = parseBytes(amountStr);
+    if (amount <= 0) {
+      setError(t("traffic_amount_invalid"));
+      return;
+    }
+    if (mode === "debit" && amount > balance) {
+      setError(t("ocs_balance_insufficient"));
+      return;
+    }
+    if (!reason.trim()) {
+      setError(t("traffic_reason_required"));
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
 
     try {
-      const payload: any = {
-        bucket: "data",
-        operation: mode,
-        reason: reason.trim(),
-      };
-      payload.amount = parseBytes(amountStr);
+      const response = await postJson<{ outcome?: string }>(
+        `/api/ocs/balances/${encodeURIComponent(imsi)}/adjust`,
+        {
+          operation: mode,
+          bucket: "data",
+          amount,
+          reason: reason.trim(),
+        },
+      );
 
-      const response = await fetch(`/api/subscribers/${imsi}/traffic-adjustments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || t("traffic_err_save"));
-      }
-
-      onSuccess(data);
+      onSuccess(response);
       onClose();
-    } catch (err: any) {
-      setError(err.message || t("traffic_err_save"));
+    } catch (err) {
+      const code = err instanceof MutationApiError ? err.code : undefined;
+      if (code && CAS_CODES.includes(code)) {
+        setError(t("ocs_balance_precondition_changed"));
+      } else if (code === "GO_BACKEND_UNREACHABLE") {
+        setError(t("ocs_balance_backend_unreachable"));
+      } else {
+        setError(err instanceof Error ? err.message : t("traffic_err_save"));
+      }
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const openBalanceManagement = () => {
+    onClose();
+    router.push(`/ocs/balances/${encodeURIComponent(imsi)}`);
   };
 
   return (
@@ -179,7 +205,7 @@ export default function TrafficAdjustmentModal({
           <ByteInput label={t("traffic_amount")} value={amountStr} onChange={setAmountStr} />
 
           <div>
-            <label className="form-label">{t("traffic_reason")}</label>
+            <label className="form-label"><span className="form-asterisk">*</span>{t("traffic_reason")}</label>
             <input
               className="form-input"
               maxLength={200}
@@ -210,7 +236,9 @@ export default function TrafficAdjustmentModal({
         </div>
 
         <div className="workflow-footer ta-footer">
-          <span className="ta-footer-text">{t("traffic_current")}: {formatBytes(balance)}</span>
+          <button type="button" className="btn btn-outline" onClick={openBalanceManagement} disabled={isSaving}>
+            <ExternalLink size={15} /> {t("sub_balance_management")}
+          </button>
           <div className="workflow-footer-actions">
             <button ref={cancelButtonRef} className="btn btn-outline" onClick={onClose} disabled={isSaving}>{t("cancel")}</button>
             <button className="btn btn-primary" onClick={handleSubmit} disabled={isSaving}>

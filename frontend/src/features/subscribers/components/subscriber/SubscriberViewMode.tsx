@@ -26,11 +26,15 @@ interface SubscriberViewModeProps {
   ocsPlmn: string;
   ocsPlanId: string;
   ocsPlanStatus: string;
+  ocsContractStatus: string;
+  hasOcsContract: boolean;
+  hasOcsBalance: boolean;
   ocsRules: any[];
   ratingList?: any[];
   slices: Slice[];
   expandedSlices: number[];
   setExpandedSlices: React.Dispatch<React.SetStateAction<number[]>>;
+  canRevealCredentials: boolean;
 }
 
 function SummaryMetric({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
@@ -67,24 +71,36 @@ function DetailPanel({ id, icon, title, children, defaultOpen = false }: { id: s
   );
 }
 
-function HealthPill({ tone, children }: { tone: "ok" | "warn" | "danger"; children: React.ReactNode }) {
-  const toneClass = tone === "ok" ? "health-pill-ok" : tone === "warn" ? "health-pill-warn" : "health-pill-danger";
+function ConfigCheck({ state, label, detail }: { state: "ok" | "missing" | "warning"; label: string; detail?: string }) {
   return (
-    <span className={`health-pill-base ${toneClass}`}>
-      {tone === "ok" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
-      {children}
-    </span>
+    <div className={`config-check-row config-check-${state}`}>
+      {state === "ok" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+      <span className="config-check-label">{label}</span>
+      {detail ? <span className="config-check-detail">{detail}</span> : null}
+    </div>
   );
 }
 
-function AuthValueCard({ label, value, copyable = false, singleLine = false }: { label: string; value: string; copyable?: boolean; singleLine?: boolean }) {
+function AuthValueCard({
+  label,
+  value,
+  copyable = false,
+  singleLine = false,
+  canReveal = true,
+}: {
+  label: string;
+  value: string;
+  copyable?: boolean;
+  singleLine?: boolean;
+  canReveal?: boolean;
+}) {
   return (
     <div className="auth-value-card">
       <div className="auth-value-label">
         {label}
       </div>
       {copyable ? (
-        <MaskedValue label={label} value={value} singleLine={singleLine} />
+        <MaskedValue label={label} value={value} singleLine={singleLine} canReveal={canReveal} />
       ) : (
         <div className="auth-value-text">
           {value || "N/A"}
@@ -92,6 +108,21 @@ function AuthValueCard({ label, value, copyable = false, singleLine = false }: {
       )}
     </div>
   );
+}
+
+function contractStatusLabel(t: any, value?: string) {
+  if (!value) return t("sub_not_configured");
+  if (value === "active") return t("status_active");
+  if (value === "suspended") return t("status_suspended");
+  if (value === "terminated") return t("ocs_contract_status_terminated");
+  return value;
+}
+
+function planStatusLabel(t: any, value?: string) {
+  if (!value) return t("sub_not_configured");
+  if (value === "active") return t("status_active");
+  if (value === "disabled") return t("users_disabled");
+  return value;
 }
 
 function ratingTypeLabel(t: any, value?: string) {
@@ -126,11 +157,15 @@ export default function SubscriberViewMode({
   ocsPlmn,
   ocsPlanId,
   ocsPlanStatus,
+  ocsContractStatus,
+  hasOcsContract,
+  hasOcsBalance,
   ocsRules,
   ratingList,
   slices,
   expandedSlices,
-  setExpandedSlices
+  setExpandedSlices,
+  canRevealCredentials,
 }: SubscriberViewModeProps) {
   const hasDataRule = ocsRules.some((rule: any) => rule?.charging_type === "data_volume");
   const hasVoiceRule = ocsRules.some((rule: any) => rule?.charging_type === "voice_time");
@@ -155,36 +190,65 @@ export default function SubscriberViewMode({
   const voicePercent = voiceTotal > 0 ? Math.max(0, Math.min(100, (voiceBalance / voiceTotal) * 100)) : 0;
   const smsPercent = smsTotal > 0 ? Math.max(0, Math.min(100, (smsBalance / smsTotal) * 100)) : 0;
   const hasPlan = Boolean(ocsPlanId);
-  const isSuspended = ocsPlanStatus && ocsPlanStatus !== "active";
+  const isContractSuspended = ocsContractStatus === "suspended" || ocsContractStatus === "terminated";
   const hasRestriction = Number(accessRestriction || 0) !== 0 && Number(accessRestriction || 0) !== 32;
-  const healthScore = Math.max(0, Math.min(100,
-    100
-    - (hasPlan ? 0 : 18)
-    - (hasDataRule ? 0 : 14)
-    - (hasVoiceRule ? 0 : 12)
-    - (hasSmsRule ? 0 : 10)
-    - (hasImsRule ? 0 : 10)
-    - (sliceCount > 0 ? 0 : 12)
-    - (trafficPercent < 15 ? 16 : trafficPercent < 30 ? 8 : 0)
-    - (voicePercent < 15 ? 10 : voicePercent < 30 ? 5 : 0)
-    - (smsPercent < 15 ? 8 : smsPercent < 30 ? 4 : 0)
-    - (isSuspended ? 14 : 0)
-    - (hasRestriction ? 8 : 0)
-  ));
-  const healthTone = healthScore >= 86 ? "ok" : healthScore >= 68 ? "warn" : "danger";
+  const hasRules = ocsRules.length > 0;
+
+  const configChecks: Array<{ key: string; state: "ok" | "missing" | "warning"; label: string; detail?: string }> = [
+    {
+      key: "contract",
+      state: hasOcsContract ? (isContractSuspended ? "warning" : "ok") : "missing",
+      label: t("sub_check_contract"),
+      detail: hasOcsContract ? contractStatusLabel(t, ocsContractStatus) : undefined,
+    },
+    {
+      key: "plan",
+      state: hasPlan ? "ok" : "missing",
+      label: t("sub_check_plan"),
+      detail: hasPlan ? ocsPlanId : undefined,
+    },
+    {
+      key: "balance",
+      state: hasOcsBalance ? "ok" : "missing",
+      label: t("sub_check_balance"),
+      detail: hasOcsBalance ? `${ocsTrafficBalanceStr || "0 B"} / ${ocsTrafficTotalStr || "0 B"}` : undefined,
+    },
+    {
+      key: "rules",
+      state: hasRules ? "ok" : "missing",
+      label: t("sub_check_rules"),
+      detail: hasRules ? String(ocsRules.length) : undefined,
+    },
+    {
+      key: "slices",
+      state: sliceCount > 0 ? "ok" : "missing",
+      label: t("sub_check_slices"),
+      detail: sliceCount > 0 ? String(sliceCount) : undefined,
+    },
+    {
+      key: "access",
+      state: hasRestriction ? "warning" : "ok",
+      label: t("sub_check_access"),
+      detail: hasRestriction ? String(accessRestriction) : t("sub_360_access_open"),
+    },
+  ];
+
   const focusItems = [
-    !hasPlan ? t("sub_360_focus_plan") : "",
-    !hasDataRule ? t("sub_360_focus_data_rule") : "",
-    !hasVoiceRule ? t("sub_360_focus_voice_rule") : "",
-    !hasSmsRule ? t("sub_360_focus_sms_rule") : "",
-    !hasImsRule ? t("sub_360_focus_ims_rule") : "",
+    !hasOcsContract ? t("sub_360_focus_contract") : "",
+    hasOcsContract && !hasPlan ? t("sub_360_focus_plan") : "",
+    !hasOcsBalance ? t("sub_360_focus_balance") : "",
+    hasPlan && !hasDataRule ? t("sub_360_focus_data_rule") : "",
     sliceCount === 0 ? t("sub_360_focus_slice") : "",
-    trafficPercent < 30 ? t("sub_360_focus_traffic") : "",
-    voicePercent < 30 ? t("sub_360_focus_voice") : "",
-    smsPercent < 30 ? t("sub_360_focus_sms") : "",
-    isSuspended ? t("sub_360_focus_status") : "",
+    hasOcsBalance && trafficTotal > 0 && trafficPercent < 30 ? t("sub_360_focus_traffic") : "",
+    isContractSuspended ? t("sub_360_focus_contract_status") : "",
     hasRestriction ? t("sub_360_focus_access") : "",
   ].filter(Boolean).slice(0, 4);
+
+  const remainingLabel = (total: number, balance: number, configured: boolean) => {
+    if (!configured) return t("sub_not_configured");
+    if (total <= 0) return "0%";
+    return `${Math.max(0, Math.min(100, (balance / total) * 100)).toFixed(0)}%`;
+  };
 
   return (
     <div className="animate-fade-in view-mode-container">
@@ -197,15 +261,11 @@ export default function SubscriberViewMode({
         <div className="dash-card-body dash-card-body-grid">
           <div className="overview-grid">
             <div className="overview-box gap-sm">
-              <div className="health-score-container">
-                <div>
-                  <div className="health-score-label">{t("sub_360_health")}</div>
-                  <div className="health-score-value">{healthScore}</div>
-                </div>
-                <HealthPill tone={healthTone}>{t(`sub_360_health_${healthTone}`)}</HealthPill>
-              </div>
-              <div className="health-bar-bg">
-                <div className={`health-bar-fill ${healthTone}`} style={{ width: `${healthScore}%` }} />
+              <div className="config-check-title">{t("sub_config_check")}</div>
+              <div className="config-check-list">
+                {configChecks.map((check) => (
+                  <ConfigCheck key={check.key} state={check.state} label={check.label} detail={check.detail} />
+                ))}
               </div>
               <div className="identity-info-grid">
                 <div className="identity-info-row"><span>IMSI</span><strong className="identity-info-val">{imsi || "N/A"}</strong></div>
@@ -234,9 +294,9 @@ export default function SubscriberViewMode({
                 </div>
               )}
               <div className="overview-metrics-grid">
-                <SummaryMetric label={t("sub_360_data_remaining")} value={`${trafficPercent.toFixed(0)}%`} accent={trafficPercent >= 30} />
-                <SummaryMetric label={t("sub_360_voice_remaining")} value={`${voicePercent.toFixed(0)}%`} accent={voicePercent >= 30} />
-                <SummaryMetric label={t("sub_360_sms_remaining")} value={`${smsPercent.toFixed(0)}%`} accent={smsPercent >= 30} />
+                <SummaryMetric label={t("sub_360_data_remaining")} value={remainingLabel(trafficTotal, trafficBalance, hasOcsBalance)} accent={hasOcsBalance && trafficPercent >= 30} />
+                <SummaryMetric label={t("sub_360_voice_remaining")} value={remainingLabel(voiceTotal, voiceBalance, hasOcsBalance)} accent={hasOcsBalance && voicePercent >= 30} />
+                <SummaryMetric label={t("sub_360_sms_remaining")} value={remainingLabel(smsTotal, smsBalance, hasOcsBalance)} accent={hasOcsBalance && smsPercent >= 30} />
                 <SummaryMetric label={t("sub_360_rule_coverage")} value={`${[hasDataRule, hasVoiceRule, hasSmsRule, hasImsRule].filter(Boolean).length}/4`} accent={hasDataRule && hasVoiceRule && hasSmsRule && hasImsRule} />
               </div>
             </div>
@@ -249,9 +309,10 @@ export default function SubscriberViewMode({
                 {t("sub_360_package")}
               </div>
               <div className="details-box-content">
-                <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("none")} accent />
-                <SummaryMetric label={t("sub_360_plan_status")} value={ocsPlanStatus || t("unknown")} />
-                <SummaryMetric label="PLMN" value={ocsPlmn || "N/A"} />
+                <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("sub_not_configured")} accent />
+                <SummaryMetric label={t("sub_360_plan_status")} value={planStatusLabel(t, ocsPlanStatus)} />
+                <SummaryMetric label={t("sub_contract_status")} value={contractStatusLabel(t, ocsContractStatus)} />
+                <SummaryMetric label="PLMN" value={ocsPlmn || t("sub_not_configured")} />
               </div>
             </div>
 
@@ -261,8 +322,8 @@ export default function SubscriberViewMode({
                 {t("sub_360_data_balance")}
               </div>
               <div className="details-box-content">
-                <SummaryMetric label={t("sub_360_total_quota")} value={ocsTrafficTotalStr} />
-                <SummaryMetric label={t("sub_360_available")} value={ocsTrafficBalanceStr} accent />
+                <SummaryMetric label={t("sub_360_total_quota")} value={hasOcsBalance ? (ocsTrafficTotalStr || "0 B") : t("sub_not_configured")} />
+                <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsTrafficBalanceStr || "0 B") : t("sub_not_configured")} accent={hasOcsBalance} />
               </div>
             </div>
 
@@ -272,8 +333,8 @@ export default function SubscriberViewMode({
                 {t("sub_360_ims_voice")}
               </div>
               <div className="details-box-content">
-                <SummaryMetric label={t("sub_360_total_duration")} value={ocsVoiceTotalStr} />
-                <SummaryMetric label={t("sub_360_available")} value={ocsVoiceBalanceStr} accent />
+                <SummaryMetric label={t("sub_360_total_duration")} value={hasOcsBalance ? (ocsVoiceTotalStr || "0s") : t("sub_not_configured")} />
+                <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsVoiceBalanceStr || "0s") : t("sub_not_configured")} accent={hasOcsBalance} />
               </div>
             </div>
 
@@ -283,8 +344,8 @@ export default function SubscriberViewMode({
                 {t("sub_360_ims_sms")}
               </div>
               <div className="details-box-content">
-                <SummaryMetric label={t("sub_360_sms_quota")} value={ocsSmsTotalStr} />
-                <SummaryMetric label={t("sub_360_available")} value={ocsSmsBalanceStr} accent />
+                <SummaryMetric label={t("sub_360_sms_quota")} value={hasOcsBalance ? (ocsSmsTotalStr || "0") : t("sub_not_configured")} />
+                <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsSmsBalanceStr || "0") : t("sub_not_configured")} accent={hasOcsBalance} />
               </div>
             </div>
 
@@ -316,10 +377,10 @@ export default function SubscriberViewMode({
           {t("sub_technical_title")}
         </div>
 
-        <DetailPanel id="sec-security" title={t("sec_security_auth")} icon={<KeyRound size={18} color="var(--primary)" />} defaultOpen>
+        <DetailPanel id="sec-security" title={t("sec_security_auth")} icon={<KeyRound size={18} color="var(--primary)" />}>
           <div className="auth-grid">
-            <AuthValueCard label={t("sub_key_k")} value={auth4GData.k} copyable singleLine />
-            <AuthValueCard label={`${t("sub_key_op")} (${usimType.toUpperCase()})`} value={auth4GData.opValue} copyable singleLine />
+            <AuthValueCard label={t("sub_key_k")} value={auth4GData.k} copyable singleLine canReveal={canRevealCredentials} />
+            <AuthValueCard label={`${t("sub_key_op")} (${usimType.toUpperCase()})`} value={auth4GData.opValue} copyable singleLine canReveal={canRevealCredentials} />
             <AuthValueCard label="AMF" value={auth4GData.amf || "N/A"} />
             <AuthValueCard label="SQN" value={String(auth4GData.sqn || 0)} />
           </div>
@@ -356,9 +417,10 @@ export default function SubscriberViewMode({
             <SummaryMetric label={t("sub_360_voice_balance")} value={ocsVoiceBalanceStr} accent />
             <SummaryMetric label={t("sub_360_sms_quota")} value={ocsSmsTotalStr} />
             <SummaryMetric label={t("sub_360_sms_balance")} value={ocsSmsBalanceStr} accent />
-            <SummaryMetric label="PLMN" value={ocsPlmn} />
-            <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("none")} accent />
-            <SummaryMetric label={t("sub_360_plan_status")} value={ocsPlanStatus || t("unknown")} />
+            <SummaryMetric label="PLMN" value={ocsPlmn || t("sub_not_configured")} />
+            <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("sub_not_configured")} accent />
+            <SummaryMetric label={t("sub_360_plan_status")} value={planStatusLabel(t, ocsPlanStatus)} />
+            <SummaryMetric label={t("sub_contract_status")} value={contractStatusLabel(t, ocsContractStatus)} />
           </div>
           <div className="apn-rules-title">{t("sub_360_apn_rules")}</div>
           <RatingRuleLinkPanel

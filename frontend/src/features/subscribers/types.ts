@@ -3,6 +3,9 @@
  * frontend/src/app/(dashboard)/subscribers/types.ts
  * Adaptations: `@/` aliases repointed; the feedback tone re-exported from the current primitives.
  */
+import { type FeedbackTone } from '../../components/ui/OperationFeedback';
+export type { FeedbackTone };
+
 export interface PlmnRecord {
   mcc: string;
   mnc: string;
@@ -11,19 +14,39 @@ export interface PlmnRecord {
   country_code?: string;
 }
 
+export type SubscriberProvisioning = {
+  contract: boolean;
+  balance: boolean;
+  tariffPlan: boolean;
+};
+
+export type SubscriberTrafficSnapshot = {
+  used: number;
+  total: number;
+  balance?: number;
+};
+
+export type SubscriberSmsSnapshot = {
+  used: number;
+  total: number;
+  balance?: number;
+};
+
 export interface SubscriberRow {
   imsi: string;
+  msisdn?: string;
   status: string;
+  contractStatus?: string;
   policy?: string;
   policyName?: string;
   policyStatus?: string;
+  provisioning?: SubscriberProvisioning;
   lastActive: string;
   ard?: number;
-  traffic?: {
-    used: number;
-    total: number;
-    balance?: number;
-  };
+  plmn?: string;
+  profile?: string;
+  traffic?: SubscriberTrafficSnapshot;
+  sms?: SubscriberSmsSnapshot;
   [key: string]: unknown;
 }
 
@@ -36,11 +59,7 @@ export type TrafficAdjustmentTarget = {
     total: number;
     balance: number;
   };
-  mode: TrafficAdjustmentMode;
 };
-
-import { type FeedbackTone } from '../../components/ui/OperationFeedback';
-export type { FeedbackTone };
 
 export type FeedbackState = {
   tone: FeedbackTone;
@@ -53,13 +72,33 @@ export type PendingDelete = {
   imsis: string[];
 };
 
-export type SubscriberStatusFilter = "all" | "active" | "restricted" | "lowTraffic";
+export type SubscriberAccessStatus = "all" | "active" | "restricted";
+export type SubscriberContractStatus = "all" | "active" | "suspended" | "terminated" | "none";
+export type SubscriberProvisioningStatus =
+  | "all"
+  | "complete"
+  | "incomplete"
+  | "missing_contract"
+  | "missing_balance"
+  | "missing_plan";
+export type SubscriberBalanceStatus = "all" | "exhausted" | "available" | "missing";
+
+export type SubscriberFilters = {
+  access: SubscriberAccessStatus;
+  contract: SubscriberContractStatus;
+  provisioning: SubscriberProvisioningStatus;
+  planId: string;
+  balance: SubscriberBalanceStatus;
+};
+
+export type SubscriberSummaryKey = "all" | "active" | "restricted" | "unprovisioned";
 
 export type SubscriberSummary = {
   total: number;
   active: number;
   restricted: number;
   lowTraffic: number;
+  unprovisioned: number;
 };
 
 export interface ProfilesResponse {
@@ -72,4 +111,10 @@ export interface SubscribersResponse {
   page: number;
   limit: number;
   summary?: SubscriberSummary;
+  matchedBy?: "imsi" | "msisdn";
+  matchSource?: string;
 }
+
+export type SubscriberListResponse = SubscribersResponse;
+
+export type StatusLabelMap = Record<string, string>;

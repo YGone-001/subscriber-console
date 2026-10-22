@@ -6,6 +6,8 @@
 import { Save, Trash2, X, Pencil, Check, Layers, Copy, BatteryCharging } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from '../providers/I18nProvider';
+import { useAuth } from '../providers/AuthProvider';
+import { hasPermission } from '../lib/permissions';
 import SubscriberViewMode from '../features/subscribers/components/subscriber/SubscriberViewMode';
 import SubscriberEditMode from '../features/subscribers/components/subscriber/SubscriberEditMode';
 import TrafficAdjustmentModal from './TrafficAdjustmentModal';
@@ -23,12 +25,15 @@ interface SubscriberModalProps {
 
 export default function SubscriberModal({ imsi, onClose, onRefresh }: SubscriberModalProps) {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const canRevealCredentials = hasPermission(user, 'subscribers.write');
+  const canAdjustBalance = hasPermission(user, 'ocs.balance.adjust');
   const [isTrafficModalOpen, setIsTrafficModalOpen] = useState(false);
   const [isImsiCopied, setIsImsiCopied] = useState(false);
   const { state, actions } = useSubscriberForm(imsi, t, onClose, onRefresh);
   const {
     isEditing, isLoading, isSaving, error, inputImsi, toastMessage,
-    slices, ocsPlanId, ocsTrafficTotalStr, ocsTrafficBalanceStr,
+    slices, ocsTrafficTotalStr, ocsTrafficBalanceStr,
     inputImsiExists, isCheckingInputImsi, inputMsisdnExists, isCheckingInputMsisdn
   } = state;
   const { handleDelete, handleSave, setIsEditing, scrollTo, clearError, clearToastMessage } = actions;
@@ -92,11 +97,15 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
       ocsPlmn={state.ocsPlmn}
       ocsPlanId={state.ocsPlanId}
       ocsPlanStatus={state.ocsPlanStatus}
+      ocsContractStatus={state.ocsContractStatus}
+      hasOcsContract={state.hasOcsContract}
+      hasOcsBalance={state.hasOcsBalance}
       ocsRules={state.ocsRules}
       ratingList={state.ratingList}
       slices={state.slices}
       expandedSlices={state.expandedSlices}
       setExpandedSlices={actions.setExpandedSlices}
+      canRevealCredentials={canRevealCredentials}
     />;
   };
 
@@ -156,7 +165,15 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
                   <p className="sub-modal-new-desc">{t("sub_new_desc")}</p>
                 </div>
               )}
-              {ocsPlanId && <span className="badge-active"><Check size={12}/> {t("sub_billing_active")}</span>}
+              {imsi && (
+                state.hasOcsContract ? (
+                  <span className={state.ocsContractStatus === "active" ? "badge-active" : "badge-secondary"}>
+                    <Check size={12}/> {state.ocsContractStatus === "active" ? t("sub_billing_active") : t(`sub_contract_${state.ocsContractStatus || "unknown"}`)}
+                  </span>
+                ) : (
+                  <span className="badge-secondary">{t("sub_not_configured")}</span>
+                )
+              )}
               {slices.length > 1 && <span className="badge-secondary"><Layers size={12}/> {t("sub_multi_slice")}</span>}
             </div>
           </div>
@@ -164,7 +181,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
           <div className="workflow-header-actions">
             {!isEditing && (
               <>
-                {imsi && (
+                {imsi && canAdjustBalance && state.hasOcsBalance && (
                   <button className="btn-icon" onClick={() => setIsTrafficModalOpen(true)} title={t("traffic_adjust")}>
                     <BatteryCharging size={24} color="var(--primary)" />
                   </button>
@@ -255,7 +272,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
             {isEditing ? t("sub_msg_edit") : t("sub_msg_view")}
           </div>
           <div className="workflow-footer-actions">
-            <button className="btn btn-outline" onClick={unsavedGuard.requestClose} disabled={isSaving}>{t("cancel")}</button>
+            <button className="btn btn-outline" onClick={unsavedGuard.requestClose} disabled={isSaving}>{isEditing ? t("cancel") : t("close")}</button>
             {isEditing && (
               <button
                 className={`btn btn-primary ${isSaving ? 'btn-loading' : ''}`}

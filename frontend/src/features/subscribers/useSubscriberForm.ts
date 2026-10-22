@@ -3,7 +3,7 @@
  * frontend/src/hooks/useSubscriberForm.ts
  * Adaptations: "use client" dropped; `@/` aliases and CSS-module imports repointed for the Vite runtime.
  */
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { parseBytes, formatBytes, parseSeconds, formatSeconds, parseEvents, formatEvents } from '../../lib/unitParser';
 import { sessionQosPreset } from '../../lib/imsQosPresets.js';
 import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
@@ -66,17 +66,21 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [profileList, setProfileList] = useState<any[]>([]);
   const [ratingList, setRatingList] = useState<any[]>([]);
   const [tariffPlanList, setTariffPlanList] = useState<TariffPlanOption[]>([]);
-  const [ocsPlanId, setOcsPlanId] = useState("plan_default_10gb");
-  const [ocsPlanStatus, setOcsPlanStatus] = useState("active");
+  const [ocsPlanId, setOcsPlanId] = useState("");
+  const [ocsPlanStatus, setOcsPlanStatus] = useState("");
+  const [ocsContractStatus, setOcsContractStatus] = useState("");
+  const [hasOcsContract, setHasOcsContract] = useState(false);
+  const [hasOcsBalance, setHasOcsBalance] = useState(false);
   const [ocsRules, setOcsRules] = useState<any[]>([]);
 
-  const [ocsPlmn, setOcsPlmn] = useState("45400");
-  const [ocsTrafficTotalStr, setOcsTrafficTotalStr] = useState("10 GB");
-  const [ocsTrafficBalanceStr, setOcsTrafficBalanceStr] = useState("10 GB");
-  const [ocsVoiceTotalStr, setOcsVoiceTotalStr] = useState("1h");
-  const [ocsVoiceBalanceStr, setOcsVoiceBalanceStr] = useState("1h");
-  const [ocsSmsTotalStr, setOcsSmsTotalStr] = useState("100");
-  const [ocsSmsBalanceStr, setOcsSmsBalanceStr] = useState("100");
+  const [ocsPlmn, setOcsPlmn] = useState("");
+  const [ocsTrafficTotalStr, setOcsTrafficTotalStr] = useState("");
+  const [ocsTrafficBalanceStr, setOcsTrafficBalanceStr] = useState("");
+  const [ocsVoiceTotalStr, setOcsVoiceTotalStr] = useState("");
+  const [ocsVoiceBalanceStr, setOcsVoiceBalanceStr] = useState("");
+  const [ocsSmsTotalStr, setOcsSmsTotalStr] = useState("");
+  const [ocsSmsBalanceStr, setOcsSmsBalanceStr] = useState("");
+  const initialOcsSignatureRef = useRef<string | null>(null);
 
   const [plmnDb, setPlmnDb] = useState<any[]>([]);
 
@@ -186,7 +190,10 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         const plans = Array.isArray(data.plans) ? data.plans : [];
         setTariffPlanList(plans);
         setOcsPlanId((current) => {
-          if (plans.some((plan: TariffPlanOption) => plan.plan_id === current)) return current;
+          if (current && plans.some((plan: TariffPlanOption) => plan.plan_id === current)) return current;
+          /* Existing subscribers must not inherit a plan candidate before the
+           * detail response proves a contract exists. */
+          if (imsi) return current;
           return plans.find((plan: TariffPlanOption) => (plan.status || "active") === "active")?.plan_id
             || plans[0]?.plan_id
             || current;
@@ -207,7 +214,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     fetchProfileList();
     fetchTariffPlanList();
     fetchPlmnDb();
-  }, []);
+  }, [imsi]);
 
   useEffect(() => {
     if (!ocsPlanId) return;
@@ -287,7 +294,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         setTimeout(() => setToastMessage(null), 3000);
       }
     } catch {
-      setError('Failed to load profile template.');
+      setError(t("sub_err_profile_load"));
     }
   };
 
@@ -322,8 +329,9 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
             amf: data.auth4G.amf || "8000"
           });
         }
+        setHasOcsBalance(Boolean(data.ocsTraffic));
         if (data.ocsTraffic) {
-          setOcsPlmn(data.ocsTraffic.plmn || "45400");
+          setOcsPlmn(data.ocsTraffic.plmn ? String(data.ocsTraffic.plmn) : "");
           if (data.ocsTraffic.traffic_total !== undefined) {
              setOcsTrafficTotalStr(formatBytes(data.ocsTraffic.traffic_total));
           } else {
@@ -335,14 +343,24 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (data.ocsTraffic.sms_total !== undefined) setOcsSmsTotalStr(formatEvents(Number(data.ocsTraffic.sms_total)));
           if (data.ocsTraffic.sms_balance !== undefined) setOcsSmsBalanceStr(formatEvents(Number(data.ocsTraffic.sms_balance)));
         }
-        if (data.ocsImsi) {
+        /* A contract is the authority that a plan exists. Without it, the
+         * default tariff plan returned by the read API is not this subscriber's
+         * provisioning and must not be rendered as one. */
+        const hasContract = Boolean(data.ocsImsi);
+        setHasOcsContract(hasContract);
+        if (hasContract) {
           if (data.ocsImsi.msisdn) setMsisdn(String(data.ocsImsi.msisdn));
           if (data.ocsImsi.plan_id) setOcsPlanId(String(data.ocsImsi.plan_id));
-          if (data.ocsImsi.status) setOcsPlanStatus(String(data.ocsImsi.status));
+          setOcsContractStatus(data.ocsImsi.status ? String(data.ocsImsi.status) : "");
+          if (data.ocsTariffPlan?.plan_id) setOcsPlanId(String(data.ocsTariffPlan.plan_id));
+          if (data.ocsTariffPlan?.status) setOcsPlanStatus(String(data.ocsTariffPlan.status));
+          if (Array.isArray(data.ocsTariffPlan?.rules)) setOcsRules(data.ocsTariffPlan.rules);
+        } else {
+          setOcsContractStatus("");
+          setOcsPlanId("");
+          setOcsPlanStatus("");
+          setOcsRules([]);
         }
-        if (data.ocsTariffPlan?.plan_id) setOcsPlanId(String(data.ocsTariffPlan.plan_id));
-        if (data.ocsTariffPlan?.status) setOcsPlanStatus(String(data.ocsTariffPlan.status));
-        if (Array.isArray(data.ocsTariffPlan?.rules)) setOcsRules(data.ocsTariffPlan.rules);
     } catch {
       setError(t("sub_err_load"));
       } finally {
@@ -351,6 +369,22 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     };
     fetchData();
   }, [imsi, t]);
+
+  useEffect(() => {
+    if (isLoading || initialOcsSignatureRef.current !== null) return;
+    initialOcsSignatureRef.current = JSON.stringify({
+      planId: ocsPlanId,
+      trafficTotal: ocsTrafficTotalStr,
+      trafficBalance: ocsTrafficBalanceStr,
+      voiceTotal: ocsVoiceTotalStr,
+      voiceBalance: ocsVoiceBalanceStr,
+      smsTotal: ocsSmsTotalStr,
+      smsBalance: ocsSmsBalanceStr,
+    });
+  }, [
+    isLoading, ocsPlanId, ocsTrafficTotalStr, ocsTrafficBalanceStr,
+    ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr,
+  ]);
 
   const handleDelete = async () => {
     if (!imsi) return;
@@ -380,6 +414,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       if (!imsi && inputImsiExists) throw new Error(t("sub_err_imsi_exists"));
       if (!/^\d+$/.test(msisdn)) throw new Error(t("sub_err_msisdn"));
       if (inputMsisdnExists) throw new Error(t("sub_err_msisdn_exists"));
+      if (!imsi && !ocsPlanId) throw new Error(t("sub_err_plan_required"));
 
       const duplicateParams = new URLSearchParams({ msisdn });
       if (imsi) duplicateParams.set("excludeImsi", imsi);
@@ -398,7 +433,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         session_list: (Array.isArray(slice.session_list) ? slice.session_list : []).map((session: any) => {
           const pgwIpv4 = session?.pgwIpv4?.trim() || "";
           if (pgwIpv4 && !isValidIpv4(pgwIpv4)) {
-            throw new Error(`Invalid PGW IPv4 format in session ${session?.name || "unknown"}.`);
+            throw new Error(t("sub_err_pgw_ipv4", { session: session?.name || t("unknown") }));
           }
           return {
             ...session,
@@ -453,24 +488,39 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         msisdnList: [{ msisdn }],
       };
 
-      const ocsTrafficPayload = {
-        traffic_total: parseBytes(ocsTrafficTotalStr),
-        traffic_balance: parseBytes(ocsTrafficBalanceStr),
-        voice_total: parseSeconds(ocsVoiceTotalStr),
-        voice_balance: parseSeconds(ocsVoiceBalanceStr),
-        sms_total: parseEvents(ocsSmsTotalStr),
-        sms_balance: parseEvents(ocsSmsBalanceStr),
-        planId: ocsPlanId
-      };
+      /* Only send OCS fields the operator actually has values for. An empty
+       * form on an unprovisioned subscriber must not silently create a default
+       * contract or zero out an existing balance. */
+      const ocsTrafficPayload: Record<string, any> = {};
+      if (ocsPlanId) ocsTrafficPayload.planId = ocsPlanId;
+      if (ocsTrafficTotalStr) ocsTrafficPayload.traffic_total = parseBytes(ocsTrafficTotalStr);
+      if (ocsTrafficBalanceStr) ocsTrafficPayload.traffic_balance = parseBytes(ocsTrafficBalanceStr);
+      if (ocsVoiceTotalStr) ocsTrafficPayload.voice_total = parseSeconds(ocsVoiceTotalStr);
+      if (ocsVoiceBalanceStr) ocsTrafficPayload.voice_balance = parseSeconds(ocsVoiceBalanceStr);
+      if (ocsSmsTotalStr) ocsTrafficPayload.sms_total = parseEvents(ocsSmsTotalStr);
+      if (ocsSmsBalanceStr) ocsTrafficPayload.sms_balance = parseEvents(ocsSmsBalanceStr);
 
       /*
        * No auth4G here. This request only applies ordinary mutable configuration; authentication
        * material was already provisioned by the POST above and is immutable from this point on.
        */
+      const currentOcsSignature = JSON.stringify({
+        planId: ocsPlanId,
+        trafficTotal: ocsTrafficTotalStr,
+        trafficBalance: ocsTrafficBalanceStr,
+        voiceTotal: ocsVoiceTotalStr,
+        voiceBalance: ocsVoiceBalanceStr,
+        smsTotal: ocsSmsTotalStr,
+        smsBalance: ocsSmsBalanceStr,
+      });
+      const ocsDirty = !imsi || initialOcsSignatureRef.current !== currentOcsSignature;
+
       const payload: any = {
         sub4G: finalSub4G,
-        ocsTraffic: ocsTrafficPayload
       };
+      if (ocsDirty && Object.keys(ocsTrafficPayload).length > 0) {
+        payload.ocsTraffic = ocsTrafficPayload;
+      }
 
       try {
         await putJson(`/api/subscribers/${encodeURIComponent(targetImsi)}`, payload);
@@ -570,7 +620,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       isEditing, isLoading, isSaving, error, newlyAddedSliceIndex, inputImsi, toastMessage,
       inputImsiExists, isCheckingInputImsi, inputMsisdnExists, isCheckingInputMsisdn,
       expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
-      accessRestriction, profileList, ratingList, tariffPlanList, ocsPlanId, ocsPlanStatus, ocsRules, ocsPlmn,
+      accessRestriction, profileList, ratingList, tariffPlanList, ocsPlanId, ocsPlanStatus, ocsContractStatus, hasOcsContract, hasOcsBalance, ocsRules, ocsPlmn,
       ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr,
       ocsSmsTotalStr, ocsSmsBalanceStr
     },

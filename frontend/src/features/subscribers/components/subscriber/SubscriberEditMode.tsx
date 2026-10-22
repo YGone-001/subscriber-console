@@ -9,7 +9,6 @@ import RatingRuleLinkPanel from './RatingRuleLinkPanel';
 import { BYTE_INPUT_UNITS, TIME_INPUT_UNITS, composeByteInput, composeSecondsInput, splitByteInput, splitSecondsInput } from '../../../../lib/unitParser';
 import { AMBR_UNITS } from './utils';
 import type { Ambr, Auth4GData, Rating, Slice } from '../../../../types/subscriber';
-import { useI18n } from '../../../../providers/I18nProvider';
 
 interface SubscriberEditModeProps {
   t: any;
@@ -34,6 +33,9 @@ interface SubscriberEditModeProps {
     ocsSmsBalanceStr: string;
     ocsPlanId: string;
     ocsPlanStatus: string;
+    ocsContractStatus: string;
+    hasOcsContract: boolean;
+    hasOcsBalance: boolean;
     ocsRules: any[];
     slices: Slice[];
     newlyAddedSliceIndex: number | null;
@@ -61,12 +63,26 @@ function ratingUnitLabel(t: any, value?: string) {
   return value || "-";
 }
 
+function contractStatusLabel(t: any, value?: string) {
+  if (!value) return t("sub_not_configured");
+  if (value === "active") return t("status_active");
+  if (value === "suspended") return t("status_suspended");
+  if (value === "terminated") return t("ocs_contract_status_terminated");
+  return value;
+}
+
+function planStatusLabel(t: any, value?: string) {
+  if (!value) return t("sub_not_configured");
+  if (value === "active") return t("status_active");
+  if (value === "disabled") return t("users_disabled");
+  return value;
+}
+
 export default function SubscriberEditMode({ t, imsi, state, actions }: SubscriberEditModeProps) {
-  const { lang } = useI18n();
   const {
     inputImsi, msisdn, profileList,
     auth4GData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules, ratingList, tariffPlanList,
+    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr, ocsPlanId, ocsPlanStatus, ocsContractStatus, hasOcsContract, hasOcsBalance, ocsRules, ratingList, tariffPlanList,
     slices, newlyAddedSliceIndex, expandedSlices, inputImsiExists, isCheckingInputImsi, inputMsisdnExists, isCheckingInputMsisdn
   } = state;
 
@@ -84,16 +100,12 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
    */
   const authReadOnly = Boolean(imsi);
 
-  const totalTrafficInput = splitByteInput(ocsTrafficTotalStr);
-  const balanceTrafficInput = splitByteInput(ocsTrafficBalanceStr, totalTrafficInput.unit);
-  const totalVoiceInput = splitSecondsInput(ocsVoiceTotalStr);
-  const balanceVoiceInput = splitSecondsInput(ocsVoiceBalanceStr, totalVoiceInput.unit);
-  const duplicateImsiWarning = lang === "zh"
-    ? "\u8be5 IMSI \u5df2\u5b58\u5728\u3002\u5df2\u963b\u6b62\u521b\u5efa\uff0c\u907f\u514d\u8986\u76d6\u5df2\u6709\u7b7e\u7ea6\u7528\u6237\u3002"
-    : t("sub_imsi_exists_warning");
-  const checkingImsiText = lang === "zh"
-    ? "\u6b63\u5728\u68c0\u67e5\u8be5 IMSI \u662f\u5426\u5df2\u5b58\u5728..."
-    : t("sub_imsi_checking");
+  const totalTrafficInput = ocsTrafficTotalStr ? splitByteInput(ocsTrafficTotalStr) : { value: "", unit: "GB" };
+  const balanceTrafficInput = ocsTrafficBalanceStr ? splitByteInput(ocsTrafficBalanceStr, totalTrafficInput.unit) : { value: "", unit: totalTrafficInput.unit };
+  const totalVoiceInput = ocsVoiceTotalStr ? splitSecondsInput(ocsVoiceTotalStr) : { value: "", unit: "h" };
+  const balanceVoiceInput = ocsVoiceBalanceStr ? splitSecondsInput(ocsVoiceBalanceStr, totalVoiceInput.unit) : { value: "", unit: totalVoiceInput.unit };
+  const duplicateImsiWarning = t("sub_imsi_exists_warning");
+  const checkingImsiText = t("sub_imsi_checking");
   const duplicateMsisdnWarning = t("sub_msisdn_exists_warning");
   const checkingMsisdnText = t("sub_msisdn_checking");
 
@@ -341,6 +353,16 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           <h3 className="edit-header-title">{t("sec_billing_config")}</h3>
         </div>
         <div className="dash-card-body billing-edit-grid">
+          {!hasOcsContract && (
+            <p className="auth-readonly-note auth-edit-full" role="note">
+              {t("sub_ocs_provision_notice")}
+            </p>
+          )}
+          {hasOcsContract && !hasOcsBalance && (
+            <p className="auth-readonly-note auth-edit-full" role="note">
+              {t("sub_ocs_balance_notice")}
+            </p>
+          )}
           <div>
             <label className="form-label form-label-flex">
               <span><span className="form-asterisk">*</span>PLMN</span>
@@ -392,8 +414,9 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               className="form-input plan-id-select"
               value={ocsPlanId}
               onChange={(e) => setOcsPlanId(e.target.value)}
-              disabled={tariffPlanOptions.length === 0}
+              disabled={tariffPlanOptions.length === 0 && !ocsPlanId}
             >
+              <option value="">{t("sub_not_configured")}</option>
               {tariffPlanOptions.map((plan) => (
                 <option key={plan.plan_id} value={plan.plan_id}>
                   {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}{plan.status === "disabled" ? ` - ${t("users_disabled")}` : ""}
@@ -403,7 +426,11 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           </div>
           <div>
             <label className="form-label">{t("sub_360_plan_status")}</label>
-            <input type="text" className="form-input plan-status-readonly" value={ocsPlanStatus} readOnly />
+            <input type="text" className="form-input plan-status-readonly" value={planStatusLabel(t, ocsPlanStatus)} readOnly />
+          </div>
+          <div>
+            <label className="form-label">{t("sub_contract_status")}</label>
+            <input type="text" className="form-input plan-status-readonly" value={contractStatusLabel(t, ocsContractStatus)} readOnly />
           </div>
           <RatingRuleLinkPanel
             planId={ocsPlanId}
