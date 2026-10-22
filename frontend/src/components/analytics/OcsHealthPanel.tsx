@@ -127,10 +127,6 @@ export default function OcsHealthPanel({
             <span>{t('nav_ocs_balances')}</span>
             <ArrowUpRight size={14} />
           </Link>
-          <Link to="/ocs/usage" className="analytics-ocs-link-btn">
-            <span>{t('nav_ocs_usage')}</span>
-            <ArrowUpRight size={14} />
-          </Link>
         </div>
       </div>
 

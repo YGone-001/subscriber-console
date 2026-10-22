@@ -97,8 +97,8 @@ export default function AnalyticsCockpit() {
             sessions: formatNumber(sessions.activeSessions),
             total: formatNumber(activeSessionTotal / BYTES_IN_GB, { maximumFractionDigits: 2 }),
           }),
-          href: '/ocs/sessions',
-          action: t('nav_ocs_sessions'),
+          href: '/ocs/balances',
+          action: t('nav_ocs_balances'),
         });
       } else {
         result.push({
@@ -108,8 +108,8 @@ export default function AnalyticsCockpit() {
           detail: latestText
             ? t('dash_biz_risk_usage_stale_detail', { time: latestText })
             : t('dash_biz_risk_usage_none'),
-          href: '/ocs/usage',
-          action: t('nav_ocs_usage'),
+          href: '/ocs/balances',
+          action: t('nav_ocs_balances'),
         });
       }
     } else if (runwayHours !== null && runwayHours < 72) {
@@ -145,8 +145,8 @@ export default function AnalyticsCockpit() {
         tone: 'info',
         title: t('dash_biz_risk_orphan_title', { count: formatNumber(reservations.orphanedReservations) }),
         detail: t('dash_biz_risk_orphan_detail'),
-        href: '/ocs/usage',
-        action: t('nav_ocs_usage'),
+        href: '/ocs/balances',
+        action: t('nav_ocs_balances'),
       });
     }
 

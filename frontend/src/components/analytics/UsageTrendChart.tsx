@@ -105,8 +105,8 @@ export default function UsageTrendChart({
                 ? t('dash_biz_usage_empty_latest', { time: latestText })
                 : t('dash_biz_usage_empty_none'))}
             action={(
-              <Link to="/ocs/usage" className="btn btn-outline analytics-empty-button">
-                {t('nav_ocs_usage')}
+              <Link to="/ocs/balances" className="btn btn-outline analytics-empty-button">
+                {t('nav_ocs_balances')}
               </Link>
             )}
           />
