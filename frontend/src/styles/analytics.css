@@ -1850,6 +1850,10 @@
     background: color-mix(in srgb, var(--status-info) 10%, var(--surface));
   }
 
+  .analytics-risk-info .analytics-risk-copy span {
+    white-space: normal;
+  }
+
   .analytics-risk-copy {
     display: flex;
     flex-direction: column;

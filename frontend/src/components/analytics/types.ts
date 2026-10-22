@@ -122,3 +122,16 @@ export type BusinessRisk = {
   href: string;
   action: string;
 };
+
+export type OrphanReservationRecord = {
+  id: string;
+  imsi: string;
+  session_id: string;
+  apn: string;
+  charging_type?: string;
+  state: string;
+  orphan_reason?: string;
+  reserved_octets: number;
+  used_octets: number;
+  released_octets: number;
+};

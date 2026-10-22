@@ -34,15 +34,41 @@ import TariffPlanDistributionChart from './analytics/TariffPlanDistributionChart
 import OcsHealthPanel from './analytics/OcsHealthPanel';
 import TopUsageChart from './analytics/TopUsageChart';
 import { BYTES_IN_GB } from './analytics/utils';
-import type { BusinessRisk, MetricsData } from './analytics/types';
+import type { BusinessRisk, MetricsData, OrphanReservationRecord } from './analytics/types';
 import type { UEInfoResponse } from '../features/ue-info/types';
 
 const RISK_RANK: Record<BusinessRisk['tone'], number> = { danger: 0, warning: 1, info: 2 };
+
+function formatDataSize(
+  bytes: number,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
+): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes >= BYTES_IN_GB) {
+    return `${formatNumber(bytes / BYTES_IN_GB, { maximumFractionDigits: 2 })} GB`;
+  }
+  if (bytes >= 1024 ** 2) {
+    return `${formatNumber(bytes / 1024 ** 2, { maximumFractionDigits: 1 })} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${formatNumber(bytes / 1024, { maximumFractionDigits: 1 })} KB`;
+  }
+  return `${formatNumber(bytes)} B`;
+}
 
 export default function AnalyticsCockpit() {
   const { t, formatNumber, formatDateTime } = useI18n();
   const metrics = useSWR<MetricsData>('/api/analytics/metrics', fetcher, { refreshInterval: 30000 });
   const ue = useSWR<UEInfoResponse>('/api/ue-info?summary=1', fetcher, { refreshInterval: 30000 });
+  const orphanedCount = metrics.data?.ocsReservations?.orphanedReservations ?? 0;
+  const orphanRead = useSWR<{ records?: OrphanReservationRecord[] }>(
+    orphanedCount > 0
+      ? '/api/ocs/reservations?state=orphaned&limit=1&sortField=updated_at&sortOrder=desc'
+      : null,
+    fetcher,
+    { refreshInterval: 60000, revalidateOnFocus: false },
+  );
+  const orphanRecord = orphanRead.data?.records?.[0];
 
   const risks = useMemo<BusinessRisk[]>(() => {
     const data = metrics.data;
@@ -140,11 +166,20 @@ export default function AnalyticsCockpit() {
     }
 
     if (reservations && reservations.orphanedReservations > 0) {
+      const orphanDetail = orphanRecord
+        ? `${reservations.orphanedReservations > 1 ? t('dash_biz_risk_orphan_latest') : ''}${t('dash_biz_risk_orphan_detail_record', {
+          imsi: orphanRecord.imsi || '—',
+          apn: orphanRecord.apn || '—',
+          reserved: formatDataSize(orphanRecord.reserved_octets, formatNumber),
+          used: formatDataSize(orphanRecord.used_octets, formatNumber),
+          reason: orphanRecord.orphan_reason || '—',
+        })}`
+        : t('dash_biz_risk_orphan_detail');
       result.push({
         id: 'orphaned-reservations',
         tone: 'info',
         title: t('dash_biz_risk_orphan_title', { count: formatNumber(reservations.orphanedReservations) }),
-        detail: t('dash_biz_risk_orphan_detail'),
+        detail: orphanDetail,
         href: '/ocs/balances',
         action: t('nav_ocs_balances'),
       });
@@ -179,7 +214,7 @@ export default function AnalyticsCockpit() {
     }
 
     return result.sort((left, right) => RISK_RANK[left.tone] - RISK_RANK[right.tone]);
-  }, [metrics.data, t, formatNumber, formatDateTime]);
+  }, [metrics.data, orphanRecord, orphanedCount, t, formatNumber, formatDateTime]);
 
   if (metrics.isLoading) {
     return <SkeletonDashboard />;
