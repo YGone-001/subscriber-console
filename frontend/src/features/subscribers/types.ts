@@ -32,11 +32,15 @@ export type SubscriberSmsSnapshot = {
   balance?: number;
 };
 
+export type SubscriberBalanceState = "missing" | "exhausted" | "low" | "normal";
+
 export interface SubscriberRow {
   imsi: string;
   msisdn?: string;
   status: string;
   contractStatus?: string;
+  balanceState?: SubscriberBalanceState;
+  balanceThreshold?: number;
   policy?: string;
   policyName?: string;
   policyStatus?: string;
@@ -81,7 +85,7 @@ export type SubscriberProvisioningStatus =
   | "missing_contract"
   | "missing_balance"
   | "missing_plan";
-export type SubscriberBalanceStatus = "all" | "exhausted" | "available" | "missing";
+export type SubscriberBalanceStatus = "all" | "exhausted" | "low" | "normal" | "available" | "missing";
 
 export type SubscriberFilters = {
   access: SubscriberAccessStatus;
@@ -91,13 +95,14 @@ export type SubscriberFilters = {
   balance: SubscriberBalanceStatus;
 };
 
-export type SubscriberSummaryKey = "all" | "active" | "restricted" | "unprovisioned";
+export type SubscriberSummaryKey = "all" | "active" | "restricted" | "lowBalance" | "unprovisioned";
 
 export type SubscriberSummary = {
   total: number;
   active: number;
   restricted: number;
   lowTraffic: number;
+  lowBalance: number;
   unprovisioned: number;
 };
 

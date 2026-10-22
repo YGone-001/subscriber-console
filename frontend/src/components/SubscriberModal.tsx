@@ -100,6 +100,8 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
       ocsContractStatus={state.ocsContractStatus}
       hasOcsContract={state.hasOcsContract}
       hasOcsBalance={state.hasOcsBalance}
+      ocsVolumeThreshold={state.ocsVolumeThreshold}
+      ocsDataReservedStr={state.ocsDataReservedStr}
       ocsRules={state.ocsRules}
       ratingList={state.ratingList}
       slices={state.slices}

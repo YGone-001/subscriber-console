@@ -97,7 +97,8 @@ export function SubscriberFilters({ filters, planOptions, onChange, onReset }: S
           onChange={(event) => update('balance', event.target.value as SubscriberFilterState['balance'])}
         >
           <option value="all">{t('sub_filter_all')}</option>
-          <option value="available">{t('sub_balance_available')}</option>
+          <option value="normal">{t('sub_balance_normal')}</option>
+          <option value="low">{t('sub_balance_low')}</option>
           <option value="exhausted">{t('sub_balance_exhausted')}</option>
           <option value="missing">{t('sub_not_configured')}</option>
         </select>

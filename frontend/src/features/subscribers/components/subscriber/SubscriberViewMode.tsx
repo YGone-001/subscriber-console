@@ -7,7 +7,7 @@ import { AlertTriangle, BadgeCheck, CheckCircle2, Gauge, KeyRound, ListChecks, M
 import RatingRuleLinkPanel from './RatingRuleLinkPanel';
 import { Pill, MaskedValue, AMBR_UNITS, getAmbrString, typeLabel } from './utils';
 import type { Ambr, Auth4GData, Slice } from '../../../../types/subscriber';
-import { parseBytes, parseSeconds, parseEvents } from '../../../../lib/unitParser';
+import { parseBytes, parseSeconds, parseEvents, formatBytes } from '../../../../lib/unitParser';
 
 interface SubscriberViewModeProps {
   t: any;
@@ -29,6 +29,8 @@ interface SubscriberViewModeProps {
   ocsContractStatus: string;
   hasOcsContract: boolean;
   hasOcsBalance: boolean;
+  ocsVolumeThreshold: number;
+  ocsDataReservedStr: string;
   ocsRules: any[];
   ratingList?: any[];
   slices: Slice[];
@@ -160,6 +162,8 @@ export default function SubscriberViewMode({
   ocsContractStatus,
   hasOcsContract,
   hasOcsBalance,
+  ocsVolumeThreshold,
+  ocsDataReservedStr,
   ocsRules,
   ratingList,
   slices,
@@ -193,6 +197,25 @@ export default function SubscriberViewMode({
   const isContractSuspended = ocsContractStatus === "suspended" || ocsContractStatus === "terminated";
   const hasRestriction = Number(accessRestriction || 0) !== 0 && Number(accessRestriction || 0) !== 32;
   const hasRules = ocsRules.length > 0;
+  const balanceState: "missing" | "exhausted" | "low" | "normal" = !hasOcsBalance
+    ? "missing"
+    : trafficBalance <= 0
+      ? "exhausted"
+      : ocsVolumeThreshold > 0 && trafficBalance <= ocsVolumeThreshold
+        ? "low"
+        : "normal";
+  const balanceStateLabel = balanceState === "exhausted"
+    ? t("sub_balance_exhausted")
+    : balanceState === "low"
+      ? t("sub_balance_low")
+      : balanceState === "normal"
+        ? t("sub_balance_normal")
+        : t("sub_not_configured");
+  const balanceCheckState: "ok" | "missing" | "warning" = balanceState === "missing" || balanceState === "exhausted"
+    ? "missing"
+    : balanceState === "low"
+      ? "warning"
+      : "ok";
 
   const configChecks: Array<{ key: string; state: "ok" | "missing" | "warning"; label: string; detail?: string }> = [
     {
@@ -209,9 +232,9 @@ export default function SubscriberViewMode({
     },
     {
       key: "balance",
-      state: hasOcsBalance ? "ok" : "missing",
+      state: balanceCheckState,
       label: t("sub_check_balance"),
-      detail: hasOcsBalance ? `${ocsTrafficBalanceStr || "0 B"} / ${ocsTrafficTotalStr || "0 B"}` : undefined,
+      detail: hasOcsBalance ? `${balanceStateLabel} · ${ocsTrafficBalanceStr || "0 B"} / ${ocsTrafficTotalStr || "0 B"}` : undefined,
     },
     {
       key: "rules",
@@ -239,7 +262,9 @@ export default function SubscriberViewMode({
     !hasOcsBalance ? t("sub_360_focus_balance") : "",
     hasPlan && !hasDataRule ? t("sub_360_focus_data_rule") : "",
     sliceCount === 0 ? t("sub_360_focus_slice") : "",
-    hasOcsBalance && trafficTotal > 0 && trafficPercent < 30 ? t("sub_360_focus_traffic") : "",
+    balanceState === "exhausted" ? t("sub_360_focus_exhausted") : "",
+    balanceState === "low" ? t("sub_360_focus_low_balance") : "",
+    balanceState === "normal" && trafficTotal > 0 && trafficPercent < 30 ? t("sub_360_focus_traffic") : "",
     isContractSuspended ? t("sub_360_focus_contract_status") : "",
     hasRestriction ? t("sub_360_focus_access") : "",
   ].filter(Boolean).slice(0, 4);
@@ -324,6 +349,8 @@ export default function SubscriberViewMode({
               <div className="details-box-content">
                 <SummaryMetric label={t("sub_360_total_quota")} value={hasOcsBalance ? (ocsTrafficTotalStr || "0 B") : t("sub_not_configured")} />
                 <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsTrafficBalanceStr || "0 B") : t("sub_not_configured")} accent={hasOcsBalance} />
+                <SummaryMetric label={t("sub_360_reserved")} value={hasOcsBalance ? (ocsDataReservedStr || "0 B") : t("sub_not_configured")} />
+                <SummaryMetric label={t("sub_360_balance_threshold")} value={ocsVolumeThreshold > 0 ? formatBytes(ocsVolumeThreshold) : t("sub_not_configured")} />
               </div>
             </div>
 

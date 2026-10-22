@@ -9,6 +9,7 @@ import { sessionQosPreset } from '../../lib/imsQosPresets.js';
 import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
 import { deleteJson, MutationApiError, postJson, putJson } from '../../lib/api/mutation-client';
 import { buildSubscriberCreateRequest } from './mutation-contract';
+import { ONBOARDING_TEMPLATE, isRecommendedOnboardingPlan } from './onboarding-template';
 
 type ApiRecord = Record<string, any>;
 
@@ -23,6 +24,8 @@ type TariffPlanOption = {
   name?: string;
   description?: string;
   status?: string;
+  validity_time?: number;
+  volume_threshold?: number;
   rules?: any[];
 };
 
@@ -74,12 +77,14 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [ocsRules, setOcsRules] = useState<any[]>([]);
 
   const [ocsPlmn, setOcsPlmn] = useState("");
-  const [ocsTrafficTotalStr, setOcsTrafficTotalStr] = useState("");
-  const [ocsTrafficBalanceStr, setOcsTrafficBalanceStr] = useState("");
-  const [ocsVoiceTotalStr, setOcsVoiceTotalStr] = useState("");
-  const [ocsVoiceBalanceStr, setOcsVoiceBalanceStr] = useState("");
-  const [ocsSmsTotalStr, setOcsSmsTotalStr] = useState("");
-  const [ocsSmsBalanceStr, setOcsSmsBalanceStr] = useState("");
+  const [ocsTrafficTotalStr, setOcsTrafficTotalStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.dataTotal);
+  const [ocsTrafficBalanceStr, setOcsTrafficBalanceStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.dataBalance);
+  const [ocsVoiceTotalStr, setOcsVoiceTotalStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.voiceTotal);
+  const [ocsVoiceBalanceStr, setOcsVoiceBalanceStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.voiceBalance);
+  const [ocsSmsTotalStr, setOcsSmsTotalStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.smsTotal);
+  const [ocsSmsBalanceStr, setOcsSmsBalanceStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.smsBalance);
+  const [ocsVolumeThreshold, setOcsVolumeThreshold] = useState(0);
+  const [ocsDataReservedStr, setOcsDataReservedStr] = useState("");
   const initialOcsSignatureRef = useRef<string | null>(null);
 
   const [plmnDb, setPlmnDb] = useState<any[]>([]);
@@ -194,7 +199,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           /* Existing subscribers must not inherit a plan candidate before the
            * detail response proves a contract exists. */
           if (imsi) return current;
-          return plans.find((plan: TariffPlanOption) => (plan.status || "active") === "active")?.plan_id
+          return plans.find((plan: TariffPlanOption) => isRecommendedOnboardingPlan(plan))?.plan_id
+            || plans.find((plan: TariffPlanOption) => (plan.status || "active") === "active")?.plan_id
             || plans[0]?.plan_id
             || current;
         });
@@ -231,6 +237,9 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         if (planData) {
           const plan = planData.plan;
           if (plan?.status) setOcsPlanStatus(String(plan.status));
+          if (plan?.volume_threshold !== undefined) {
+            setOcsVolumeThreshold(Number(plan.volume_threshold) || 0);
+          }
           if (Array.isArray(plan?.rules)) setOcsRules(plan.rules);
         }
 
@@ -342,6 +351,13 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (data.ocsTraffic.voice_balance !== undefined) setOcsVoiceBalanceStr(formatSeconds(Number(data.ocsTraffic.voice_balance)));
           if (data.ocsTraffic.sms_total !== undefined) setOcsSmsTotalStr(formatEvents(Number(data.ocsTraffic.sms_total)));
           if (data.ocsTraffic.sms_balance !== undefined) setOcsSmsBalanceStr(formatEvents(Number(data.ocsTraffic.sms_balance)));
+          setOcsDataReservedStr(
+            data.ocsTraffic.data_reserved !== undefined
+              ? formatBytes(Number(data.ocsTraffic.data_reserved))
+              : "",
+          );
+        } else {
+          setOcsDataReservedStr("");
         }
         /* A contract is the authority that a plan exists. Without it, the
          * default tariff plan returned by the read API is not this subscriber's
@@ -354,11 +370,15 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           setOcsContractStatus(data.ocsImsi.status ? String(data.ocsImsi.status) : "");
           if (data.ocsTariffPlan?.plan_id) setOcsPlanId(String(data.ocsTariffPlan.plan_id));
           if (data.ocsTariffPlan?.status) setOcsPlanStatus(String(data.ocsTariffPlan.status));
+          if (data.ocsTariffPlan?.volume_threshold !== undefined) {
+            setOcsVolumeThreshold(Number(data.ocsTariffPlan.volume_threshold) || 0);
+          }
           if (Array.isArray(data.ocsTariffPlan?.rules)) setOcsRules(data.ocsTariffPlan.rules);
         } else {
           setOcsContractStatus("");
           setOcsPlanId("");
           setOcsPlanStatus("");
+          setOcsVolumeThreshold(0);
           setOcsRules([]);
         }
     } catch {
@@ -622,7 +642,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
       accessRestriction, profileList, ratingList, tariffPlanList, ocsPlanId, ocsPlanStatus, ocsContractStatus, hasOcsContract, hasOcsBalance, ocsRules, ocsPlmn,
       ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr,
-      ocsSmsTotalStr, ocsSmsBalanceStr
+      ocsSmsTotalStr, ocsSmsBalanceStr, ocsVolumeThreshold, ocsDataReservedStr
     },
     actions: {
       setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn: handleMsisdnChange, loadFromProfile, setAuth4GData,

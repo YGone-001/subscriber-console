@@ -130,7 +130,7 @@ export function SubscribersPage() {
 
   const subscribers = subscribersData?.subscribers || [];
   const totalSubscribers = subscribersData?.total || 0;
-  const subscriberSummary = subscribersData?.summary || { total: totalSubscribers, active: 0, restricted: 0, lowTraffic: 0, unprovisioned: 0 };
+  const subscriberSummary = subscribersData?.summary || { total: totalSubscribers, active: 0, restricted: 0, lowTraffic: 0, lowBalance: 0, unprovisioned: 0 };
 
   const { data: profileData } = useRead<ProfilesResponse>('/api/profiles');
   const profileList = profileData?.profiles || [];
@@ -288,11 +288,16 @@ export function SubscribersPage() {
       handleFiltersChange({ ...DEFAULT_FILTERS, provisioning: 'incomplete' });
       return;
     }
+    if (key === 'lowBalance') {
+      handleFiltersChange({ ...DEFAULT_FILTERS, balance: 'low' });
+      return;
+    }
     handleFiltersChange({ ...DEFAULT_FILTERS, access: key });
   };
 
   const activeCard: SubscriberSummaryKey | null = (() => {
     if (filters.provisioning === 'incomplete' && filters.access === 'all' && filters.contract === 'all' && filters.balance === 'all' && !filters.planId) return 'unprovisioned';
+    if (filters.balance === 'low' && filters.access === 'all' && filters.contract === 'all' && filters.provisioning === 'all' && !filters.planId) return 'lowBalance';
     if (filters.access === 'active' && filters.contract === 'all' && filters.provisioning === 'all' && filters.balance === 'all' && !filters.planId) return 'active';
     if (filters.access === 'restricted' && filters.contract === 'all' && filters.provisioning === 'all' && filters.balance === 'all' && !filters.planId) return 'restricted';
     if (!hasActiveFilters) return 'all';
@@ -303,6 +308,7 @@ export function SubscribersPage() {
     { key: 'all' as const, label: subscriberQuery ? t('subscriber_summary_matched') : t('subscriber_summary_total'), value: subscriberSummary.total, tone: 'primary' },
     { key: 'active' as const, label: t('subscriber_summary_active'), value: subscriberSummary.active, tone: 'success' },
     { key: 'restricted' as const, label: t('subscriber_summary_restricted'), value: subscriberSummary.restricted, tone: 'danger' },
+    { key: 'lowBalance' as const, label: t('subscriber_summary_low_balance'), value: subscriberSummary.lowBalance ?? 0, tone: 'warning' },
     { key: 'unprovisioned' as const, label: t('subscriber_summary_unprovisioned'), value: subscriberSummary.unprovisioned ?? 0, tone: 'warning' },
   ] as const;
 

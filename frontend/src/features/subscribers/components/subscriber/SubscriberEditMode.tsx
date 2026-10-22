@@ -6,7 +6,8 @@
 import { Users, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
 import ProfileSliceEditor from '../../../profiles/components/ProfileSliceEditor';
 import RatingRuleLinkPanel from './RatingRuleLinkPanel';
-import { BYTE_INPUT_UNITS, TIME_INPUT_UNITS, composeByteInput, composeSecondsInput, splitByteInput, splitSecondsInput } from '../../../../lib/unitParser';
+import { BYTE_INPUT_UNITS, TIME_INPUT_UNITS, formatBytes, composeByteInput, composeSecondsInput, splitByteInput, splitSecondsInput } from '../../../../lib/unitParser';
+import { ONBOARDING_TEMPLATE } from '../../onboarding-template';
 import { AMBR_UNITS } from './utils';
 import type { Ambr, Auth4GData, Rating, Slice } from '../../../../types/subscriber';
 
@@ -18,7 +19,7 @@ interface SubscriberEditModeProps {
     msisdn: string;
     profileList: any[];
     ratingList: Rating[];
-    tariffPlanList: Array<{ plan_id: string; name?: string; status?: string }>;
+    tariffPlanList: Array<{ plan_id: string; name?: string; status?: string; validity_time?: number; volume_threshold?: number }>;
     auth4GData: Auth4GData;
     usimType: "opc" | "op";
     ueAmbr: Ambr;
@@ -36,6 +37,7 @@ interface SubscriberEditModeProps {
     ocsContractStatus: string;
     hasOcsContract: boolean;
     hasOcsBalance: boolean;
+    ocsVolumeThreshold: number;
     ocsRules: any[];
     slices: Slice[];
     newlyAddedSliceIndex: number | null;
@@ -82,7 +84,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
   const {
     inputImsi, msisdn, profileList,
     auth4GData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr, ocsPlanId, ocsPlanStatus, ocsContractStatus, hasOcsContract, hasOcsBalance, ocsRules, ratingList, tariffPlanList,
+    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr, ocsPlanId, ocsPlanStatus, ocsContractStatus, hasOcsContract, hasOcsBalance, ocsVolumeThreshold, ocsRules, ratingList, tariffPlanList,
     slices, newlyAddedSliceIndex, expandedSlices, inputImsiExists, isCheckingInputImsi, inputMsisdnExists, isCheckingInputMsisdn
   } = state;
 
@@ -112,6 +114,20 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
   const tariffPlanOptions = tariffPlanList.length > 0
     ? tariffPlanList.filter((plan) => (plan.status || "active") === "active" || plan.plan_id === ocsPlanId)
     : (ocsPlanId ? [{ plan_id: ocsPlanId, name: ocsPlanId, status: ocsPlanStatus }] : []);
+
+  const isNewSubscriber = !imsi;
+  const selectedPlan = tariffPlanList.find((plan) => plan.plan_id === ocsPlanId);
+  const selectedPlanValidity = Number(selectedPlan?.validity_time || 0);
+  const selectedPlanThreshold = Number(selectedPlan?.volume_threshold ?? ocsVolumeThreshold ?? 0);
+  const planTemplateMismatch = isNewSubscriber && Boolean(selectedPlan)
+    && (selectedPlanValidity !== ONBOARDING_TEMPLATE.recommendedValiditySeconds
+      || selectedPlanThreshold !== ONBOARDING_TEMPLATE.recommendedVolumeThreshold);
+  const thresholdDisplay = selectedPlanThreshold > 0
+    ? formatBytes(selectedPlanThreshold)
+    : t("sub_not_configured");
+  const validityDisplay = selectedPlanValidity > 0
+    ? `${Math.round(selectedPlanValidity / 86400)}d`
+    : t("sub_not_configured");
 
   return (
     <div className="edit-mode-container">
@@ -353,6 +369,24 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           <h3 className="edit-header-title">{t("sec_billing_config")}</h3>
         </div>
         <div className="dash-card-body billing-edit-grid">
+          {isNewSubscriber && (
+            <p className="auth-readonly-note auth-edit-full" role="note">
+              {t("sub_default_template_notice", {
+                data: ONBOARDING_TEMPLATE.dataTotal,
+                voice: ONBOARDING_TEMPLATE.voiceTotal,
+                sms: ONBOARDING_TEMPLATE.smsTotal,
+              })}
+            </p>
+          )}
+          {planTemplateMismatch && (
+            <p className="warning-text auth-edit-full" role="note">
+              {t("sub_default_template_plan_mismatch", {
+                plan: selectedPlan?.name || selectedPlan?.plan_id || ocsPlanId,
+                validity: validityDisplay,
+                threshold: thresholdDisplay,
+              })}
+            </p>
+          )}
           {!hasOcsContract && (
             <p className="auth-readonly-note auth-edit-full" role="note">
               {t("sub_ocs_provision_notice")}
@@ -431,6 +465,10 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           <div>
             <label className="form-label">{t("sub_contract_status")}</label>
             <input type="text" className="form-input plan-status-readonly" value={contractStatusLabel(t, ocsContractStatus)} readOnly />
+          </div>
+          <div>
+            <label className="form-label">{t("sub_360_balance_threshold")}</label>
+            <input type="text" className="form-input plan-status-readonly" value={thresholdDisplay} readOnly />
           </div>
           <RatingRuleLinkPanel
             planId={ocsPlanId}

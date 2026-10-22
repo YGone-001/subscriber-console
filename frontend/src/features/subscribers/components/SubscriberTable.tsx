@@ -164,6 +164,14 @@ export function SubscriberTable(props: SubscriberTableProps) {
             const balance = traffic?.balance ?? Math.max(0, total - used);
             const uRatio = total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0;
             const remainingPercent = total > 0 ? Math.max(0, Math.min(100, (balance / total) * 100)) : (hasBalance ? 0 : null);
+            const balanceState = sub.balanceState ?? (hasBalance
+              ? (balance <= 0 ? "exhausted" : (sub.balanceThreshold && balance <= sub.balanceThreshold ? "low" : "normal"))
+              : "missing");
+            const balanceStateLabel = balanceState === "low"
+              ? t("sub_balance_low")
+              : balanceState === "exhausted"
+                ? t("sub_balance_exhausted_short")
+                : "";
             const isSelected = selectedImsis.includes(sub.imsi);
             const net = resolveNetwork(sub.imsi);
             const networkTooltip = net.network && net.network !== 'Unknown'
@@ -281,6 +289,16 @@ export function SubscriberTable(props: SubscriberTableProps) {
                         <span>{formatBytes(total)}</span>
                         <span className="traffic-percent">{remainingPercent === null ? t("sub_not_configured") : `${remainingPercent.toFixed(0)}%`}</span>
                       </div>
+                      {balanceStateLabel && (
+                        <div
+                          className={`traffic-state traffic-state-${balanceState}`}
+                          title={sub.balanceThreshold && sub.balanceThreshold > 0
+                            ? t("sub_balance_threshold_tooltip", { threshold: formatBytes(sub.balanceThreshold) })
+                            : undefined}
+                        >
+                          {balanceStateLabel}
+                        </div>
+                      )}
                       <div className="traffic-bar-container">
                         <div
                           className={`traffic-bar ${uRatio > 90 ? "high" : uRatio > 70 ? "medium" : "low"}`}

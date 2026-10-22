@@ -1662,3 +1662,17 @@
     justify-content: center;
   }
 }
+
+.traffic-state {
+  font-size: var(--ref-font-size-label);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.traffic-state-low {
+  color: var(--warning);
+}
+
+.traffic-state-exhausted {
+  color: var(--danger);
+}
