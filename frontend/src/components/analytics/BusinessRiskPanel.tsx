@@ -6,7 +6,7 @@
  * data-gap risk, never a passing check.
  */
 import { Link } from 'react-router-dom';
-import { AlertCircle, AlertTriangle, ListChecks, ShieldCheck } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Info, ListChecks, ShieldCheck } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import type { BusinessRisk } from './types';
 
@@ -43,14 +43,22 @@ export default function BusinessRiskPanel({ risks, total }: { risks: BusinessRis
               <li key={risk.id}>
                 <Link to={risk.href} className={`analytics-risk-item analytics-risk-${risk.tone}`}>
                   <span className="analytics-risk-icon" aria-hidden="true">
-                    {risk.tone === 'danger' ? <AlertTriangle size={15} /> : <AlertCircle size={15} />}
+                    {risk.tone === 'danger'
+                      ? <AlertTriangle size={15} />
+                      : risk.tone === 'warning'
+                        ? <AlertCircle size={15} />
+                        : <Info size={15} />}
                   </span>
                   <span className="analytics-risk-copy">
                     <strong>{risk.title}</strong>
                     <span>{risk.detail}</span>
                   </span>
                   <span className="analytics-risk-severity">
-                    {t(risk.tone === 'danger' ? 'dash_biz_risk_high' : 'dash_biz_risk_attention')}
+                    {t(risk.tone === 'danger'
+                      ? 'dash_biz_risk_high'
+                      : risk.tone === 'warning'
+                        ? 'dash_biz_risk_attention'
+                        : 'dash_biz_risk_info')}
                   </span>
                   <span className="analytics-risk-action">{risk.action}</span>
                 </Link>

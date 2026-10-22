@@ -142,7 +142,7 @@ export default function AnalyticsCockpit() {
     if (reservations && reservations.orphanedReservations > 0) {
       result.push({
         id: 'orphaned-reservations',
-        tone: 'warning',
+        tone: 'info',
         title: t('dash_biz_risk_orphan_title', { count: formatNumber(reservations.orphanedReservations) }),
         detail: t('dash_biz_risk_orphan_detail'),
         href: '/ocs/usage',
