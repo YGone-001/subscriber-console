@@ -2,7 +2,9 @@ package subscriber
 
 import (
 	"encoding/json"
+	"net/url"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -198,16 +200,19 @@ func TestEnsureImsiRange(t *testing.T) {
 }
 
 func TestIsLowTraffic(t *testing.T) {
-	if !isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: 0}}) {
-		t.Error("balance 0 should be low traffic")
+	if !isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: 0}, Provisioning: SubscriberProvisioning{Balance: true}}) {
+		t.Error("provisioned balance 0 should be low traffic")
 	}
-	if isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: 100}}) {
+	if isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: 100}, Provisioning: SubscriberProvisioning{Balance: true}}) {
 		t.Error("balance 100 should not be low traffic")
+	}
+	if isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: 0}}) {
+		t.Error("missing balance record must be unprovisioned, not low traffic")
 	}
 }
 
 func TestMatchesStatusFilter(t *testing.T) {
-	row := SubscriberRow{Status: "Active", Traffic: TrafficSnapshot{Balance: 100}}
+	row := SubscriberRow{Status: "Active", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: SubscriberProvisioning{Balance: true}}
 	if !matchesStatusFilter(row, "all") {
 		t.Error("all should match")
 	}
@@ -218,14 +223,14 @@ func TestMatchesStatusFilter(t *testing.T) {
 		t.Error("restricted should not match Active")
 	}
 
-	restrictedRow := SubscriberRow{Status: "Suspended", Traffic: TrafficSnapshot{Balance: 100}}
+	restrictedRow := SubscriberRow{Status: "Suspended", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: SubscriberProvisioning{Balance: true}}
 	if !matchesStatusFilter(restrictedRow, "restricted") {
 		t.Error("restricted should match Suspended")
 	}
 
-	lowRow := SubscriberRow{Status: "Active", Traffic: TrafficSnapshot{Balance: 0}}
+	lowRow := SubscriberRow{Status: "Active", Traffic: TrafficSnapshot{Balance: 0}, Provisioning: SubscriberProvisioning{Balance: true}}
 	if !matchesStatusFilter(lowRow, "lowTraffic") {
-		t.Error("lowTraffic should match balance 0")
+		t.Error("lowTraffic should match provisioned balance 0")
 	}
 }
 
@@ -366,26 +371,31 @@ func TestLegacyStateRoundTripsIntoUpdateValidation(t *testing.T) {
 // before status filtering, while total is the post-filter count.
 // This matches Node behavior: summary = pre-filter, total = post-filter.
 func TestSummaryPreFilter(t *testing.T) {
+	provisioned := SubscriberProvisioning{Contract: true, Balance: true, TariffPlan: true}
 	rows := []SubscriberRow{
-		{IMSI: "460000000000001", Status: "Active", Traffic: TrafficSnapshot{Balance: 100}},
-		{IMSI: "460000000000002", Status: "Suspended", Traffic: TrafficSnapshot{Balance: 100}},
-		{IMSI: "460000000000003", Status: "Active", Traffic: TrafficSnapshot{Balance: 0}}, // low traffic
-		{IMSI: "460000000000004", Status: "Active", Traffic: TrafficSnapshot{Balance: 200}},
+		{IMSI: "460000000000001", Status: "Active", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: provisioned},
+		{IMSI: "460000000000002", Status: "Suspended", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: provisioned},
+		{IMSI: "460000000000003", Status: "Active", Traffic: TrafficSnapshot{Balance: 0}, Provisioning: provisioned}, // low traffic
+		{IMSI: "460000000000004", Status: "Active", Traffic: TrafficSnapshot{Balance: 200}, Provisioning: provisioned},
+		{IMSI: "460000000000005", Status: "Active"}, // no OCS records: unprovisioned, not low traffic
 	}
 
 	// Summary is computed from ALL rows (pre-filter)
 	summary := buildSummary(nil, rows)
-	if summary.Total != 4 {
-		t.Errorf("summary.Total = %d, want 4 (pre-filter)", summary.Total)
+	if summary.Total != 5 {
+		t.Errorf("summary.Total = %d, want 5 (pre-filter)", summary.Total)
 	}
-	if summary.Active != 3 {
-		t.Errorf("summary.Active = %d, want 3 (pre-filter)", summary.Active)
+	if summary.Active != 4 {
+		t.Errorf("summary.Active = %d, want 4 (pre-filter)", summary.Active)
 	}
 	if summary.Restricted != 1 {
 		t.Errorf("summary.Restricted = %d, want 1 (pre-filter)", summary.Restricted)
 	}
 	if summary.LowTraffic != 1 {
 		t.Errorf("summary.LowTraffic = %d, want 1 (pre-filter)", summary.LowTraffic)
+	}
+	if summary.Unprovisioned != 1 {
+		t.Errorf("summary.Unprovisioned = %d, want 1 (pre-filter)", summary.Unprovisioned)
 	}
 
 	// After filtering to "active" only, total = 3 (post-filter)
@@ -395,8 +405,8 @@ func TestSummaryPreFilter(t *testing.T) {
 			filtered = append(filtered, row)
 		}
 	}
-	if len(filtered) != 3 {
-		t.Errorf("filtered count = %d, want 3 (post-filter active)", len(filtered))
+	if len(filtered) != 4 {
+		t.Errorf("filtered count = %d, want 4 (post-filter active)", len(filtered))
 	}
 }
 
@@ -529,5 +539,213 @@ func TestLegacyDetailSections(t *testing.T) {
 	}
 	if len(decoded) != 6 {
 		t.Errorf("legacy detail response must have exactly 6 sections, got %d", len(decoded))
+	}
+}
+
+func TestComputeLastActiveUsesLatestTimestamp(t *testing.T) {
+	doc := bson.M{
+		"updated_at": "2026-01-01T00:00:00.000Z",
+	}
+	ocsSub := bson.M{
+		"updated_at": "2026-03-01T00:00:00.000Z",
+	}
+	balance := bson.M{
+		"updated_at": "2026-02-01T00:00:00.000Z",
+	}
+
+	got := computeLastActive(doc, ocsSub, balance)
+	want := "2026-03-01T00:00:00.000Z"
+	if got != want {
+		t.Fatalf("computeLastActive = %q, want %q", got, want)
+	}
+}
+
+func TestComputeLastActiveUnknownIsEmpty(t *testing.T) {
+	if got := computeLastActive(bson.M{}, nil, nil); got != "" {
+		t.Fatalf("missing timestamps must return empty, got %q", got)
+	}
+}
+
+func TestComputeLastActiveAcceptsTimeValues(t *testing.T) {
+	older := time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC)
+	newer := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+
+	got := computeLastActive(bson.M{"updated_at": newer}, bson.M{"updated_at": older}, nil)
+	want := "2026-04-01T00:00:00.000Z"
+	if got != want {
+		t.Fatalf("computeLastActive = %q, want %q", got, want)
+	}
+}
+
+func TestExtractSubscriberMSISDN(t *testing.T) {
+	tests := []struct {
+		name   string
+		xcloud bson.M
+		ocs    bson.M
+		want   string
+	}{
+		{
+			name:   "msisdnList object",
+			xcloud: bson.M{"msisdnList": bson.A{bson.M{"msisdn": "18800000001"}}},
+			want:   "18800000001",
+		},
+		{
+			name:   "msisdn array",
+			xcloud: bson.M{"msisdn": bson.A{"18800000002"}},
+			want:   "18800000002",
+		},
+		{
+			name:   "ocs fallback",
+			xcloud: bson.M{},
+			ocs:    bson.M{"msisdn": "18800000003"},
+			want:   "18800000003",
+		},
+		{
+			name:   "missing",
+			xcloud: bson.M{},
+			want:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := extractSubscriberMSISDN(tt.xcloud, tt.ocs); got != tt.want {
+				t.Fatalf("extractSubscriberMSISDN = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchesFiltersContractProvisioningAndBalance(t *testing.T) {
+	provisioned := SubscriberProvisioning{Contract: true, Balance: true, TariffPlan: true}
+	row := SubscriberRow{
+		IMSI:           "460000000000001",
+		Status:         "Active",
+		ContractStatus: "suspended",
+		Policy:         "plan_a",
+		Provisioning:   provisioned,
+		Traffic:        TrafficSnapshot{Balance: 0},
+	}
+
+	if !matchesFilters(row, SubscriberListFilters{Status: "active", ContractStatus: "suspended", Provisioning: "complete", PlanID: "plan_a", BalanceStatus: "exhausted"}) {
+		t.Fatal("row should match all additive filters")
+	}
+	if matchesFilters(row, SubscriberListFilters{ContractStatus: "active"}) {
+		t.Fatal("contract status mismatch must not match")
+	}
+	if matchesFilters(row, SubscriberListFilters{Provisioning: "missing_balance"}) {
+		t.Fatal("complete provisioning must not match missing_balance")
+	}
+	if matchesFilters(row, SubscriberListFilters{PlanID: "plan_b"}) {
+		t.Fatal("plan mismatch must not match")
+	}
+	if matchesFilters(row, SubscriberListFilters{BalanceStatus: "available"}) {
+		t.Fatal("exhausted balance must not match available")
+	}
+
+	unprovisioned := SubscriberRow{IMSI: "460000000000002", Status: "Active"}
+	if !matchesFilters(unprovisioned, SubscriberListFilters{Provisioning: "incomplete", ContractStatus: "none", BalanceStatus: "missing"}) {
+		t.Fatal("unprovisioned row should match incomplete/none/missing filters")
+	}
+}
+
+func TestRedactAuthMaterial(t *testing.T) {
+	state := &LegacySubscriberState{
+		Auth4G: map[string]any{
+			"k":   "00112233445566778899aabbccddeeff",
+			"opc": "E8ED289DEBA952E4283B54E88E6183CA",
+			"amf": "8000",
+			"sqn": 0,
+		},
+	}
+
+	redactAuthMaterial(state, false)
+	if _, ok := state.Auth4G["k"]; ok {
+		t.Fatal("k must be redacted for read-only roles")
+	}
+	if _, ok := state.Auth4G["opc"]; ok {
+		t.Fatal("opc must be redacted for read-only roles")
+	}
+	if state.Auth4G["amf"] != "8000" {
+		t.Fatal("non-secret AMF must remain")
+	}
+
+	privileged := &LegacySubscriberState{Auth4G: map[string]any{"k": "key", "opc": "opc"}}
+	redactAuthMaterial(privileged, true)
+	if privileged.Auth4G["k"] != "key" || privileged.Auth4G["opc"] != "opc" {
+		t.Fatal("privileged roles must retain authentication material")
+	}
+}
+
+func TestParseSubscriberListFilters(t *testing.T) {
+	defaults := parseSubscriberListFilters(url.Values{})
+	if defaults.SearchBy != "imsi" || defaults.Status != "all" {
+		t.Fatalf("defaults = %+v, want imsi/all", defaults)
+	}
+
+	legacy := parseSubscriberListFilters(url.Values{"status": {"lowTraffic"}})
+	if legacy.Status != "all" || legacy.BalanceStatus != "exhausted" {
+		t.Fatalf("legacy lowTraffic = %+v, want all/exhausted", legacy)
+	}
+
+	full := parseSubscriberListFilters(url.Values{
+		"searchBy":       {"auto"},
+		"status":         {"active"},
+		"contractStatus": {"suspended"},
+		"provisioning":   {"missing_balance"},
+		"balanceStatus":  {"available"},
+		"planId":         {"plan_a"},
+	})
+	if full.SearchBy != "auto" || full.Status != "active" || full.ContractStatus != "suspended" ||
+		full.Provisioning != "missing_balance" || full.BalanceStatus != "available" || full.PlanID != "plan_a" {
+		t.Fatalf("full filters = %+v", full)
+	}
+
+	invalid := parseSubscriberListFilters(url.Values{
+		"searchBy":       {"email"},
+		"status":         {"unknown"},
+		"contractStatus": {"disabled"},
+		"provisioning":   {"broken"},
+		"balanceStatus":  {"zero"},
+	})
+	if invalid.SearchBy != "imsi" || invalid.Status != "all" || invalid.ContractStatus != "" ||
+		invalid.Provisioning != "" || invalid.BalanceStatus != "" {
+		t.Fatalf("invalid filters must be ignored, got %+v", invalid)
+	}
+}
+
+func TestToSubscriberRowProvisioningSignals(t *testing.T) {
+	doc := bson.M{
+		"imsi":       "460000000000001",
+		"msisdnList": bson.A{bson.M{"msisdn": "18800000001"}},
+	}
+	ocsSub := bson.M{
+		"imsi":    "460000000000001",
+		"status":  "active",
+		"plan_id": "plan_a",
+	}
+	balance := bson.M{"imsi": "460000000000001", "data_total": int64(100), "data_available": int64(0)}
+	plan := bson.M{"plan_id": "plan_a", "name": "Plan A", "status": "active"}
+
+	row := toSubscriberRow(doc, ocsSub, balance, plan)
+	if row.MSISDN != "18800000001" {
+		t.Fatalf("MSISDN = %q, want 18800000001", row.MSISDN)
+	}
+	if row.ContractStatus != "active" {
+		t.Fatalf("ContractStatus = %q, want active", row.ContractStatus)
+	}
+	if !row.Provisioning.Contract || !row.Provisioning.Balance || !row.Provisioning.TariffPlan {
+		t.Fatalf("provisioning flags = %+v, want all true", row.Provisioning)
+	}
+	if !isLowTraffic(row) {
+		t.Fatal("provisioned zero balance must be low traffic")
+	}
+
+	orphan := toSubscriberRow(doc, nil, nil, plan)
+	if orphan.Provisioning.Contract || orphan.Provisioning.Balance || orphan.Provisioning.TariffPlan {
+		t.Fatalf("orphan provisioning flags = %+v, want all false", orphan.Provisioning)
+	}
+	if isLowTraffic(orphan) {
+		t.Fatal("orphan row must not be treated as low traffic")
 	}
 }

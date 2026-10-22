@@ -14,29 +14,55 @@ type SubscriberListResult[T any] struct {
 	Page        int                `json:"page"`
 	Limit       int                `json:"limit"`
 	Summary     *SubscriberSummary `json:"summary,omitempty"`
+	MatchedBy   string             `json:"matchedBy,omitempty"`
+	MatchSource string             `json:"matchSource,omitempty"`
 }
 
 // SubscriberSummary provides aggregate status counts.
 type SubscriberSummary struct {
-	Total      int `json:"total"`
-	Active     int `json:"active"`
-	Restricted int `json:"restricted"`
-	LowTraffic int `json:"lowTraffic"`
+	Total         int `json:"total"`
+	Active        int `json:"active"`
+	Restricted    int `json:"restricted"`
+	LowTraffic    int `json:"lowTraffic"`
+	Unprovisioned int `json:"unprovisioned"`
+}
+
+// SubscriberProvisioning reports whether the OCS provisioning records exist.
+// Missing records are evidence, not zeros: callers must render an explicit
+// "not configured" state instead of a default plan or quota.
+type SubscriberProvisioning struct {
+	Contract   bool `json:"contract"`
+	Balance    bool `json:"balance"`
+	TariffPlan bool `json:"tariffPlan"`
+}
+
+// SubscriberListFilters carries the additive list query filters. The legacy
+// status filter remains supported; the other fields are opt-in.
+type SubscriberListFilters struct {
+	SearchBy       string
+	Status         string
+	ContractStatus string
+	Provisioning   string
+	PlanID         string
+	BalanceStatus  string
 }
 
 // SubscriberRow is the enriched row for detail=true mode.
 type SubscriberRow struct {
-	IMSI         string          `json:"imsi"`
-	Status       string          `json:"status"`
-	ARD          int             `json:"ard"`
-	PLMN         string          `json:"plmn"`
-	Profile      string          `json:"profile"`
-	Policy       string          `json:"policy"`
-	PolicyName   string          `json:"policyName,omitempty"`
-	PolicyStatus string          `json:"policyStatus,omitempty"`
-	Traffic      TrafficSnapshot `json:"traffic"`
-	SMS          SMSSnapshot     `json:"sms"`
-	LastActive   string          `json:"lastActive"`
+	IMSI           string                 `json:"imsi"`
+	MSISDN         string                 `json:"msisdn"`
+	Status         string                 `json:"status"`
+	ContractStatus string                 `json:"contractStatus,omitempty"`
+	ARD            int                    `json:"ard"`
+	PLMN           string                 `json:"plmn"`
+	Profile        string                 `json:"profile"`
+	Policy         string                 `json:"policy"`
+	PolicyName     string                 `json:"policyName,omitempty"`
+	PolicyStatus   string                 `json:"policyStatus,omitempty"`
+	Provisioning   SubscriberProvisioning `json:"provisioning"`
+	Traffic        TrafficSnapshot        `json:"traffic"`
+	SMS            SMSSnapshot            `json:"sms"`
+	LastActive     string                 `json:"lastActive"`
 }
 
 // TrafficSnapshot holds traffic balance data.

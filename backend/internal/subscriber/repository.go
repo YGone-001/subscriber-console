@@ -234,6 +234,7 @@ func computeLastActive(xcloudDoc, ocsSubDoc, balanceDoc bson.M) string {
 		candidates = append(candidates, balanceDoc["updated_at"])
 	}
 
+	var latest time.Time
 	for _, raw := range candidates {
 		if raw == nil {
 			continue
@@ -251,12 +252,77 @@ func computeLastActive(xcloudDoc, ocsSubDoc, balanceDoc bson.M) string {
 		default:
 			continue
 		}
-		if !t.IsZero() {
-			return t.UTC().Format("2006-01-02T15:04:05.000Z")
+		if !t.IsZero() && t.After(latest) {
+			latest = t
 		}
 	}
 
-	return time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	if latest.IsZero() {
+		return ""
+	}
+	return latest.UTC().Format("2006-01-02T15:04:05.000Z")
+}
+
+// extractSubscriberMSISDN reads the first MSISDN from the legacy xCloud
+// document and falls back to the OCS contract. The xCloud shape has appeared
+// both as msisdnList[{msisdn}] and as a plain msisdn array, so both are accepted.
+func extractSubscriberMSISDN(xcloudDoc, ocsSubDoc bson.M) string {
+	if xcloudDoc != nil {
+		if value, ok := firstMSISDNValue(xcloudDoc["msisdnList"]); ok {
+			return value
+		}
+		if value, ok := firstMSISDNValue(xcloudDoc["msisdn"]); ok {
+			return value
+		}
+	}
+	if ocsSubDoc != nil {
+		if value, ok := ocsSubDoc["msisdn"].(string); ok {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstMSISDNValue(raw any) (string, bool) {
+	switch value := raw.(type) {
+	case string:
+		return value, value != ""
+	case bson.A:
+		for _, item := range value {
+			if parsed, ok := firstMSISDNValue(item); ok {
+				return parsed, true
+			}
+		}
+	case []any:
+		for _, item := range value {
+			if parsed, ok := firstMSISDNValue(item); ok {
+				return parsed, true
+			}
+		}
+	case []string:
+		for _, item := range value {
+			if item != "" {
+				return item, true
+			}
+		}
+	case bson.M:
+		if item, ok := value["msisdn"].(string); ok && item != "" {
+			return item, true
+		}
+	case map[string]any:
+		if item, ok := value["msisdn"].(string); ok && item != "" {
+			return item, true
+		}
+	}
+	return "", false
+}
+
+func extractContractStatus(ocsSubDoc bson.M) string {
+	if ocsSubDoc == nil {
+		return ""
+	}
+	status, _ := ocsSubDoc["status"].(string)
+	return status
 }
 
 // toSubscriberRow converts raw BSON documents to a SubscriberRow.
@@ -293,26 +359,41 @@ func toSubscriberRow(
 	}
 
 	return SubscriberRow{
-		IMSI:         imsi,
-		Status:       statusFromARD(ard),
-		ARD:          ard,
-		PLMN:         plmn,
-		Profile:      extractProfileName(xcloudDoc),
-		Policy:       planID,
-		PolicyName:   planName,
-		PolicyStatus: planStatus,
-		Traffic:      traffic,
-		SMS:          sms,
-		LastActive:   computeLastActive(xcloudDoc, ocsSubDoc, balanceDoc),
+		IMSI:           imsi,
+		MSISDN:         extractSubscriberMSISDN(xcloudDoc, ocsSubDoc),
+		Status:         statusFromARD(ard),
+		ContractStatus: extractContractStatus(ocsSubDoc),
+		ARD:            ard,
+		PLMN:           plmn,
+		Profile:        extractProfileName(xcloudDoc),
+		Policy:         planID,
+		PolicyName:     planName,
+		PolicyStatus:   planStatus,
+		Provisioning: SubscriberProvisioning{
+			Contract:   ocsSubDoc != nil,
+			Balance:    balanceDoc != nil,
+			TariffPlan: ocsSubDoc != nil && tariffPlanDoc != nil,
+		},
+		Traffic:    traffic,
+		SMS:        sms,
+		LastActive: computeLastActive(xcloudDoc, ocsSubDoc, balanceDoc),
 	}
 }
 
-// isLowTraffic checks if a row qualifies as low traffic.
+// isLowTraffic checks if a provisioned balance is exhausted. A missing balance
+// record is an unprovisioned fact, not a zero balance.
 func isLowTraffic(row SubscriberRow) bool {
-	return row.Traffic.Balance < lowTrafficThreshold
+	return row.Provisioning.Balance && row.Traffic.Balance < lowTrafficThreshold
 }
 
-// matchesStatusFilter checks if a row matches the given status filter.
+// isUnprovisioned reports whether any of the three OCS provisioning records is
+// missing. It deliberately does not treat a disabled tariff plan or a suspended
+// contract as unprovisioned.
+func isUnprovisioned(row SubscriberRow) bool {
+	return !row.Provisioning.Contract || !row.Provisioning.Balance || !row.Provisioning.TariffPlan
+}
+
+// matchesStatusFilter checks if a row matches the given access status filter.
 func matchesStatusFilter(row SubscriberRow, filter string) bool {
 	switch filter {
 	case "active":
@@ -324,6 +405,76 @@ func matchesStatusFilter(row SubscriberRow, filter string) bool {
 	default:
 		return true
 	}
+}
+
+// matchesFilters applies the access, contract, provisioning, plan and balance
+// filters independently. The legacy status filter keeps its existing scope.
+func matchesFilters(row SubscriberRow, filters SubscriberListFilters) bool {
+	if !matchesStatusFilter(row, filters.Status) {
+		return false
+	}
+
+	switch filters.ContractStatus {
+	case "", "all":
+	case "none":
+		if row.Provisioning.Contract {
+			return false
+		}
+	default:
+		if !row.Provisioning.Contract || row.ContractStatus != filters.ContractStatus {
+			return false
+		}
+	}
+
+	switch filters.Provisioning {
+	case "", "all":
+	case "complete":
+		if isUnprovisioned(row) {
+			return false
+		}
+	case "incomplete":
+		if !isUnprovisioned(row) {
+			return false
+		}
+	case "missing_contract":
+		if row.Provisioning.Contract {
+			return false
+		}
+	case "missing_balance":
+		if row.Provisioning.Balance {
+			return false
+		}
+	case "missing_plan":
+		if row.Provisioning.TariffPlan {
+			return false
+		}
+	default:
+		return false
+	}
+
+	if filters.PlanID != "" && row.Policy != filters.PlanID {
+		return false
+	}
+
+	switch filters.BalanceStatus {
+	case "", "all":
+	case "exhausted":
+		if !isLowTraffic(row) {
+			return false
+		}
+	case "available":
+		if !row.Provisioning.Balance || isLowTraffic(row) {
+			return false
+		}
+	case "missing":
+		if row.Provisioning.Balance {
+			return false
+		}
+	default:
+		return false
+	}
+
+	return true
 }
 
 // buildSummary computes aggregate summary from all rows (before filtering).
@@ -340,6 +491,9 @@ func buildSummary(rows []SubscriberSummary, allRows []SubscriberRow) SubscriberS
 		if isLowTraffic(row) {
 			s.LowTraffic++
 		}
+		if isUnprovisioned(row) {
+			s.Unprovisioned++
+		}
 	}
 	return s
 }
@@ -348,10 +502,18 @@ func buildSummary(rows []SubscriberSummary, allRows []SubscriberRow) SubscriberS
 
 // ListSubscriberImsis returns a paginated list of IMSI strings.
 func (r *Repository) ListSubscriberImsis(ctx context.Context, page, limit int, query, sortDirection string) (SubscriberListResult[string], error) {
-	filter, valid := subscriberFilter(query)
+	return r.ListSubscriberImsisFiltered(ctx, page, limit, query, "imsi", sortDirection)
+}
+
+// ListSubscriberImsisFiltered returns IMSIs with optional MSISDN fallback.
+func (r *Repository) ListSubscriberImsisFiltered(ctx context.Context, page, limit int, query, searchBy, sortDirection string) (SubscriberListResult[string], error) {
 	page = safePage(page)
 	limit = safeLimit(limit)
 
+	filter, valid, matchedBy, matchSource, err := r.resolveSearchFilter(ctx, query, searchBy)
+	if err != nil {
+		return SubscriberListResult[string]{}, err
+	}
 	if !valid {
 		return SubscriberListResult[string]{
 			Subscribers: []string{},
@@ -403,6 +565,8 @@ func (r *Repository) ListSubscriberImsis(ctx context.Context, page, limit int, q
 		Total:       int(total),
 		Page:        page,
 		Limit:       limit,
+		MatchedBy:   matchedBy,
+		MatchSource: matchSource,
 	}, nil
 }
 
@@ -410,10 +574,27 @@ func (r *Repository) ListSubscriberImsis(ctx context.Context, page, limit int, q
 
 // ListSubscriberRows returns enriched subscriber rows with OCS data.
 func (r *Repository) ListSubscriberRows(ctx context.Context, page, limit int, query, statusFilter, sortField, sortDirection string) (SubscriberListResult[SubscriberRow], error) {
-	filter, valid := subscriberFilter(query)
+	return r.ListSubscriberRowsFiltered(ctx, page, limit, query, SubscriberListFilters{
+		SearchBy: "imsi",
+		Status:   statusFilter,
+	}, sortField, sortDirection)
+}
+
+// ListSubscriberRowsFiltered returns enriched rows with the additive filters.
+func (r *Repository) ListSubscriberRowsFiltered(ctx context.Context, page, limit int, query string, filters SubscriberListFilters, sortField, sortDirection string) (SubscriberListResult[SubscriberRow], error) {
 	page = safePage(page)
 	limit = safeLimit(limit)
+	if filters.SearchBy == "" {
+		filters.SearchBy = "imsi"
+	}
+	if filters.Status == "" {
+		filters.Status = "all"
+	}
 
+	filter, valid, matchedBy, matchSource, err := r.resolveSearchFilter(ctx, query, filters.SearchBy)
+	if err != nil {
+		return SubscriberListResult[SubscriberRow]{}, err
+	}
 	if !valid {
 		return SubscriberListResult[SubscriberRow]{
 			Subscribers: []SubscriberRow{},
@@ -443,6 +624,8 @@ func (r *Repository) ListSubscriberRows(ctx context.Context, page, limit int, qu
 			Page:        page,
 			Limit:       limit,
 			Summary:     &SubscriberSummary{},
+			MatchedBy:   matchedBy,
+			MatchSource: matchSource,
 		}, nil
 	}
 
@@ -473,10 +656,10 @@ func (r *Repository) ListSubscriberRows(ctx context.Context, page, limit int, qu
 	// Compute summary before filtering
 	summary := buildSummary(nil, rows)
 
-	// Apply status filter
+	// Apply additive filters
 	filtered := make([]SubscriberRow, 0, len(rows))
 	for _, row := range rows {
-		if matchesStatusFilter(row, statusFilter) {
+		if matchesFilters(row, filters) {
 			filtered = append(filtered, row)
 		}
 	}
@@ -505,7 +688,47 @@ func (r *Repository) ListSubscriberRows(ctx context.Context, page, limit int, qu
 		Page:        page,
 		Limit:       limit,
 		Summary:     &summary,
+		MatchedBy:   matchedBy,
+		MatchSource: matchSource,
 	}, nil
+}
+
+// resolveSearchFilter keeps the legacy IMSI-prefix search as the default and
+// optionally falls back to an exact MSISDN lookup when no IMSI matched.
+func (r *Repository) resolveSearchFilter(ctx context.Context, query, searchBy string) (bson.M, bool, string, string, error) {
+	filter, valid := subscriberFilter(query)
+	if !valid {
+		return nil, false, "", "", nil
+	}
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return filter, true, "", "", nil
+	}
+	if searchBy != "auto" {
+		return filter, true, "imsi", "", nil
+	}
+
+	count, err := r.subscribers.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, false, "", "", fmt.Errorf("count subscriber search matches: %w", err)
+	}
+	if count > 0 {
+		return filter, true, "imsi", "", nil
+	}
+
+	lookup, err := r.FindSubscriberByMsisdn(ctx, trimmed, "")
+	if err != nil {
+		return nil, false, "", "", err
+	}
+	if lookup == nil || !lookup.Exists || lookup.IMSI == nil {
+		return filter, true, "imsi", "", nil
+	}
+
+	source := ""
+	if lookup.Source != nil {
+		source = *lookup.Source
+	}
+	return bson.M{"imsi": *lookup.IMSI}, true, "msisdn", source, nil
 }
 
 // getPlanID extracts plan_id from an OCS subscriber doc, defaulting to plan_default_10gb.

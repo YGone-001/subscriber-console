@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"subscriber/internal/audit"
@@ -52,7 +53,6 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 	query := q.Get("q")
-	status := q.Get("status")
 	sortField := q.Get("sortField")
 	if sortField == "" {
 		sortField = q.Get("sort")
@@ -73,11 +73,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	msisdn := q.Get("msisdn")
 	excludeImsi := q.Get("excludeImsi")
 
-	// Normalize status filter
-	statusFilter := "all"
-	if status == "active" || status == "restricted" || status == "lowTraffic" {
-		statusFilter = status
-	}
+	listFilters := parseSubscriberListFilters(q)
 
 	// MSISDN lookup mode
 	if msisdn != "" {
@@ -91,14 +87,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if detail {
-		result, err := h.repo.ListSubscriberRows(r.Context(), page, limit, query, statusFilter, sortField, sortDirection)
+		result, err := h.repo.ListSubscriberRowsFiltered(r.Context(), page, limit, query, listFilters, sortField, sortDirection)
 		if err != nil {
 			response.InternalError(w)
 			return
 		}
 		response.JSON(w, http.StatusOK, result)
 	} else {
-		result, err := h.repo.ListSubscriberImsis(r.Context(), page, limit, query, sortDirection)
+		result, err := h.repo.ListSubscriberImsisFiltered(r.Context(), page, limit, query, listFilters.SearchBy, sortDirection)
 		if err != nil {
 			response.InternalError(w)
 			return
@@ -135,7 +131,57 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	redactAuthMaterial(state, auth.HasCapability(p, "subscriber_write"))
+
 	response.JSON(w, http.StatusOK, state)
+}
+
+// parseSubscriberListFilters normalizes the additive list filters. Unknown
+// values are ignored so the existing lenient query contract is preserved.
+func parseSubscriberListFilters(q url.Values) SubscriberListFilters {
+	filters := SubscriberListFilters{
+		SearchBy: "imsi",
+		Status:   "all",
+	}
+	if q.Get("searchBy") == "auto" {
+		filters.SearchBy = "auto"
+	}
+
+	switch q.Get("status") {
+	case "active", "restricted":
+		filters.Status = q.Get("status")
+	case "lowTraffic":
+		filters.BalanceStatus = "exhausted"
+	}
+
+	switch q.Get("contractStatus") {
+	case "active", "suspended", "terminated", "none":
+		filters.ContractStatus = q.Get("contractStatus")
+	}
+
+	switch q.Get("provisioning") {
+	case "complete", "incomplete", "missing_contract", "missing_balance", "missing_plan":
+		filters.Provisioning = q.Get("provisioning")
+	}
+
+	switch q.Get("balanceStatus") {
+	case "exhausted", "available", "missing":
+		filters.BalanceStatus = q.Get("balanceStatus")
+	}
+
+	filters.PlanID = q.Get("planId")
+	return filters
+}
+
+// redactAuthMaterial removes permanent subscriber keys for read-only roles.
+// The keys are only needed by roles that can provision authentication material.
+func redactAuthMaterial(state *LegacySubscriberState, canProvision bool) {
+	if state == nil || canProvision {
+		return
+	}
+	for _, key := range []string{"k", "opc", "op"} {
+		delete(state.Auth4G, key)
+	}
 }
 
 // Search handles GET /api/search
