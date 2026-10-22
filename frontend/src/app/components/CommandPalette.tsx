@@ -22,8 +22,6 @@ import {
   Command,
   CornerDownLeft,
   CreditCard,
-  Download,
-  FileUp,
   Languages,
   Plus,
   Search,
@@ -35,6 +33,7 @@ import {
 import { useI18n } from '../../providers/I18nProvider';
 import { useTheme } from '../../providers/ThemeProvider';
 import { useAuth } from '../../providers/AuthProvider';
+import { hasPermission } from '../../lib/permissions';
 import { Dialog } from '../../components/ui/Dialog';
 import { useRead } from '../../lib/api/use-read';
 import { requestAnalyticsSync } from '../../features/system-health/system-health-api';
@@ -116,11 +115,10 @@ export function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProp
     }))
   ), [t, user?.role]);
 
+  const canOperate = hasPermission(user, 'subscribers.write');
   const actionItems = useMemo<PaletteItem[]>(() => [
     { id: 'act-new-sub', label: t('cp_act_new_sub'), desc: t('cp_act_new_sub_desc'), icon: Plus, type: 'action', category: 'actions', actionKey: 'new-subscriber' },
-    { id: 'act-import', label: t('cp_act_import'), desc: t('cp_act_import_desc'), icon: FileUp, type: 'action', category: 'actions', actionKey: 'import-csv' },
-    { id: 'act-export', label: t('cp_act_export'), desc: t('cp_act_export_desc'), icon: Download, type: 'action', category: 'actions', actionKey: 'export-csv' },
-    { id: 'act-sync', label: t('cp_act_sync'), desc: t('cp_act_sync_desc'), icon: Zap, type: 'action', category: 'actions', actionKey: 'sync-telemetry' },
+    ...(canOperate ? [{ id: 'act-sync', label: t('cp_act_sync'), desc: t('cp_act_sync_desc'), icon: Zap, type: 'action' as const, category: 'actions' as const, actionKey: 'sync-telemetry' }] : []),
     {
       id: 'act-toggle-theme',
       label: resolvedTheme === 'dark' ? t('theme_switch_light') : t('theme_switch_dark'),
@@ -140,7 +138,7 @@ export function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProp
       actionKey: 'toggle-language',
     },
     { id: 'act-clear-history', label: t('nav_crumb_clear_recent'), desc: t('cp_act_clear_history_desc'), icon: Trash2, type: 'action', category: 'actions', actionKey: 'clear-recent-history' },
-  ], [t, resolvedTheme, locale]);
+  ], [t, resolvedTheme, locale, canOperate]);
 
   const remoteItems = useMemo<PaletteItem[]>(() => (
     (searchData?.results || []).map((item) => ({
@@ -198,7 +196,7 @@ export function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProp
       void requestAnalyticsSync().catch(() => undefined);
     } else if (onAction) {
       onAction(item.actionKey);
-    } else if (item.actionKey === 'new-subscriber' || item.actionKey === 'import-csv' || item.actionKey === 'export-csv') {
+    } else if (item.actionKey === 'new-subscriber') {
       router.push('/subscribers');
     }
   }, [locale, onAction, onClose, resolvedTheme, router, setLocale, setPreference]);
