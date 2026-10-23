@@ -1191,6 +1191,11 @@
   fill: var(--sys-color-action-primary);
 }
 
+.actualLinkRelated .actualLink {
+  stroke-width: 2.25;
+  opacity: 0.95;
+}
+
 .actualLinkHovered .actualLink {
   stroke-width: 2.5;
   opacity: 1;
@@ -1488,6 +1493,21 @@
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-panel);
   background: var(--sys-color-surface-canvas);
+  cursor: grab;
+  user-select: none;
+}
+
+.liveCanvasViewport[data-panning='true'] {
+  cursor: grabbing;
+}
+
+.liveCanvasViewport [data-resource-id],
+.liveCanvasViewport [data-lane-focus] {
+  cursor: pointer;
+}
+
+.liveCanvasViewport[data-panning='true'] * {
+  cursor: grabbing;
 }
 
 .liveCanvasViewport:fullscreen {
@@ -1508,6 +1528,13 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
+}
+
+.liveStatusFacts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
 }
 
 .liveLegendLine {

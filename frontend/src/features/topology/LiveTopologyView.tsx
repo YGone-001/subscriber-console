@@ -10,7 +10,7 @@
  * and reference sources. Configured links are never described as observed
  * traffic or service health.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink, Layers, RefreshCw } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
@@ -21,6 +21,8 @@ import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
 import { TopologyGraphShell } from './components/TopologyGraphShell';
 import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology } from './actual-topology-model';
+import { LABEL_DETAIL_MIN_ZOOM, resolveLabelVisibility } from './actual-topology-labels';
+import { interfaceCoverage } from './interface-catalog';
 import type { TopologyDomainMode } from './nf-classification';
 import {
   liveConfigCompleteness,
@@ -53,12 +55,24 @@ export function LiveTopologyView() {
   const { t } = useI18n();
   const live = useRead<LiveTopologyResponse>('/api/topology/live');
   const [selectedComponentId, setSelectedComponentId] = useState<string | undefined>();
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | undefined>();
+  const [hoveredResourceId, setHoveredResourceId] = useState<string | undefined>();
+  const [focusedResourceId, setFocusedResourceId] = useState<string | undefined>();
   const [search, setSearch] = useState('');
   const [domainMode, setDomainMode] = useState<TopologyDomainMode>('all');
+  const [showAllInterfaceNames, setShowAllInterfaceNames] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
+  const [panning, setPanning] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const autoFitRef = useRef(true);
+  const panRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
   const data = live.data;
   const refresh = useCallback(() => {
     void live.mutate();
@@ -72,6 +86,18 @@ export function LiveTopologyView() {
     () => buildActualTopology(liveLinks, directory, { domainMode, resources: runtimeResources }),
     [liveLinks, directory, runtimeResources, domainMode],
   );
+  const labelVisibility = useMemo(
+    () => resolveLabelVisibility(layout.links, {
+      selectedResourceId: selectedComponentId,
+      focusedResourceId,
+      hoveredResourceId,
+      hoveredEdgeId,
+      showAllInterfaceNames,
+      zoom,
+    }),
+    [layout.links, selectedComponentId, focusedResourceId, hoveredResourceId, hoveredEdgeId, showAllInterfaceNames, zoom],
+  );
+  const interfaceCounts = useMemo(() => interfaceCoverage(layout.links), [layout.links]);
   const selected = data?.nodes.find((node) => node.componentId === selectedComponentId);
   const unresolved = data?.unresolvedPeers ?? [];
 
@@ -79,7 +105,16 @@ export function LiveTopologyView() {
     if (selectedComponentId && data && !data.nodes.some((node) => node.componentId === selectedComponentId)) {
       setSelectedComponentId(undefined);
     }
-  }, [data, selectedComponentId]);
+    if (hoveredEdgeId && !layout.links.some((link) => link.edgeId === hoveredEdgeId)) {
+      setHoveredEdgeId(undefined);
+    }
+    if (hoveredResourceId && !layout.nodes.some((node) => node.resourceId === hoveredResourceId)) {
+      setHoveredResourceId(undefined);
+    }
+    if (focusedResourceId && !layout.nodes.some((node) => node.resourceId === focusedResourceId)) {
+      setFocusedResourceId(undefined);
+    }
+  }, [data, selectedComponentId, layout.links, layout.nodes, hoveredEdgeId, hoveredResourceId, focusedResourceId]);
 
   const fitView = useCallback(() => {
     const viewport = canvasRef.current;
@@ -96,6 +131,8 @@ export function LiveTopologyView() {
     const scale = Math.min(1, availableWidth / layout.width, availableHeight / layout.height);
     const next = Math.max(MIN_ZOOM, Math.min(1, Number(scale.toFixed(2))));
     autoFitRef.current = true;
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = 0;
     setZoom(next);
   }, [layout.width, layout.height]);
 
@@ -125,8 +162,12 @@ export function LiveTopologyView() {
   };
   const resetView = () => {
     setSelectedComponentId(undefined);
+    setHoveredEdgeId(undefined);
+    setHoveredResourceId(undefined);
+    setFocusedResourceId(undefined);
     setSearch('');
     setDomainMode('all');
+    setShowAllInterfaceNames(false);
     fitView();
   };
   const toggleFullscreen = useCallback(() => {
@@ -136,6 +177,44 @@ export function LiveTopologyView() {
       void canvasRef.current?.requestFullscreen?.();
     }
   }, []);
+
+  /* Dragging the empty canvas pans the scroll viewport. Presses that start on a
+   * node or lane header keep their own click/keyboard behaviour, so panning can
+   * never steal a selection. */
+  const beginPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    const target = event.target as Element | null;
+    if (target?.closest('[data-resource-id], [data-lane-focus], a, button, input, select, textarea')) return;
+    const viewport = canvasRef.current;
+    if (!viewport) return;
+    panRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+    viewport.setPointerCapture?.(event.pointerId);
+    setPanning(true);
+  };
+  const movePan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current;
+    if (!pan || pan.pointerId !== event.pointerId) return;
+    const viewport = canvasRef.current;
+    if (!viewport) return;
+    viewport.scrollLeft = pan.scrollLeft - (event.clientX - pan.startX);
+    viewport.scrollTop = pan.scrollTop - (event.clientY - pan.startY);
+  };
+  const endPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current;
+    if (!pan || pan.pointerId !== event.pointerId) return;
+    panRef.current = null;
+    setPanning(false);
+    const viewport = canvasRef.current;
+    if (viewport?.hasPointerCapture?.(event.pointerId)) {
+      viewport.releasePointerCapture(event.pointerId);
+    }
+  };
 
   const liveStateLabel = (state: string) => {
     const key = `topology_live_state_${state}`;
@@ -262,9 +341,24 @@ export function LiveTopologyView() {
               </label>
             )}
             actions={(
-              <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
-                {t('topology_live_open_architecture')}
-              </Link>
+              <>
+                {interfaceCounts.annotated > 0 ? (
+                  <button
+                    type="button"
+                    className={styles.actualSupportToggle}
+                    data-action="toggle-interface-labels"
+                    aria-pressed={showAllInterfaceNames}
+                    onClick={() => setShowAllInterfaceNames((current) => !current)}
+                  >
+                    {showAllInterfaceNames
+                      ? t('topology_interface_hide_all')
+                      : t('topology_interface_show_all')}
+                  </button>
+                ) : null}
+                <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
+                  {t('topology_live_open_architecture')}
+                </Link>
+              </>
             )}
             zoom={{
               value: zoom,
@@ -288,8 +382,21 @@ export function LiveTopologyView() {
           </span>
         )}
         status={(
-          <span data-live-runtime-total="true">
-            {t('topology_live_runtime_total', { count: runtime.total })}
+          <span className={styles.liveStatusFacts}>
+            <span data-live-zoom={Math.round(zoom * 100)}>
+              {t('topology_zoom_level', { percent: Math.round(zoom * 100) })}
+            </span>
+            <span data-hidden-label-count={labelVisibility.hiddenCount}>
+              {t('topology_labels_hidden', { count: labelVisibility.hiddenCount })}
+            </span>
+            {showAllInterfaceNames && zoom < LABEL_DETAIL_MIN_ZOOM ? (
+              <span data-label-zoom-hint="true">
+                {t('topology_interface_zoom_hint', { percent: Math.round(LABEL_DETAIL_MIN_ZOOM * 100) })}
+              </span>
+            ) : null}
+            <span data-live-runtime-total="true">
+              {t('topology_live_runtime_total', { count: runtime.total })}
+            </span>
           </span>
         )}
         footer={(
@@ -365,7 +472,16 @@ export function LiveTopologyView() {
             description={t('topology_live_error_body')}
           />
         ) : (
-          <div ref={canvasRef} className={styles.liveCanvasViewport} data-live-canvas="true">
+          <div
+            ref={canvasRef}
+            className={styles.liveCanvasViewport}
+            data-live-canvas="true"
+            data-panning={panning ? 'true' : undefined}
+            onPointerDown={beginPan}
+            onPointerMove={movePan}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
+          >
             <div
               className={styles.liveCanvasScale}
               style={{ width: `${layout.width * zoom}px`, height: `${layout.height * zoom}px` }}
@@ -373,12 +489,18 @@ export function LiveTopologyView() {
               <ActualTopologyCanvas
                 layout={layout}
                 selectedResourceId={selectedComponentId}
+                focusedResourceId={focusedResourceId}
+                hoveredResourceId={hoveredResourceId}
+                hoveredEdgeId={hoveredEdgeId}
                 search={search}
-                showAllInterfaceNames
+                zoom={zoom}
+                showAllInterfaceNames={showAllInterfaceNames}
                 onSelectResource={(resourceId) => {
                   setSelectedComponentId((current) => current === resourceId ? undefined : resourceId);
                 }}
-                onHoverEdge={() => {}}
+                onFocusResource={setFocusedResourceId}
+                onHoverResource={setHoveredResourceId}
+                onHoverEdge={setHoveredEdgeId}
                 onFocusDomain={(domain) => setDomainMode(domain as TopologyDomainMode)}
               />
             </div>

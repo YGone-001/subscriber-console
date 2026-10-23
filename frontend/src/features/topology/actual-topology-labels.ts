@@ -11,6 +11,7 @@ import {
   type ActualTopologyLink,
   type ActualTopologyNode,
 } from './actual-topology-model';
+import { edgeInterfaceNames } from './interface-catalog';
 
 export type Point = { x: number; y: number };
 
@@ -33,6 +34,49 @@ export type EdgeLabelPlacement = {
 };
 
 export const EDGE_LABEL_HEIGHT = 18;
+
+/* Below this zoom the canvas is a map, not a label sheet: only labels for the
+ * selected, focused or hovered path stay readable. */
+export const LABEL_DETAIL_MIN_ZOOM = 0.8;
+
+export type LabelVisibilityOptions = {
+  selectedResourceId?: string;
+  focusedResourceId?: string;
+  hoveredResourceId?: string;
+  hoveredEdgeId?: string;
+  showAllInterfaceNames?: boolean;
+  zoom?: number;
+};
+
+export type LabelVisibility = {
+  showAll: boolean;
+  visibleEdgeIds: ReadonlySet<string>;
+  hiddenCount: number;
+};
+
+export function resolveLabelVisibility(
+  links: readonly ActualTopologyLink[],
+  options: LabelVisibilityOptions = {},
+): LabelVisibility {
+  const zoom = options.zoom ?? 1;
+  const showAll = Boolean(options.showAllInterfaceNames) && zoom >= LABEL_DETAIL_MIN_ZOOM;
+  const activeResourceIds = [
+    options.selectedResourceId,
+    options.focusedResourceId,
+    options.hoveredResourceId,
+  ].filter((value): value is string => Boolean(value));
+  const visibleEdgeIds = new Set<string>();
+  for (const link of links) {
+    const related = activeResourceIds.some(
+      (resourceId) => link.fromResourceId === resourceId || link.toResourceId === resourceId,
+    );
+    const annotated = edgeInterfaceNames(link).length > 0;
+    if (related || link.edgeId === options.hoveredEdgeId || (showAll && annotated)) {
+      visibleEdgeIds.add(link.edgeId);
+    }
+  }
+  return { showAll, visibleEdgeIds, hiddenCount: links.length - visibleEdgeIds.size };
+}
 
 const LABEL_MIN_T = 0.16;
 const LABEL_MAX_T = 0.84;

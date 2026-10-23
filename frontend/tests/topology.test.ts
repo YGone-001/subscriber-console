@@ -66,8 +66,10 @@ import {
 } from '../src/features/topology/nf-classification';
 import {
   edgeGeometry,
+  LABEL_DETAIL_MIN_ZOOM,
   placeEdgeLabels,
   pointOnGeometry,
+  resolveLabelVisibility,
 } from '../src/features/topology/actual-topology-labels';
 import {
   projectNodeHealth,
@@ -923,6 +925,50 @@ test('relationship labels stay hidden until a path is focused or hovered', () =>
 
   const hovered = render(createElement(ActualTopologyCanvas, { ...props, hoveredEdgeId: edge().edgeId }));
   assert.ok(hovered.includes('depends on'), 'hover reveals the relationship name');
+});
+
+test('interface labels follow hover, focus and the detail zoom threshold', () => {
+  const annotated = edge({ edgeId: 'density-annotated', interfaceNames: ['N7'] });
+  const fallback = edge({ edgeId: 'density-fallback', fromResourceId: AMF, toResourceId: PCF });
+  const layout = buildActualTopology([annotated, fallback], directory);
+  const props = {
+    layout,
+    search: '',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  };
+
+  const quiet = render(createElement(ActualTopologyCanvas, props));
+  assert.ok(quiet.includes('data-visible-label-count="0"'));
+  assert.ok(quiet.includes('data-hidden-label-count="2"'), 'the quiet canvas reports every hidden label');
+
+  const all = render(createElement(ActualTopologyCanvas, { ...props, showAllInterfaceNames: true }));
+  assert.ok(all.includes('data-visible-label-count="1"'), 'show-all reveals annotated labels only');
+
+  const zoomedOut = render(createElement(ActualTopologyCanvas, {
+    ...props,
+    showAllInterfaceNames: true,
+    zoom: LABEL_DETAIL_MIN_ZOOM - 0.01,
+  }));
+  assert.ok(zoomedOut.includes('data-visible-label-count="0"'), 'show-all is suppressed below the detail zoom');
+  assert.ok(!zoomedOut.includes('data-edge-label'), 'no label paints below the threshold without a focus');
+
+  const selected = render(createElement(ActualTopologyCanvas, {
+    ...props,
+    zoom: LABEL_DETAIL_MIN_ZOOM - 0.01,
+    selectedResourceId: PCF,
+  }));
+  assert.ok(selected.includes('N7'), 'selection keeps the focused path readable at low zoom');
+
+  const focused = render(createElement(ActualTopologyCanvas, { ...props, focusedResourceId: PCF }));
+  assert.ok(focused.includes('N7'), 'keyboard focus reveals the same labels as selection');
+
+  const hoveredNode = render(createElement(ActualTopologyCanvas, { ...props, hoveredResourceId: SMF }));
+  assert.ok(hoveredNode.includes('N7'), 'hovering a node reveals labels without selecting it');
+
+  const visibility = resolveLabelVisibility(layout.links, { showAllInterfaceNames: true, zoom: 0.6 });
+  assert.equal(visibility.showAll, false);
+  assert.equal(visibility.hiddenCount, 2);
 });
 
 test('search dims non-matching resources without hiding them', () => {

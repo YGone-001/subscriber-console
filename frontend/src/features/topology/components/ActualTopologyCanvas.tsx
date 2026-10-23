@@ -15,7 +15,7 @@ import {
   type ActualTopologyLayout,
   type ActualTopologyNode,
 } from '../actual-topology-model';
-import { edgeGeometry, placeEdgeLabels } from '../actual-topology-labels';
+import { edgeGeometry, placeEdgeLabels, resolveLabelVisibility } from '../actual-topology-labels';
 import { nodeHealthLabelKey, type NodeHealth, type NodeHealthState } from '../actual-topology-health';
 import { nfRoleLabel } from '../nf-classification';
 import { edgeInterfaceNames, formatInterfaceNames } from '../interface-catalog';
@@ -68,21 +68,31 @@ function runtimeDotClass(status: string | undefined): string {
 export function ActualTopologyCanvas({
   layout,
   selectedResourceId,
+  focusedResourceId,
+  hoveredResourceId,
   search,
   hoveredEdgeId,
   health,
+  zoom = 1,
   showAllInterfaceNames = false,
   onSelectResource,
+  onFocusResource,
+  onHoverResource,
   onHoverEdge,
   onFocusDomain,
 }: {
   layout: ActualTopologyLayout;
   selectedResourceId?: string;
+  focusedResourceId?: string;
+  hoveredResourceId?: string;
   search: string;
   hoveredEdgeId?: string;
   health?: ReadonlyMap<string, NodeHealth>;
+  zoom?: number;
   showAllInterfaceNames?: boolean;
   onSelectResource: (resourceId: string) => void;
+  onFocusResource?: (resourceId?: string) => void;
+  onHoverResource?: (resourceId?: string) => void;
   onHoverEdge: (edgeId?: string) => void;
   /* Focus a domain lane into the single-domain view. Omitted when the owning
    * view has no domain control. */
@@ -98,14 +108,19 @@ export function ActualTopologyCanvas({
     );
   }, [layout.links, selectedResourceId]);
   const isFocused = (node: ActualTopologyNode) => !selectedResourceId || relatedIds.has(node.resourceId);
+  const visibility = useMemo(
+    () => resolveLabelVisibility(layout.links, {
+      selectedResourceId,
+      focusedResourceId,
+      hoveredResourceId,
+      hoveredEdgeId,
+      showAllInterfaceNames,
+      zoom,
+    }),
+    [layout.links, selectedResourceId, focusedResourceId, hoveredResourceId, hoveredEdgeId, showAllInterfaceNames, zoom],
+  );
   const labels = useMemo(() => {
-    if (!selectedResourceId && !hoveredEdgeId && !showAllInterfaceNames) return [];
-    const relatedLinks = layout.links.filter((link) => {
-      const related = Boolean(selectedResourceId)
-        && (link.fromResourceId === selectedResourceId || link.toResourceId === selectedResourceId);
-      const annotated = edgeInterfaceNames(link).length > 0;
-      return related || link.edgeId === hoveredEdgeId || (showAllInterfaceNames && annotated);
-    });
+    const relatedLinks = layout.links.filter((link) => visibility.visibleEdgeIds.has(link.edgeId));
     const text = new Map<string, string>();
     for (const link of relatedLinks) {
       const interfaceNames = edgeInterfaceNames(link);
@@ -121,7 +136,7 @@ export function ActualTopologyCanvas({
       text.set(link.edgeId, presentation ? t(presentation.labelKey) : link.relationshipType);
     }
     return placeEdgeLabels(relatedLinks, text, layout.nodes, layout.width, layout.height);
-  }, [layout.links, layout.nodes, layout.width, layout.height, selectedResourceId, hoveredEdgeId, showAllInterfaceNames, t]);
+  }, [layout.links, layout.nodes, layout.width, layout.height, visibility, t]);
 
   return (
     <svg
@@ -131,6 +146,8 @@ export function ActualTopologyCanvas({
       aria-label={t('topology_title')}
       preserveAspectRatio="xMidYMid meet"
       data-actual-canvas="true"
+      data-visible-label-count={visibility.visibleEdgeIds.size}
+      data-hidden-label-count={visibility.hiddenCount}
     >
       <title>{t('topology_title')}</title>
       <defs>
@@ -247,7 +264,8 @@ export function ActualTopologyCanvas({
               key={link.edgeId}
               data-edge-id={link.edgeId}
               data-evidence={link.source?.kind}
-              className={`${styles.actualLinkGroup} ${link.source?.kind === 'configured' ? styles.actualLinkConfigured : ''} ${selectedResourceId && !related ? styles.actualDimmed : ''} ${hovered ? styles.actualLinkHovered : ''}`}
+              data-link-related={related ? 'true' : undefined}
+              className={`${styles.actualLinkGroup} ${link.source?.kind === 'configured' ? styles.actualLinkConfigured : ''} ${related ? styles.actualLinkRelated : ''} ${selectedResourceId && !related ? styles.actualDimmed : ''} ${hovered ? styles.actualLinkHovered : ''}`}
               onMouseEnter={() => onHoverEdge(link.edgeId)}
               onMouseLeave={() => onHoverEdge(undefined)}
             >
@@ -313,6 +331,10 @@ export function ActualTopologyCanvas({
             aria-pressed={selected}
             className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${node.boundary ? styles.actualNodeBoundary : ''} ${node.proxy ? styles.actualNodeProxy : ''} ${node.runtimeStatus === 'stopped' ? styles.actualNodeStopped : ''} ${node.runtimeStatus === 'not_detected' ? styles.actualNodeNotDetected : ''} ${selected ? styles.actualNodeSelected : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
             onClick={() => onSelectResource(node.resourceId)}
+            onFocus={() => onFocusResource?.(node.resourceId)}
+            onBlur={() => onFocusResource?.(undefined)}
+            onMouseEnter={() => onHoverResource?.(node.resourceId)}
+            onMouseLeave={() => onHoverResource?.(undefined)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();

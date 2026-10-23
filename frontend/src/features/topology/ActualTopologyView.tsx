@@ -574,6 +574,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
                 search={search}
                 hoveredEdgeId={hoveredEdgeId}
                 health={health.coverage !== 'unavailable' && health.byResource.size > 0 ? health.byResource : undefined}
+                zoom={zoom}
                 showAllInterfaceNames={showAllInterfaceNames}
                 onSelectResource={(resourceId) => setSelectedResourceId((current) => current === resourceId ? undefined : resourceId)}
                 onHoverEdge={setHoveredEdgeId}

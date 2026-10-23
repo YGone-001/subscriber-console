@@ -144,3 +144,18 @@ test('the runtime view is presented through the shared workbench', () => {
   assert.ok(!source.includes('styles.liveBody'), 'the old canvas/detail grid must be gone');
   assert.ok(!source.includes('styles.liveToolbar'), 'the old page-local toolbar must be gone');
 });
+
+test('the runtime view pans, reveals labels deliberately and reports the view state', () => {
+  const source = read('../src/features/topology/LiveTopologyView.tsx');
+  assert.match(source, /onPointerDown=\{beginPan\}/, 'the canvas must be pannable by dragging');
+  assert.match(source, /setPointerCapture/, 'a drag must keep receiving pointer moves');
+  assert.match(source, /\[data-resource-id\], \[data-lane-focus\]/, 'panning must not start on a node or lane control');
+  assert.match(source, /data-action="toggle-interface-labels"/, 'show-all labels must remain an explicit option');
+  assert.match(source, /showAllInterfaceNames=\{showAllInterfaceNames\}/, 'label density must be controlled by the view');
+  assert.match(source, /onFocusResource=\{setFocusedResourceId\}/, 'keyboard focus must reveal labels');
+  assert.match(source, /onHoverResource=\{setHoveredResourceId\}/, 'node hover must reveal labels');
+  assert.match(source, /onHoverEdge=\{setHoveredEdgeId\}/, 'edge hover must reveal labels');
+  assert.match(source, /LABEL_DETAIL_MIN_ZOOM/, 'the detail zoom threshold must gate show-all labels');
+  assert.match(source, /data-hidden-label-count=\{labelVisibility.hiddenCount\}/, 'the status bar must report hidden labels');
+  assert.match(source, /data-live-zoom=/, 'the status bar must report the current zoom');
+});
