@@ -140,7 +140,7 @@ test('an unknown view falls back to the declared graph instead of an empty page'
   assert.ok(!markup.includes('id="architecture-title"'));
 });
 
-test('every topology view keeps one tab strip and one refresh control', () => {
+test('every topology view keeps one compact navigation entry and one refresh control', () => {
   const paths = [
     '/topology',
     '/topology?view=ledger',
@@ -149,16 +149,29 @@ test('every topology view keeps one tab strip and one refresh control', () => {
   ];
   for (const path of paths) {
     const markup = renderTopology(path);
+    assert.ok(markup.includes('data-workspace-mode="canvas"'), `${path} must use the canvas workspace`);
     assert.equal(
       markup.split('data-operations-refresh="page"').length - 1,
       1,
       `${path} must expose exactly one refresh control`,
     );
     assert.equal(
-      markup.split('data-operations-nav="workbench"').length - 1,
+      markup.split('data-operations-nav="compact"').length - 1,
       1,
-      `${path} must expose exactly one tab strip`,
+      `${path} must expose exactly one compact navigation entry`,
     );
+    assert.equal(
+      markup.split('data-operations-nav="workbench"').length - 1,
+      0,
+      `${path} must not keep the full tab strip`,
+    );
+  }
+});
+
+test('the compact navigation still reaches every operations surface', () => {
+  const markup = renderTopology('/topology');
+  for (const href of ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts']) {
+    assert.ok(markup.includes(`href="${href}"`), `the compact menu must link to ${href}`);
   }
 });
 

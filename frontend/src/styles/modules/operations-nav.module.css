@@ -58,3 +58,81 @@
   color: var(--sys-color-action-primary);
   background: transparent;
 }
+
+/* ------------------------------------------------------------ canvas mode -- */
+/* One disclosure replaces the full strip on graph-heavy pages. It keeps every
+ * destination, so the compact header is not a navigation dead end. */
+
+.compact {
+  position: relative;
+}
+
+.compactSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--control-height);
+  padding: 0 var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  list-style: none;
+  cursor: pointer;
+}
+
+.compactSummary::-webkit-details-marker {
+  display: none;
+}
+
+.compactSummary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.compact[open] .compactSummary {
+  color: var(--text-primary, inherit);
+}
+
+.compactMenu {
+  position: absolute;
+  top: calc(100% + var(--space-4));
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 220px;
+  padding: var(--space-4);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.compactLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: var(--control-height);
+  padding: 0 var(--space-8);
+  border-radius: var(--ref-radius-small);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.compactLink:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary, inherit);
+}
+
+.compactLink:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.compactLinkActive {
+  color: var(--sys-color-action-primary);
+  font-weight: 600;
+}

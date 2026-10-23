@@ -11,7 +11,7 @@
  * only implied by colour.
  */
 import { NavLink } from 'react-router-dom';
-import { BellRing, Boxes, HeartPulse, Network, Radar } from 'lucide-react';
+import { BellRing, Boxes, ChevronDown, HeartPulse, Network, Radar } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import styles from '../../styles/modules/operations-nav.module.css';
 
@@ -38,6 +38,37 @@ export function OperationsNav() {
         </NavLink>
       ))}
     </nav>
+  );
+}
+
+/**
+ * Canvas-mode navigation: the same destinations behind one disclosure, so a
+ * graph page keeps a single-row header without losing the way to its sibling
+ * operations surfaces.
+ */
+export function OperationsNavCompact() {
+  const { t } = useI18n();
+  return (
+    <details className={styles.compact} data-operations-nav="compact">
+      <summary className={styles.compactSummary}>
+        <Boxes size={15} aria-hidden="true" />
+        <span>{t('ops_nav_compact')}</span>
+        <ChevronDown size={14} aria-hidden="true" />
+      </summary>
+      <nav className={styles.compactMenu} aria-label={t('ops_nav_label')}>
+        {TABS.map(({ to, labelKey, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            aria-label={t(labelKey)}
+            className={({ isActive }) => `${styles.compactLink} ${isActive ? styles.compactLinkActive : ''}`}
+          >
+            <Icon size={15} aria-hidden="true" />
+            <span>{t(labelKey)}</span>
+          </NavLink>
+        ))}
+      </nav>
+    </details>
   );
 }
 

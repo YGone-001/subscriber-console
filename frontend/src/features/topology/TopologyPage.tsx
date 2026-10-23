@@ -321,6 +321,7 @@ export function TopologyPage() {
       title={t('topology_title')}
       description={t('topology_description')}
       icon={<GitBranch size={23} />}
+      workspaceMode="canvas"
       viewSwitch={(
         <div className={styles.viewToggle} role="group" aria-label={t('topology_primary_view_label')}>
           {TOPOLOGY_PRIMARY_VIEWS.map((view) => (

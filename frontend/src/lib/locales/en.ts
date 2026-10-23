@@ -2622,6 +2622,7 @@ export const en: Record<string, string> = {
   
 
     ops_nav_label: "Operational sections",
+    ops_nav_compact: "Operations navigation",
     ops_presentation_label: "Presentation",
     ops_presentation_cards: "Cards",
     ops_presentation_table: "Table",

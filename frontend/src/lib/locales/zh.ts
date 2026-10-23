@@ -2620,6 +2620,7 @@ export const zh: Record<string, string> = {
     runtime_apply_failed: "失败",
 
     ops_nav_label: "运维工作台分区",
+    ops_nav_compact: "运维导航",
     ops_presentation_label: "呈现方式",
     ops_presentation_cards: "卡片",
     ops_presentation_table: "表格",

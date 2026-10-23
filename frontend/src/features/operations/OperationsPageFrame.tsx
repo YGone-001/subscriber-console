@@ -21,13 +21,15 @@ import { useCallback, useState, type ReactNode } from 'react';
 import { RefreshCw } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import { useI18n } from '../../providers/I18nProvider';
-import { OperationsNav } from './OperationsNav';
+import { OperationsNav, OperationsNavCompact } from './OperationsNav';
 import {
   OperationsRefreshProvider,
   useOperationsRefreshRegistry,
   useOperationsRefreshing,
 } from './operations-refresh';
 import styles from '../../styles/modules/operations-frame.module.css';
+
+export type OperationsWorkspaceMode = 'standard' | 'canvas';
 
 export type OperationsPageFrameProps = {
   title: string;
@@ -43,6 +45,10 @@ export type OperationsPageFrameProps = {
   actions?: ReactNode;
   /* Revalidates the data the page itself owns. Sections register separately. */
   onRefresh?: () => void | Promise<void>;
+  /* `canvas` replaces the full operations tab strip with one compact entry,
+   * giving a graph-heavy page more first-screen height. Defaults to the
+   * unchanged standard chrome. */
+  workspaceMode?: OperationsWorkspaceMode;
   children: ReactNode;
 };
 
@@ -55,11 +61,16 @@ export function OperationsPageFrame({
   filters,
   actions,
   onRefresh,
+  workspaceMode = 'standard',
   children,
 }: OperationsPageFrameProps) {
+  const canvas = workspaceMode === 'canvas';
   return (
     <OperationsRefreshProvider>
-      <div className="container animate-fade-in">
+      <div
+        className="container animate-fade-in"
+        data-workspace-mode={canvas ? 'canvas' : 'standard'}
+      >
         <PageHeader
           compact
           icon={icon}
@@ -67,13 +78,14 @@ export function OperationsPageFrame({
           description={description}
           actions={(
             <>
+              {canvas ? <OperationsNavCompact /> : null}
               {viewSwitch}
               <OperationsRefreshControl onRefresh={onRefresh} />
               {actions}
             </>
           )}
         />
-        <OperationsNav />
+        {canvas ? null : <OperationsNav />}
         {status ? (
           <div className={styles.contextStrip} role="status" aria-live="polite">
             {status}

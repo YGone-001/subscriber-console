@@ -265,7 +265,26 @@ test('the inventory view switch is URL state, not component-only state', () => {
   assert.match(source, /views: INVENTORY_VIEWS/);
 });
 
-test('a rendered operations page exposes one tab strip and one refresh control', () => {
+test('canvas mode is opt-in and the default frame keeps the full tab strip', () => {
+  const source = read('../src/features/operations/OperationsPageFrame.tsx');
+  assert.match(source, /workspaceMode = 'standard'/, 'the standard chrome must remain the default');
+  assert.match(source, /workspaceMode === 'canvas'/);
+  assert.match(source, /<OperationsNavCompact \/>/);
+  assert.match(source, /\{canvas \? null : <OperationsNav \/>\}/);
+});
+
+test('only the topology page opts into canvas mode', () => {
+  for (const page of OPERATIONS_PAGES) {
+    const source = read(`../${page}`);
+    if (page.includes('TopologyPage')) {
+      assert.match(source, /workspaceMode="canvas"/, 'the topology workbench must use the canvas chrome');
+    } else {
+      assert.ok(!source.includes('workspaceMode='), `${page} must keep the standard chrome`);
+    }
+  }
+});
+
+test('a rendered operations page exposes one compact navigation entry and one refresh control', () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (() => {
     throw new Error('page rendering must not perform network access');
@@ -288,7 +307,9 @@ test('a rendered operations page exposes one tab strip and one refresh control',
     );
     const refreshControls = markup.split('data-operations-refresh="page"').length - 1;
     assert.equal(refreshControls, 1, 'exactly one page-level refresh control may render');
-    assert.equal(markup.split('data-operations-nav="workbench"').length - 1, 1, 'exactly one tab strip may render');
+    assert.ok(markup.includes('data-workspace-mode="canvas"'), 'the topology workspace must use canvas mode');
+    assert.equal(markup.split('data-operations-nav="compact"').length - 1, 1, 'exactly one compact navigation entry may render');
+    assert.equal(markup.split('data-operations-nav="workbench"').length - 1, 0, 'the full tab strip must not render');
     assert.ok(markup.includes('Topology'), 'the page title must render');
   } finally {
     globalThis.fetch = originalFetch;
@@ -319,6 +340,9 @@ test('a rendered inventory page honours the view from the URL', () => {
     assert.ok(markup.includes('aria-pressed="true"'), 'the active view switch must be pressed');
     assert.ok(markup.includes('data-view-mode="assets"'), 'the ledger view switch must render');
     assert.ok(markup.includes('type="search"'), 'the ledger workspace must render for view=assets');
+    assert.ok(markup.includes('data-workspace-mode="standard"'), 'inventory must keep the standard chrome');
+    assert.equal(markup.split('data-operations-nav="workbench"').length - 1, 1, 'inventory keeps the full tab strip');
+    assert.equal(markup.split('data-operations-nav="compact"').length - 1, 0, 'inventory must not use the compact menu');
   } finally {
     globalThis.fetch = originalFetch;
   }
