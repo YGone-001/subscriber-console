@@ -21,7 +21,12 @@ import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
 import { TopologyGraphShell } from './components/TopologyGraphShell';
 import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import { buildActualTopology } from './actual-topology-model';
-import { liveDirectory, liveEdges } from './live-topology-model';
+import {
+  liveConfigCompleteness,
+  liveDirectory,
+  liveEdges,
+  presentRuntimeStates,
+} from './live-topology-model';
 import type {
   LiveEndpoint,
   LiveNode,
@@ -163,8 +168,9 @@ export function LiveTopologyView() {
   if (!data) return null;
 
   const runtime = data.runtime;
-  const attentionCount = runtime.unverified + runtime.permissionDenied + runtime.unknown + runtime.stale;
   const config = data.config;
+  const runtimeStates = presentRuntimeStates(runtime);
+  const completeness = liveConfigCompleteness(config);
   const nodeById = new Map(data.nodes.map((node) => [node.componentId, node]));
 
   return (
@@ -174,31 +180,26 @@ export function LiveTopologyView() {
         title={t('topology_live_title')}
         subtitle={t('topology_live_subtitle')}
         evidence={t('topology_source_evidence_runtime')}
-        completeness={config.complete ? 'complete' : 'partial'}
-        summary={(
+        completeness={completeness}
+        summary={runtimeStates.length > 0 || data.edges.length > 0 || unresolved.length > 0 ? (
           <div className={styles.liveChips}>
-            <span className={styles.liveChip} data-runtime-running={runtime.running}>
-              {t('runtime_status_running')} {runtime.running}
-            </span>
-            <span className={styles.liveChip} data-runtime-stopped={runtime.stopped}>
-              {t('runtime_status_stopped')} {runtime.stopped}
-            </span>
-            <span className={styles.liveChip} data-runtime-attention={attentionCount}>
-              {t('topology_live_attention', { count: attentionCount })}
-            </span>
-            <span className={styles.liveChip} data-runtime-not-detected={runtime.notDetected}>
-              {t('runtime_status_not_detected')} {runtime.notDetected}
-            </span>
-            <span className={styles.liveChip} data-configured-edge-count={data.edges.length}>
-              {t('topology_live_configured_edges', { count: data.edges.length })}
-            </span>
+            {runtimeStates.map(({ state, count }) => (
+              <span key={state} className={styles.liveChip} data-runtime-state={state}>
+                {t(`runtime_status_${state}`)} {count}
+              </span>
+            ))}
+            {data.edges.length > 0 ? (
+              <span className={styles.liveChip} data-configured-edge-count={data.edges.length}>
+                {t('topology_live_configured_edges', { count: data.edges.length })}
+              </span>
+            ) : null}
             {unresolved.length > 0 ? (
               <span className={styles.liveChip} data-unresolved-peer-count={unresolved.length}>
                 {t('topology_live_unresolved_peers', { count: unresolved.length })}
               </span>
             ) : null}
           </div>
-        )}
+        ) : undefined}
         notice={(
           <>
             {!config.manifestConfigured ? (

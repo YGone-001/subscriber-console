@@ -139,7 +139,8 @@ test('the runtime view is presented through the shared workbench', () => {
   assert.match(source, /onCloseInspector=/, 'the inspector must be closable');
   assert.match(source, /fitView/, 'the view must fit its own layout');
   assert.match(source, /toggleFullscreen/, 'the view must own fullscreen state');
-  assert.match(source, /completeness=\{config\.complete \? 'complete' : 'partial'\}/, 'config completeness must stay explicit');
+  assert.match(source, /completeness=\{completeness\}/, 'config completeness must stay explicit');
+  assert.match(source, /liveConfigCompleteness/, 'completeness must distinguish unavailable, partial and complete reads');
   assert.ok(!source.includes('styles.liveBody'), 'the old canvas/detail grid must be gone');
   assert.ok(!source.includes('styles.liveToolbar'), 'the old page-local toolbar must be gone');
 });

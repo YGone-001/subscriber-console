@@ -1372,22 +1372,21 @@
   font-variant-numeric: tabular-nums;
 }
 
-.liveChip[data-runtime-running]:not([data-runtime-running='0']) {
+.liveChip[data-runtime-state='running'] {
   border-color: currentColor;
   color: var(--sys-color-status-success);
 }
 
-.liveChip[data-runtime-stopped]:not([data-runtime-stopped='0']) {
+.liveChip[data-runtime-state='stopped'],
+.liveChip[data-runtime-state='unverified'],
+.liveChip[data-runtime-state='permission_denied'],
+.liveChip[data-runtime-state='stale'] {
   border-color: currentColor;
   color: var(--sys-color-status-warning);
 }
 
-.liveChip[data-runtime-attention]:not([data-runtime-attention='0']) {
-  border-color: currentColor;
-  color: var(--sys-color-status-warning);
-}
-
-.liveChip[data-runtime-not-detected] {
+.liveChip[data-runtime-state='unknown'],
+.liveChip[data-runtime-state='not_detected'] {
   color: var(--text-muted);
 }
 

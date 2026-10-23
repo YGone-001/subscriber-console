@@ -50,7 +50,12 @@ import {
   groupForResource,
   nodeMatches,
 } from '../src/features/topology/actual-topology-model';
-import { liveDirectory, liveEdges } from '../src/features/topology/live-topology-model';
+import {
+  liveConfigCompleteness,
+  liveDirectory,
+  liveEdges,
+  presentRuntimeStates,
+} from '../src/features/topology/live-topology-model';
 import type { LiveTopologyResponse } from '../src/features/topology/live-topology-types';
 import {
   classifyResource,
@@ -928,6 +933,107 @@ test('live topology maps runtime identities and configured links without inventi
   assert.ok(markup.includes('N4'), 'interface names label the configured link');
 });
 
+test('the runtime summary only carries states present in the payload', () => {
+  const states = presentRuntimeStates({
+    total: 6, running: 4, stopped: 1, unverified: 0, permissionDenied: 1,
+    unknown: 0, stale: 1, notDetected: 1, expected: 5,
+  });
+  assert.deepEqual(states, [
+    { state: 'running', count: 4 },
+    { state: 'stopped', count: 1 },
+    { state: 'permission_denied', count: 1 },
+    { state: 'stale', count: 1 },
+    { state: 'not_detected', count: 1 },
+  ], 'only present states render, in a stable order');
+  assert.ok(!states.some((entry) => entry.count === 0), 'a zero count must not become a summary row');
+
+  assert.deepEqual(
+    presentRuntimeStates({
+      total: 0, running: 0, stopped: 0, unverified: 0, permissionDenied: 0,
+      unknown: 0, stale: 0, notDetected: 0, expected: 0,
+    }),
+    [],
+    'an empty snapshot has no state summary at all',
+  );
+});
+
+test('runtime completeness distinguishes an unavailable, partial and complete config read', () => {
+  assert.equal(
+    liveConfigCompleteness({ manifestConfigured: false, sourceCount: 0, availableSources: 0, complete: false }),
+    'unavailable',
+    'a missing manifest means configured evidence is unavailable',
+  );
+  assert.equal(
+    liveConfigCompleteness({ manifestConfigured: true, sourceCount: 3, availableSources: 2, complete: false }),
+    'partial',
+  );
+  assert.equal(
+    liveConfigCompleteness({ manifestConfigured: true, sourceCount: 2, availableSources: 2, complete: true }),
+    'complete',
+  );
+});
+
+test('a node whose role equals its name renders one identity line', () => {
+  const runtimeNode: ResourceProjection = {
+    resourceId: 'amf',
+    kind: 'network_function',
+    name: 'AMF',
+    displayName: 'AMF',
+    domain: '5gc',
+    role: 'amf',
+    lifecycleState: 'unknown',
+    runtimeStatus: 'running',
+  };
+  const runtimeLayout = buildActualTopology([], { amf: runtimeNode }, {
+    domainMode: 'all',
+    resources: [runtimeNode],
+  });
+  const runtimeMarkup = render(
+    createElement(ActualTopologyCanvas, {
+      layout: runtimeLayout,
+      search: '',
+      onSelectResource: () => {},
+      onHoverEdge: () => {},
+    }),
+  );
+  assert.ok(runtimeMarkup.includes('data-role-deduped="true"'), 'AMF / AMF must collapse to one visible identity');
+  assert.ok(
+    runtimeMarkup.includes('aria-label="AMF, 5GC / Runtime: running"'),
+    'the accessible name must not repeat the role either',
+  );
+
+  const declaredNode: ResourceProjection = {
+    ...runtimeNode,
+    resourceId: 'amf-01',
+    name: 'amf-01',
+    displayName: 'AMF-01',
+    lifecycleState: 'active',
+    runtimeStatus: undefined,
+  };
+  const declaredLayout = buildActualTopology([], { 'amf-01': declaredNode }, {
+    domainMode: 'all',
+    resources: [declaredNode],
+  });
+  const declaredMarkup = render(
+    createElement(ActualTopologyCanvas, {
+      layout: declaredLayout,
+      search: '',
+      onSelectResource: () => {},
+      onHoverEdge: () => {},
+    }),
+  );
+  assert.ok(!declaredMarkup.includes('data-role-deduped="true"'), 'a distinct resource name keeps its role eyebrow');
+});
+
+test('the runtime view copy does not claim connectivity, traffic or health', () => {
+  assert.equal(en.topology_live_title, 'Runtime and configured topology');
+  assert.equal(zh.topology_live_title, '运行与配置拓扑');
+  assert.match(en.topology_live_subtitle, /does not prove real connectivity, observed traffic or service health/);
+  assert.match(zh.topology_live_subtitle, /不证明真实连通、实测流量或服务健康/);
+  assert.match(en.topology_live_config_complete, /read completely/);
+  assert.match(zh.topology_live_config_complete, /已完整读取/);
+});
+
 /* -------------------------------------------------------------- interfaces -- */
 
 test('interface helpers never invent names and scope the view filters', () => {
@@ -1227,7 +1333,7 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_inspector_label', 'topology_close_inspector',
     'topology_runtime_label',
     'topology_live_title', 'topology_live_subtitle', 'topology_live_runtime_total',
-    'topology_live_attention', 'topology_live_search_placeholder',
+    'topology_live_search_placeholder',
     'topology_live_configured_edges', 'topology_live_config_complete',
     'topology_live_config_incomplete', 'topology_live_config_unconfigured',
     'topology_live_unresolved_peers', 'topology_live_selected', 'topology_live_process',

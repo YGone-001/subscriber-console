@@ -204,6 +204,14 @@ export function ActualTopologyCanvas({
         const dimmed = (!matched || !isFocused(node)) && !selected;
         const role = nodeRole(node);
         const name = nodeName(node);
+        /* A runtime node is often named exactly like its role (AMF / AMF).
+         * The name is the primary identity, so an identical role eyebrow is
+         * dropped instead of repeating the same word twice. */
+        const duplicateRole = Boolean(role) && role.trim().toLowerCase() === name.trim().toLowerCase();
+        const showRole = Boolean(role) && !duplicateRole;
+        const nameY = showRole ? node.y + 37 : node.y + 31;
+        const metaY = showRole ? node.y + 51 : node.y + 47;
+        const identity = showRole ? `${role}: ${name}` : name;
         const nodeHealth = health?.get(node.resourceId);
         const healthLabel = nodeHealth ? t(nodeHealthLabelKey(nodeHealth.state)) : '';
         const runtimeKey = node.runtimeStatus ? `runtime_status_${node.runtimeStatus}` : '';
@@ -238,9 +246,10 @@ export function ActualTopologyCanvas({
             data-boundary={node.boundary ? 'true' : undefined}
             data-proxy={node.proxy ? 'true' : undefined}
             data-group={node.group}
+            data-role-deduped={duplicateRole ? 'true' : undefined}
             data-runtime-status={node.runtimeStatus}
             data-health-state={nodeHealth?.state}
-            aria-label={`${role}: ${name}, ${meta}${healthSuffix}`}
+            aria-label={`${identity}, ${meta}${healthSuffix}`}
             aria-pressed={selected}
             className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${node.boundary ? styles.actualNodeBoundary : ''} ${node.proxy ? styles.actualNodeProxy : ''} ${node.runtimeStatus === 'stopped' ? styles.actualNodeStopped : ''} ${node.runtimeStatus === 'not_detected' ? styles.actualNodeNotDetected : ''} ${selected ? styles.actualNodeSelected : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
             onClick={() => onSelectResource(node.resourceId)}
@@ -251,12 +260,14 @@ export function ActualTopologyCanvas({
               }
             }}
           >
-            <title>{`${role}: ${name}${healthSuffix}`}</title>
+            <title>{`${identity}${healthSuffix}`}</title>
             <rect x={node.x} y={node.y} width={ACTUAL_NODE_WIDTH} height={ACTUAL_NODE_HEIGHT} rx={8} className={styles.actualNodeRect} />
             <rect x={node.x} y={node.y + 8} width={4} height={ACTUAL_NODE_HEIGHT - 16} rx={2} className={styles.actualNodeBar} />
-            <text x={node.x + 14} y={node.y + 21} className={styles.actualNodeRole}>{truncate(role, 14)}</text>
-            <text x={node.x + 14} y={node.y + 37} className={styles.actualNodeName}>{truncate(name, 22)}</text>
-            <text x={node.x + 14} y={node.y + 51} className={styles.actualNodeMeta}>{truncate(meta, 24)}</text>
+            {showRole ? (
+              <text x={node.x + 14} y={node.y + 21} className={styles.actualNodeRole}>{truncate(role, 14)}</text>
+            ) : null}
+            <text x={node.x + 14} y={nameY} className={styles.actualNodeName}>{truncate(name, 22)}</text>
+            <text x={node.x + 14} y={metaY} className={styles.actualNodeMeta}>{truncate(meta, 24)}</text>
             {nodeHealth ? (
               <circle
                 cx={node.x + ACTUAL_NODE_WIDTH - 13}
