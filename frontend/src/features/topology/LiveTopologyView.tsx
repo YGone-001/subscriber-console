@@ -31,6 +31,7 @@ import {
   presentRuntimeStates,
 } from './live-topology-model';
 import type {
+  LiveEdge,
   LiveEndpoint,
   LiveNode,
   LiveTopologyResponse,
@@ -55,6 +56,7 @@ export function LiveTopologyView() {
   const { t } = useI18n();
   const live = useRead<LiveTopologyResponse>('/api/topology/live');
   const [selectedComponentId, setSelectedComponentId] = useState<string | undefined>();
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | undefined>();
   const [hoveredResourceId, setHoveredResourceId] = useState<string | undefined>();
   const [focusedResourceId, setFocusedResourceId] = useState<string | undefined>();
@@ -65,6 +67,7 @@ export function LiveTopologyView() {
   const [fullscreen, setFullscreen] = useState(false);
   const [panning, setPanning] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<{ kind: 'node' | 'edge'; id: string } | undefined>(undefined);
   const autoFitRef = useRef(true);
   const panRef = useRef<{
     pointerId: number;
@@ -99,11 +102,15 @@ export function LiveTopologyView() {
   );
   const interfaceCounts = useMemo(() => interfaceCoverage(layout.links), [layout.links]);
   const selected = data?.nodes.find((node) => node.componentId === selectedComponentId);
+  const selectedEdge = data?.edges.find((edge) => edge.edgeId === selectedEdgeId);
   const unresolved = data?.unresolvedPeers ?? [];
 
   useEffect(() => {
     if (selectedComponentId && data && !data.nodes.some((node) => node.componentId === selectedComponentId)) {
       setSelectedComponentId(undefined);
+    }
+    if (selectedEdgeId && data && !data.edges.some((edge) => edge.edgeId === selectedEdgeId)) {
+      setSelectedEdgeId(undefined);
     }
     if (hoveredEdgeId && !layout.links.some((link) => link.edgeId === hoveredEdgeId)) {
       setHoveredEdgeId(undefined);
@@ -114,7 +121,7 @@ export function LiveTopologyView() {
     if (focusedResourceId && !layout.nodes.some((node) => node.resourceId === focusedResourceId)) {
       setFocusedResourceId(undefined);
     }
-  }, [data, selectedComponentId, layout.links, layout.nodes, hoveredEdgeId, hoveredResourceId, focusedResourceId]);
+  }, [data, selectedComponentId, selectedEdgeId, layout.links, layout.nodes, hoveredEdgeId, hoveredResourceId, focusedResourceId]);
 
   const fitView = useCallback(() => {
     const viewport = canvasRef.current;
@@ -162,6 +169,8 @@ export function LiveTopologyView() {
   };
   const resetView = () => {
     setSelectedComponentId(undefined);
+    setSelectedEdgeId(undefined);
+    triggerRef.current = undefined;
     setHoveredEdgeId(undefined);
     setHoveredResourceId(undefined);
     setFocusedResourceId(undefined);
@@ -170,6 +179,39 @@ export function LiveTopologyView() {
     setShowAllInterfaceNames(false);
     fitView();
   };
+  const selectNode = (componentId: string) => {
+    if (componentId === selectedComponentId) {
+      triggerRef.current = undefined;
+      setSelectedComponentId(undefined);
+      return;
+    }
+    triggerRef.current = { kind: 'node', id: componentId };
+    setSelectedEdgeId(undefined);
+    setSelectedComponentId(componentId);
+  };
+  const selectEdge = (edgeId: string) => {
+    if (edgeId === selectedEdgeId) {
+      triggerRef.current = undefined;
+      setSelectedEdgeId(undefined);
+      return;
+    }
+    triggerRef.current = { kind: 'edge', id: edgeId };
+    setSelectedComponentId(undefined);
+    setSelectedEdgeId(edgeId);
+  };
+  const closeInspector = useCallback(() => {
+    setSelectedComponentId(undefined);
+    setSelectedEdgeId(undefined);
+    const trigger = triggerRef.current;
+    triggerRef.current = undefined;
+    if (!trigger) return;
+    window.requestAnimationFrame(() => {
+      const selector = trigger.kind === 'node'
+        ? `[data-resource-id="${trigger.id}"]`
+        : `[data-edge-id="${trigger.id}"]`;
+      canvasRef.current?.querySelector<SVGElement>(selector)?.focus();
+    });
+  }, []);
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
       void document.exitFullscreen?.();
@@ -372,9 +414,20 @@ export function LiveTopologyView() {
             fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
           />
         )}
-        inspector={selected ? <LiveNodeDetail node={selected} /> : undefined}
-        inspectorLabel={t('topology_live_selected')}
-        onCloseInspector={() => setSelectedComponentId(undefined)}
+        inspector={selectedEdge ? (
+          <LiveEdgeDetail edge={selectedEdge} nodes={data.nodes} onSelectNode={selectNode} />
+        ) : selected ? (
+          <LiveNodeDetail
+            node={selected}
+            nodes={data.nodes}
+            edges={data.edges.filter((edge) => (
+              edge.fromComponentId === selected.componentId || edge.toComponentId === selected.componentId
+            ))}
+            onSelectEdge={selectEdge}
+          />
+        ) : undefined}
+        inspectorLabel={selectedEdge ? t('topology_inspector_edge') : t('topology_live_selected')}
+        onCloseInspector={closeInspector}
         legend={(
           <span className={styles.liveLegendItem}>
             <i className={styles.liveLegendLine} aria-hidden="true" />
@@ -489,15 +542,15 @@ export function LiveTopologyView() {
               <ActualTopologyCanvas
                 layout={layout}
                 selectedResourceId={selectedComponentId}
+                selectedEdgeId={selectedEdgeId}
                 focusedResourceId={focusedResourceId}
                 hoveredResourceId={hoveredResourceId}
                 hoveredEdgeId={hoveredEdgeId}
                 search={search}
                 zoom={zoom}
                 showAllInterfaceNames={showAllInterfaceNames}
-                onSelectResource={(resourceId) => {
-                  setSelectedComponentId((current) => current === resourceId ? undefined : resourceId);
-                }}
+                onSelectResource={selectNode}
+                onSelectEdge={selectEdge}
                 onFocusResource={setFocusedResourceId}
                 onHoverResource={setHoveredResourceId}
                 onHoverEdge={setHoveredEdgeId}
@@ -511,8 +564,21 @@ export function LiveTopologyView() {
   );
 }
 
-function LiveNodeDetail({ node }: { node: LiveNode }) {
+function LiveNodeDetail({
+  node,
+  nodes,
+  edges,
+  onSelectEdge,
+}: {
+  node: LiveNode;
+  nodes: LiveNode[];
+  edges: LiveEdge[];
+  onSelectEdge: (edgeId: string) => void;
+}) {
   const { t } = useI18n();
+  const nodeName = (componentId: string) => (
+    nodes.find((candidate) => candidate.componentId === componentId)?.displayName || componentId
+  );
   const runtimeStatusLabel = (status: string) => {
     const key = runtimeLabelKey(status);
     const translated = t(key);
@@ -522,6 +588,10 @@ function LiveNodeDetail({ node }: { node: LiveNode }) {
     <div className={styles.liveDetailBody}>
       <strong>{node.displayName || node.componentId}</strong>
       <dl className={styles.liveDetailList}>
+        <div>
+          <dt>{t('topology_inspector_identity')}</dt>
+          <dd><code>{node.inventoryResourceId || node.componentId}</code></dd>
+        </div>
         <div>
           <dt>{t('topology_live_process')}</dt>
           <dd>{node.processName || '-'}</dd>
@@ -551,13 +621,107 @@ function LiveNodeDetail({ node }: { node: LiveNode }) {
             )}
           </dd>
         </div>
+        <div>
+          <dt>{t('topology_inspector_evidence')}</dt>
+          <dd>{t('topology_source_evidence_runtime')}</dd>
+        </div>
       </dl>
+      <section aria-label={t('topology_related_relationships')}>
+        <h4 className={styles.inspectorSectionTitle}>{t('topology_related_relationships')}</h4>
+        {edges.length === 0 ? (
+          <p className={styles.liveMuted}>{t('topology_no_relationships')}</p>
+        ) : (
+          <ul className={styles.actualInspectorLinks}>
+            {edges.map((edge) => (
+              <li key={edge.edgeId}>
+                <button
+                  type="button"
+                  className={styles.linkBtn}
+                  data-related-edge={edge.edgeId}
+                  onClick={() => onSelectEdge(edge.edgeId)}
+                >
+                  {nodeName(edge.fromComponentId)} -&gt; {nodeName(edge.toComponentId)}
+                  {' · '}
+                  {edge.interfaceNames.length > 0 ? edge.interfaceNames.join(' / ') : edge.protocol}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       {node.inventoryResourceId ? (
         <Link className={styles.linkBtn} to={`/inventory/${encodeURIComponent(node.inventoryResourceId)}`}>
           <ExternalLink size={12} aria-hidden="true" />
           {t('topology_live_open_inventory')}
         </Link>
       ) : null}
+    </div>
+  );
+}
+
+function LiveEdgeDetail({
+  edge,
+  nodes,
+  onSelectNode,
+}: {
+  edge: LiveEdge;
+  nodes: LiveNode[];
+  onSelectNode: (componentId: string) => void;
+}) {
+  const { t } = useI18n();
+  const from = nodes.find((node) => node.componentId === edge.fromComponentId);
+  const to = nodes.find((node) => node.componentId === edge.toComponentId);
+  const stateKey = `topology_live_state_${edge.state}`;
+  const translated = t(stateKey);
+  return (
+    <div className={styles.liveDetailBody}>
+      <strong>
+        {from?.displayName || edge.fromComponentId} -&gt; {to?.displayName || edge.toComponentId}
+      </strong>
+      <dl className={styles.liveDetailList}>
+        <div>
+          <dt>{t('topology_from_resource')}</dt>
+          <dd>
+            <button type="button" className={styles.linkBtn} onClick={() => onSelectNode(edge.fromComponentId)}>
+              {from?.displayName || edge.fromComponentId}
+            </button>
+          </dd>
+        </div>
+        <div>
+          <dt>{t('topology_interfaces')}</dt>
+          <dd>{edge.interfaceNames.length > 0 ? edge.interfaceNames.join(' / ') : edge.protocol}</dd>
+        </div>
+        <div>
+          <dt>{t('topology_to_resource')}</dt>
+          <dd>
+            <button type="button" className={styles.linkBtn} onClick={() => onSelectNode(edge.toComponentId)}>
+              {to?.displayName || edge.toComponentId}
+            </button>
+          </dd>
+        </div>
+        <div>
+          <dt>{t('topology_live_state')}</dt>
+          <dd>{translated === stateKey ? edge.state : translated}</dd>
+        </div>
+        <div>
+          <dt>{t('topology_live_evidence')}</dt>
+          <dd>{t('topology_live_evidence_configured')}</dd>
+        </div>
+        <div>
+          <dt>{t('topology_live_endpoint')}</dt>
+          <dd>
+            <code>{endpointLabel(edge.fromEndpoint)}</code>
+            {' -> '}
+            <code>{endpointLabel(edge.toEndpoint)}</code>
+          </dd>
+        </div>
+        {edge.sourceFiles && edge.sourceFiles.length > 0 ? (
+          <div>
+            <dt>{t('topology_live_sources')}</dt>
+            <dd>{edge.sourceFiles.join(', ')}</dd>
+          </div>
+        ) : null}
+      </dl>
     </div>
   );
 }

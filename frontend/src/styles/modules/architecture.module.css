@@ -796,6 +796,29 @@
   margin: 0 auto;
 }
 
+.archWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-12);
+  align-items: start;
+}
+
+.archWorkspace[data-inspector-open='true'] {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+}
+
+.archWorkspaceMain {
+  display: grid;
+  gap: var(--space-12);
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .archWorkspace[data-inspector-open='true'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .archLane {
   fill: var(--surface-subtle);
   stroke: var(--surface-border);
@@ -1522,6 +1545,20 @@
   opacity: 1;
 }
 
+.actualLinkSelected .actualLink {
+  stroke-width: 3;
+  opacity: 1;
+}
+
+.actualLinkGroup:focus-visible {
+  outline: none;
+}
+
+.actualLinkGroup:focus-visible .actualLink {
+  stroke-width: 3;
+  opacity: 1;
+}
+
 .actualLinkConfigured .actualLink {
   stroke-dasharray: 5 3;
 }
@@ -1874,6 +1911,21 @@
 .liveDetailBody {
   display: grid;
   gap: var(--space-8);
+}
+
+.actualInspectorLinks {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inspectorSectionTitle {
+  margin: var(--space-8) 0 var(--space-4);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .liveDetailBody strong {

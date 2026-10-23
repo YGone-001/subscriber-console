@@ -58,8 +58,9 @@ import {
   type ArchitectureViewMode,
 } from './reference-architecture';
 import { ArchitectureCanvas } from './components/ArchitectureCanvas';
-import { ArchitectureDetailDrawer } from './components/ArchitectureDetailDrawer';
+import { ArchitectureRoleDetail } from './components/ArchitectureDetailDrawer';
 import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
+import { TopologyInspector } from './components/TopologyInspector';
 import type { RuntimeObservations } from '../runtime/runtime-types';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import styles from '../../styles/modules/architecture.module.css';
@@ -192,6 +193,7 @@ export function ArchitectureView({
   const [fullscreen, setFullscreen] = useState(false);
   const [panning, setPanning] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const triggerRoleRef = useRef<string | undefined>(undefined);
   const autoFitRef = useRef(false);
   const panRef = useRef<{
     pointerId: number;
@@ -337,13 +339,31 @@ export function ArchitectureView({
     autoFitRef.current = false;
     setZoom(1);
     setSelectedRole(undefined);
+    triggerRoleRef.current = undefined;
     scrollToOrigin();
   };
   const revealAllRoles = () => {
     setView('all');
     setSelectedRole(undefined);
+    triggerRoleRef.current = undefined;
     scrollToOrigin();
   };
+  const restoreRoleFocus = useCallback(() => {
+    const role = triggerRoleRef.current;
+    triggerRoleRef.current = undefined;
+    if (!role) return;
+    window.requestAnimationFrame(() => {
+      canvasRef.current?.querySelector<SVGElement>(`[data-role="${role}"]`)?.focus();
+    });
+  }, []);
+  const closeRoleInspector = useCallback(() => {
+    setSelectedRole(undefined);
+    restoreRoleFocus();
+  }, [restoreRoleFocus]);
+  const openRoleInspector = useCallback((role: string) => {
+    triggerRoleRef.current = role;
+    setSelectedRole(role);
+  }, []);
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
       void document.exitFullscreen?.();
@@ -419,6 +439,7 @@ export function ArchitectureView({
                     onClick={() => {
                       setView(mode);
                       setSelectedRole(undefined);
+                      triggerRoleRef.current = undefined;
                       scrollToOrigin();
                     }}
                   >
@@ -479,6 +500,11 @@ export function ArchitectureView({
             </span>
           </div>
 
+          <div
+            className={styles.archWorkspace}
+            data-inspector-open={selected ? 'true' : undefined}
+          >
+            <div className={styles.archWorkspaceMain}>
           {view !== 'all' ? (
             <div className={styles.legendCompact}>
               <span
@@ -613,7 +639,13 @@ export function ArchitectureView({
                   links={visible.links}
                   lanes={lanes}
                   selectedRole={selectedRole}
-                  onSelect={(role) => setSelectedRole((current) => (current === role ? undefined : role))}
+                  onSelect={(role) => {
+                    if (role === selectedRole) {
+                      closeRoleInspector();
+                      return;
+                    }
+                    openRoleInspector(role);
+                  }}
                 />
               </div>
             </div>
@@ -648,7 +680,7 @@ export function ArchitectureView({
                       <button
                         type="button"
                         className={styles.legendToggle}
-                        onClick={() => setSelectedRole(node.role)}
+                        onClick={() => openRoleInspector(node.role)}
                       >
                         {t('arch_list_open')}
                       </button>
@@ -662,10 +694,15 @@ export function ArchitectureView({
           <p className={styles.footnote}>
             <Layers size={14} /> {t('arch_coverage_note')}
           </p>
+            </div>
+            {selected ? (
+              <TopologyInspector label={t('arch_detail_title')} onClose={closeRoleInspector}>
+                <ArchitectureRoleDetail node={selected} />
+              </TopologyInspector>
+            ) : null}
+          </div>
         </>
       )}
-
-      <ArchitectureDetailDrawer node={selected} onClose={() => setSelectedRole(undefined)} />
 
       <Dialog
         open={legendOpen}

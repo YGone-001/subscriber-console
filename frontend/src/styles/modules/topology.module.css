@@ -678,6 +678,10 @@
   background: var(--surface);
 }
 
+.detailPanelEmbedded {
+  min-width: 0;
+}
+
 .detailEmpty {
   margin: 0;
   color: var(--text-muted);
@@ -1283,6 +1287,17 @@
   background: var(--surface-field);
 }
 
+.inspector:focus {
+  outline: none;
+}
+
+.inspectorBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: color-mix(in srgb, var(--sys-color-surface-canvas) 55%, transparent);
+}
+
 .inspectorHeader {
   display: flex;
   align-items: center;
@@ -1336,7 +1351,7 @@
     top: var(--space-16);
     right: var(--space-16);
     bottom: var(--space-16);
-    z-index: 40;
+    z-index: 80;
     width: min(380px, calc(100vw - 32px));
     overflow: auto;
     background: var(--surface);

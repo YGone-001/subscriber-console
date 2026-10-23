@@ -16,6 +16,7 @@ export interface TopologyEdgeDetailProps {
   edge: TopologyEdge | null;
   directory: Record<string, ResourceProjection>;
   canConfigure: boolean;
+  embedded?: boolean;
   onViewResource?: (resourceId: string) => void;
   onEdit?: (edge: TopologyEdge) => void;
   onRetire?: (edge: TopologyEdge) => void;
@@ -29,15 +30,17 @@ export function TopologyEdgeDetail({
   edge,
   directory,
   canConfigure,
+  embedded = false,
   onViewResource,
   onEdit,
   onRetire,
 }: TopologyEdgeDetailProps) {
   const { t } = useI18n();
+  const panelClass = embedded ? styles.detailPanelEmbedded : styles.detailPanel;
 
   if (!edge) {
     return (
-      <aside className={styles.detailPanel} aria-live="polite">
+      <aside className={panelClass} aria-live="polite">
         <p className={styles.detailEmpty}>{t('topology_detail_empty')}</p>
       </aside>
     );
@@ -49,7 +52,7 @@ export function TopologyEdgeDetail({
   const interfaceNames = edgeInterfaceNames(edge);
 
   return (
-    <aside className={styles.detailPanel} aria-label={t('topology_detail_title')}>
+    <aside className={panelClass} aria-label={t('topology_detail_title')}>
       <header className={styles.detailHeader}>
         <h3>{t('topology_detail_title')}</h3>
         <span className={`badge ${retired ? 'badge-danger' : 'badge-success'}`}>

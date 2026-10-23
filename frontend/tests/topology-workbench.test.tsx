@@ -129,14 +129,56 @@ test('the inspector omits the close control when the view owns no selection', ()
   assert.ok(!markup.includes('Close inspector'));
 });
 
+test('the inspector becomes a focus-managed portal drawer on narrow screens', () => {
+  const source = read('../src/features/topology/components/TopologyInspector.tsx');
+  assert.match(source, /createPortal/, 'the overlay must escape the page stacking context');
+  assert.match(source, /\(max-width: 1100px\)/, 'only narrow screens use the overlay');
+  assert.match(source, /role=\{narrow \? 'dialog'/, 'the overlay must announce itself as a dialog');
+  assert.match(source, /event\.key !== 'Escape'/, 'Escape must close the inspector');
+  assert.match(source, /panelRef\.current\?\.focus\(\)/, 'opening moves focus into the inspector');
+  assert.match(source, /inspectorBackdrop/, 'the overlay must be dismissible by pointer');
+});
+
+/* ---------------------------------------------------------- inspections -- */
+
+test('the declared and runtime views inspect nodes and relationships in place', () => {
+  const actual = read('../src/features/topology/ActualTopologyView.tsx');
+  assert.match(actual, /TopologyInspector/, 'declared nodes and edges use the shared inspector');
+  assert.match(actual, /TopologyEdgeDetail/, 'declared relationships reuse the edge detail content');
+  assert.match(actual, /onSelectEdge=\{selectEdge\}/, 'declared edges are selectable');
+  assert.match(actual, /closeInspector/, 'closing restores focus');
+  assert.match(actual, /data-related-edge=/, 'node detail links to adjacent relationships');
+
+  const live = read('../src/features/topology/LiveTopologyView.tsx');
+  assert.match(live, /LiveEdgeDetail/, 'configured relationships have their own inspector content');
+  assert.match(live, /onSelectEdge=\{selectEdge\}/);
+  assert.match(live, /onCloseInspector=\{closeInspector\}/);
+  assert.match(live, /data-related-edge=/, 'runtime node detail links to its configured relationships');
+
+  const canvas = read('../src/features/topology/components/ActualTopologyCanvas.tsx');
+  assert.match(canvas, /role=\{onSelectEdge \? 'button'/, 'relationships must be keyboard reachable');
+  assert.match(canvas, /data-edge-selected/, 'the selected relationship must stay marked');
+  assert.match(canvas, /event\.key === 'Enter'/, 'relationships must open with Enter or Space');
+});
+
+test('the architecture view presents role detail through the shared inspector', () => {
+  const source = read('../src/features/topology/ArchitectureView.tsx');
+  assert.match(source, /TopologyInspector/, 'roles must use the shared inspector');
+  assert.match(source, /ArchitectureRoleDetail/, 'role content must be reusable');
+  assert.ok(!source.includes('<ArchitectureDetailDrawer'), 'the one-off overlay must no longer own the view');
+  assert.match(source, /closeRoleInspector/, 'role close must restore focus');
+  assert.match(source, /restoreRoleFocus/);
+  assert.match(source, /data-inspector-open/, 'the inspector must take the side rail');
+});
+
 /* --------------------------------------------------------------- live ---- */
 
 test('the runtime view is presented through the shared workbench', () => {
   const source = read('../src/features/topology/LiveTopologyView.tsx');
   assert.match(source, /TopologyGraphShell/, 'the runtime graph must use the shared shell');
   assert.match(source, /TopologyGraphToolbar/, 'search and canvas controls must use the shared toolbar');
-  assert.match(source, /inspector=\{selected \?/, 'node detail must use the contextual inspector');
-  assert.match(source, /onCloseInspector=/, 'the inspector must be closable');
+  assert.match(source, /inspector=\{selectedEdge \?/, 'node and edge detail must use one contextual inspector');
+  assert.match(source, /onCloseInspector=\{closeInspector\}/, 'the inspector must restore focus on close');
   assert.match(source, /fitView/, 'the view must fit its own layout');
   assert.match(source, /toggleFullscreen/, 'the view must own fullscreen state');
   assert.match(source, /completeness=\{completeness\}/, 'config completeness must stay explicit');

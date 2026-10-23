@@ -228,7 +228,7 @@ test('the canvas has an equivalent list representation with the same state', () 
   assert.ok(source.includes('visible.nodes.map'), 'the list must cover every visible role');
   assert.ok(source.includes("t(stateLabelKey(node.tone))"), 'the list must carry the same state vocabulary');
   assert.ok(source.includes("t(bindingLabelKey(node.binding))"), 'the list must carry the binding state');
-  assert.ok(source.includes('setSelectedRole(node.role)'), 'the list must open the same detail');
+  assert.ok(source.includes('openRoleInspector(node.role)'), 'the list must open the same detail');
 });
 
 /* -------------------------------------------------- contract closure -- */

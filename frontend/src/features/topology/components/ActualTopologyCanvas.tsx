@@ -70,12 +70,14 @@ export function ActualTopologyCanvas({
   selectedResourceId,
   focusedResourceId,
   hoveredResourceId,
+  selectedEdgeId,
   search,
   hoveredEdgeId,
   health,
   zoom = 1,
   showAllInterfaceNames = false,
   onSelectResource,
+  onSelectEdge,
   onFocusResource,
   onHoverResource,
   onHoverEdge,
@@ -85,12 +87,14 @@ export function ActualTopologyCanvas({
   selectedResourceId?: string;
   focusedResourceId?: string;
   hoveredResourceId?: string;
+  selectedEdgeId?: string;
   search: string;
   hoveredEdgeId?: string;
   health?: ReadonlyMap<string, NodeHealth>;
   zoom?: number;
   showAllInterfaceNames?: boolean;
   onSelectResource: (resourceId: string) => void;
+  onSelectEdge?: (edgeId: string) => void;
   onFocusResource?: (resourceId?: string) => void;
   onHoverResource?: (resourceId?: string) => void;
   onHoverEdge: (edgeId?: string) => void;
@@ -253,21 +257,39 @@ export function ActualTopologyCanvas({
         );
       })}
 
-      <g aria-hidden="true">
+      <g aria-hidden={onSelectEdge ? undefined : true}>
         {layout.links.map((link) => {
           const related = selectedResourceId
             && (link.fromResourceId === selectedResourceId || link.toResourceId === selectedResourceId);
           const hovered = link.edgeId === hoveredEdgeId;
+          const selectedEdge = link.edgeId === selectedEdgeId;
           const geometry = edgeGeometry(link);
+          const interfaceNames = edgeInterfaceNames(link);
+          const edgeLabel = `${nodeName(link.fromNode)} -> ${nodeName(link.toNode)}, ${
+            interfaceNames.length > 0 ? formatInterfaceNames(interfaceNames) : (link.protocol || link.relationshipType)
+          }`;
+          const selectEdge = () => onSelectEdge?.(link.edgeId);
           return (
             <g
               key={link.edgeId}
               data-edge-id={link.edgeId}
               data-evidence={link.source?.kind}
               data-link-related={related ? 'true' : undefined}
-              className={`${styles.actualLinkGroup} ${link.source?.kind === 'configured' ? styles.actualLinkConfigured : ''} ${related ? styles.actualLinkRelated : ''} ${selectedResourceId && !related ? styles.actualDimmed : ''} ${hovered ? styles.actualLinkHovered : ''}`}
+              data-edge-selected={selectedEdge ? 'true' : undefined}
+              role={onSelectEdge ? 'button' : undefined}
+              tabIndex={onSelectEdge ? 0 : undefined}
+              aria-label={onSelectEdge ? edgeLabel : undefined}
+              aria-pressed={onSelectEdge ? selectedEdge : undefined}
+              className={`${styles.actualLinkGroup} ${link.source?.kind === 'configured' ? styles.actualLinkConfigured : ''} ${related ? styles.actualLinkRelated : ''} ${selectedResourceId && !related ? styles.actualDimmed : ''} ${hovered ? styles.actualLinkHovered : ''} ${selectedEdge ? styles.actualLinkSelected : ''}`}
               onMouseEnter={() => onHoverEdge(link.edgeId)}
               onMouseLeave={() => onHoverEdge(undefined)}
+              onClick={onSelectEdge ? selectEdge : undefined}
+              onKeyDown={onSelectEdge ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  selectEdge();
+                }
+              } : undefined}
             >
               <path d={geometry.path} className={styles.actualLinkHit} />
               <path d={geometry.path} className={styles.actualLink} markerEnd="url(#actual-topology-arrow)" />
