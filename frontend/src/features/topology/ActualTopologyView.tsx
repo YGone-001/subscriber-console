@@ -39,6 +39,7 @@ import { nodeHealthLabelKey, summarizeNodeHealth, type NodeHealthState } from '.
 import { useResourceDirectory } from './use-resource-directory';
 import { useTopologyHealth } from './use-topology-health';
 import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
+import { ArchitectureView } from './ArchitectureView';
 import styles from '../../styles/modules/architecture.module.css';
 
 const MIN_ZOOM = 0.5;
@@ -304,17 +305,18 @@ export function ActualTopologyView() {
     return (
       <section className={styles.actualSection} aria-labelledby="actual-topology-title">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
-        <EmptyState
-          icon={<Search size={40} />}
-          title={t('topology_actual_empty_title')}
-          description={t('topology_actual_empty_body')}
-          action={(
-            <Link className="btn btn-secondary" to="/topology?view=relationships">
-              <GitBranch size={15} />
-              {t('topology_open_ledger')}
-            </Link>
-          )}
-        />
+        <div className={styles.actualSuggestedNotice} role="status">
+          <Layers size={22} aria-hidden="true" />
+          <div>
+            <strong>{t('topology_actual_suggested_title')}</strong>
+            <span>{t('topology_actual_suggested_body')}</span>
+          </div>
+          <Link className="btn btn-secondary" to="/topology?view=relationships">
+            <GitBranch size={15} />
+            {t('topology_open_ledger')}
+          </Link>
+        </div>
+        <ArchitectureView embedded initialView="all" />
       </section>
     );
   }

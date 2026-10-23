@@ -606,6 +606,12 @@ labels remain the standard 3GPP forms (`SGW-C`, `PGW-C`, `SGW-U`, `PGW-U`).
 The `actual` topology view is the default `/topology` tab. It renders only
 resources whose kind is `network_function` or `network_function_instance`.
 
+When no active declared relationship exists, the tab renders the automatic 3GPP
+reference fallback instead of a blank page. The fallback is clearly labelled as
+a suggestion: it combines the reference architecture with the current Inventory
+binding and runtime status, but its reference links are neither declared nor
+observed connections and are never persisted as topology edges.
+
 Every `network_element` and every other Inventory kind is a support resource:
 
 ```text

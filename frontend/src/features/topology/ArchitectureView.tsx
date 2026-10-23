@@ -101,9 +101,15 @@ function domainClass(domain: string): string {
   return map[domain] ?? styles.domainLegacy;
 }
 
-export function ArchitectureView() {
+export function ArchitectureView({
+  embedded = false,
+  initialView = '5gc-sa',
+}: {
+  embedded?: boolean;
+  initialView?: ArchitectureViewMode;
+}) {
   const { t } = useI18n();
-  const [view, setView] = useState<ArchitectureViewMode>('5gc-sa');
+  const [view, setView] = useState<ArchitectureViewMode>(initialView);
   const [selectedRole, setSelectedRole] = useState<string | undefined>(undefined);
   const [legendOpen, setLegendOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
@@ -125,7 +131,10 @@ export function ArchitectureView() {
   }, [resourcesRead, runtimeRead, edges]);
 
   // UX-1: the page frame owns the only visible refresh entry.
-  useRegisterOperationsRefresh('topology:architecture', refresh);
+  useRegisterOperationsRefresh(
+    embedded ? 'topology:actual:suggested' : 'topology:architecture',
+    refresh,
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -163,7 +172,11 @@ export function ArchitectureView() {
   const summary = projection.summary;
 
   return (
-    <section className={styles.section} aria-labelledby="architecture-title">
+    <section
+      className={styles.section}
+      aria-labelledby="architecture-title"
+      data-architecture-embedded={embedded ? 'true' : undefined}
+    >
       <h2 id="architecture-title" className="sr-only">{t('arch_title')}</h2>
 
       {loading ? (

@@ -841,9 +841,10 @@ test('the actual view separates an unavailable read from empty and filtered stat
   assert.ok(filteredEmpty > empty, 'a topology with only hidden support resources or a filter must have its own state');
   assert.ok(unavailable < empty, 'a failed read must never fall through to the empty state');
   assert.ok(source.includes("topology_actual_unavailable_title"));
-  assert.ok(source.includes("topology_actual_empty_title"));
   assert.ok(source.includes("topology_actual_no_nf_title"));
   assert.ok(source.includes("topology_interface_empty_title"));
+  assert.ok(source.includes("topology_actual_suggested_title"));
+  assert.ok(source.includes('<ArchitectureView embedded initialView="all" />'));
   assert.ok(source.includes('data-action="toggle-support"'), 'support visibility must be an explicit control');
   assert.ok(source.includes('data-interface-filter'), 'the interface filter must be explicit');
   assert.ok(source.includes('data-interface-coverage'), 'the annotated coverage must be visible');
@@ -1133,10 +1134,11 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_rel_depends_on', 'topology_state_retired', 'topology_stale_revision_body',
     'topology_view_actual', 'topology_actual_node_count', 'topology_actual_coverage_hint',
     'topology_actual_partial_notice',
-    'topology_search_matches', 'topology_search_no_match', 'topology_actual_empty_title',
-    'topology_actual_empty_body', 'topology_actual_unavailable_title', 'topology_actual_unavailable_body',
+    'topology_search_matches', 'topology_search_no_match',
+    'topology_actual_unavailable_title', 'topology_actual_unavailable_body',
     'topology_actual_support_show', 'topology_actual_support_hide', 'topology_actual_hidden_support',
     'topology_actual_no_nf_title', 'topology_actual_no_nf_body', 'topology_support_resource',
+    'topology_actual_suggested_title', 'topology_actual_suggested_body',
     'topology_actual_boundary_count', 'topology_actual_cross_domain_count',
     'topology_actual_boundary_show', 'topology_actual_boundary_hide', 'topology_actual_hidden_boundary',
     'topology_actual_domain_empty_title', 'topology_actual_domain_empty_body',
