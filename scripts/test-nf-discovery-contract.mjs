@@ -52,7 +52,7 @@ assert.deepEqual(detailRoute.dynamicParameters, ['sourceId'], 'discovery detail 
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 157, `Go registered operations must be exactly 157, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 158, `Go registered operations must be exactly 158, got ${goRegistrations.length}`);
 
 const discoveryGoRoutes = goRegistrations.filter((r) => r.includes('/api/discovery'));
 assert.equal(discoveryGoRoutes.length, 12, `Discovery Go registrations must be exactly 12, got ${discoveryGoRoutes.length}`);
@@ -257,7 +257,7 @@ expectReject(() => {
 
 console.log('discovery_frontend_routes=2');
 console.log('discovery_go_registrations=12');
-console.log('go_registration_count=157');
+console.log('go_registration_count=158');
 console.log('discovery_collections=3');
 console.log('discovery_security_findings=0');
 console.log('discovery_product_name_tokens=0');

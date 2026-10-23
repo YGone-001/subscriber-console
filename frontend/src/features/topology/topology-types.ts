@@ -64,6 +64,7 @@ export interface TopologyEdge {
   labels?: Record<string, string>;
   attributes?: Record<string, unknown>;
   interfaceNames?: string[];
+  protocol?: string;
   lifecycleState: TopologyLifecycleState | string;
   source: SourceMetadata;
   revision: number;
@@ -131,6 +132,8 @@ export interface ResourceProjection {
   domain: string;
   role?: string;
   lifecycleState: string;
+  runtimeStatus?: string;
+  statusReason?: string;
 }
 
 export interface Neighbor {

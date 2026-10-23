@@ -258,11 +258,12 @@ check. This is a documented boundary, not a claimed guarantee.
 
 ## 6. API Surface
 
-Seven Topology endpoints:
+Eight Topology endpoints:
 
 | Method | Path | Access | Permission |
 | --- | --- | --- | --- |
 | GET | `/api/topology/meta` | read | `core.read` |
+| GET | `/api/topology/live` | read | `core.read` |
 | GET | `/api/topology/edges` | read | `core.read` |
 | GET | `/api/topology/edges/{edgeId}` | read | `core.read` |
 | GET | `/api/topology/resources/{resourceId}/neighbors` | read | `core.read` |
@@ -279,7 +280,7 @@ admin    = read/write
 ```
 
 The backend remains the final authorization authority. Go registration count is
-`109`; canonical frontend routes are `30`.
+`158`; canonical frontend routes are `39`.
 
 ### 6.1 Metadata
 
@@ -392,6 +393,64 @@ Retirement accepts `expectedRevision` and a bounded, trimmed, non-empty `reason`
 | Server-owned field spoofing | 400 | `SERVER_OWNED_FIELD_FORBIDDEN` |
 
 Failures are never collapsed into a generic `HTTP 500`.
+
+### 6.6 Live runtime projection
+
+`GET /api/topology/live` is a read-only projection, not a persisted model. It
+joins the current runtime discovery snapshot with operator-owned NF configuration
+files:
+
+```text
+runtime snapshot  -> nodes, process identity, runtime status
+NF_ETC_MANIFEST   -> configured listeners and explicit peers
+```
+
+`NF_ETC_MANIFEST` is an absolute path to a flat JSON object mapping a recognized
+component ID to the absolute config files that component actually uses:
+
+```json
+{
+  "smf": ["/usr/local/src/open5gs/install/etc/open5gs/smf.yaml"],
+  "icscf": ["/etc/xCloud/gcc/icscf/icscf_main.cfg"]
+}
+```
+
+The manifest is environment-specific. There is no default root and no fallback
+to a reference copy: a missing or unreadable file is reported per source in
+`config.unavailable`, `config.complete` becomes `false`, and runtime nodes keep
+rendering without invented links. Bounds are enforced: manifest `256 KiB`, each
+config file `1 MiB`, `64` components, `16` files per component and `128` files
+total. Paths must be absolute.
+
+Parsed evidence is limited to explicit protocol sections:
+
+```text
+Open5GS YAML          sbi, pfcp, gtpc, gtpu server/client address and port
+freeDiameter .conf    Identity, Realm, Port, ListenOn, ConnectPeer
+IMS Diameter XML      DiameterPeer FQDN/Realm, Acceptor, Peer
+SIP .cfg              listen=proto:address:port
+DRA .cfg              local listeners and realm only
+```
+
+Addresses and ports are read from the files; no IP address or single config root
+is hardcoded. The parser never parses or returns certificates, keys, passwords or
+other secret material.
+
+A live edge exists only when one component's config explicitly names another
+recognized component's identity or listener address and port. Unmatched peers are
+returned as `unresolvedPeers` and are never guessed into an edge. DRA config
+does not synthesize direct links through the proxy. The edge `state` is derived
+from the two endpoints' runtime status (`active`, `partial`, `inactive`,
+`unknown`); it is not a health, traffic or connectivity claim. `inactive` is
+reported only when both endpoints were explicitly observed as stopped. A
+permission failure, an unverified identity, a stale observation or a component
+that was never detected keeps the edge `unknown`; failed inspection is never
+reported as a stopped or inactive link.
+
+The endpoint accepts no query parameters, requires `core.read`, is rate limited
+to `120/60s` per user, and returns `HTTP 503 TOPOLOGY_LIVE_UNAVAILABLE` when the
+runtime snapshot is unavailable. It never writes Inventory, Topology, NF Health
+or Discovery state.
 
 ## 7. Metadata Validation and Security
 
@@ -606,11 +665,13 @@ labels remain the standard 3GPP forms (`SGW-C`, `PGW-C`, `SGW-U`, `PGW-U`).
 The `actual` topology view is the default `/topology` tab. It renders only
 resources whose kind is `network_function` or `network_function_instance`.
 
-When no active declared relationship exists, the tab renders the automatic 3GPP
-reference fallback instead of a blank page. The fallback is clearly labelled as
-a suggestion: it combines the reference architecture with the current Inventory
-binding and runtime status, but its reference links are neither declared nor
-observed connections and are never persisted as topology edges.
+When no active declared relationship exists, the tab renders the live runtime
+projection instead of a blank page. Nodes come from the current runtime snapshot;
+links come only from explicit NF_ETC configuration evidence. The section is
+clearly labelled as runtime identities plus configured links, and the 3GPP
+reference architecture remains one click away in its own view. Reference
+suggestions, runtime identities and configured links are never persisted as
+topology edges.
 
 Every `network_element` and every other Inventory kind is a support resource:
 
@@ -715,6 +776,35 @@ The filter is client-side over the bounded loaded edge set. A partial read is
 never presented as a complete annotation population; the existing coverage
 indicator remains authoritative.
 
+### 9.9 Live topology surface
+
+The live surface is shown when the declared relationship read is genuinely empty,
+and it reads `GET /api/topology/live` independently:
+
+```text
+runtime chips        running / stopped / attention / not detected
+configured links     explicit NF-to-NF config evidence count
+config status        complete / incomplete / manifest unconfigured
+unresolved peers     configured peers that match no recognized component
+canvas               every runtime component, even when it has no link
+relationships table  from / to / interface / state / evidence / endpoints
+```
+
+Runtime status is rendered as text and as a dot; stopped and not-detected
+components are visually de-emphasised but remain selectable. The `attention`
+chip aggregates `unverified`, `permission_denied`, `unknown` and `stale`
+observations, so an inspection failure is visible in the header instead of being
+silently folded into a running or stopped count. Selecting a component reveals
+its process identity, runtime status, type and domain, configured listeners and
+Inventory link. Configured links use a dashed edge and an explicit `configured`
+evidence marker so they cannot be mistaken for declared edges. Interface names
+are the preferred edge label, followed by protocol.
+
+Unknown or unreadable config sources are listed under `Sources`; the view never
+falls back to a reference config copy. An API failure renders an explicit
+unavailable state with retry and a link to the 3GPP reference architecture. The
+surface contains no mutation control.
+
 ## 10. Explicit Exclusions
 
 This capability does **not** introduce:
@@ -730,6 +820,10 @@ live network telemetry, live NF health, alarm correlation, AIOps RCA
 multi-hop impact analysis
 ```
 
+The live topology projection is read-only. It does not scan the network, run NF
+discovery, infer an unconfigured link, persist an edge, or treat configured
+evidence as connectivity or health.
+
 The presence of a node icon or a relationship line does not imply that network
 control or live monitoring has been implemented.
 
@@ -744,9 +838,10 @@ control or live monitoring has been implemented.
 | Browser-rendered acceptance | `frontend/tests/topology-screenshots.mjs` |
 | Supplemental rendered HTML | `frontend/tests/render-topology-evidence.mjs` |
 
-Backend unit tests live in `backend/internal/topology/`. The integration suite
-runs the production index initializer, a real Go backend and real HTTP requests
-against isolated test databases.
+Backend unit tests live in `backend/internal/topology/` and
+`backend/internal/livetopology/`. The integration suite runs the production
+index initializer, a real Go backend and real HTTP requests against isolated test
+databases.
 
 ### 11.1 Browser-rendered acceptance
 

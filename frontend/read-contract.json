@@ -230,6 +230,7 @@
     "source": "frontend/src/features/topology/TopologyPage.tsx",
     "readEndpoints": [
       "GET /api/topology/meta",
+      "GET /api/topology/live",
       "GET /api/topology/edges",
       "GET /api/inventory/resources",
       "GET /api/operations/resources"

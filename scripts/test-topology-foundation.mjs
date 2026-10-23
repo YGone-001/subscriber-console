@@ -639,10 +639,10 @@ async function main() {
     console.log('topology_node_collection_count=0');
     console.log('topology_relationship_type_count=9');
     console.log('topology_lifecycle_state_count=2');
-    console.log('topology_api_read_count=4');
+    console.log('topology_api_read_count=5');
     console.log('topology_api_mutation_count=3');
-    console.log('topology_api_total_count=7');
-    console.log('go_registration_count=136');
+    console.log('topology_api_total_count=8');
+    console.log('go_registration_count=158');
     console.log('frontend_route_count=39');
     console.log('topology_read_permission=core.read');
     console.log('topology_write_permission=core.configure');

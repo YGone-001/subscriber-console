@@ -111,6 +111,39 @@ export const EDGES = [
   topologyEdge(EDGE_IDS.exposes, 'exposes', RESOURCE_IDS.pcf, RESOURCE_IDS.nrf, 'retired', 3, 'PCF exposes NRF (retired)', TS.t1),
 ];
 
+/* Live topology: runtime identities plus one NF_ETC configured PFCP link. */
+export const LIVE_TOPOLOGY = {
+  generatedAt: TS.t5,
+  host: { hostId: 'fixture-host', hostName: 'agent-fixture' },
+  runtime: {
+    total: 5, running: 4, stopped: 1, unverified: 0, permissionDenied: 0,
+    unknown: 0, stale: 0, notDetected: 0, expected: 1,
+  },
+  config: { manifestConfigured: true, sourceCount: 2, availableSources: 2, complete: true },
+  nodes: [
+    { componentId: 'amf', displayName: 'AMF', processName: 'open5gs-amfd', role: 'amf', nfType: 'AMF', domain: '5gc', runtimeStatus: 'running' },
+    { componentId: 'smf', displayName: 'SMF', processName: 'open5gs-smfd', role: 'smf', nfType: 'SMF', domain: '5gc', runtimeStatus: 'running' },
+    { componentId: 'upf', displayName: 'UPF', processName: 'open5gs-upfd', role: 'upf', nfType: 'UPF', domain: '5gc', runtimeStatus: 'running' },
+    { componentId: 'pcf', displayName: 'PCF', processName: 'open5gs-pcfd', role: 'pcf', nfType: 'PCF', domain: '5gc', runtimeStatus: 'running' },
+    { componentId: 'mme', displayName: 'MME', processName: 'open5gs-mmed', role: 'mme', nfType: 'MME', domain: 'epc', runtimeStatus: 'stopped' },
+  ],
+  edges: [{
+    edgeId: 'live-fixture-n4',
+    fromComponentId: 'smf',
+    toComponentId: 'upf',
+    relationshipType: 'connects_to',
+    interfaceNames: ['N4'],
+    protocol: 'pfcp',
+    evidence: 'configured',
+    state: 'active',
+    fromEndpoint: { protocol: 'pfcp', address: '10.10.0.139', port: 8805 },
+    toEndpoint: { protocol: 'pfcp', address: '10.10.0.139', port: 8805 },
+    sourceFiles: ['/etc/open5gs/smf.yaml', '/etc/open5gs/upf.yaml'],
+  }],
+  unresolvedPeers: [],
+  summary: { nodeCount: 5, edgeCount: 1, configuredEdgeCount: 1, unresolvedPeerCount: 0 },
+};
+
 export const RELATIONSHIP_TYPES = [
   'contains', 'runs_on', 'depends_on', 'connects_to', 'routes_to',
   'registers_with', 'serves', 'uses', 'exposes',
@@ -191,8 +224,8 @@ function project(resourceId) {
   };
 }
 
-function neighboursOf(rootResourceId, direction, lifecycleState, relationshipType) {
-  const matches = EDGES.filter((edge) => {
+function neighboursOf(rootResourceId, direction, lifecycleState, relationshipType, edges) {
+  const matches = edges.filter((edge) => {
     if (lifecycleState && edge.lifecycleState !== lifecycleState) return false;
     if (relationshipType && edge.relationshipType !== relationshipType) return false;
     if (direction === 'inbound') return edge.toResourceId === rootResourceId;
@@ -320,7 +353,7 @@ function sendJson(res, status, payload) {
  * @param {string} options.sessionKey key of SESSIONS to authenticate as
  * @returns {Promise<{origin: string, unexpected: string[], close: () => Promise<void>, requestLog: string[]}>}
  */
-export async function startFixtureServer({ distDir, sessionKey = 'operator' }) {
+export async function startFixtureServer({ distDir, sessionKey = 'operator', edges = EDGES, live = LIVE_TOPOLOGY }) {
   const unexpected = [];
   const requestLog = [];
   const openStreams = new Set();
@@ -331,7 +364,7 @@ export async function startFixtureServer({ distDir, sessionKey = 'operator' }) {
 
     if (pathname.startsWith('/api/')) {
       requestLog.push(`${req.method} ${pathname}`);
-      return handleApi(req, res, url, { sessionKey, unexpected, openStreams });
+      return handleApi(req, res, url, { sessionKey, unexpected, openStreams, edges, live });
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -515,13 +548,16 @@ function handleApi(req, res, url, context) {
       interfaceCatalog: INTERFACE_CATALOG,
     });
   }
+  if (pathname === '/api/topology/live') {
+    return sendJson(res, 200, context.live);
+  }
   if (pathname === '/api/topology/edges' && req.method === 'GET') {
     const lifecycleState = url.searchParams.get('lifecycleState') ?? 'active';
     const relationshipType = url.searchParams.get('relationshipType') ?? '';
     const fromResourceId = url.searchParams.get('fromResourceId') ?? '';
     const toResourceId = url.searchParams.get('toResourceId') ?? '';
     const limit = Number(url.searchParams.get('limit') ?? 20) || 20;
-    const items = EDGES.filter((edge) => {
+    const items = context.edges.filter((edge) => {
       if (lifecycleState && edge.lifecycleState !== lifecycleState) return false;
       if (relationshipType && edge.relationshipType !== relationshipType) return false;
       if (fromResourceId && edge.fromResourceId !== fromResourceId) return false;
@@ -556,19 +592,19 @@ function handleApi(req, res, url, context) {
   const edgeRetire = /^\/api\/topology\/edges\/([^/]+)\/retire$/.exec(pathname);
   if (edgeRetire && req.method === 'POST') {
     return readBody(req, () => {
-      const edge = EDGES.find((item) => item.edgeId === edgeRetire[1]) ?? EDGES[0];
+      const edge = context.edges.find((item) => item.edgeId === edgeRetire[1]) ?? context.edges[0];
       return sendJson(res, 200, { ...edge, lifecycleState: 'retired', revision: edge.revision + 1, updatedAt: TS.t5 });
     });
   }
   const edgeMatch = /^\/api\/topology\/edges\/([^/]+)$/.exec(pathname);
   if (edgeMatch && req.method === 'GET') {
-    const edge = EDGES.find((item) => item.edgeId === edgeMatch[1]);
+    const edge = context.edges.find((item) => item.edgeId === edgeMatch[1]);
     if (!edge) return sendJson(res, 404, { error: 'not found', code: 'TOPOLOGY_EDGE_NOT_FOUND' });
     return sendJson(res, 200, edge);
   }
   if (edgeMatch && req.method === 'PUT') {
     return readBody(req, (payload) => {
-      const edge = EDGES.find((item) => item.edgeId === edgeMatch[1]) ?? EDGES[0];
+      const edge = context.edges.find((item) => item.edgeId === edgeMatch[1]) ?? context.edges[0];
       return sendJson(res, 200, {
         ...edge,
         description: payload?.edge?.description ?? edge.description,
@@ -589,7 +625,7 @@ function handleApi(req, res, url, context) {
     const lifecycleState = url.searchParams.get('lifecycleState') ?? 'active';
     const relationshipType = url.searchParams.get('relationshipType') ?? '';
     const limit = Number(url.searchParams.get('limit') ?? 50) || 50;
-    const neighbours = neighboursOf(rootResourceId, direction, lifecycleState, relationshipType).slice(0, limit);
+    const neighbours = neighboursOf(rootResourceId, direction, lifecycleState, relationshipType, context.edges).slice(0, limit);
     return sendJson(res, 200, {
       rootResource: root,
       neighbors: neighbours,

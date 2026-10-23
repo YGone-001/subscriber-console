@@ -5,8 +5,8 @@
  * Proves:
  * - Route count = 28 (26 -> 28 intentional Stage 2 transition)
  * - Topology frontend routes = 2
- * - Topology Go registrations = 7 (4 reads, 3 mutations)
- * - Go registrations = 157 (intentional platform extensions)
+ * - Topology Go registrations = 8 (5 reads, 3 mutations)
+ * - Go registrations = 158 (intentional platform extensions)
  * - Topology reads use core.read, mutations use core.configure
  * - Topology hard-delete endpoint = 0
  * - No generic command execution endpoint exists
@@ -50,13 +50,14 @@ for (const expected of ['/topology', '/topology/:resourceId']) {
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 157, `Go registered operations must be exactly 157, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 158, `Go registered operations must be exactly 158, got ${goRegistrations.length}`);
 
 const topologyGoRoutes = goRegistrations.filter((r) => r.includes('/api/topology'));
-assert.equal(topologyGoRoutes.length, 7, `Topology Go registrations must be exactly 7, got ${topologyGoRoutes.length}`);
+assert.equal(topologyGoRoutes.length, 8, `Topology Go registrations must be exactly 8, got ${topologyGoRoutes.length}`);
 
 const expectedTopologyGo = [
   'GET /api/topology/meta',
+  'GET /api/topology/live',
   'GET /api/topology/edges',
   'GET /api/topology/edges/{edgeId}',
   'GET /api/topology/resources/{resourceId}/neighbors',
@@ -70,7 +71,7 @@ for (const expected of expectedTopologyGo) {
 
 const topologyReads = topologyGoRoutes.filter((r) => r.startsWith('GET '));
 const topologyMutations = topologyGoRoutes.filter((r) => !r.startsWith('GET '));
-assert.equal(topologyReads.length, 4, `Topology read count must be 4, got ${topologyReads.length}`);
+assert.equal(topologyReads.length, 5, `Topology read count must be 5, got ${topologyReads.length}`);
 assert.equal(topologyMutations.length, 3, `Topology mutation count must be 3, got ${topologyMutations.length}`);
 
 // No hard delete and no generic command execution endpoint anywhere in topology
@@ -88,11 +89,11 @@ const topologyContract = JSON.parse(readFileSync(resolve(frontend, 'topology-con
 assert.ok(Array.isArray(topologyContract.routes), 'topology-contract.json must declare routes');
 assert.equal(topologyContract.routes.length, 2, 'topology-contract.json must declare 2 routes');
 assert.ok(Array.isArray(topologyContract.apis), 'topology-contract.json must declare apis');
-assert.equal(topologyContract.apis.length, 7, 'topology-contract.json must declare 7 APIs');
+assert.equal(topologyContract.apis.length, 8, 'topology-contract.json must declare 8 APIs');
 
 const declaredReads = topologyContract.apis.filter((api) => api.access === 'read');
 const declaredWrites = topologyContract.apis.filter((api) => api.access === 'write');
-assert.equal(declaredReads.length, 4, 'topology-contract.json must declare 4 reads');
+assert.equal(declaredReads.length, 5, 'topology-contract.json must declare 5 reads');
 assert.equal(declaredWrites.length, 3, 'topology-contract.json must declare 3 writes');
 for (const api of declaredReads) {
   assert.equal(api.permission, 'core.read', `${api.method} ${api.path} read permission must be core.read`);
@@ -312,11 +313,11 @@ assert.equal(inventoryGoRoutes.length, 6, `inventory Go registrations must remai
 
 console.log('route_count=39');
 console.log('topology_frontend_routes=2');
-console.log('topology_api_registrations=7');
-console.log('topology_reads=4');
+console.log('topology_api_registrations=8');
+console.log('topology_reads=5');
 console.log('topology_mutations=3');
-console.log('go_registration_count=157');
-console.log('topology_contract_apis=7');
+console.log('go_registration_count=158');
+console.log('topology_contract_apis=8');
 console.log('topology_request_contract_exact=PASS');
 console.log('topology_request_contract_negative_sentinels=PASS');
 console.log('topology_contract_sentinels_verified=13');

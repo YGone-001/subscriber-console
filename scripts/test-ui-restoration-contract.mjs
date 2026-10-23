@@ -29,7 +29,7 @@ const ARCHITECTURE_BASELINE_SHA = '11471af9d93fd4345f8d85a60f5c3fdfe821d93b';
 const BRAND_ASSET = 'frontend/public/images/xCloud_picture.png';
 const BRAND_ASSET_BLOB = 'aaaa520147353d4f20127c58d9e9a8f3baf37695';
 const EXPECTED_ROUTES = 39;
-const EXPECTED_GO_REGISTRATIONS = 157;
+const EXPECTED_GO_REGISTRATIONS = 158;
 const MANIFEST = 'docs/architecture/frontend-ui-restoration.md';
 
 function walk(dir, predicate, files = []) {
@@ -226,11 +226,11 @@ check('UI-32', manifestText.includes(HISTORICAL_UI_REFERENCE_SHA) && manifestTex
 check('UI-33', manifestText.includes('xCloud_picture.png'), 'manifest_brand_asset=documented');
 
 // 11. Stage 2 boundary.
-// Stage 2 intentionally adds exactly two Topology routes and seven Topology APIs.
+// Stage 2 intentionally adds exactly two Topology routes and eight Topology APIs.
 const stageTwoRoutes = routes.filter((entry) => entry.route.startsWith('/topology'));
 check('UI-34', stageTwoRoutes.length === 2, `topology_routes=${stageTwoRoutes.length}`);
 const topologyApi = goRegistrations.keys.filter((key) => key.includes('/api/topology'));
-check('UI-35', topologyApi.length === 7, `topology_api=${topologyApi.length}`);
+check('UI-35', topologyApi.length === 8, `topology_api=${topologyApi.length}`);
 
 const failed = invariants.filter((invariant) => !invariant.ok);
 

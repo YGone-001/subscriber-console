@@ -75,6 +75,8 @@ export type ActualTopologyBuildOptions = {
   showSupport?: boolean;
   showBoundary?: boolean;
   domainMode?: TopologyDomainMode;
+  /** Optional standalone nodes, for a runtime graph that can exist without edges. */
+  resources?: ResourceProjection[];
 };
 
 export type ActualTopologyLayout = {
@@ -256,9 +258,13 @@ export function buildActualTopology(
   const selectedDomain = isKnownDomainMode(domainMode) ? domainMode : null;
   const activeEdges = edges.filter(isActiveEdge);
   const resourceIds = new Set(activeEdges.flatMap((edge) => [edge.fromResourceId, edge.toResourceId]));
+  for (const resource of options.resources ?? []) {
+    if (resource.resourceId) resourceIds.add(resource.resourceId);
+  }
+  const extraResources = new Map((options.resources ?? []).map((resource) => [resource.resourceId, resource]));
   const records = [...resourceIds]
     .map((resourceId) => {
-      const projection = directory[resourceId] ?? unresolvedResource(resourceId);
+      const projection = directory[resourceId] ?? extraResources.get(resourceId) ?? unresolvedResource(resourceId);
       return {
         projection,
         resourceClass: classifyResource(projection),

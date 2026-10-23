@@ -39,7 +39,7 @@ import { nodeHealthLabelKey, summarizeNodeHealth, type NodeHealthState } from '.
 import { useResourceDirectory } from './use-resource-directory';
 import { useTopologyHealth } from './use-topology-health';
 import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
-import { ArchitectureView } from './ArchitectureView';
+import { LiveTopologyView } from './LiveTopologyView';
 import styles from '../../styles/modules/architecture.module.css';
 
 const MIN_ZOOM = 0.5;
@@ -316,7 +316,7 @@ export function ActualTopologyView() {
             {t('topology_open_ledger')}
           </Link>
         </div>
-        <ArchitectureView embedded initialView="all" />
+        <LiveTopologyView />
       </section>
     );
   }

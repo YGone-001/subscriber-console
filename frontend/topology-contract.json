@@ -32,6 +32,7 @@
   ],
   "apis": [
     { "method": "GET", "path": "/api/topology/meta", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/topology/live", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/topology/edges", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/topology/edges/{edgeId}", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/topology/resources/{resourceId}/neighbors", "access": "read", "permission": "core.read" },

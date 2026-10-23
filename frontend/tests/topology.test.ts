@@ -50,6 +50,8 @@ import {
   groupForResource,
   nodeMatches,
 } from '../src/features/topology/actual-topology-model';
+import { liveDirectory, liveEdges } from '../src/features/topology/live-topology-model';
+import type { LiveTopologyResponse } from '../src/features/topology/live-topology-types';
 import {
   classifyResource,
   nfRoleLabel,
@@ -844,11 +846,82 @@ test('the actual view separates an unavailable read from empty and filtered stat
   assert.ok(source.includes("topology_actual_no_nf_title"));
   assert.ok(source.includes("topology_interface_empty_title"));
   assert.ok(source.includes("topology_actual_suggested_title"));
-  assert.ok(source.includes('<ArchitectureView embedded initialView="all" />'));
+  assert.ok(source.includes('<LiveTopologyView />'), 'the empty declared view must fall through to the live runtime projection');
   assert.ok(source.includes('data-action="toggle-support"'), 'support visibility must be an explicit control');
   assert.ok(source.includes('data-interface-filter'), 'the interface filter must be explicit');
   assert.ok(source.includes('data-interface-coverage'), 'the annotated coverage must be visible');
   assert.ok(source.includes('data-action="toggle-interface-labels"'), 'all interface labels must be an explicit toggle');
+});
+
+test('live topology maps runtime identities and configured links without inventing evidence', () => {
+  const data: LiveTopologyResponse = {
+    generatedAt: '2026-10-23T00:00:00Z',
+    host: { hostId: 'host-1', hostName: 'agent-139' },
+    runtime: {
+      total: 2, running: 1, stopped: 1, unverified: 0, permissionDenied: 0,
+      unknown: 0, stale: 0, notDetected: 0, expected: 1,
+    },
+    config: { manifestConfigured: true, sourceCount: 2, availableSources: 2, complete: true },
+    nodes: [
+      {
+        componentId: 'smf', displayName: 'SMF', processName: 'open5gs-smfd',
+        role: 'smf', nfType: 'SMF', domain: '5gc', runtimeStatus: 'running',
+      },
+      {
+        componentId: 'upf', displayName: 'UPF', processName: 'open5gs-upfd',
+        role: 'upf', nfType: 'UPF', domain: '5gc', runtimeStatus: 'stopped',
+      },
+    ],
+    edges: [{
+      edgeId: 'live-edge-1',
+      fromComponentId: 'smf',
+      toComponentId: 'upf',
+      relationshipType: 'connects_to',
+      interfaceNames: ['N4'],
+      protocol: 'pfcp',
+      evidence: 'configured',
+      state: 'active',
+      fromEndpoint: { protocol: 'pfcp', address: '10.0.0.1', port: 8805 },
+      toEndpoint: { protocol: 'pfcp', address: '10.0.0.2', port: 8805 },
+      sourceFiles: ['/etc/open5gs/smf.yaml'],
+    }],
+    summary: { nodeCount: 2, edgeCount: 1, configuredEdgeCount: 1, unresolvedPeerCount: 0 },
+  };
+
+  const directory = liveDirectory(data);
+  assert.equal(directory.smf.runtimeStatus, 'running');
+  assert.equal(directory.smf.lifecycleState, 'unknown', 'a runtime identity is not an Inventory lifecycle claim');
+  assert.equal(liveDirectory(undefined).smf, undefined, 'a missing payload never fabricates a node');
+
+  const links = liveEdges(data);
+  assert.equal(links.length, 1);
+  assert.equal(links[0].source?.kind, 'configured');
+  assert.equal(links[0].source?.authority, 'configured');
+  assert.deepEqual(links[0].interfaceNames, ['N4']);
+  assert.equal(links[0].protocol, 'pfcp');
+
+  const layout = buildActualTopology(links, directory, {
+    domainMode: 'all',
+    resources: Object.values(directory),
+  });
+  assert.equal(layout.nodes.length, 2, 'runtime nodes render even when a component has no configured link');
+  assert.equal(layout.links.length, 1);
+  assert.equal(layout.nodes.find((node) => node.resourceId === 'upf')?.runtimeStatus, 'stopped');
+
+  const markup = render(
+    createElement(ActualTopologyCanvas, {
+      layout,
+      search: '',
+      showAllInterfaceNames: true,
+      onSelectResource: () => {},
+      onHoverEdge: () => {},
+    }),
+  );
+  assert.ok(markup.includes('data-runtime-status="running"'));
+  assert.ok(markup.includes('data-runtime-status="stopped"'));
+  assert.ok(markup.includes('Runtime: running'), 'the canvas must expose runtime status as text, not only colour');
+  assert.ok(markup.includes('data-evidence="configured"'), 'configured links must be distinguishable from declared edges');
+  assert.ok(markup.includes('N4'), 'interface names label the configured link');
 });
 
 /* -------------------------------------------------------------- interfaces -- */
@@ -1139,6 +1212,20 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_actual_support_show', 'topology_actual_support_hide', 'topology_actual_hidden_support',
     'topology_actual_no_nf_title', 'topology_actual_no_nf_body', 'topology_support_resource',
     'topology_actual_suggested_title', 'topology_actual_suggested_body',
+    'topology_runtime_label',
+    'topology_live_title', 'topology_live_subtitle', 'topology_live_runtime_total',
+    'topology_live_attention', 'topology_live_search_placeholder',
+    'topology_live_configured_edges', 'topology_live_config_complete',
+    'topology_live_config_incomplete', 'topology_live_config_unconfigured',
+    'topology_live_unresolved_peers', 'topology_live_selected', 'topology_live_process',
+    'topology_live_detail_empty',
+    'topology_live_type_domain', 'topology_live_listeners', 'topology_live_no_listeners',
+    'topology_live_open_inventory', 'topology_live_edges_title', 'topology_live_no_edges',
+    'topology_live_unresolved_title', 'topology_live_open_architecture',
+    'topology_live_error_title', 'topology_live_error_body', 'topology_live_endpoint',
+    'topology_live_evidence', 'topology_live_state', 'topology_live_sources',
+    'topology_live_state_active', 'topology_live_state_partial', 'topology_live_state_inactive',
+    'topology_live_state_unknown', 'topology_live_evidence_configured',
     'topology_actual_boundary_count', 'topology_actual_cross_domain_count',
     'topology_actual_boundary_show', 'topology_actual_boundary_hide', 'topology_actual_hidden_boundary',
     'topology_actual_domain_empty_title', 'topology_actual_domain_empty_body',

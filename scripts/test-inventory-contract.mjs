@@ -52,7 +52,7 @@ for (const r of expectedInventoryRoutes) {
 // 2. Go API registrations checks
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 157, `Go registered operations must be exactly 157, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 158, `Go registered operations must be exactly 158, got ${goRegistrations.length}`);
 
 const inventoryGoRoutes = goRegistrations.filter((r) => r.includes('/api/inventory'));
 assert.equal(inventoryGoRoutes.length, 6, `Inventory Go registrations must be exactly 6, got ${inventoryGoRoutes.length}`);

@@ -53,6 +53,19 @@ function healthDotClass(state: NodeHealthState): string {
   }
 }
 
+function runtimeDotClass(status: string | undefined): string {
+  switch (status) {
+    case 'running': return styles.actualRuntimeRunning;
+    case 'stopped': return styles.actualRuntimeStopped;
+    case 'not_detected': return styles.actualRuntimeNotDetected;
+    case 'unverified':
+    case 'permission_denied':
+    case 'unknown':
+    case 'stale': return styles.actualRuntimeWarning;
+    default: return styles.actualRuntimeUnknown;
+  }
+}
+
 export function ActualTopologyCanvas({
   layout,
   selectedResourceId,
@@ -95,6 +108,10 @@ export function ActualTopologyCanvas({
       const interfaceNames = edgeInterfaceNames(link);
       if (interfaceNames.length > 0) {
         text.set(link.edgeId, formatInterfaceNames(interfaceNames));
+        continue;
+      }
+      if (link.protocol) {
+        text.set(link.edgeId, link.protocol);
         continue;
       }
       const presentation = RELATIONSHIP_PRESENTATION[link.relationshipType];
@@ -169,7 +186,8 @@ export function ActualTopologyCanvas({
             <g
               key={link.edgeId}
               data-edge-id={link.edgeId}
-              className={`${styles.actualLinkGroup} ${selectedResourceId && !related ? styles.actualDimmed : ''} ${hovered ? styles.actualLinkHovered : ''}`}
+              data-evidence={link.source?.kind}
+              className={`${styles.actualLinkGroup} ${link.source?.kind === 'configured' ? styles.actualLinkConfigured : ''} ${selectedResourceId && !related ? styles.actualDimmed : ''} ${hovered ? styles.actualLinkHovered : ''}`}
               onMouseEnter={() => onHoverEdge(link.edgeId)}
               onMouseLeave={() => onHoverEdge(undefined)}
             >
@@ -188,6 +206,11 @@ export function ActualTopologyCanvas({
         const name = nodeName(node);
         const nodeHealth = health?.get(node.resourceId);
         const healthLabel = nodeHealth ? t(nodeHealthLabelKey(nodeHealth.state)) : '';
+        const runtimeKey = node.runtimeStatus ? `runtime_status_${node.runtimeStatus}` : '';
+        const runtimeTranslation = runtimeKey ? t(runtimeKey) : '';
+        const runtimeLabel = runtimeTranslation && runtimeTranslation !== runtimeKey
+          ? runtimeTranslation
+          : (node.runtimeStatus || '');
         const meta = [
           domainLabel(node.domain) || t('unknown'),
           node.boundary ? t('topology_actual_boundary_label') : '',
@@ -195,7 +218,11 @@ export function ActualTopologyCanvas({
           node.resourceClass === 'support' ? t('topology_support_resource') : '',
           node.resourceClass === 'unresolved' ? t('topology_unresolved_resource') : '',
           node.resourceClass === 'nf' && node.domainBand === 'unclassified' ? t('topology_domain_unclassified') : '',
-          node.resolved && node.lifecycleState && node.lifecycleState !== 'active' ? node.lifecycleState.toUpperCase() : '',
+          runtimeLabel ? `${t('topology_runtime_label')}: ${runtimeLabel}` : '',
+          node.resolved && node.lifecycleState
+            && node.lifecycleState !== 'active'
+            && node.lifecycleState !== 'unknown'
+            ? node.lifecycleState.toUpperCase() : '',
         ]
           .filter(Boolean)
           .join(' / ');
@@ -211,10 +238,11 @@ export function ActualTopologyCanvas({
             data-boundary={node.boundary ? 'true' : undefined}
             data-proxy={node.proxy ? 'true' : undefined}
             data-group={node.group}
+            data-runtime-status={node.runtimeStatus}
             data-health-state={nodeHealth?.state}
             aria-label={`${role}: ${name}, ${meta}${healthSuffix}`}
             aria-pressed={selected}
-            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${node.boundary ? styles.actualNodeBoundary : ''} ${node.proxy ? styles.actualNodeProxy : ''} ${selected ? styles.actualNodeSelected : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
+            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${node.boundary ? styles.actualNodeBoundary : ''} ${node.proxy ? styles.actualNodeProxy : ''} ${node.runtimeStatus === 'stopped' ? styles.actualNodeStopped : ''} ${node.runtimeStatus === 'not_detected' ? styles.actualNodeNotDetected : ''} ${selected ? styles.actualNodeSelected : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
             onClick={() => onSelectResource(node.resourceId)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
@@ -235,6 +263,13 @@ export function ActualTopologyCanvas({
                 cy={node.y + 12}
                 r={4}
                 className={`${styles.actualHealthDot} ${healthDotClass(nodeHealth.state)}`}
+              />
+            ) : node.runtimeStatus ? (
+              <circle
+                cx={node.x + ACTUAL_NODE_WIDTH - 13}
+                cy={node.y + 12}
+                r={4}
+                className={`${styles.actualRuntimeDot} ${runtimeDotClass(node.runtimeStatus)}`}
               />
             ) : null}
           </g>
