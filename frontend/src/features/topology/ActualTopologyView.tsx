@@ -41,6 +41,7 @@ import { useTopologyHealth } from './use-topology-health';
 import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
 import { TopologyEdgeDetail } from './components/TopologyEdgeDetail';
 import { TopologyInspector } from './components/TopologyInspector';
+import { TopologyAnnouncer } from './components/TopologyAnnouncer';
 import styles from '../../styles/modules/architecture.module.css';
 
 const MIN_ZOOM = 0.5;
@@ -66,6 +67,9 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
   const { edges, coverage, loading, refresh } = useBoundedEdges();
   const [selectedResourceId, setSelectedResourceId] = useState<string | undefined>();
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
+  const [focusedResourceId, setFocusedResourceId] = useState<string | undefined>();
+  const [focusedEdgeId, setFocusedEdgeId] = useState<string | undefined>();
+  const [listOpen, setListOpen] = useState(false);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | undefined>();
   const [search, setSearch] = useState('');
   const [showSupport, setShowSupport] = useState(false);
@@ -76,7 +80,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<{ kind: 'node' | 'edge'; id: string } | undefined>(undefined);
+  const triggerRef = useRef<{ kind: 'node' | 'edge'; id: string; element?: Element | null } | undefined>(undefined);
   const autoFitRef = useRef(true);
   const endpointIds = useMemo(
     () => edges.flatMap((edge) => {
@@ -191,6 +195,37 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     health.refresh();
   }, [refresh, health.refresh]);
 
+  const announcement = useMemo(() => {
+    if (loading) return t('topology_announce_loading');
+    if (coverage === 'unavailable') return t('topology_announce_unavailable');
+    if (selectedEdge) {
+      return t('topology_announce_selected_edge', {
+        from: inspectorNodeName(selectedEdge.fromNode),
+        to: inspectorNodeName(selectedEdge.toNode),
+      });
+    }
+    if (selected) return t('topology_announce_selected_node', { name: inspectorNodeName(selected) });
+    const filters = [
+      search ? `${t('topology_search_filter')}: ${search}` : '',
+      domainMode !== 'all'
+        ? t(ACTUAL_DOMAIN_MODE_OPTIONS.find((option) => option.value === domainMode)?.labelKey ?? 'topology_domain_all')
+        : '',
+      interfaceFilter ? `${t('topology_interface_filter')}: ${interfaceFilterLabel}` : '',
+    ].filter(Boolean).join(' · ');
+    const hiddenNodes = layout.hiddenBoundaryNodeCount + (showSupport ? 0 : layout.supportResourceCount);
+    const hiddenLinks = layout.hiddenBoundaryLinkCount + (showSupport ? 0 : layout.supportLinkCount);
+    return `${t('topology_announce_loaded', {
+      nodes: layout.nodes.length,
+      links: layout.links.length,
+      filters: filters || t('topology_announce_no_filters'),
+    })}${hiddenNodes > 0 || hiddenLinks > 0
+      ? ` ${t('topology_announce_hidden', { nodes: hiddenNodes, links: hiddenLinks })}`
+      : ''}`;
+  }, [
+    loading, coverage, selectedEdge, selected, search, domainMode, interfaceFilter,
+    interfaceFilterLabel, layout, showSupport, t,
+  ]);
+
   useRegisterOperationsRefresh('topology:actual', refreshAll);
 
   const fitView = useCallback(() => {
@@ -231,13 +266,28 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     };
   }, [fitView]);
 
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      void document.exitFullscreen?.();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fullscreen]);
+
   const selectNode = (resourceId: string) => {
     if (resourceId === selectedResourceId) {
       triggerRef.current = undefined;
       setSelectedResourceId(undefined);
       return;
     }
-    triggerRef.current = { kind: 'node', id: resourceId };
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    triggerRef.current = {
+      kind: 'node',
+      id: resourceId,
+      element: active && active !== document.body ? active : null,
+    };
     setSelectedEdgeId(undefined);
     setSelectedResourceId(resourceId);
   };
@@ -247,7 +297,12 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
       setSelectedEdgeId(undefined);
       return;
     }
-    triggerRef.current = { kind: 'edge', id: edgeId };
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    triggerRef.current = {
+      kind: 'edge',
+      id: edgeId,
+      element: active && active !== document.body ? active : null,
+    };
     setSelectedResourceId(undefined);
     setSelectedEdgeId(edgeId);
   };
@@ -257,6 +312,10 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     const trigger = triggerRef.current;
     triggerRef.current = undefined;
     if (!trigger) return;
+    if (trigger.element instanceof Element && trigger.element.isConnected) {
+      (trigger.element as HTMLElement).focus?.();
+      return;
+    }
     window.requestAnimationFrame(() => {
       const selector = trigger.kind === 'node'
         ? `[data-resource-id="${trigger.id}"]`
@@ -275,7 +334,13 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     if (hoveredEdgeId && !layout.links.some((link) => link.edgeId === hoveredEdgeId)) {
       setHoveredEdgeId(undefined);
     }
-  }, [layout.nodes, layout.links, selectedResourceId, selectedEdgeId, hoveredEdgeId]);
+    if (focusedResourceId && !layout.nodes.some((node) => node.resourceId === focusedResourceId)) {
+      setFocusedResourceId(undefined);
+    }
+    if (focusedEdgeId && !layout.links.some((link) => link.edgeId === focusedEdgeId)) {
+      setFocusedEdgeId(undefined);
+    }
+  }, [layout.nodes, layout.links, selectedResourceId, selectedEdgeId, focusedResourceId, focusedEdgeId, hoveredEdgeId]);
 
   useEffect(() => {
     if (!interfaceFilter || interfaceFilter === UNANNOTATED_INTERFACE_FILTER) return;
@@ -289,6 +354,8 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
   const resetView = () => {
     setSelectedResourceId(undefined);
     setSelectedEdgeId(undefined);
+    setFocusedResourceId(undefined);
+    setFocusedEdgeId(undefined);
     triggerRef.current = undefined;
     setSearch('');
     setHoveredEdgeId(undefined);
@@ -311,6 +378,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     return (
       <section className={styles.actualSection} aria-labelledby="actual-topology-title" aria-busy="true">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
+        <TopologyAnnouncer message={t('topology_announce_loading')} />
         <LoadingRows rows={5} />
       </section>
     );
@@ -320,6 +388,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     return (
       <section className={styles.actualSection} aria-labelledby="actual-topology-title">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
+        <TopologyAnnouncer message={t('topology_announce_unavailable')} />
         <EmptyState
           icon={<AlertTriangle size={40} />}
           title={t('topology_actual_unavailable_title')}
@@ -339,6 +408,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     return (
       <section className={styles.actualSection} aria-labelledby="actual-topology-title">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
+        <TopologyAnnouncer message={t('topology_announce_empty')} />
         <EmptyState
           icon={<GitBranch size={40} />}
           title={t('topology_actual_empty_declared_title')}
@@ -370,6 +440,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
   return (
     <section className={styles.actualSection} aria-labelledby="actual-topology-title" aria-busy={loading}>
       <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
+      <TopologyAnnouncer message={announcement} />
       <div className={styles.actualToolbar}>
         <label className={styles.actualDomainFilter}>
           <span className="sr-only">{t('topology_domain_filter')}</span>
@@ -504,6 +575,16 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
               : t('topology_interface_show_all')}
           </button>
         ) : null}
+        <button
+          type="button"
+          className={styles.actualSupportToggle}
+          data-action="toggle-lists"
+          aria-expanded={listOpen}
+          aria-pressed={listOpen}
+          onClick={() => setListOpen((open) => !open)}
+        >
+          {listOpen ? t('topology_hide_lists') : t('topology_show_lists')}
+        </button>
       </div>
       <p className={styles.actualNote}>{t('topology_declared_notice')}</p>
       {coverage === 'partial' ? (
@@ -611,6 +692,8 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
                   layout={layout}
                   selectedResourceId={selectedResourceId}
                   selectedEdgeId={selectedEdgeId}
+                  focusedResourceId={focusedResourceId}
+                  focusedEdgeId={focusedEdgeId}
                   search={search}
                   hoveredEdgeId={hoveredEdgeId}
                   health={health.coverage !== 'unavailable' && health.byResource.size > 0 ? health.byResource : undefined}
@@ -618,11 +701,24 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
                   showAllInterfaceNames={showAllInterfaceNames}
                   onSelectResource={selectNode}
                   onSelectEdge={selectEdge}
+                  onFocusResource={setFocusedResourceId}
+                  onFocusEdge={setFocusedEdgeId}
                   onHoverEdge={setHoveredEdgeId}
                   onFocusDomain={(domain) => setDomainMode(domain as TopologyDomainMode)}
                 />
               </div>
             </div>
+            {listOpen ? (
+              <ActualLists
+                nodes={layout.nodes}
+                links={layout.links}
+                health={health.coverage !== 'unavailable' ? health.byResource : new Map()}
+                onFocusNode={setFocusedResourceId}
+                onSelectNode={selectNode}
+                onFocusEdge={setFocusedEdgeId}
+                onSelectEdge={selectEdge}
+              />
+            ) : null}
           </div>
           {selected || selectedEdge ? (
             <TopologyInspector
@@ -657,6 +753,117 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
 
 function inspectorNodeName(node: ActualTopologyNode): string {
   return node.displayName || node.name || node.resourceId;
+}
+
+function ActualLists({
+  nodes,
+  links,
+  health,
+  onFocusNode,
+  onSelectNode,
+  onFocusEdge,
+  onSelectEdge,
+}: {
+  nodes: ActualTopologyNode[];
+  links: ActualTopologyLink[];
+  health: ReadonlyMap<string, NodeHealth>;
+  onFocusNode: (resourceId?: string) => void;
+  onSelectNode: (resourceId: string) => void;
+  onFocusEdge: (edgeId?: string) => void;
+  onSelectEdge: (edgeId: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className={styles.topologyLists} data-topology-lists="actual">
+      <section className={styles.topologyListSection} aria-labelledby="actual-node-list-title">
+        <h3 id="actual-node-list-title">{t('topology_list_nodes')}</h3>
+        <div className={styles.topologyListScroll}>
+          <table className={styles.topologyListTable}>
+            <caption className="sr-only">{t('topology_list_nodes')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t('topology_list_name')}</th>
+                <th scope="col">{t('topology_inspector_type')}</th>
+                <th scope="col">{t('topology_domain_filter')}</th>
+                <th scope="col">{t('topology_lifecycle')}</th>
+                <th scope="col">{t('topology_health_label')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map((node) => {
+                const nodeHealth = health.get(node.resourceId);
+                return (
+                  <tr key={node.resourceId} data-list-node-row={node.resourceId}>
+                    <th scope="row">
+                      <button
+                        type="button"
+                        className={styles.linkBtn}
+                        data-list-node={node.resourceId}
+                        onFocus={() => onFocusNode(node.resourceId)}
+                        onBlur={() => onFocusNode(undefined)}
+                        onClick={() => onSelectNode(node.resourceId)}
+                      >
+                        {inspectorNodeName(node)}
+                      </button>
+                    </th>
+                    <td>{node.resourceClass === 'support' ? t('topology_support_resource') : node.role ? nfRoleLabel(node.role) : (node.kind || t('unknown'))}</td>
+                    <td>{node.domain ? node.domain.toUpperCase() : t('unknown')}</td>
+                    <td>{node.lifecycleState || t('unknown')}</td>
+                    <td>{nodeHealth ? t(nodeHealthLabelKey(nodeHealth.state)) : t('ops_metric_unavailable')}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className={styles.topologyListSection} aria-labelledby="actual-relationship-list-title">
+        <h3 id="actual-relationship-list-title">{t('topology_list_relationships')}</h3>
+        <div className={styles.topologyListScroll}>
+          <table className={styles.topologyListTable}>
+            <caption className="sr-only">{t('topology_list_relationships')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t('topology_list_source')}</th>
+                <th scope="col">{t('topology_list_interface')}</th>
+                <th scope="col">{t('topology_list_target')}</th>
+                <th scope="col">{t('topology_list_evidence')}</th>
+                <th scope="col">{t('topology_list_state')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {links.map((link) => {
+                const interfaceNames = edgeInterfaceNames(link);
+                const stateKey = `topology_state_${link.lifecycleState}`;
+                const state = t(stateKey);
+                return (
+                  <tr key={link.edgeId} data-list-edge-row={link.edgeId}>
+                    <th scope="row">
+                      <button
+                        type="button"
+                        className={styles.linkBtn}
+                        data-list-edge={link.edgeId}
+                        onFocus={() => onFocusEdge(link.edgeId)}
+                        onBlur={() => onFocusEdge(undefined)}
+                        onClick={() => onSelectEdge(link.edgeId)}
+                      >
+                        {inspectorNodeName(link.fromNode)}
+                      </button>
+                    </th>
+                    <td>{interfaceNames.length > 0 ? interfaceNames.join(' / ') : t('topology_interface_unannotated')}</td>
+                    <td>{inspectorNodeName(link.toNode)}</td>
+                    <td>{link.source?.kind || t('topology_source_declared')}</td>
+                    <td>{state === stateKey ? link.lifecycleState : state}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function ActualNodeInspector({

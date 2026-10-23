@@ -92,16 +92,27 @@ export function ArchitectureCanvas({
   links,
   lanes = [],
   selectedRole,
+  focusedRole,
+  focusedLinkKey,
   onSelect,
+  onFocusRole,
 }: {
   nodes: ArchitectureNodeView[];
   links: ArchitectureLinkView[];
   lanes?: ArchitectureLane[];
   selectedRole?: string;
+  focusedRole?: string;
+  focusedLinkKey?: string;
   onSelect?: (role: string) => void;
+  onFocusRole?: (role?: string) => void;
 }) {
   const { t } = useI18n();
   const byRole = new Map(nodes.map((node) => [node.role, node]));
+  const focusedEndpoints = new Set(
+    links
+      .filter((link) => link.key === focusedLinkKey)
+      .flatMap((link) => [link.source, link.target]),
+  );
   const busLayout = useMemo(
     () => buildArchitectureBusLayout(nodes, links, selectedRole),
     [nodes, links, selectedRole],
@@ -178,6 +189,8 @@ export function ArchitectureCanvas({
           const labelX = anchor.x;
           const labelY = anchor.y - 5;
           const width = link.interfaceLabel.length * 5.6 + 8;
+          const focusedLink = link.key === focusedLinkKey
+            || (Boolean(focusedRole) && (link.source === focusedRole || link.target === focusedRole));
           return (
             <g key={link.key} data-link-key={link.key} data-evidence={link.evidence}>
               <line
@@ -185,7 +198,7 @@ export function ArchitectureCanvas({
                 y1={from.y}
                 x2={to.x}
                 y2={to.y}
-                className={LINK_EVIDENCE_CLASS[link.evidence]}
+                className={`${LINK_EVIDENCE_CLASS[link.evidence]} ${focusedLink ? styles.linkFocused : ''}`}
               />
               <rect
                 x={labelX - width / 2}
@@ -209,6 +222,7 @@ export function ArchitectureCanvas({
 
       {nodes.map((node) => {
         const selected = node.role === selectedRole;
+        const focusRelated = focusedEndpoints.has(node.role);
         const stateText = t(stateLabelKey(node.tone));
         const ariaLabel = `${node.label} ${t(domainLabelKey(node.domain))}: ${stateText}`;
         const activate = () => onSelect?.(node.role);
@@ -221,8 +235,10 @@ export function ArchitectureCanvas({
             aria-pressed={selected}
             data-binding={node.binding}
             data-role={node.role}
-            className={`${styles.node} ${TONE_CLASS[node.tone]} ${DOMAIN_CLASS[node.domain]} ${selected ? styles.nodeSelected : ''}`}
+            className={`${styles.node} ${TONE_CLASS[node.tone]} ${DOMAIN_CLASS[node.domain]} ${selected ? styles.nodeSelected : ''} ${focusRelated ? styles.nodeFocusRelated : ''}`}
             onClick={activate}
+            onFocus={() => onFocusRole?.(node.role)}
+            onBlur={() => onFocusRole?.(undefined)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();

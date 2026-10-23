@@ -71,6 +71,7 @@ export function ActualTopologyCanvas({
   focusedResourceId,
   hoveredResourceId,
   selectedEdgeId,
+  focusedEdgeId,
   search,
   hoveredEdgeId,
   health,
@@ -79,6 +80,7 @@ export function ActualTopologyCanvas({
   onSelectResource,
   onSelectEdge,
   onFocusResource,
+  onFocusEdge,
   onHoverResource,
   onHoverEdge,
   onFocusDomain,
@@ -88,6 +90,7 @@ export function ActualTopologyCanvas({
   focusedResourceId?: string;
   hoveredResourceId?: string;
   selectedEdgeId?: string;
+  focusedEdgeId?: string;
   search: string;
   hoveredEdgeId?: string;
   health?: ReadonlyMap<string, NodeHealth>;
@@ -96,6 +99,7 @@ export function ActualTopologyCanvas({
   onSelectResource: (resourceId: string) => void;
   onSelectEdge?: (edgeId: string) => void;
   onFocusResource?: (resourceId?: string) => void;
+  onFocusEdge?: (edgeId?: string) => void;
   onHoverResource?: (resourceId?: string) => void;
   onHoverEdge: (edgeId?: string) => void;
   /* Focus a domain lane into the single-domain view. Omitted when the owning
@@ -112,6 +116,10 @@ export function ActualTopologyCanvas({
     );
   }, [layout.links, selectedResourceId]);
   const isFocused = (node: ActualTopologyNode) => !selectedResourceId || relatedIds.has(node.resourceId);
+  const focusedEdgeEndpoints = useMemo(() => {
+    const link = layout.links.find((candidate) => candidate.edgeId === focusedEdgeId);
+    return new Set(link ? [link.fromResourceId, link.toResourceId] : []);
+  }, [layout.links, focusedEdgeId]);
   const visibility = useMemo(
     () => resolveLabelVisibility(layout.links, {
       selectedResourceId,
@@ -263,6 +271,10 @@ export function ActualTopologyCanvas({
             && (link.fromResourceId === selectedResourceId || link.toResourceId === selectedResourceId);
           const hovered = link.edgeId === hoveredEdgeId;
           const selectedEdge = link.edgeId === selectedEdgeId;
+          const focused = link.edgeId === focusedEdgeId
+            || (Boolean(focusedResourceId) && (
+              link.fromResourceId === focusedResourceId || link.toResourceId === focusedResourceId
+            ));
           const geometry = edgeGeometry(link);
           const interfaceNames = edgeInterfaceNames(link);
           const edgeLabel = `${nodeName(link.fromNode)} -> ${nodeName(link.toNode)}, ${
@@ -280,9 +292,11 @@ export function ActualTopologyCanvas({
               tabIndex={onSelectEdge ? 0 : undefined}
               aria-label={onSelectEdge ? edgeLabel : undefined}
               aria-pressed={onSelectEdge ? selectedEdge : undefined}
-              className={`${styles.actualLinkGroup} ${link.source?.kind === 'configured' ? styles.actualLinkConfigured : ''} ${related ? styles.actualLinkRelated : ''} ${selectedResourceId && !related ? styles.actualDimmed : ''} ${hovered ? styles.actualLinkHovered : ''} ${selectedEdge ? styles.actualLinkSelected : ''}`}
+              className={`${styles.actualLinkGroup} ${link.source?.kind === 'configured' ? styles.actualLinkConfigured : ''} ${related ? styles.actualLinkRelated : ''} ${selectedResourceId && !related ? styles.actualDimmed : ''} ${hovered ? styles.actualLinkHovered : ''} ${selectedEdge ? styles.actualLinkSelected : ''} ${focused ? styles.actualLinkFocused : ''}`}
               onMouseEnter={() => onHoverEdge(link.edgeId)}
               onMouseLeave={() => onHoverEdge(undefined)}
+              onFocus={onFocusEdge ? () => onFocusEdge(link.edgeId) : undefined}
+              onBlur={onFocusEdge ? () => onFocusEdge(undefined) : undefined}
               onClick={onSelectEdge ? selectEdge : undefined}
               onKeyDown={onSelectEdge ? (event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
@@ -302,6 +316,7 @@ export function ActualTopologyCanvas({
         const selected = node.resourceId === selectedResourceId;
         const matched = nodeMatches(node, search);
         const dimmed = (!matched || !isFocused(node)) && !selected;
+        const focusedByEdge = focusedEdgeEndpoints.has(node.resourceId);
         const role = nodeRole(node);
         const name = nodeName(node);
         /* A runtime node is often named exactly like its role (AMF / AMF).
@@ -351,7 +366,7 @@ export function ActualTopologyCanvas({
             data-health-state={nodeHealth?.state}
             aria-label={`${identity}, ${meta}${healthSuffix}`}
             aria-pressed={selected}
-            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${node.boundary ? styles.actualNodeBoundary : ''} ${node.proxy ? styles.actualNodeProxy : ''} ${node.runtimeStatus === 'stopped' ? styles.actualNodeStopped : ''} ${node.runtimeStatus === 'not_detected' ? styles.actualNodeNotDetected : ''} ${selected ? styles.actualNodeSelected : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
+            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${node.boundary ? styles.actualNodeBoundary : ''} ${node.proxy ? styles.actualNodeProxy : ''} ${node.runtimeStatus === 'stopped' ? styles.actualNodeStopped : ''} ${node.runtimeStatus === 'not_detected' ? styles.actualNodeNotDetected : ''} ${selected ? styles.actualNodeSelected : ''} ${focusedByEdge ? styles.actualNodeFocusRelated : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
             onClick={() => onSelectResource(node.resourceId)}
             onFocus={() => onFocusResource?.(node.resourceId)}
             onBlur={() => onFocusResource?.(undefined)}

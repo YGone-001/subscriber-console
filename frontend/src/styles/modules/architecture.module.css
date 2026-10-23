@@ -456,6 +456,15 @@
   opacity: 0.9;
 }
 
+.linkFocused {
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+.nodeFocusRelated .nodeRect {
+  stroke-width: 2.5;
+}
+
 .sbiBus {
   pointer-events: none;
 }
@@ -811,6 +820,55 @@
   display: grid;
   gap: var(--space-12);
   min-width: 0;
+}
+
+.topologyLists {
+  display: grid;
+  gap: var(--space-12);
+}
+
+.topologyListSection {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.topologyListSection h3 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.topologyListScroll {
+  overflow: auto;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--sys-color-surface-panel);
+}
+
+.topologyListTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+
+.topologyListTable th,
+.topologyListTable td {
+  padding: var(--space-4) var(--space-8);
+  border-bottom: 1px solid var(--surface-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.topologyListTable thead th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.topologyListTable tbody tr:last-child th,
+.topologyListTable tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 @media (max-width: 1100px) {
@@ -1550,6 +1608,11 @@
   opacity: 1;
 }
 
+.actualLinkFocused .actualLink {
+  stroke-width: 2.75;
+  opacity: 1;
+}
+
 .actualLinkGroup:focus-visible {
   outline: none;
 }
@@ -1648,6 +1711,10 @@
 .actualNodeMatch .actualNodeRect {
   stroke: var(--actual-group);
   stroke-width: 2;
+}
+
+.actualNodeFocusRelated .actualNodeRect {
+  stroke-width: 2.5;
 }
 
 .actualNodeMatch .actualNodeRect {
@@ -2046,5 +2113,35 @@
 
   .liveCanvasViewport {
     max-height: 52vh;
+  }
+}
+
+/* These preference overrides sit last so they beat the interaction styles. */
+@media (forced-colors: active) {
+  .actualNodeSelected .actualNodeRect,
+  .actualNodeFocusRelated .actualNodeRect,
+  .actualNode:focus-visible .actualNodeRect,
+  .nodeSelected .nodeRect,
+  .nodeFocusRelated .nodeRect,
+  .node:focus-visible .nodeRect {
+    stroke: Highlight;
+  }
+
+  .actualLinkSelected .actualLink,
+  .actualLinkFocused .actualLink,
+  .actualLinkGroup:focus-visible .actualLink,
+  .linkFocused {
+    stroke: Highlight;
+    opacity: 1;
+  }
+
+  .legendMark {
+    forced-color-adjust: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actualNode {
+    transition: none;
   }
 }

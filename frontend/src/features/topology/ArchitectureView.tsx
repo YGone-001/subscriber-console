@@ -61,6 +61,7 @@ import { ArchitectureCanvas } from './components/ArchitectureCanvas';
 import { ArchitectureRoleDetail } from './components/ArchitectureDetailDrawer';
 import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import { TopologyInspector } from './components/TopologyInspector';
+import { TopologyAnnouncer } from './components/TopologyAnnouncer';
 import type { RuntimeObservations } from '../runtime/runtime-types';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import styles from '../../styles/modules/architecture.module.css';
@@ -189,11 +190,13 @@ export function ArchitectureView({
   const [selectedRole, setSelectedRole] = useState<string | undefined>(undefined);
   const [legendOpen, setLegendOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  const [focusedRole, setFocusedRole] = useState<string | undefined>(undefined);
+  const [focusedLinkKey, setFocusedLinkKey] = useState<string | undefined>(undefined);
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const [panning, setPanning] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const triggerRoleRef = useRef<string | undefined>(undefined);
+  const triggerRoleRef = useRef<{ role: string; element?: Element | null } | undefined>(undefined);
   const autoFitRef = useRef(false);
   const panRef = useRef<{
     pointerId: number;
@@ -288,6 +291,19 @@ export function ArchitectureView({
   const incompleteSources = INCOMPLETE_DIMENSIONS.filter(
     (dimension) => completeness[dimension] !== 'complete',
   );
+  const announcement = useMemo(() => {
+    if (loading) return t('topology_announce_loading');
+    if (failed) return t('topology_announce_unavailable');
+    if (selected) return t('topology_announce_selected_role', { name: selected.label });
+    const loaded = t('topology_announce_loaded', {
+      nodes: visible.nodes.length,
+      links: visible.links.length,
+      filters: t(VIEW_LABEL_KEY[view]),
+    });
+    return visible.hiddenCount > 0
+      ? `${loaded} ${t('topology_announce_hidden', { nodes: visible.hiddenCount, links: 0 })}`
+      : loaded;
+  }, [loading, failed, selected, visible.nodes.length, visible.links.length, visible.hiddenCount, view, t]);
 
   const scrollToOrigin = useCallback(() => {
     const viewport = canvasRef.current;
@@ -331,6 +347,16 @@ export function ArchitectureView({
     };
   }, [fitView]);
 
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      void document.exitFullscreen?.();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fullscreen]);
+
   const updateZoom = (delta: number) => {
     autoFitRef.current = false;
     setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
@@ -339,21 +365,29 @@ export function ArchitectureView({
     autoFitRef.current = false;
     setZoom(1);
     setSelectedRole(undefined);
+    setFocusedRole(undefined);
+    setFocusedLinkKey(undefined);
     triggerRoleRef.current = undefined;
     scrollToOrigin();
   };
   const revealAllRoles = () => {
     setView('all');
     setSelectedRole(undefined);
+    setFocusedRole(undefined);
+    setFocusedLinkKey(undefined);
     triggerRoleRef.current = undefined;
     scrollToOrigin();
   };
   const restoreRoleFocus = useCallback(() => {
-    const role = triggerRoleRef.current;
+    const trigger = triggerRoleRef.current;
     triggerRoleRef.current = undefined;
-    if (!role) return;
+    if (!trigger) return;
+    if (trigger.element instanceof Element && trigger.element.isConnected) {
+      (trigger.element as HTMLElement).focus?.();
+      return;
+    }
     window.requestAnimationFrame(() => {
-      canvasRef.current?.querySelector<SVGElement>(`[data-role="${role}"]`)?.focus();
+      canvasRef.current?.querySelector<SVGElement>(`[data-role="${trigger.role}"]`)?.focus();
     });
   }, []);
   const closeRoleInspector = useCallback(() => {
@@ -361,7 +395,11 @@ export function ArchitectureView({
     restoreRoleFocus();
   }, [restoreRoleFocus]);
   const openRoleInspector = useCallback((role: string) => {
-    triggerRoleRef.current = role;
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    triggerRoleRef.current = {
+      role,
+      element: active && active !== document.body ? active : null,
+    };
     setSelectedRole(role);
   }, []);
   const toggleFullscreen = useCallback(() => {
@@ -416,6 +454,7 @@ export function ArchitectureView({
       data-architecture-embedded={embedded ? 'true' : undefined}
     >
       <h2 id="architecture-title" className="sr-only">{t('arch_title')}</h2>
+      <TopologyAnnouncer message={announcement} />
 
       {loading ? (
         <LoadingRows rows={4} />
@@ -439,6 +478,8 @@ export function ArchitectureView({
                     onClick={() => {
                       setView(mode);
                       setSelectedRole(undefined);
+                      setFocusedRole(undefined);
+                      setFocusedLinkKey(undefined);
                       triggerRoleRef.current = undefined;
                       scrollToOrigin();
                     }}
@@ -639,6 +680,9 @@ export function ArchitectureView({
                   links={visible.links}
                   lanes={lanes}
                   selectedRole={selectedRole}
+                  focusedRole={focusedRole}
+                  focusedLinkKey={focusedLinkKey}
+                  onFocusRole={setFocusedRole}
                   onSelect={(role) => {
                     if (role === selectedRole) {
                       closeRoleInspector();
@@ -654,6 +698,7 @@ export function ArchitectureView({
           {/* Equivalent list representation: the same state as the canvas, in
               text, for keyboard and assistive-technology users. */}
           {view !== 'all' && listOpen ? (
+            <>
             <table className={styles.nodeTable}>
               <caption className={styles.nodeTableCaption}>{t('arch_canvas_aria')}</caption>
               <thead>
@@ -680,6 +725,8 @@ export function ArchitectureView({
                       <button
                         type="button"
                         className={styles.legendToggle}
+                        onFocus={() => setFocusedRole(node.role)}
+                        onBlur={() => setFocusedRole(undefined)}
                         onClick={() => openRoleInspector(node.role)}
                       >
                         {t('arch_list_open')}
@@ -689,6 +736,54 @@ export function ArchitectureView({
                 ))}
               </tbody>
             </table>
+            <table className={styles.nodeTable} data-architecture-relationship-list="true">
+              <caption className={styles.nodeTableCaption}>{t('topology_list_relationships')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t('topology_list_source')}</th>
+                  <th scope="col">{t('topology_list_interface')}</th>
+                  <th scope="col">{t('topology_list_target')}</th>
+                  <th scope="col">{t('topology_list_evidence')}</th>
+                  <th scope="col">{t('topology_list_state')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.links.map((link) => {
+                  const source = visible.nodes.find((node) => node.role === link.source);
+                  const target = visible.nodes.find((node) => node.role === link.target);
+                  return (
+                    <tr key={link.key} data-architecture-link-row={link.key}>
+                      <th scope="row">
+                        <button
+                          type="button"
+                          className={styles.legendToggle}
+                          onFocus={() => setFocusedLinkKey(link.key)}
+                          onBlur={() => setFocusedLinkKey(undefined)}
+                          onClick={() => openRoleInspector(link.source)}
+                        >
+                          {source?.label || link.source}
+                        </button>
+                      </th>
+                      <td>{link.interfaceLabel}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className={styles.legendToggle}
+                          onFocus={() => setFocusedLinkKey(link.key)}
+                          onBlur={() => setFocusedLinkKey(undefined)}
+                          onClick={() => openRoleInspector(link.target)}
+                        >
+                          {target?.label || link.target}
+                        </button>
+                      </td>
+                      <td>{t(evidenceLabelKey(link.evidence))}</td>
+                      <td>{link.endpointsBound ? t('arch_binding_bound') : t('arch_binding_unbound')}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            </>
           ) : null}
 
           <p className={styles.footnote}>

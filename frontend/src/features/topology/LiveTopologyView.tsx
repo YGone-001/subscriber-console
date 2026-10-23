@@ -20,6 +20,7 @@ import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
 import { TopologyGraphShell } from './components/TopologyGraphShell';
 import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
+import { TopologyAnnouncer } from './components/TopologyAnnouncer';
 import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology } from './actual-topology-model';
 import { LABEL_DETAIL_MIN_ZOOM, resolveLabelVisibility } from './actual-topology-labels';
 import { interfaceCoverage } from './interface-catalog';
@@ -58,6 +59,7 @@ export function LiveTopologyView() {
   const [selectedComponentId, setSelectedComponentId] = useState<string | undefined>();
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | undefined>();
+  const [focusedEdgeId, setFocusedEdgeId] = useState<string | undefined>();
   const [hoveredResourceId, setHoveredResourceId] = useState<string | undefined>();
   const [focusedResourceId, setFocusedResourceId] = useState<string | undefined>();
   const [search, setSearch] = useState('');
@@ -67,7 +69,7 @@ export function LiveTopologyView() {
   const [fullscreen, setFullscreen] = useState(false);
   const [panning, setPanning] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<{ kind: 'node' | 'edge'; id: string } | undefined>(undefined);
+  const triggerRef = useRef<{ kind: 'node' | 'edge'; id: string; element?: Element | null } | undefined>(undefined);
   const autoFitRef = useRef(true);
   const panRef = useRef<{
     pointerId: number;
@@ -105,6 +107,33 @@ export function LiveTopologyView() {
   const selectedEdge = data?.edges.find((edge) => edge.edgeId === selectedEdgeId);
   const unresolved = data?.unresolvedPeers ?? [];
 
+  const announcement = useMemo(() => {
+    if (live.isLoading && !data) return t('topology_announce_loading');
+    if (live.error && !data) return t('topology_announce_unavailable');
+    if (!data) return t('topology_announce_loading');
+    const name = (componentId: string) => (
+      data.nodes.find((node) => node.componentId === componentId)?.displayName || componentId
+    );
+    if (selectedEdge) {
+      return t('topology_announce_selected_edge', {
+        from: name(selectedEdge.fromComponentId),
+        to: name(selectedEdge.toComponentId),
+      });
+    }
+    if (selected) return t('topology_announce_selected_node', { name: selected.displayName || selected.componentId });
+    const filters = [
+      search ? `${t('topology_search_filter')}: ${search}` : '',
+      domainMode !== 'all'
+        ? t(ACTUAL_DOMAIN_MODE_OPTIONS.find((option) => option.value === domainMode)?.labelKey ?? 'topology_domain_all')
+        : '',
+    ].filter(Boolean).join(' · ');
+    return t('topology_announce_loaded', {
+      nodes: data.nodes.length,
+      links: data.edges.length,
+      filters: filters || t('topology_announce_no_filters'),
+    });
+  }, [live.isLoading, live.error, data, selected, selectedEdge, search, domainMode, t]);
+
   useEffect(() => {
     if (selectedComponentId && data && !data.nodes.some((node) => node.componentId === selectedComponentId)) {
       setSelectedComponentId(undefined);
@@ -115,13 +144,16 @@ export function LiveTopologyView() {
     if (hoveredEdgeId && !layout.links.some((link) => link.edgeId === hoveredEdgeId)) {
       setHoveredEdgeId(undefined);
     }
+    if (focusedEdgeId && !layout.links.some((link) => link.edgeId === focusedEdgeId)) {
+      setFocusedEdgeId(undefined);
+    }
     if (hoveredResourceId && !layout.nodes.some((node) => node.resourceId === hoveredResourceId)) {
       setHoveredResourceId(undefined);
     }
     if (focusedResourceId && !layout.nodes.some((node) => node.resourceId === focusedResourceId)) {
       setFocusedResourceId(undefined);
     }
-  }, [data, selectedComponentId, selectedEdgeId, layout.links, layout.nodes, hoveredEdgeId, hoveredResourceId, focusedResourceId]);
+  }, [data, selectedComponentId, selectedEdgeId, layout.links, layout.nodes, hoveredEdgeId, focusedEdgeId, hoveredResourceId, focusedResourceId]);
 
   const fitView = useCallback(() => {
     const viewport = canvasRef.current;
@@ -163,6 +195,16 @@ export function LiveTopologyView() {
     };
   }, [fitView]);
 
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      void document.exitFullscreen?.();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fullscreen]);
+
   const updateZoom = (delta: number) => {
     autoFitRef.current = false;
     setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
@@ -174,6 +216,7 @@ export function LiveTopologyView() {
     setHoveredEdgeId(undefined);
     setHoveredResourceId(undefined);
     setFocusedResourceId(undefined);
+    setFocusedEdgeId(undefined);
     setSearch('');
     setDomainMode('all');
     setShowAllInterfaceNames(false);
@@ -185,7 +228,12 @@ export function LiveTopologyView() {
       setSelectedComponentId(undefined);
       return;
     }
-    triggerRef.current = { kind: 'node', id: componentId };
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    triggerRef.current = {
+      kind: 'node',
+      id: componentId,
+      element: active && active !== document.body ? active : null,
+    };
     setSelectedEdgeId(undefined);
     setSelectedComponentId(componentId);
   };
@@ -195,7 +243,12 @@ export function LiveTopologyView() {
       setSelectedEdgeId(undefined);
       return;
     }
-    triggerRef.current = { kind: 'edge', id: edgeId };
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    triggerRef.current = {
+      kind: 'edge',
+      id: edgeId,
+      element: active && active !== document.body ? active : null,
+    };
     setSelectedComponentId(undefined);
     setSelectedEdgeId(edgeId);
   };
@@ -205,6 +258,10 @@ export function LiveTopologyView() {
     const trigger = triggerRef.current;
     triggerRef.current = undefined;
     if (!trigger) return;
+    if (trigger.element instanceof Element && trigger.element.isConnected) {
+      (trigger.element as HTMLElement).focus?.();
+      return;
+    }
     window.requestAnimationFrame(() => {
       const selector = trigger.kind === 'node'
         ? `[data-resource-id="${trigger.id}"]`
@@ -265,27 +322,35 @@ export function LiveTopologyView() {
   };
 
   if (live.isLoading && !data) {
-    return <LoadingRows rows={5} />;
+    return (
+      <>
+        <TopologyAnnouncer message={t('topology_announce_loading')} />
+        <LoadingRows rows={5} />
+      </>
+    );
   }
 
   if (live.error && !data) {
     return (
-      <EmptyState
-        icon={<Layers size={40} />}
-        title={t('topology_live_error_title')}
-        description={t('topology_live_error_body')}
-        action={(
-          <div className={styles.liveErrorActions}>
-            <button type="button" className="btn btn-secondary" onClick={refresh}>
-              <RefreshCw size={15} />
-              {t('retry')}
-            </button>
-            <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
-              {t('topology_live_open_architecture')}
-            </Link>
-          </div>
-        )}
-      />
+      <>
+        <TopologyAnnouncer message={t('topology_announce_unavailable')} />
+        <EmptyState
+          icon={<Layers size={40} />}
+          title={t('topology_live_error_title')}
+          description={t('topology_live_error_body')}
+          action={(
+            <div className={styles.liveErrorActions}>
+              <button type="button" className="btn btn-secondary" onClick={refresh}>
+                <RefreshCw size={15} />
+                {t('retry')}
+              </button>
+              <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
+                {t('topology_live_open_architecture')}
+              </Link>
+            </div>
+          )}
+        />
+      </>
     );
   }
 
@@ -299,6 +364,7 @@ export function LiveTopologyView() {
 
   return (
     <div className={styles.liveSection} data-live-topology="true">
+      <TopologyAnnouncer message={announcement} />
       <TopologyGraphShell
         titleId="live-topology-title"
         title={t('topology_live_title')}
@@ -454,6 +520,48 @@ export function LiveTopologyView() {
         )}
         footer={(
           <>
+            <section className={styles.topologyListSection} aria-labelledby="live-nodes-title">
+              <h3 id="live-nodes-title">{t('topology_list_nodes')}</h3>
+              <div className={styles.topologyListScroll}>
+                <table className={styles.topologyListTable}>
+                  <caption className="sr-only">{t('topology_list_nodes')}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{t('topology_list_name')}</th>
+                      <th scope="col">{t('topology_live_type_domain')}</th>
+                      <th scope="col">{t('topology_runtime_label')}</th>
+                      <th scope="col">{t('topology_list_state')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.nodes.map((node) => {
+                      const runtimeKey = `runtime_status_${node.runtimeStatus}`;
+                      const runtimeText = t(runtimeKey);
+                      return (
+                        <tr key={node.componentId} data-live-node-row={node.componentId}>
+                          <th scope="row">
+                            <button
+                              type="button"
+                              className={styles.linkBtn}
+                              data-list-node={node.componentId}
+                              onFocus={() => setFocusedResourceId(node.componentId)}
+                              onBlur={() => setFocusedResourceId(undefined)}
+                              onClick={() => selectNode(node.componentId)}
+                            >
+                              {node.displayName || node.componentId}
+                            </button>
+                          </th>
+                          <td>{[node.nfType || node.role || '-', node.domain || '-'].join(' / ')}</td>
+                          <td>{runtimeText === runtimeKey ? node.runtimeStatus : runtimeText}</td>
+                          <td>{node.inventoryResourceId ? t('arch_binding_bound') : t('arch_binding_unbound')}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
             <section className={styles.liveEdges} aria-labelledby="live-edges-title">
               <h3 id="live-edges-title">{t('topology_live_edges_title')}</h3>
               {data.edges.length === 0 ? (
@@ -478,7 +586,18 @@ export function LiveTopologyView() {
                         const to = nodeById.get(edge.toComponentId);
                         return (
                           <tr key={edge.edgeId} data-live-edge-id={edge.edgeId} data-evidence={edge.evidence}>
-                            <td>{from?.displayName || edge.fromComponentId}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className={styles.linkBtn}
+                                data-list-edge={edge.edgeId}
+                                onFocus={() => setFocusedEdgeId(edge.edgeId)}
+                                onBlur={() => setFocusedEdgeId(undefined)}
+                                onClick={() => selectEdge(edge.edgeId)}
+                              >
+                                {from?.displayName || edge.fromComponentId}
+                              </button>
+                            </td>
                             <td>{to?.displayName || edge.toComponentId}</td>
                             <td>{edge.interfaceNames.length > 0 ? edge.interfaceNames.join(' / ') : edge.protocol}</td>
                             <td>{liveStateLabel(edge.state)}</td>
@@ -544,6 +663,7 @@ export function LiveTopologyView() {
                 selectedResourceId={selectedComponentId}
                 selectedEdgeId={selectedEdgeId}
                 focusedResourceId={focusedResourceId}
+                focusedEdgeId={focusedEdgeId}
                 hoveredResourceId={hoveredResourceId}
                 hoveredEdgeId={hoveredEdgeId}
                 search={search}
@@ -552,6 +672,7 @@ export function LiveTopologyView() {
                 onSelectResource={selectNode}
                 onSelectEdge={selectEdge}
                 onFocusResource={setFocusedResourceId}
+                onFocusEdge={setFocusedEdgeId}
                 onHoverResource={setHoveredResourceId}
                 onHoverEdge={setHoveredEdgeId}
                 onFocusDomain={(domain) => setDomainMode(domain as TopologyDomainMode)}

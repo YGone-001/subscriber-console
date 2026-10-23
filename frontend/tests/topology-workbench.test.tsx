@@ -15,6 +15,7 @@ import { I18nProvider } from '../src/providers/I18nProvider';
 import { TopologyGraphShell } from '../src/features/topology/components/TopologyGraphShell';
 import { TopologyGraphToolbar } from '../src/features/topology/components/TopologyGraphToolbar';
 import { TopologyInspector } from '../src/features/topology/components/TopologyInspector';
+import { TopologyAnnouncer } from '../src/features/topology/components/TopologyAnnouncer';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -169,6 +170,57 @@ test('the architecture view presents role detail through the shared inspector', 
   assert.match(source, /closeRoleInspector/, 'role close must restore focus');
   assert.match(source, /restoreRoleFocus/);
   assert.match(source, /data-inspector-open/, 'the inspector must take the side rail');
+});
+
+/* ------------------------------------------------------- lists / a11y ---- */
+
+test('the announcer exposes a polite live status', () => {
+  const markup = render(createElement(TopologyAnnouncer, { message: 'Loaded 5 nodes' }));
+  assert.ok(markup.includes('role="status"'));
+  assert.ok(markup.includes('aria-live="polite"'));
+  assert.ok(markup.includes('data-topology-announcer="true"'));
+  assert.ok(markup.includes('Loaded 5 nodes'));
+});
+
+test('every canvas provides equivalent node and relationship lists with announcements', () => {
+  const actual = read('../src/features/topology/ActualTopologyView.tsx');
+  const live = read('../src/features/topology/LiveTopologyView.tsx');
+  const architecture = read('../src/features/topology/ArchitectureView.tsx');
+
+  for (const [name, source] of [['declared', actual], ['runtime', live], ['reference', architecture]]) {
+    assert.match(source, /TopologyAnnouncer/, `${name} needs a screen-reader status channel`);
+  }
+
+  assert.match(actual, /data-topology-lists="actual"/, 'declared view needs an explicit list view');
+  assert.match(actual, /data-list-node=/, 'declared nodes must be listed');
+  assert.match(actual, /data-list-edge=/, 'declared relationships must be listed');
+  for (const key of [
+    'topology_list_source', 'topology_list_interface', 'topology_list_target',
+    'topology_list_evidence', 'topology_list_state',
+  ]) {
+    assert.ok(actual.includes(key), `declared relationship list needs ${key}`);
+  }
+
+  assert.match(live, /data-list-node=/, 'runtime nodes must be listed');
+  assert.match(live, /data-list-edge=/, 'configured relationships must be listed');
+
+  assert.match(architecture, /data-architecture-relationship-list/, 'reference relationships need a list');
+});
+
+test('canvas focus highlights related relationships and endpoints', () => {
+  const actual = read('../src/features/topology/components/ActualTopologyCanvas.tsx');
+  assert.match(actual, /actualLinkFocused/, 'a focused node highlights its edges');
+  assert.match(actual, /actualNodeFocusRelated/, 'a focused edge highlights both endpoints');
+  assert.match(actual, /onFocusEdge/, 'edge focus must be observable');
+
+  const architecture = read('../src/features/topology/components/ArchitectureCanvas.tsx');
+  assert.match(architecture, /linkFocused/, 'role focus highlights the related reference points');
+  assert.match(architecture, /nodeFocusRelated/, 'relationship focus highlights both roles');
+  assert.match(architecture, /onFocusRole/);
+
+  const css = read('../src/styles/modules/architecture.module.css');
+  assert.ok(css.includes('@media (forced-colors: active)'), 'Windows high contrast needs explicit state styling');
+  assert.ok(css.includes('@media (prefers-reduced-motion: reduce)'), 'reduced motion must be honoured');
 });
 
 /* --------------------------------------------------------------- live ---- */

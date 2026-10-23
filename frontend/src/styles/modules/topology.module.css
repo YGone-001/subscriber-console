@@ -1291,6 +1291,25 @@
   outline: none;
 }
 
+@media (forced-colors: active) {
+  .inspector,
+  .inspectorClose {
+    border-color: CanvasText;
+  }
+
+  .inspectorClose:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inspector,
+  .inspectorClose {
+    transition: none;
+  }
+}
+
 .inspectorBackdrop {
   position: fixed;
   inset: 0;

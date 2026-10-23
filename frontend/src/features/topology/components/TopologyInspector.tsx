@@ -32,6 +32,7 @@ export function TopologyInspector({ label, onClose, children }: TopologyInspecto
     if (!onClose) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      event.preventDefault();
       event.stopPropagation();
       onClose();
     };
