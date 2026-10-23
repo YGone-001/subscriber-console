@@ -2720,6 +2720,8 @@ export const en: Record<string, string> = {
     topology_runtime_scope_label: "Runtime sub-view",
     topology_runtime_scope_config: "Configured projection",
     topology_runtime_scope_hierarchy: "Runtime hierarchy",
+    topology_inspector_label: "Details",
+    topology_close_inspector: "Close inspector",
     topology_view_label: "Topology view",
     topology_view_actual: "Actual topology",
     topology_view_architecture: "Architecture",

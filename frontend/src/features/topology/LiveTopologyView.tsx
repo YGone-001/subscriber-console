@@ -4,15 +4,22 @@
  * Nodes come from the current runtime snapshot. Links come only from explicit
  * NF_ETC configuration; they are configured evidence, not observed traffic and
  * not a health claim. No write control is rendered here.
+ *
+ * The graph is presented inside the shared topology shell: search, canvas
+ * controls and the contextual inspector share one structure with the declared
+ * and reference sources. Configured links are never described as observed
+ * traffic or service health.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ExternalLink, Layers, RefreshCw, Search } from 'lucide-react';
+import { ExternalLink, Layers, RefreshCw } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
+import { TopologyGraphShell } from './components/TopologyGraphShell';
+import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import { buildActualTopology } from './actual-topology-model';
 import { liveDirectory, liveEdges } from './live-topology-model';
 import type {
@@ -21,6 +28,10 @@ import type {
   LiveTopologyResponse,
 } from './live-topology-types';
 import styles from '../../styles/modules/architecture.module.css';
+
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 1.75;
+const ZOOM_STEP = 0.15;
 
 function endpointLabel(endpoint: LiveEndpoint): string {
   const address = endpoint.address || '-';
@@ -37,6 +48,10 @@ export function LiveTopologyView() {
   const live = useRead<LiveTopologyResponse>('/api/topology/live');
   const [selectedComponentId, setSelectedComponentId] = useState<string | undefined>();
   const [search, setSearch] = useState('');
+  const [zoom, setZoom] = useState(1);
+  const [fullscreen, setFullscreen] = useState(false);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const autoFitRef = useRef(true);
   const data = live.data;
   const refresh = useCallback(() => {
     void live.mutate();
@@ -58,6 +73,61 @@ export function LiveTopologyView() {
       setSelectedComponentId(undefined);
     }
   }, [data, selectedComponentId]);
+
+  const fitView = useCallback(() => {
+    const viewport = canvasRef.current;
+    if (!viewport) {
+      setZoom(1);
+      return;
+    }
+    const computed = window.getComputedStyle(viewport);
+    const paddingX = (Number.parseFloat(computed.paddingLeft) || 0) + (Number.parseFloat(computed.paddingRight) || 0);
+    const paddingY = (Number.parseFloat(computed.paddingTop) || 0) + (Number.parseFloat(computed.paddingBottom) || 0);
+    const maxHeight = Number.parseFloat(computed.maxHeight);
+    const availableWidth = viewport.clientWidth - paddingX - 2;
+    const availableHeight = (Number.isFinite(maxHeight) ? maxHeight : viewport.clientHeight) - paddingY - 2;
+    const scale = Math.min(1, availableWidth / layout.width, availableHeight / layout.height);
+    const next = Math.max(MIN_ZOOM, Math.min(1, Number(scale.toFixed(2))));
+    autoFitRef.current = true;
+    setZoom(next);
+  }, [layout.width, layout.height]);
+
+  useEffect(() => {
+    fitView();
+  }, [fitView]);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (autoFitRef.current) fitView();
+    };
+    const onFullscreenChange = () => {
+      setFullscreen(document.fullscreenElement === canvasRef.current);
+      if (autoFitRef.current) window.requestAnimationFrame(fitView);
+    };
+    window.addEventListener('resize', onResize);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    };
+  }, [fitView]);
+
+  const updateZoom = (delta: number) => {
+    autoFitRef.current = false;
+    setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
+  };
+  const resetView = () => {
+    setSelectedComponentId(undefined);
+    setSearch('');
+    fitView();
+  };
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.();
+    } else {
+      void canvasRef.current?.requestFullscreen?.();
+    }
+  }, []);
 
   const liveStateLabel = (state: string) => {
     const key = `topology_live_state_${state}`;
@@ -98,182 +168,204 @@ export function LiveTopologyView() {
   const nodeById = new Map(data.nodes.map((node) => [node.componentId, node]));
 
   return (
-    <section className={styles.liveSection} aria-labelledby="live-topology-title" data-live-topology="true">
-      <h2 id="live-topology-title" className="sr-only">{t('topology_live_title')}</h2>
-      <div className={styles.liveHeader}>
-        <div className={styles.liveHeading}>
-          <strong>{t('topology_live_title')}</strong>
-          <p>{t('topology_live_subtitle')}</p>
-        </div>
-        <div className={styles.liveChips} role="status">
-          <span className={styles.liveChip} data-runtime-running={runtime.running}>
-            {t('runtime_status_running')} {runtime.running}
-          </span>
-          <span className={styles.liveChip} data-runtime-stopped={runtime.stopped}>
-            {t('runtime_status_stopped')} {runtime.stopped}
-          </span>
-          <span className={styles.liveChip} data-runtime-attention={attentionCount}>
-            {t('topology_live_attention', { count: attentionCount })}
-          </span>
-          <span className={styles.liveChip} data-runtime-not-detected={runtime.notDetected}>
-            {t('runtime_status_not_detected')} {runtime.notDetected}
-          </span>
-          <span className={styles.liveChip} data-configured-edge-count={data.edges.length}>
-            {t('topology_live_configured_edges', { count: data.edges.length })}
-          </span>
-          {unresolved.length > 0 ? (
-            <span className={styles.liveChip} data-unresolved-peer-count={unresolved.length}>
-              {t('topology_live_unresolved_peers', { count: unresolved.length })}
+    <div className={styles.liveSection} data-live-topology="true">
+      <TopologyGraphShell
+        titleId="live-topology-title"
+        title={t('topology_live_title')}
+        subtitle={t('topology_live_subtitle')}
+        evidence={t('topology_source_evidence_runtime')}
+        completeness={config.complete ? 'complete' : 'partial'}
+        summary={(
+          <div className={styles.liveChips}>
+            <span className={styles.liveChip} data-runtime-running={runtime.running}>
+              {t('runtime_status_running')} {runtime.running}
             </span>
-          ) : null}
-        </div>
-        <div className={styles.liveActions}>
-          <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
-            {t('topology_live_open_architecture')}
-          </Link>
-        </div>
-      </div>
-
-      {!config.manifestConfigured ? (
-        <p className={styles.liveWarning} data-config-warning="unconfigured">
-          {t('topology_live_config_unconfigured')}
-        </p>
-      ) : !config.complete ? (
-        <p className={styles.liveWarning} data-config-warning="incomplete">
-          {t('topology_live_config_incomplete', {
-            available: config.availableSources,
-            total: config.sourceCount,
-          })}
-        </p>
-      ) : (
-        <p className={styles.liveConfigNote} data-config-complete="true">
-          {t('topology_live_config_complete')}
-        </p>
-      )}
-      {config.unavailable && config.unavailable.length > 0 ? (
-        <details className={styles.liveSources}>
-          <summary>{t('topology_live_sources')}</summary>
-          <ul>
-            {config.unavailable.map((source, index) => (
-              <li key={`${source.componentId ?? 'manifest'}-${source.file ?? 'entry'}-${index}`}>
-                {source.componentId || 'manifest'}
-                {source.file ? ` · ${source.file}` : ''}
-                {' · '}
-                {source.reason}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-
-      <div className={styles.liveToolbar}>
-        <label className={styles.liveSearch}>
-          <Search size={15} aria-hidden="true" />
-          <span className="sr-only">{t('topology_live_search_placeholder')}</span>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t('topology_live_search_placeholder')}
-          />
-        </label>
-        <span>{t('topology_live_runtime_total', { count: runtime.total })}</span>
-      </div>
-
-      {layout.nodes.length === 0 ? (
-        <EmptyState
-          icon={<Layers size={40} />}
-          title={t('topology_live_error_title')}
-          description={t('topology_live_error_body')}
-        />
-      ) : (
-        <div className={styles.liveCanvasViewport} data-live-canvas="true">
-          <div style={{ width: `${layout.width}px`, height: `${layout.height}px` }}>
-            <ActualTopologyCanvas
-              layout={layout}
-              selectedResourceId={selectedComponentId}
-              search={search}
-              showAllInterfaceNames
-              onSelectResource={(resourceId) => {
-                setSelectedComponentId((current) => current === resourceId ? undefined : resourceId);
-              }}
-              onHoverEdge={() => {}}
-            />
+            <span className={styles.liveChip} data-runtime-stopped={runtime.stopped}>
+              {t('runtime_status_stopped')} {runtime.stopped}
+            </span>
+            <span className={styles.liveChip} data-runtime-attention={attentionCount}>
+              {t('topology_live_attention', { count: attentionCount })}
+            </span>
+            <span className={styles.liveChip} data-runtime-not-detected={runtime.notDetected}>
+              {t('runtime_status_not_detected')} {runtime.notDetected}
+            </span>
+            <span className={styles.liveChip} data-configured-edge-count={data.edges.length}>
+              {t('topology_live_configured_edges', { count: data.edges.length })}
+            </span>
+            {unresolved.length > 0 ? (
+              <span className={styles.liveChip} data-unresolved-peer-count={unresolved.length}>
+                {t('topology_live_unresolved_peers', { count: unresolved.length })}
+              </span>
+            ) : null}
           </div>
-        </div>
-      )}
-
-      <div className={styles.liveBody}>
-        <aside className={styles.liveDetail} aria-label={t('topology_live_selected')}>
-          {selected ? (
-            <LiveNodeDetail node={selected} />
-          ) : (
-            <p className={styles.liveMuted}>{t('topology_live_detail_empty')}</p>
-          )}
-        </aside>
-
-        <section className={styles.liveEdges} aria-labelledby="live-edges-title">
-          <h3 id="live-edges-title">{t('topology_live_edges_title')}</h3>
-          {data.edges.length === 0 ? (
-            <p className={styles.liveMuted}>{t('topology_live_no_edges')}</p>
-          ) : (
-            <div className={styles.liveTableScroll}>
-              <table className={styles.liveTable}>
-                <thead>
-                  <tr>
-                    <th scope="col">{t('topology_from_resource')}</th>
-                    <th scope="col">{t('topology_to_resource')}</th>
-                    <th scope="col">{t('topology_interfaces')}</th>
-                    <th scope="col">{t('topology_live_state')}</th>
-                    <th scope="col">{t('topology_live_evidence')}</th>
-                    <th scope="col">{t('topology_live_endpoint')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.edges.map((edge) => {
-                    const from = nodeById.get(edge.fromComponentId);
-                    const to = nodeById.get(edge.toComponentId);
-                    return (
-                      <tr key={edge.edgeId} data-live-edge-id={edge.edgeId} data-evidence={edge.evidence}>
-                        <td>{from?.displayName || edge.fromComponentId}</td>
-                        <td>{to?.displayName || edge.toComponentId}</td>
-                        <td>{edge.interfaceNames.length > 0 ? edge.interfaceNames.join(' / ') : edge.protocol}</td>
-                        <td>{liveStateLabel(edge.state)}</td>
-                        <td>{t('topology_live_evidence_configured')}</td>
-                        <td>
-                          <code>{endpointLabel(edge.fromEndpoint)}</code>
-                          {' -> '}
-                          <code>{endpointLabel(edge.toEndpoint)}</code>
-                        </td>
+        )}
+        notice={(
+          <>
+            {!config.manifestConfigured ? (
+              <p className={styles.liveWarning} data-config-warning="unconfigured">
+                {t('topology_live_config_unconfigured')}
+              </p>
+            ) : !config.complete ? (
+              <p className={styles.liveWarning} data-config-warning="incomplete">
+                {t('topology_live_config_incomplete', {
+                  available: config.availableSources,
+                  total: config.sourceCount,
+                })}
+              </p>
+            ) : (
+              <p className={styles.liveConfigNote} data-config-complete="true">
+                {t('topology_live_config_complete')}
+              </p>
+            )}
+            {config.unavailable && config.unavailable.length > 0 ? (
+              <details className={styles.liveSources}>
+                <summary>{t('topology_live_sources')}</summary>
+                <ul>
+                  {config.unavailable.map((source, index) => (
+                    <li key={`${source.componentId ?? 'manifest'}-${source.file ?? 'entry'}-${index}`}>
+                      {source.componentId || 'manifest'}
+                      {source.file ? ` · ${source.file}` : ''}
+                      {' · '}
+                      {source.reason}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </>
+        )}
+        toolbar={(
+          <TopologyGraphToolbar
+            search={{
+              value: search,
+              onChange: setSearch,
+              label: t('topology_live_search_placeholder'),
+              placeholder: t('topology_live_search_placeholder'),
+            }}
+            actions={(
+              <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
+                {t('topology_live_open_architecture')}
+              </Link>
+            )}
+            zoom={{
+              value: zoom,
+              min: MIN_ZOOM,
+              max: MAX_ZOOM,
+              onIn: () => updateZoom(ZOOM_STEP),
+              onOut: () => updateZoom(-ZOOM_STEP),
+              onFit: fitView,
+              onReset: resetView,
+            }}
+            fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
+          />
+        )}
+        inspector={selected ? <LiveNodeDetail node={selected} /> : undefined}
+        inspectorLabel={t('topology_live_selected')}
+        onCloseInspector={() => setSelectedComponentId(undefined)}
+        legend={(
+          <span className={styles.liveLegendItem}>
+            <i className={styles.liveLegendLine} aria-hidden="true" />
+            {t('topology_live_evidence_configured')}
+          </span>
+        )}
+        status={(
+          <span data-live-runtime-total="true">
+            {t('topology_live_runtime_total', { count: runtime.total })}
+          </span>
+        )}
+        footer={(
+          <>
+            <section className={styles.liveEdges} aria-labelledby="live-edges-title">
+              <h3 id="live-edges-title">{t('topology_live_edges_title')}</h3>
+              {data.edges.length === 0 ? (
+                <p className={styles.liveMuted}>{t('topology_live_no_edges')}</p>
+              ) : (
+                <div className={styles.liveTableScroll}>
+                  <table className={styles.liveTable}>
+                    <caption className="sr-only">{t('topology_live_edges_title')}</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">{t('topology_from_resource')}</th>
+                        <th scope="col">{t('topology_to_resource')}</th>
+                        <th scope="col">{t('topology_interfaces')}</th>
+                        <th scope="col">{t('topology_live_state')}</th>
+                        <th scope="col">{t('topology_live_evidence')}</th>
+                        <th scope="col">{t('topology_live_endpoint')}</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
+                    </thead>
+                    <tbody>
+                      {data.edges.map((edge) => {
+                        const from = nodeById.get(edge.fromComponentId);
+                        const to = nodeById.get(edge.toComponentId);
+                        return (
+                          <tr key={edge.edgeId} data-live-edge-id={edge.edgeId} data-evidence={edge.evidence}>
+                            <td>{from?.displayName || edge.fromComponentId}</td>
+                            <td>{to?.displayName || edge.toComponentId}</td>
+                            <td>{edge.interfaceNames.length > 0 ? edge.interfaceNames.join(' / ') : edge.protocol}</td>
+                            <td>{liveStateLabel(edge.state)}</td>
+                            <td>{t('topology_live_evidence_configured')}</td>
+                            <td>
+                              <code>{endpointLabel(edge.fromEndpoint)}</code>
+                              {' -> '}
+                              <code>{endpointLabel(edge.toEndpoint)}</code>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
 
-      {unresolved.length > 0 ? (
-        <details className={styles.liveUnresolved}>
-          <summary>{t('topology_live_unresolved_title')}</summary>
-          <ul>
-            {unresolved.map((item, index) => (
-              <li key={`${item.componentId}-${item.protocol}-${item.peer}-${index}`}>
-                <strong>{item.componentId}</strong>
-                {' · '}
-                {item.protocol}
-                {' · '}
-                {item.peer}
-                {' · '}
-                {item.reason}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-    </section>
+            {unresolved.length > 0 ? (
+              <details className={styles.liveUnresolved}>
+                <summary>{t('topology_live_unresolved_title')}</summary>
+                <ul>
+                  {unresolved.map((item, index) => (
+                    <li key={`${item.componentId}-${item.protocol}-${item.peer}-${index}`}>
+                      <strong>{item.componentId}</strong>
+                      {' · '}
+                      {item.protocol}
+                      {' · '}
+                      {item.peer}
+                      {' · '}
+                      {item.reason}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </>
+        )}
+      >
+        {layout.nodes.length === 0 ? (
+          <EmptyState
+            icon={<Layers size={40} />}
+            title={t('topology_live_error_title')}
+            description={t('topology_live_error_body')}
+          />
+        ) : (
+          <div ref={canvasRef} className={styles.liveCanvasViewport} data-live-canvas="true">
+            <div
+              className={styles.liveCanvasScale}
+              style={{ width: `${layout.width * zoom}px`, height: `${layout.height * zoom}px` }}
+            >
+              <ActualTopologyCanvas
+                layout={layout}
+                selectedResourceId={selectedComponentId}
+                search={search}
+                showAllInterfaceNames
+                onSelectResource={(resourceId) => {
+                  setSelectedComponentId((current) => current === resourceId ? undefined : resourceId);
+                }}
+                onHoverEdge={() => {}}
+              />
+            </div>
+          </div>
+        )}
+      </TopologyGraphShell>
+    </div>
   );
 }
 
@@ -286,7 +378,6 @@ function LiveNodeDetail({ node }: { node: LiveNode }) {
   };
   return (
     <div className={styles.liveDetailBody}>
-      <span className={styles.liveEyebrow}>{t('topology_live_selected')}</span>
       <strong>{node.displayName || node.componentId}</strong>
       <dl className={styles.liveDetailList}>
         <div>

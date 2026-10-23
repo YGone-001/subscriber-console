@@ -1042,6 +1042,308 @@
   margin-bottom: 0;
 }
 
+/* ------------------------------------------------------ graph workspace ---- */
+/* Shared shell for every topology source: header, toolbar, canvas, contextual
+ * inspector and one status bar. The inspector rail only exists while something
+ * is selected; below 1100px it becomes an overlay so the canvas keeps its width. */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--sys-color-surface-panel);
+}
+
+.shellHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+
+.shellHeading {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 240px;
+}
+
+.shellTitle {
+  margin: 0;
+  color: var(--text-primary, inherit);
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.shellSubtitle {
+  margin: 0;
+  max-width: 76ch;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+.shellMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.shellEvidence {
+  padding: 2px var(--space-8);
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--surface-border));
+  border-radius: var(--ref-radius-pill);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.shellCompleteness {
+  padding: 2px var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.shellCompleteness[data-completeness='complete'] {
+  border-color: var(--sys-color-status-success);
+  color: var(--sys-color-status-success);
+}
+
+.shellCompleteness[data-completeness='partial'] {
+  border-color: var(--sys-color-status-warning);
+  color: var(--sys-color-status-warning);
+}
+
+.shellCompleteness[data-completeness='unavailable'] {
+  border-color: var(--sys-color-action-danger);
+  color: var(--sys-color-action-danger);
+}
+
+.shellSummary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.shellNotice {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.shellToolbar {
+  min-width: 0;
+}
+
+.shellBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-12);
+  align-items: start;
+}
+
+.shellBody[data-inspector-open='true'] {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+}
+
+.shellCanvas {
+  min-width: 0;
+}
+
+.shellStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--surface-border);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.shellLegend,
+.shellStatusMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.shellFooter {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------- toolbar ------- */
+
+.graphToolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.graphSearch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: min(100%, 220px);
+  padding: 0 var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+  color: var(--text-muted);
+}
+
+.graphSearch:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.graphSearch input {
+  width: 100%;
+  min-height: calc(var(--control-height) - 4px);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.graphFilters {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  color: var(--text-muted);
+}
+
+.graphToolbarSpacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.graphControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.graphControls button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.graphControls button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary, inherit);
+}
+
+.graphControls button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.graphControls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.graphControls span {
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------- inspector ------ */
+
+.inspector {
+  min-width: 0;
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface-field);
+}
+
+.inspectorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.inspectorTitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inspectorClose {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.inspectorClose:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary, inherit);
+}
+
+.inspectorClose:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.inspectorBody {
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .shellBody[data-inspector-open='true'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inspector {
+    position: fixed;
+    top: var(--space-16);
+    right: var(--space-16);
+    bottom: var(--space-16);
+    z-index: 40;
+    width: min(380px, calc(100vw - 32px));
+    overflow: auto;
+    background: var(--surface);
+    box-shadow: var(--shadow-panel);
+  }
+}
+
 .viewToggle {
   display: inline-flex;
   align-items: center;

@@ -2718,6 +2718,8 @@ export const zh: Record<string, string> = {
     topology_runtime_scope_label: "运行子视图",
     topology_runtime_scope_config: "配置投影",
     topology_runtime_scope_hierarchy: "运行层级",
+    topology_inspector_label: "详情",
+    topology_close_inspector: "关闭检查器",
     topology_view_label: "拓扑视图",
     topology_view_actual: "实际拓扑",
     topology_view_architecture: "参考架构",

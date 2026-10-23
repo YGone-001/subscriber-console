@@ -1351,37 +1351,6 @@
   gap: var(--space-12);
 }
 
-.liveHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-12);
-  flex-wrap: wrap;
-  padding: var(--space-12);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-panel);
-  background: var(--sys-color-surface-panel);
-}
-
-.liveHeading {
-  display: grid;
-  flex: 1;
-  gap: 2px;
-  min-width: 240px;
-}
-
-.liveHeading strong {
-  color: var(--text-primary, inherit);
-  font-size: 0.86rem;
-}
-
-.liveHeading p {
-  margin: 0;
-  max-width: 72ch;
-  color: var(--text-muted);
-  font-size: 0.74rem;
-}
-
 .liveChips {
   display: inline-flex;
   align-items: center;
@@ -1422,7 +1391,6 @@
   color: var(--text-muted);
 }
 
-.liveActions,
 .liveErrorActions {
   display: inline-flex;
   align-items: center;
@@ -1476,41 +1444,6 @@
   overflow-wrap: anywhere;
 }
 
-.liveToolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
-  flex-wrap: wrap;
-  color: var(--text-muted);
-  font-size: 0.74rem;
-}
-
-.liveSearch {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: min(100%, 220px);
-  padding: 0 var(--space-8);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-control);
-  background: var(--surface-field);
-  color: var(--text-muted);
-}
-
-.liveSearch:focus-within {
-  box-shadow: var(--focus-ring);
-}
-
-.liveSearch input {
-  width: 100%;
-  min-height: calc(var(--control-height) - 4px);
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-
 .liveCanvasViewport {
   max-height: min(62vh, 620px);
   overflow: auto;
@@ -1519,14 +1452,31 @@
   background: var(--sys-color-surface-canvas);
 }
 
-.liveBody {
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  gap: var(--space-12);
-  align-items: start;
+.liveCanvasViewport:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  padding: var(--space-24);
+  border: 0;
+  border-radius: 0;
+  background: var(--sys-color-surface-canvas);
 }
 
-.liveDetail,
+.liveCanvasScale {
+  margin: 0 auto;
+}
+
+.liveLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.liveLegendLine {
+  width: 18px;
+  border-top: 1px dashed var(--sys-color-action-primary);
+}
+
 .liveEdges {
   min-width: 0;
   padding: var(--space-12);
@@ -1538,13 +1488,6 @@
 .liveDetailBody {
   display: grid;
   gap: var(--space-8);
-}
-
-.liveEyebrow {
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .liveDetailBody strong {
@@ -1661,10 +1604,6 @@
 
   .actualCanvasViewport {
     max-height: 58vh;
-  }
-
-  .liveBody {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .liveCanvasViewport {

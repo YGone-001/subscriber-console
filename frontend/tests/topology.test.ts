@@ -1224,6 +1224,7 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_source_notes', 'topology_source_note_declared', 'topology_source_note_runtime',
     'topology_source_note_reference', 'topology_runtime_scope_label',
     'topology_runtime_scope_config', 'topology_runtime_scope_hierarchy',
+    'topology_inspector_label', 'topology_close_inspector',
     'topology_runtime_label',
     'topology_live_title', 'topology_live_subtitle', 'topology_live_runtime_total',
     'topology_live_attention', 'topology_live_search_placeholder',
