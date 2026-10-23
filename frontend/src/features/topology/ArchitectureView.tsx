@@ -300,10 +300,13 @@ export function ArchitectureView({
       links: visible.links.length,
       filters: t(VIEW_LABEL_KEY[view]),
     });
-    return visible.hiddenCount > 0
-      ? `${loaded} ${t('topology_announce_hidden', { nodes: visible.hiddenCount, links: 0 })}`
-      : loaded;
-  }, [loading, failed, selected, visible.nodes.length, visible.links.length, visible.hiddenCount, view, t]);
+    const partial = completeness.overall !== 'complete'
+      ? `${t('topology_announce_partial', { nodes: visible.nodes.length, links: visible.links.length })} `
+      : '';
+    return `${partial}${loaded}${visible.hiddenCount > 0
+      ? ` ${t('topology_announce_hidden', { nodes: visible.hiddenCount, links: 0 })}`
+      : ''}`;
+  }, [loading, failed, selected, visible.nodes.length, visible.links.length, visible.hiddenCount, view, completeness.overall, t]);
 
   const scrollToOrigin = useCallback(() => {
     const viewport = canvasRef.current;
@@ -457,13 +460,23 @@ export function ArchitectureView({
       <TopologyAnnouncer message={announcement} />
 
       {loading ? (
-        <LoadingRows rows={4} />
+        <div className={styles.statePanel} data-state-panel="loading">
+          <LoadingRows rows={4} />
+        </div>
       ) : failed ? (
-        <EmptyState
-          icon={<Layers size={40} />}
-          title={t('arch_error_title')}
-          description={t('arch_error_body')}
-        />
+        <div className={styles.statePanel} data-state-panel="unavailable" data-state-source="operations-resources">
+          <EmptyState
+            icon={<Layers size={40} />}
+            title={t('arch_error_title')}
+            description={t('arch_error_body')}
+            action={(
+              <button type="button" className="btn btn-secondary" onClick={refresh}>
+                {t('retry')}
+              </button>
+            )}
+          />
+          <p className={styles.stateSource}>{t('arch_unavailable_source')}</p>
+        </div>
       ) : (
         <>
           <TopologyGraphToolbar
@@ -589,17 +602,32 @@ export function ArchitectureView({
           ) : null}
 
           {completeness.overall !== 'complete' ? (
-            <p
+            <div
               className={styles.completenessNote}
               data-completeness-note={completeness.overall}
               role="status"
             >
-              {t('arch_completeness_note', {
-                sources: incompleteSources
-                  .map((dimension) => `${t(`arch_dimension_${dimension}`)} ${t(`ops_completeness_${completeness[dimension]}`)}`)
-                  .join(' · '),
-              })}
-            </p>
+              <span>
+                {t('arch_completeness_note', {
+                  sources: incompleteSources
+                    .map((dimension) => `${t(`arch_dimension_${dimension}`)} ${t(`ops_completeness_${completeness[dimension]}`)}`)
+                    .join(' · '),
+                })}
+                {edges.coverage === 'partial'
+                  ? ` ${edges.coverageReason === 'page_limit'
+                    ? t('arch_topology_partial_page_limit')
+                    : t('arch_topology_partial_read_error')}`
+                  : null}
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                data-action="retry-partial"
+                onClick={refresh}
+              >
+                {t('retry')}
+              </button>
+            </div>
           ) : null}
 
           {view !== 'all' && visible.hiddenCount > 0 ? (

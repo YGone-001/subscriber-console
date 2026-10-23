@@ -313,6 +313,10 @@
   border-radius: var(--ref-radius-small);
   color: var(--sys-color-status-warning);
   font-size: 0.72rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
 }
 
 .completenessNote[data-completeness-note='unavailable'] {
@@ -1138,6 +1142,24 @@
   margin-bottom: var(--space-24);
 }
 
+.statePanel {
+  display: grid;
+  place-items: center;
+  gap: var(--space-8);
+  min-height: 320px;
+  padding: var(--space-24);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--sys-color-surface-panel);
+}
+
+.stateSource {
+  margin: 0;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+}
+
 .actualEmptyActions {
   display: flex;
   flex-wrap: wrap;
@@ -1375,6 +1397,10 @@
   margin: 0;
   font-size: 0.75rem;
   color: var(--sys-color-status-warning);
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
 }
 
 .actualHealthLegend {

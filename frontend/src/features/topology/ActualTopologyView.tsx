@@ -64,7 +64,7 @@ function healthSwatchClass(state: NodeHealthState): string {
 
 export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => void } = {}) {
   const { t } = useI18n();
-  const { edges, coverage, loading, refresh } = useBoundedEdges();
+  const { edges, coverage, coverageReason, loading, refresh } = useBoundedEdges();
   const [selectedResourceId, setSelectedResourceId] = useState<string | undefined>();
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
   const [focusedResourceId, setFocusedResourceId] = useState<string | undefined>();
@@ -214,7 +214,10 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     ].filter(Boolean).join(' · ');
     const hiddenNodes = layout.hiddenBoundaryNodeCount + (showSupport ? 0 : layout.supportResourceCount);
     const hiddenLinks = layout.hiddenBoundaryLinkCount + (showSupport ? 0 : layout.supportLinkCount);
-    return `${t('topology_announce_loaded', {
+    const partial = coverage === 'partial'
+      ? `${t('topology_announce_partial', { nodes: layout.nodes.length, links: layout.links.length })} `
+      : '';
+    return `${partial}${t('topology_announce_loaded', {
       nodes: layout.nodes.length,
       links: layout.links.length,
       filters: filters || t('topology_announce_no_filters'),
@@ -379,7 +382,9 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
       <section className={styles.actualSection} aria-labelledby="actual-topology-title" aria-busy="true">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
         <TopologyAnnouncer message={t('topology_announce_loading')} />
-        <LoadingRows rows={5} />
+        <div className={styles.statePanel} data-state-panel="loading">
+          <LoadingRows rows={5} />
+        </div>
       </section>
     );
   }
@@ -389,17 +394,20 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
       <section className={styles.actualSection} aria-labelledby="actual-topology-title">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
         <TopologyAnnouncer message={t('topology_announce_unavailable')} />
-        <EmptyState
-          icon={<AlertTriangle size={40} />}
-          title={t('topology_actual_unavailable_title')}
-          description={t('topology_actual_unavailable_body')}
-          action={(
-            <button type="button" className="btn btn-secondary" onClick={refresh}>
-              <RefreshCw size={15} />
-              {t('refresh')}
-            </button>
-          )}
-        />
+        <div className={styles.statePanel} data-state-panel="unavailable" data-state-source="topology-edges">
+          <EmptyState
+            icon={<AlertTriangle size={40} />}
+            title={t('topology_actual_unavailable_title')}
+            description={t('topology_actual_unavailable_body')}
+            action={(
+              <button type="button" className="btn btn-secondary" onClick={refresh}>
+                <RefreshCw size={15} />
+                {t('refresh')}
+              </button>
+            )}
+          />
+          <p className={styles.stateSource}>{t('topology_actual_unavailable_source')}</p>
+        </div>
       </section>
     );
   }
@@ -409,6 +417,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
       <section className={styles.actualSection} aria-labelledby="actual-topology-title">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
         <TopologyAnnouncer message={t('topology_announce_empty')} />
+        <div className={styles.statePanel} data-state-panel="empty-declared" data-state-source="declared">
         <EmptyState
           icon={<GitBranch size={40} />}
           title={t('topology_actual_empty_declared_title')}
@@ -433,6 +442,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
             </div>
           )}
         />
+        </div>
       </section>
     );
   }
@@ -475,11 +485,23 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
             </span>
           ) : null}
           {search.trim() ? (
-            <span data-search-status="true">
-              {matchedNodes.length > 0
-                ? t('topology_search_matches', { count: matchedNodes.length })
-                : t('topology_search_no_match')}
-            </span>
+            <>
+              <span data-search-status="true">
+                {matchedNodes.length > 0
+                  ? t('topology_search_matches', { count: matchedNodes.length })
+                  : t('topology_search_no_match')}
+              </span>
+              {matchedNodes.length === 0 ? (
+                <button
+                  type="button"
+                  className={styles.actualSupportToggle}
+                  data-action="clear-search"
+                  onClick={() => setSearch('')}
+                >
+                  {t('topology_search_clear')}
+                </button>
+              ) : null}
+            </>
           ) : null}
         </div>
         {supportToggle || hiddenSupportNotice || boundaryToggle || hiddenBoundaryNotice ? (
@@ -588,7 +610,21 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
       </div>
       <p className={styles.actualNote}>{t('topology_declared_notice')}</p>
       {coverage === 'partial' ? (
-        <p className={styles.actualCoverageNote} role="status">{t('topology_actual_partial_notice')}</p>
+        <div
+          className={styles.actualCoverageNote}
+          role="status"
+          data-state-panel="partial"
+          data-partial-reason={coverageReason ?? 'unknown'}
+        >
+          <span>
+            {t('topology_actual_partial_notice')}
+            {coverageReason === 'page_limit' ? ` ${t('topology_actual_partial_page_limit')}` : null}
+            {coverageReason === 'read_error' ? ` ${t('topology_actual_partial_read_error')}` : null}
+          </span>
+          <button type="button" className="btn btn-secondary" data-action="retry-partial" onClick={refresh}>
+            {t('retry')}
+          </button>
+        </div>
       ) : null}
       {health.loading || health.byResource.size > 0 || health.coverage !== 'complete' ? (
         <div className={styles.actualHealthLegend} role="group" aria-label={t('topology_health_label')}>

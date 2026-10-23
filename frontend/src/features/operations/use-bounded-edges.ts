@@ -24,9 +24,12 @@ export type BoundedEdgesOptions = {
   maxPages?: number;
 };
 
+export type BoundedEdgesCoverageReason = 'page_limit' | 'read_error' | null;
+
 export function useBoundedEdges(options: BoundedEdgesOptions = {}): {
   edges: unknown[];
   coverage: TopologyCoverage;
+  coverageReason: BoundedEdgesCoverageReason;
   loading: boolean;
   refresh: () => void;
 } {
@@ -40,6 +43,7 @@ export function useBoundedEdges(options: BoundedEdgesOptions = {}): {
 
   const [edges, setEdges] = useState<unknown[]>([]);
   const [coverage, setCoverage] = useState<TopologyCoverage>('partial');
+  const [coverageReason, setCoverageReason] = useState<BoundedEdgesCoverageReason>(null);
   const [loading, setLoading] = useState(enabled);
   const [nonce, setNonce] = useState(0);
   const runIdRef = useRef(0);
@@ -77,11 +81,13 @@ export function useBoundedEdges(options: BoundedEdgesOptions = {}): {
         if (cancelled || runIdRef.current !== runId) return;
         setEdges(collected);
         setCoverage(hasMore ? 'partial' : 'complete');
+        setCoverageReason(hasMore ? 'page_limit' : null);
       } catch {
         if (cancelled || runIdRef.current !== runId) return;
         // Keep whatever was loaded; a partial read is never authoritative.
         setEdges(collected);
         setCoverage(collected.length > 0 ? 'partial' : 'unavailable');
+        setCoverageReason('read_error');
       } finally {
         if (!cancelled && runIdRef.current === runId) setLoading(false);
       }
@@ -95,5 +101,5 @@ export function useBoundedEdges(options: BoundedEdgesOptions = {}): {
   }, [enabled, relationshipType, lifecycleState, limit, maxPages, nonce]);
 
   const refresh = useCallback(() => setNonce((value) => value + 1), []);
-  return { edges, coverage, loading, refresh };
+  return { edges, coverage, coverageReason, loading, refresh };
 }

@@ -323,34 +323,53 @@ export function LiveTopologyView() {
 
   if (live.isLoading && !data) {
     return (
-      <>
+      <div className={styles.liveSection}>
         <TopologyAnnouncer message={t('topology_announce_loading')} />
-        <LoadingRows rows={5} />
-      </>
+        <TopologyGraphShell
+          titleId="live-topology-title"
+          title={t('topology_live_title')}
+          subtitle={t('topology_live_subtitle')}
+          evidence={t('topology_source_evidence_runtime')}
+        >
+          <div className={styles.statePanel} data-state-panel="loading">
+            <LoadingRows rows={5} />
+          </div>
+        </TopologyGraphShell>
+      </div>
     );
   }
 
   if (live.error && !data) {
     return (
-      <>
+      <div className={styles.liveSection}>
         <TopologyAnnouncer message={t('topology_announce_unavailable')} />
-        <EmptyState
-          icon={<Layers size={40} />}
-          title={t('topology_live_error_title')}
-          description={t('topology_live_error_body')}
-          action={(
-            <div className={styles.liveErrorActions}>
-              <button type="button" className="btn btn-secondary" onClick={refresh}>
-                <RefreshCw size={15} />
-                {t('retry')}
-              </button>
-              <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
-                {t('topology_live_open_architecture')}
-              </Link>
-            </div>
-          )}
-        />
-      </>
+        <TopologyGraphShell
+          titleId="live-topology-title"
+          title={t('topology_live_title')}
+          subtitle={t('topology_live_subtitle')}
+          evidence={t('topology_source_evidence_runtime')}
+        >
+          <div className={styles.statePanel} data-state-panel="unavailable" data-state-source="topology-live">
+            <EmptyState
+              icon={<Layers size={40} />}
+              title={t('topology_live_error_title')}
+              description={t('topology_live_error_body')}
+              action={(
+                <div className={styles.liveErrorActions}>
+                  <button type="button" className="btn btn-secondary" onClick={refresh}>
+                    <RefreshCw size={15} />
+                    {t('retry')}
+                  </button>
+                  <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
+                    {t('topology_live_open_architecture')}
+                  </Link>
+                </div>
+              )}
+            />
+            <p className={styles.stateSource}>{t('topology_live_unavailable_source')}</p>
+          </div>
+        </TopologyGraphShell>
+      </div>
     );
   }
 
@@ -638,11 +657,24 @@ export function LiveTopologyView() {
         )}
       >
         {layout.nodes.length === 0 ? (
-          <EmptyState
-            icon={<Layers size={40} />}
-            title={t('topology_live_error_title')}
-            description={t('topology_live_error_body')}
-          />
+          <div className={styles.statePanel} data-state-panel="empty" data-state-source="topology-live">
+            <EmptyState
+              icon={<Layers size={40} />}
+              title={t('topology_live_empty_title')}
+              description={t('topology_live_empty_body')}
+              action={(
+                <div className={styles.liveErrorActions}>
+                  <button type="button" className="btn btn-secondary" onClick={refresh}>
+                    <RefreshCw size={15} />
+                    {t('retry')}
+                  </button>
+                  <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
+                    {t('topology_live_open_architecture')}
+                  </Link>
+                </div>
+              )}
+            />
+          </div>
         ) : (
           <div
             ref={canvasRef}

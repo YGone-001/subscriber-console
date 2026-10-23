@@ -223,6 +223,37 @@ test('canvas focus highlights related relationships and endpoints', () => {
   assert.ok(css.includes('@media (prefers-reduced-motion: reduce)'), 'reduced motion must be honoured');
 });
 
+/* ---------------------------------------------------------------- states -- */
+
+test('loading, empty, partial and unavailable states stay distinct', () => {
+  const bounded = read('../src/features/operations/use-bounded-edges.ts');
+  assert.match(bounded, /coverageReason/, 'partial reads must report why they are partial');
+  assert.match(bounded, /'page_limit'/, 'the page cap is an explicit partial reason');
+  assert.match(bounded, /'read_error'/, 'a failed continuation is an explicit partial reason');
+
+  const actual = read('../src/features/topology/ActualTopologyView.tsx');
+  for (const state of ['loading', 'unavailable', 'empty-declared', 'partial']) {
+    assert.ok(actual.includes(`data-state-panel="${state}"`), `declared view needs a ${state} placeholder`);
+  }
+  assert.match(actual, /data-state-source="topology-edges"/, 'the unavailable source must be named');
+  assert.match(actual, /data-partial-reason=/, 'partial must state what is missing');
+  assert.match(actual, /data-action="retry-partial"/, 'partial reads need a retry');
+  assert.match(actual, /data-action="clear-search"/, 'an empty search result must keep a clear action');
+  assert.match(actual, /data-action="show-runtime-source"/, 'empty declared state must offer the runtime source explicitly');
+
+  const live = read('../src/features/topology/LiveTopologyView.tsx');
+  assert.match(live, /data-state-panel="empty"/, 'an empty runtime projection is not an error');
+  assert.match(live, /topology_live_empty_title/);
+  assert.match(live, /data-state-source="topology-live"/);
+  assert.match(live, /topology_live_unavailable_source/);
+
+  const architecture = read('../src/features/topology/ArchitectureView.tsx');
+  assert.match(architecture, /data-state-panel="unavailable"/);
+  assert.match(architecture, /arch_unavailable_source/);
+  assert.match(architecture, /data-action="retry-partial"/, 'partial reference data needs a retry');
+  assert.match(architecture, /arch_topology_partial_/);
+});
+
 /* --------------------------------------------------------------- live ---- */
 
 test('the runtime view is presented through the shared workbench', () => {
