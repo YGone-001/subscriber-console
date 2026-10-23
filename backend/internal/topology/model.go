@@ -1,6 +1,9 @@
 package topology
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // SchemaVersion defines the authoritative schema version for topology edges.
 const SchemaVersion = 1
@@ -82,6 +85,7 @@ type Edge struct {
 	Description      string            `json:"description,omitempty" bson:"description,omitempty"`
 	Labels           map[string]string `json:"labels,omitempty" bson:"labels,omitempty"`
 	Attributes       map[string]any    `json:"attributes,omitempty" bson:"attributes,omitempty"`
+	InterfaceNames   []string          `json:"interfaceNames" bson:"interfaceNames,omitempty"`
 	LifecycleState   string            `json:"lifecycleState" bson:"lifecycleState"`
 	Source           SourceMetadata    `json:"source" bson:"source"`
 	Revision         int64             `json:"revision" bson:"revision"`
@@ -91,8 +95,18 @@ type Edge struct {
 	UpdatedBy        string            `json:"updatedBy" bson:"updatedBy"`
 }
 
+// MarshalJSON always emits interfaceNames as an array, including for legacy
+// documents that were stored before the field existed.
+func (e Edge) MarshalJSON() ([]byte, error) {
+	type edgeAlias Edge
+	if e.InterfaceNames == nil {
+		e.InterfaceNames = []string{}
+	}
+	return json.Marshal(edgeAlias(e))
+}
+
 // CreateEdgeRequest is the request body for POST /api/topology/edges.
-// Only these five fields are accepted; every server-owned field is rejected.
+// Only these six fields are accepted; every server-owned field is rejected.
 type CreateEdgeRequest struct {
 	RelationshipType string            `json:"relationshipType"`
 	FromResourceID   string            `json:"fromResourceId"`
@@ -100,13 +114,17 @@ type CreateEdgeRequest struct {
 	Description      string            `json:"description,omitempty"`
 	Labels           map[string]string `json:"labels,omitempty"`
 	Attributes       map[string]any    `json:"attributes,omitempty"`
+	InterfaceNames   []string          `json:"interfaceNames,omitempty"`
 }
 
-// MutableEdge carries the only metadata an update may replace.
+// MutableEdge carries the only metadata an update may replace. A nil
+// InterfaceNames pointer preserves the stored value for old clients; an
+// explicit empty array clears it.
 type MutableEdge struct {
-	Description string            `json:"description,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Attributes  map[string]any    `json:"attributes,omitempty"`
+	Description    string            `json:"description,omitempty"`
+	Labels         map[string]string `json:"labels,omitempty"`
+	Attributes     map[string]any    `json:"attributes,omitempty"`
+	InterfaceNames *[]string         `json:"interfaceNames,omitempty"`
 }
 
 // UpdateEdgeRequest is the request body for PUT /api/topology/edges/{edgeId}.
@@ -124,9 +142,14 @@ type RetireEdgeRequest struct {
 
 // MetaResponse is the payload for GET /api/topology/meta.
 type MetaResponse struct {
-	SchemaVersion     int      `json:"schemaVersion"`
-	RelationshipTypes []string `json:"relationshipTypes"`
-	LifecycleStates   []string `json:"lifecycleStates"`
+	SchemaVersion       int              `json:"schemaVersion"`
+	RelationshipTypes   []string         `json:"relationshipTypes"`
+	LifecycleStates     []string         `json:"lifecycleStates"`
+	CatalogVersion      string           `json:"catalogVersion"`
+	InterfaceCategories []string         `json:"interfaceCategories"`
+	InterfaceScopes     []string         `json:"interfaceScopes"`
+	InterfacePlanes     []string         `json:"interfacePlanes"`
+	InterfaceCatalog    []InterfaceEntry `json:"interfaceCatalog"`
 }
 
 // PageInfo is the opaque cursor pagination metadata in list responses.

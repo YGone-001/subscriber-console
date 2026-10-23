@@ -91,9 +91,14 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, MetaResponse{
-		SchemaVersion:     SchemaVersion,
-		RelationshipTypes: CanonicalRelationshipTypes,
-		LifecycleStates:   CanonicalLifecycleStates,
+		SchemaVersion:       SchemaVersion,
+		RelationshipTypes:   CanonicalRelationshipTypes,
+		LifecycleStates:     CanonicalLifecycleStates,
+		CatalogVersion:      CatalogVersion,
+		InterfaceCategories: CanonicalInterfaceCategories,
+		InterfaceScopes:     CanonicalInterfaceScopes,
+		InterfacePlanes:     CanonicalInterfacePlanes,
+		InterfaceCatalog:    InterfaceCatalog,
 	})
 }
 
@@ -549,6 +554,8 @@ func writeValidationError(w http.ResponseWriter, err error) {
 		response.BadRequest(w, err.Error(), "INVALID_RELATIONSHIP_TYPE")
 	case errors.Is(err, ErrInvalidResourceID):
 		response.BadRequest(w, err.Error(), "INVALID_RESOURCE_ID")
+	case errors.Is(err, ErrInvalidInterfaceName):
+		response.BadRequest(w, err.Error(), "INVALID_INTERFACE_NAME")
 	case errors.Is(err, ErrSelfEdge):
 		response.BadRequest(w, err.Error(), "TOPOLOGY_SELF_EDGE")
 	default:

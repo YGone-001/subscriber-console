@@ -41,6 +41,7 @@ func (m *mockRepo) Create(ctx context.Context, req *CreateEdgeRequest, actor str
 		Description:      req.Description,
 		Labels:           req.Labels,
 		Attributes:       req.Attributes,
+		InterfaceNames:   normalizeInterfaceNames(req.InterfaceNames),
 		LifecycleState:   LifecycleActive,
 		Source:           SourceMetadata{Kind: "manual", System: "xcloud", Authority: "authoritative"},
 		Revision:         1,
@@ -90,6 +91,9 @@ func (m *mockRepo) Update(ctx context.Context, edgeID string, req *UpdateEdgeReq
 	edge.Description = req.Edge.Description
 	edge.Labels = req.Edge.Labels
 	edge.Attributes = req.Edge.Attributes
+	if req.Edge.InterfaceNames != nil {
+		edge.InterfaceNames = normalizeInterfaceNames(*req.Edge.InterfaceNames)
+	}
 	edge.Revision++
 	edge.UpdatedAt = CurrentTimestamp()
 	edge.UpdatedBy = actor
@@ -171,6 +175,12 @@ func TestMetaRequiresReadPermission(t *testing.T) {
 	}
 	if body.SchemaVersion != 1 || len(body.RelationshipTypes) != 9 || len(body.LifecycleStates) != 2 {
 		t.Errorf("meta payload must reflect schema v1, 9 types, 2 states; got %+v", body)
+	}
+	if body.CatalogVersion == "" || len(body.InterfaceCatalog) != 46 {
+		t.Errorf("meta payload must include the 46-entry catalog and its version; got version %q, entries %d", body.CatalogVersion, len(body.InterfaceCatalog))
+	}
+	if len(body.InterfaceCategories) != 2 || len(body.InterfaceScopes) != 2 || len(body.InterfacePlanes) != 3 {
+		t.Errorf("meta payload must expose the interface vocabularies; got categories %v, scopes %v, planes %v", body.InterfaceCategories, body.InterfaceScopes, body.InterfacePlanes)
 	}
 }
 
@@ -278,6 +288,8 @@ func TestCreateValidationErrorCodes(t *testing.T) {
 		{"invalid relationship", `{"relationshipType":"peer_of","fromResourceId":"` + fromID + `","toResourceId":"` + toID + `"}`, "INVALID_RELATIONSHIP_TYPE"},
 		{"invalid identifier", `{"relationshipType":"depends_on","fromResourceId":"nope","toResourceId":"` + toID + `"}`, "INVALID_RESOURCE_ID"},
 		{"self edge", `{"relationshipType":"depends_on","fromResourceId":"` + fromID + `","toResourceId":"` + fromID + `"}`, "TOPOLOGY_SELF_EDGE"},
+		{"unknown interface", `{"relationshipType":"depends_on","fromResourceId":"` + fromID + `","toResourceId":"` + toID + `","interfaceNames":["N99"]}`, "INVALID_INTERFACE_NAME"},
+		{"blank interface", `{"relationshipType":"depends_on","fromResourceId":"` + fromID + `","toResourceId":"` + toID + `","interfaceNames":[" "]}`, "INVALID_INTERFACE_NAME"},
 		{"server owned", `{"relationshipType":"depends_on","fromResourceId":"` + fromID + `","toResourceId":"` + toID + `","lifecycleState":"retired"}`, "SERVER_OWNED_FIELD_FORBIDDEN"},
 		{"unknown field", `{"relationshipType":"depends_on","fromResourceId":"` + fromID + `","toResourceId":"` + toID + `","bogus":1}`, "INVALID_JSON"},
 	}
@@ -296,6 +308,122 @@ func TestCreateValidationErrorCodes(t *testing.T) {
 			t.Errorf("%s: expected code %s, got %s", tc.name, tc.code, payload.Code)
 		}
 	}
+}
+
+func TestCreateUpdateInterfaceNames(t *testing.T) {
+	repo := newMockRepo()
+	h := NewHandler(repo, nil, &dummyAuditWriter{})
+
+	createBody := `{"relationshipType":"depends_on","fromResourceId":"` + fromID + `","toResourceId":"` + toID + `","interfaceNames":[" N11 ","N11"]}`
+	w := httptest.NewRecorder()
+	h.Create(w, withPrincipal(httptest.NewRequest("POST", "/api/topology/edges", bytes.NewBufferString(createBody)), "operator"))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create with interface names: expected 201, got %d (%s)", w.Code, w.Body.String())
+	}
+	var created Edge
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("create body must be JSON: %v", err)
+	}
+	if !jsonEqual(created.InterfaceNames, []string{"N11"}) {
+		t.Errorf("create must trim and dedupe interface names, got %#v", created.InterfaceNames)
+	}
+
+	updateBody := `{"expectedRevision":1,"edge":{"description":"with names","interfaceNames":["N11","N7"]}}`
+	w = httptest.NewRecorder()
+	req := withPrincipal(httptest.NewRequest("PUT", "/api/topology/edges/x", bytes.NewBufferString(updateBody)), "operator")
+	req.SetPathValue("edgeId", created.EdgeID)
+	h.Update(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update with interface names: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var updated Edge
+	if err := json.Unmarshal(w.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("update body must be JSON: %v", err)
+	}
+	if !jsonEqual(updated.InterfaceNames, []string{"N11", "N7"}) {
+		t.Errorf("update must persist interface names, got %#v", updated.InterfaceNames)
+	}
+
+	preserveBody := `{"expectedRevision":2,"edge":{"description":"preserve names"}}`
+	w = httptest.NewRecorder()
+	req = withPrincipal(httptest.NewRequest("PUT", "/api/topology/edges/x", bytes.NewBufferString(preserveBody)), "operator")
+	req.SetPathValue("edgeId", created.EdgeID)
+	h.Update(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update without interface names: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var preserved Edge
+	if err := json.Unmarshal(w.Body.Bytes(), &preserved); err != nil {
+		t.Fatalf("preserve body must be JSON: %v", err)
+	}
+	if !jsonEqual(preserved.InterfaceNames, []string{"N11", "N7"}) {
+		t.Errorf("omitting interfaceNames must preserve the stored value, got %#v", preserved.InterfaceNames)
+	}
+
+	clearBody := `{"expectedRevision":3,"edge":{"description":"clear names","interfaceNames":[]}}`
+	w = httptest.NewRecorder()
+	req = withPrincipal(httptest.NewRequest("PUT", "/api/topology/edges/x", bytes.NewBufferString(clearBody)), "operator")
+	req.SetPathValue("edgeId", created.EdgeID)
+	h.Update(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update with empty interface names: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var cleared struct {
+		InterfaceNames []string `json:"interfaceNames"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &cleared); err != nil {
+		t.Fatalf("clear body must be JSON: %v", err)
+	}
+	if cleared.InterfaceNames == nil || len(cleared.InterfaceNames) != 0 {
+		t.Errorf("explicit empty interfaceNames must clear the stored value, got %#v", cleared.InterfaceNames)
+	}
+}
+
+func TestLegacyEdgeWithoutInterfaceNamesSerializesAsEmptyArray(t *testing.T) {
+	repo := newMockRepo()
+	edge := &Edge{
+		EdgeID:           audit.GenerateUUID(),
+		SchemaVersion:    SchemaVersion,
+		RelationshipType: RelationshipDependsOn,
+		FromResourceID:   fromID,
+		ToResourceID:     toID,
+		LifecycleState:   LifecycleActive,
+		Source:           SourceMetadata{Kind: "manual", System: "xcloud", Authority: "authoritative"},
+		Revision:         1,
+		CreatedAt:        CurrentTimestamp(),
+		CreatedBy:        "operator",
+		UpdatedAt:        CurrentTimestamp(),
+		UpdatedBy:        "operator",
+	}
+	repo.items[edge.EdgeID] = edge
+
+	h := NewHandler(repo, nil, &dummyAuditWriter{})
+	w := httptest.NewRecorder()
+	req := withPrincipal(httptest.NewRequest("GET", "/api/topology/edges/x", nil), "viewer")
+	req.SetPathValue("edgeId", edge.EdgeID)
+	h.Get(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("legacy edge read: expected 200, got %d", w.Code)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("legacy edge body must be JSON: %v", err)
+	}
+	if string(payload["interfaceNames"]) != "[]" {
+		t.Errorf("legacy edge must serialize interfaceNames as [], got %s", payload["interfaceNames"])
+	}
+}
+
+func jsonEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestListRejectsUnknownQueryParameterAndBadLimit(t *testing.T) {

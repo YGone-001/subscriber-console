@@ -8,7 +8,7 @@
     "productionBuilder": "frontend/src/features/topology/topology-builders.ts",
     "productionReference": "frontend/src/features/topology/components/TopologyEdgeForm.tsx",
     "requiredBodyKeys": ["relationshipType", "fromResourceId", "toResourceId"],
-    "optionalBodyKeys": ["description", "labels", "attributes"],
+    "optionalBodyKeys": ["description", "labels", "attributes", "interfaceNames"],
     "forbiddenBodyKeys": [
       "edgeId",
       "schemaVersion",
@@ -52,7 +52,7 @@
     "nestedContracts": {
       "edge": {
         "requiredKeys": [],
-        "allowedKeys": ["description", "labels", "attributes"],
+        "allowedKeys": ["description", "labels", "attributes", "interfaceNames"],
         "forbiddenKeys": [
           "edgeId",
           "schemaVersion",

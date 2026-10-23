@@ -11,9 +11,9 @@ import (
 // operations summary. Declared relationships are explicitly NOT connectivity
 // truth: they only describe what operators have recorded.
 type EdgeSummary struct {
-	Total               int64            `json:"total"`
-	Active              int64            `json:"active"`
-	Retired             int64            `json:"retired"`
+	Total                int64            `json:"total"`
+	Active               int64            `json:"active"`
+	Retired              int64            `json:"retired"`
 	ActiveByRelationship map[string]int64 `json:"activeByRelationship"`
 }
 
@@ -50,7 +50,7 @@ func (r *Repository) EdgeSummary(ctx context.Context) (EdgeSummary, error) {
 		Total []struct {
 			Value int64 `bson:"value"`
 		} `bson:"total"`
-		ByLifecycleState    []edgeCountRow `bson:"byLifecycleState"`
+		ByLifecycleState     []edgeCountRow `bson:"byLifecycleState"`
 		ActiveByRelationship []edgeCountRow `bson:"activeByRelationship"`
 	}
 	if err := cursor.All(ctx, &rows); err != nil {

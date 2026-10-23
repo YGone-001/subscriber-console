@@ -252,6 +252,7 @@ func (r *Repository) Create(ctx context.Context, req *CreateEdgeRequest, actor s
 		Description:      req.Description,
 		Labels:           req.Labels,
 		Attributes:       req.Attributes,
+		InterfaceNames:   normalizeInterfaceNames(req.InterfaceNames),
 		LifecycleState:   LifecycleActive,
 		Source: SourceMetadata{
 			Kind:      "manual",
@@ -288,6 +289,7 @@ func (r *Repository) GetByID(ctx context.Context, edgeID string) (*Edge, error) 
 		}
 		return nil, fmt.Errorf("failed to find topology edge: %w", err)
 	}
+	edge.InterfaceNames = normalizeInterfaceNames(edge.InterfaceNames)
 	return &edge, nil
 }
 
@@ -347,6 +349,7 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]Edge, *stri
 		if err := cursor.Decode(&edge); err != nil {
 			return nil, nil, false, fmt.Errorf("failed to decode topology edge: %w", err)
 		}
+		edge.InterfaceNames = normalizeInterfaceNames(edge.InterfaceNames)
 		items = append(items, edge)
 	}
 	if err := cursor.Err(); err != nil {
@@ -409,16 +412,18 @@ func (r *Repository) Update(ctx context.Context, edgeID string, req *UpdateEdgeR
 		"revision":       req.ExpectedRevision,
 		"lifecycleState": bson.M{"$ne": LifecycleRetired},
 	}
-	updateDoc := bson.M{
-		"$set": bson.M{
-			"description": req.Edge.Description,
-			"labels":      req.Edge.Labels,
-			"attributes":  req.Edge.Attributes,
-			"updatedAt":   now,
-			"updatedBy":   actor,
-			"revision":    req.ExpectedRevision + 1,
-		},
+	set := bson.M{
+		"description": req.Edge.Description,
+		"labels":      req.Edge.Labels,
+		"attributes":  req.Edge.Attributes,
+		"updatedAt":   now,
+		"updatedBy":   actor,
+		"revision":    req.ExpectedRevision + 1,
 	}
+	if req.Edge.InterfaceNames != nil {
+		set["interfaceNames"] = normalizeInterfaceNames(*req.Edge.InterfaceNames)
+	}
+	updateDoc := bson.M{"$set": set}
 
 	result, err := r.edges.UpdateOne(ctx, updateFilter, updateDoc)
 	if err != nil {
@@ -575,6 +580,7 @@ func (r *Repository) Neighbors(ctx context.Context, filter NeighborFilter) (*Nei
 		if err := cursor.Decode(&edge); err != nil {
 			return nil, fmt.Errorf("failed to decode topology edge: %w", err)
 		}
+		edge.InterfaceNames = normalizeInterfaceNames(edge.InterfaceNames)
 		edges = append(edges, edge)
 	}
 	if err := cursor.Err(); err != nil {

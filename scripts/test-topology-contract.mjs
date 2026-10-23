@@ -140,7 +140,7 @@ const exactTopologyRequestContract = [
     productionBuilder: 'frontend/src/features/topology/topology-builders.ts',
     productionReference: 'frontend/src/features/topology/components/TopologyEdgeForm.tsx',
     requiredBodyKeys: ['relationshipType', 'fromResourceId', 'toResourceId'],
-    optionalBodyKeys: ['description', 'labels', 'attributes'],
+    optionalBodyKeys: ['description', 'labels', 'attributes', 'interfaceNames'],
     forbiddenBodyKeys,
     responseSemantics: 'mutation-result',
   },
@@ -158,7 +158,7 @@ const exactTopologyRequestContract = [
     nestedContracts: {
       edge: {
         requiredKeys: [],
-        allowedKeys: ['description', 'labels', 'attributes'],
+        allowedKeys: ['description', 'labels', 'attributes', 'interfaceNames'],
         forbiddenKeys: [...forbiddenBodyKeys, 'relationshipType', 'fromResourceId', 'toResourceId'],
       },
     },
@@ -223,7 +223,7 @@ expectExactContractRejection((bad) => { bad[0].forbiddenBodyKeys = bad[0].forbid
 // 4.2 Mutation identity must be immutable: relationshipType/from/to are never mutable metadata.
 assert.deepEqual(
   topologyReqContract[1].nestedContracts.edge.allowedKeys,
-  ['description', 'labels', 'attributes'],
+  ['description', 'labels', 'attributes', 'interfaceNames'],
   'update must permit only mutable metadata fields',
 );
 

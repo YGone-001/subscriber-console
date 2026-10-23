@@ -1,6 +1,8 @@
 package topology
 
 import (
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -80,6 +82,57 @@ func TestValidateCreateRequest(t *testing.T) {
 	badID := &CreateEdgeRequest{RelationshipType: RelationshipDependsOn, FromResourceID: "nope", ToResourceID: to}
 	if err := ValidateCreateRequest(badID); err == nil {
 		t.Error("malformed fromResourceId must be rejected")
+	}
+}
+
+func TestValidateInterfaceNamesOnCreateAndUpdate(t *testing.T) {
+	from := "2f1a6a52-6c7f-4f8a-9f2b-0f7d4a1c8e33"
+	to := "8c9d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f"
+
+	create := &CreateEdgeRequest{
+		RelationshipType: RelationshipDependsOn,
+		FromResourceID:   from,
+		ToResourceID:     to,
+		InterfaceNames:   []string{" N11 ", "N11"},
+	}
+	if err := ValidateCreateRequest(create); err != nil {
+		t.Fatalf("valid create interfaceNames must pass: %v", err)
+	}
+	if !reflect.DeepEqual(create.InterfaceNames, []string{"N11"}) {
+		t.Errorf("create interfaceNames must be normalized in place: %#v", create.InterfaceNames)
+	}
+
+	unknown := &CreateEdgeRequest{
+		RelationshipType: RelationshipDependsOn,
+		FromResourceID:   from,
+		ToResourceID:     to,
+		InterfaceNames:   []string{"N99"},
+	}
+	if err := ValidateCreateRequest(unknown); !errors.Is(err, ErrInvalidInterfaceName) {
+		t.Errorf("unknown create interface name must return ErrInvalidInterfaceName, got %v", err)
+	}
+
+	names := []string{" N11 ", "N11"}
+	update := &UpdateEdgeRequest{ExpectedRevision: 1, Edge: MutableEdge{InterfaceNames: &names}}
+	if err := ValidateUpdateRequest(update); err != nil {
+		t.Fatalf("valid update interfaceNames must pass: %v", err)
+	}
+	if update.Edge.InterfaceNames == nil || !reflect.DeepEqual(*update.Edge.InterfaceNames, []string{"N11"}) {
+		t.Errorf("update interfaceNames must be normalized: %#v", update.Edge.InterfaceNames)
+	}
+
+	preserve := &UpdateEdgeRequest{ExpectedRevision: 1}
+	if err := ValidateUpdateRequest(preserve); err != nil {
+		t.Fatalf("omitted update interfaceNames must be accepted: %v", err)
+	}
+	if preserve.Edge.InterfaceNames != nil {
+		t.Errorf("omitted update interfaceNames must remain nil so the stored value is preserved")
+	}
+
+	tooMany := []string{"N4", "N7", "N8", "N9", "N10", "N11", "N12", "N13", "N14"}
+	invalidUpdate := &UpdateEdgeRequest{ExpectedRevision: 1, Edge: MutableEdge{InterfaceNames: &tooMany}}
+	if err := ValidateUpdateRequest(invalidUpdate); !errors.Is(err, ErrInvalidInterfaceName) {
+		t.Errorf("too many update interface names must return ErrInvalidInterfaceName, got %v", err)
 	}
 }
 

@@ -18,6 +18,7 @@ var (
 var (
 	ErrInvalidRelationshipType = errors.New("INVALID_RELATIONSHIP_TYPE")
 	ErrInvalidResourceID       = errors.New("INVALID_RESOURCE_ID")
+	ErrInvalidInterfaceName    = errors.New("INVALID_INTERFACE_NAME")
 	ErrSelfEdge                = errors.New("TOPOLOGY_SELF_EDGE")
 	ErrInvalidMetadata         = errors.New("VALIDATION_FAILED")
 )
@@ -239,6 +240,11 @@ func ValidateCreateRequest(req *CreateEdgeRequest) error {
 	if req.FromResourceID == req.ToResourceID {
 		return fmt.Errorf("%w: fromResourceId and toResourceId must differ", ErrSelfEdge)
 	}
+	interfaceNames, err := ValidateInterfaceNames(req.InterfaceNames)
+	if err != nil {
+		return err
+	}
+	req.InterfaceNames = interfaceNames
 	return ValidateMetadata(req.Description, req.Labels, req.Attributes)
 }
 
@@ -247,6 +253,13 @@ func ValidateCreateRequest(req *CreateEdgeRequest) error {
 func ValidateUpdateRequest(req *UpdateEdgeRequest) error {
 	if req.ExpectedRevision <= 0 {
 		return errors.New("expectedRevision must be a positive integer")
+	}
+	if req.Edge.InterfaceNames != nil {
+		interfaceNames, err := ValidateInterfaceNames(*req.Edge.InterfaceNames)
+		if err != nil {
+			return err
+		}
+		req.Edge.InterfaceNames = &interfaceNames
 	}
 	return ValidateMetadata(req.Edge.Description, req.Edge.Labels, req.Edge.Attributes)
 }

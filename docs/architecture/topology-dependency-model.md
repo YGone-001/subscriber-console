@@ -79,6 +79,7 @@ Schema version `1`:
   "description": "SMF depends on PCF",
   "labels": {},
   "attributes": {},
+  "interfaceNames": ["N7"],
   "lifecycleState": "active",
   "source": {
     "kind": "manual",
@@ -99,7 +100,7 @@ MongoDB `_id`.
 Immutable: `edgeId`, `schemaVersion`, `relationshipType`, `fromResourceId`,
 `toResourceId`, `source`, `createdAt`, `createdBy`.
 
-Mutable: `description`, `labels`, `attributes`.
+Mutable: `description`, `labels`, `attributes`, `interfaceNames`.
 
 `source` is server-owned provenance. It is never accepted from a client request.
 
@@ -117,6 +118,48 @@ Created by the production index authority `scripts/init-mongo-indexes.mjs`:
 The partial unique index is not sparse. There is no test-only index schema: the
 production initializer is the sole authority and the integration suite asserts
 the resulting indexes.
+
+### 2.3 Controlled interface names
+
+`interfaceNames` is an optional array on every edge. It records a declared
+3GPP interface segment; it does not prove live connectivity.
+
+```text
+maximum 8 names per edge
+trim and deduplicate before storage
+exact, case-sensitive membership in the server catalog
+empty array = unannotated
+legacy document without the field = []
+unknown name = HTTP 400 INVALID_INTERFACE_NAME
+never inferred from relationshipType or endpoint roles
+```
+
+The catalog lives in `backend/internal/topology/catalog.go` and is returned by
+`GET /api/topology/meta` together with `catalogVersion`. V1 contains 46
+`nf_nf` entries: 20 5GC reference points, 9 5GC SBI services, 12 EPC reference
+points and 5 IMS reference points. External interfaces, including `Gm`, are not
+part of the v1 catalog or the edge form.
+
+Role tokens in the catalog use the compact values stored in Inventory, for
+example `sgwc`, `sgwu`, `pgwc`, `pgwu`, `pcscf`, `icscf` and `scscf`. Display
+labels use the standard 3GPP hyphenated forms (`SGW-C`, `SGW-U`, `PGW-C`,
+`PGW-U`, `P-CSCF`, `I-CSCF`, `S-CSCF`, `SMSC`); matching and storage use the
+compact Inventory token. 5GC NFs such as `AMF`, `SMF`, `UPF` and `PCF` remain
+unhyphenated.
+
+Endpoint compatibility is advisory in v1. The catalog `endpoints` and
+`producerRole` fields populate form suggestions; they are not hard validation.
+DRA and SCP are proxy nodes, not logical endpoints: an interface name on an edge
+through a proxy describes the logical segment and must not be presented as a
+direct logical link. Shared HSS, PCRF and OCS resources may participate in more
+than one domain, so catalog domains are suggestions rather than constraints.
+
+Old edges without interface names are shown as unannotated. They are never
+backfilled and no name is guessed from the endpoints.
+
+Update semantics: omitting `interfaceNames` preserves the stored value for
+backward compatibility; an explicit empty array clears it; a non-empty array
+replaces it after catalog validation.
 
 ## 3. Relationship Taxonomy
 
@@ -194,6 +237,9 @@ On edge creation:
 - Neither endpoint may be retired.
 - Self-referential edges are rejected.
 - The relationship type must be canonical.
+- Every supplied interface name must be an exact member of the controlled
+  catalog, with at most eight names after trimming and deduplication.
+- Catalog endpoint compatibility is advisory only; it is not a hard rejection.
 
 Topology reuses a narrow, read-only Inventory resolver and never duplicates
 Inventory validation or persistence ownership.
@@ -243,10 +289,22 @@ The backend remains the final authorization authority. Go registration count is
 schemaVersion
 relationshipTypes
 lifecycleStates
+catalogVersion
+interfaceCategories
+interfaceScopes
+interfacePlanes
+interfaceCatalog
 ```
 
+`interfaceCatalog` is the controlled v1 vocabulary. `interfaceScopes` includes
+`nf_nf` and the reserved `external` value, but v1 contains no external entries.
 The frontend never maintains a competing hardcoded taxonomy; it consumes this
 endpoint.
+
+Every catalog entry carries `name`, `category`, `domains`, `plane`, `scope`,
+`spec` and `description`; reference points may carry suggested `endpoints`, and
+SBI entries carry a `producerRole` instead of fixed endpoints. Entries without
+fixed endpoints (`Ro`) and SBI entries omit `endpoints`.
 
 ### 6.2 List contract
 
@@ -297,13 +355,18 @@ impact analysis, no shortest path and no automated blast-radius analysis.
 ### 6.4 Mutations
 
 Create accepts `relationshipType`, `fromResourceId`, `toResourceId` and the
-optional `description`, `labels`, `attributes`. Every other field - including
-server-owned identity and provenance - is rejected. Success returns `HTTP 201`
-with `revision = 1` and `lifecycleState = active`.
+optional `description`, `labels`, `attributes`, `interfaceNames`. Every other
+field - including server-owned identity and provenance - is rejected. Success
+returns `HTTP 201` with `revision = 1` and `lifecycleState = active`.
 
 Update accepts `expectedRevision` and a nested `edge` object containing only
-`description`, `labels`, `attributes`. Empty metadata replacement is supported.
-Relationship identity is immutable and cannot be supplied.
+`description`, `labels`, `attributes`, `interfaceNames`. Empty metadata
+replacement is supported. Omitting `interfaceNames` preserves the stored value;
+an explicit empty array clears it. Relationship identity is immutable and cannot
+be supplied.
+
+Unknown interface names return `HTTP 400` with code `INVALID_INTERFACE_NAME` on
+both create and update.
 
 Retirement accepts `expectedRevision` and a bounded, trimmed, non-empty `reason`.
 
