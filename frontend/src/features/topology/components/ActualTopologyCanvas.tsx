@@ -7,9 +7,9 @@ import { useMemo } from 'react';
 import { useI18n } from '../../../providers/I18nProvider';
 import { RELATIONSHIP_PRESENTATION } from '../topology-types';
 import {
+  ACTUAL_BAND_HEADER_HEIGHT,
   ACTUAL_CANVAS_PADDING,
   ACTUAL_GROUP_LABEL_KEYS,
-  ACTUAL_GROUP_WIDTH,
   ACTUAL_NODE_HEIGHT,
   ACTUAL_NODE_WIDTH,
   nodeMatches,
@@ -110,23 +110,43 @@ export function ActualTopologyCanvas({
         </marker>
       </defs>
 
-      {layout.groups.map((group, index) => (
-        <g key={group} aria-hidden="true">
+      {layout.bands.map((band) => (
+        <g key={`${band.kind}-${band.domain ?? 'none'}`} aria-hidden="true">
           <text
-            x={ACTUAL_CANVAS_PADDING + index * ACTUAL_GROUP_WIDTH + 16}
+            x={band.x + 16}
             y={ACTUAL_CANVAS_PADDING + 16}
-            className={styles.actualGroupLabel}
-            data-group-label={group}
+            className={styles.actualBandLabel}
+            data-band={band.kind}
+            data-band-domain={band.domain}
           >
-            {t(ACTUAL_GROUP_LABEL_KEYS[group])}
+            {t(band.labelKey)}
           </text>
           <line
-            x1={ACTUAL_CANVAS_PADDING + index * ACTUAL_GROUP_WIDTH + 16}
-            x2={ACTUAL_CANVAS_PADDING + (index + 1) * ACTUAL_GROUP_WIDTH - 16}
+            x1={band.x + 16}
+            x2={band.x + band.width - 16}
             y1={ACTUAL_CANVAS_PADDING + 24}
             y2={ACTUAL_CANVAS_PADDING + 24}
-            className={styles.actualGroupRule}
+            className={styles.actualBandRule}
           />
+          {band.kind === 'support' ? null : band.columns.map((column) => (
+            <g key={`${band.kind}-${band.domain ?? 'none'}-${column.group}`}>
+              <text
+                x={column.x + 16}
+                y={ACTUAL_CANVAS_PADDING + ACTUAL_BAND_HEADER_HEIGHT + 16}
+                className={styles.actualGroupLabel}
+                data-group-label={column.group}
+              >
+                {t(ACTUAL_GROUP_LABEL_KEYS[column.group])}
+              </text>
+              <line
+                x1={column.x + 16}
+                x2={column.x + column.width - 16}
+                y1={ACTUAL_CANVAS_PADDING + ACTUAL_BAND_HEADER_HEIGHT + 24}
+                y2={ACTUAL_CANVAS_PADDING + ACTUAL_BAND_HEADER_HEIGHT + 24}
+                className={styles.actualGroupRule}
+              />
+            </g>
+          ))}
         </g>
       ))}
 
@@ -161,8 +181,11 @@ export function ActualTopologyCanvas({
         const healthLabel = nodeHealth ? t(nodeHealthLabelKey(nodeHealth.state)) : '';
         const meta = [
           domainLabel(node.domain) || t('unknown'),
+          node.boundary ? t('topology_actual_boundary_label') : '',
+          node.proxy ? t('topology_actual_proxy_label') : '',
           node.resourceClass === 'support' ? t('topology_support_resource') : '',
           node.resourceClass === 'unresolved' ? t('topology_unresolved_resource') : '',
+          node.resourceClass === 'nf' && node.domainBand === 'unclassified' ? t('topology_domain_unclassified') : '',
           node.resolved && node.lifecycleState && node.lifecycleState !== 'active' ? node.lifecycleState.toUpperCase() : '',
         ]
           .filter(Boolean)
@@ -175,11 +198,14 @@ export function ActualTopologyCanvas({
             tabIndex={0}
             data-resource-id={node.resourceId}
             data-resource-class={node.resourceClass}
+            data-node-band={node.band}
+            data-boundary={node.boundary ? 'true' : undefined}
+            data-proxy={node.proxy ? 'true' : undefined}
             data-group={node.group}
             data-health-state={nodeHealth?.state}
             aria-label={`${role}: ${name}, ${meta}${healthSuffix}`}
             aria-pressed={selected}
-            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${selected ? styles.actualNodeSelected : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
+            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${node.boundary ? styles.actualNodeBoundary : ''} ${node.proxy ? styles.actualNodeProxy : ''} ${selected ? styles.actualNodeSelected : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
             onClick={() => onSelectResource(node.resourceId)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {

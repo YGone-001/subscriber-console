@@ -9,6 +9,11 @@
 import type { ResourceProjection } from './topology-types';
 
 export type TopologyResourceClass = 'nf' | 'support' | 'unresolved';
+export type TopologyDomain = '5gc' | 'epc' | 'ims' | 'charging' | 'unclassified';
+export type KnownTopologyDomain = Exclude<TopologyDomain, 'unclassified'>;
+export type TopologyDomainMode = 'all' | KnownTopologyDomain | 'cross-domain';
+
+export const KNOWN_TOPOLOGY_DOMAINS: readonly KnownTopologyDomain[] = ['5gc', 'epc', 'ims', 'charging'];
 
 const NF_KINDS = new Set(['network_function', 'network_function_instance']);
 
@@ -47,6 +52,21 @@ export function normalizeRoleToken(role: string | undefined): string {
 export function classifyResource(resource: ResourceProjection): TopologyResourceClass {
   if (!resource.kind) return 'unresolved';
   return NF_KINDS.has(resource.kind) ? 'nf' : 'support';
+}
+
+export function topologyDomain(domain: string | undefined): TopologyDomain {
+  return KNOWN_TOPOLOGY_DOMAINS.includes(domain as KnownTopologyDomain)
+    ? domain as KnownTopologyDomain
+    : 'unclassified';
+}
+
+export function isKnownDomainMode(mode: TopologyDomainMode): mode is KnownTopologyDomain {
+  return mode !== 'all' && mode !== 'cross-domain';
+}
+
+export function isProxyRole(role: string | undefined): boolean {
+  const token = normalizeRoleToken(role);
+  return token === 'dra' || token === 'scp';
 }
 
 export function nfRoleLabel(role: string | undefined): string {

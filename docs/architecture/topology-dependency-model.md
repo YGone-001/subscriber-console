@@ -625,6 +625,53 @@ The IMS column groups `icscf`, `pcscf`, `scscf` and `smsc`; the support column
 groups every support resource. Grouping uses the stored compact role tokens,
 while node labels use the standard 3GPP forms (`SGW-C`, `P-CSCF`, ...).
 
+### 9.7 Domain views, boundaries and proxies
+
+The declared topology view supports six domain modes:
+
+```text
+all domains
+5gc
+epc
+ims
+charging
+cross-domain
+```
+
+In all-domain mode, nodes are arranged in domain bands (`5gc`, `epc`, `ims`,
+`charging`), with role columns inside each band. Unknown or non-network domains
+are placed in an `unclassified` band; support resources, when shown, occupy a
+separate support band. Role columns are presentation only and never change
+domain membership.
+
+In a single-domain mode, the selected domain is scoped to its own network
+functions. An NF in another domain becomes a **boundary node** only when it has
+a direct declared relationship with an NF in the selected domain:
+
+```text
+boundary nodes are shown by default
+boundary nodes are counted separately
+the boundary toggle hides them and reports the hidden node and relationship counts
+cross-domain relationship counts are always shown
+an unknown-domain boundary keeps its unclassified marker instead of being guessed
+unresolved endpoints connected to the selected domain remain visible diagnostics
+```
+
+Boundary relationships are the direct declared edges only. The view never walks
+through a boundary node to synthesize a second-domain edge. Support resources
+remain auxiliary: they are hidden by default, can be shown with the support
+toggle, and never count as boundary nodes or network functions.
+
+Cross-domain mode shows only edges whose two endpoints are network functions in
+two different known domains (`5gc`, `epc`, `ims`, `charging`). Same-domain edges,
+support edges and unresolved endpoints are excluded. The domain bands still show
+which domain each endpoint belongs to.
+
+DRA and SCP are proxy nodes, not logical interface endpoints. They are rendered
+with a low-emphasis proxy treatment and their detail states
+`via DRA` / `via SCP`. Two declared edges through a proxy remain two edges; they
+are never collapsed into a synthetic direct link.
+
 ## 10. Explicit Exclusions
 
 This capability does **not** introduce:

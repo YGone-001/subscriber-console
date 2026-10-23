@@ -35,7 +35,12 @@ import {
 } from '../src/features/topology/topology-types';
 import { en } from '../src/lib/locales/en';
 import { zh } from '../src/lib/locales/zh';
-import { buildActualTopology, groupForResource, nodeMatches } from '../src/features/topology/actual-topology-model';
+import {
+  ACTUAL_DOMAIN_MODE_OPTIONS,
+  buildActualTopology,
+  groupForResource,
+  nodeMatches,
+} from '../src/features/topology/actual-topology-model';
 import {
   classifyResource,
   nfRoleLabel,
@@ -102,6 +107,15 @@ function supportProjection(
   role = '',
 ): ResourceProjection {
   return { resourceId, kind, name, displayName: name, domain: 'platform', role, lifecycleState: 'active' };
+}
+
+function domainProjection(
+  resourceId: string,
+  name: string,
+  role: string,
+  domain: string,
+): ResourceProjection {
+  return { resourceId, kind: 'network_function', name, displayName: name, domain, role, lifecycleState: 'active' };
 }
 
 function edge(overrides: Partial<TopologyEdge> = {}): TopologyEdge {
@@ -523,6 +537,190 @@ test('support resources render with a distinct class, group and label when shown
   assert.ok(markup.includes('actualNodeSupport'), 'support nodes must carry a distinct visual state');
 });
 
+test('domain views scope relationships and keep shared nodes as boundaries', () => {
+  const amf = domainProjection('a0000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc');
+  const smf = domainProjection('a0000002-1111-4111-8111-000000000002', 'smf-01', 'smf', '5gc');
+  const pcf = domainProjection('a0000003-1111-4111-8111-000000000003', 'pcf-01', 'pcf', '5gc');
+  const host = supportProjection('a0000004-1111-4111-8111-000000000004', 'host-01', 'host');
+  const mme = domainProjection('a0000005-1111-4111-8111-000000000005', 'mme-01', 'mme', 'epc');
+  const hss = domainProjection('a0000006-1111-4111-8111-000000000006', 'hss-01', 'hss', 'epc');
+  const pcrf = domainProjection('a0000007-1111-4111-8111-000000000007', 'pcrf-01', 'pcrf', 'epc');
+  const dra = domainProjection('a0000008-1111-4111-8111-000000000008', 'dra-01', 'dra', 'epc');
+  const pcscf = domainProjection('a0000009-1111-4111-8111-000000000009', 'pcscf-01', 'pcscf', 'ims');
+  const icscf = domainProjection('a000000a-1111-4111-8111-00000000000a', 'icscf-01', 'icscf', 'ims');
+  const scscf = domainProjection('a000000b-1111-4111-8111-00000000000b', 'scscf-01', 'scscf', 'ims');
+  const ocs = domainProjection('a000000c-1111-4111-8111-00000000000c', 'ocs-01', 'ocs', 'charging');
+  const domainDirectory: Record<string, ResourceProjection> = {
+    [amf.resourceId]: amf,
+    [smf.resourceId]: smf,
+    [pcf.resourceId]: pcf,
+    [host.resourceId]: host,
+    [mme.resourceId]: mme,
+    [hss.resourceId]: hss,
+    [pcrf.resourceId]: pcrf,
+    [dra.resourceId]: dra,
+    [pcscf.resourceId]: pcscf,
+    [icscf.resourceId]: icscf,
+    [scscf.resourceId]: scscf,
+    [ocs.resourceId]: ocs,
+  };
+  const domainEdges = [
+    edge({ edgeId: 'domain-1', fromResourceId: amf.resourceId, toResourceId: smf.resourceId }),
+    edge({ edgeId: 'domain-2', fromResourceId: smf.resourceId, toResourceId: pcf.resourceId }),
+    edge({ edgeId: 'domain-3', fromResourceId: amf.resourceId, toResourceId: mme.resourceId }),
+    edge({ edgeId: 'domain-4', fromResourceId: mme.resourceId, toResourceId: hss.resourceId }),
+    edge({ edgeId: 'domain-5', fromResourceId: hss.resourceId, toResourceId: icscf.resourceId }),
+    edge({ edgeId: 'domain-6', fromResourceId: pcscf.resourceId, toResourceId: pcrf.resourceId }),
+    edge({ edgeId: 'domain-7', fromResourceId: pcrf.resourceId, toResourceId: ocs.resourceId }),
+    edge({ edgeId: 'domain-8', fromResourceId: icscf.resourceId, toResourceId: scscf.resourceId }),
+    edge({ edgeId: 'domain-9', fromResourceId: mme.resourceId, toResourceId: dra.resourceId }),
+    edge({ edgeId: 'domain-10', fromResourceId: smf.resourceId, toResourceId: host.resourceId }),
+  ];
+
+  const all = buildActualTopology(domainEdges, domainDirectory);
+  assert.equal(all.activeLinkCount, 10);
+  assert.equal(all.crossDomainLinkCount, 4, 'N26, Cx, Rx and Sy are cross-domain');
+  assert.equal(all.proxyNodeCount, 1, 'DRA is a proxy node');
+  assert.equal(all.supportResourceCount, 1);
+  assert.equal(all.supportLinkCount, 1);
+  assert.deepEqual(
+    all.bands.filter((band) => band.kind === 'domain').map((band) => band.domain),
+    ['5gc', 'epc', 'ims', 'charging'],
+  );
+  assert.ok(all.bands.find((band) => band.domain === 'epc')?.columns.some((column) => column.group === 'access'));
+  assert.ok(all.bands.find((band) => band.domain === 'ims')?.columns.some((column) => column.group === 'ims'));
+  const draNode = all.nodes.find((node) => node.resourceId === dra.resourceId);
+  assert.equal(draNode?.proxy, true);
+  assert.equal(draNode?.band, 'domain');
+
+  const ims = buildActualTopology(domainEdges, domainDirectory, { domainMode: 'ims' });
+  assert.equal(ims.selectedDomain, 'ims');
+  assert.equal(ims.scopedLinkCount, 3);
+  assert.equal(ims.nodes.length, 5);
+  assert.equal(ims.links.length, 3);
+  assert.equal(ims.boundaryNodeCount, 2, 'HSS and PCRF are shared boundary nodes');
+  assert.equal(ims.boundaryLinkCount, 2);
+  assert.equal(ims.crossDomainLinkCount, 2);
+  assert.deepEqual(
+    ims.nodes.filter((node) => node.boundary).map((node) => node.resourceId).sort(),
+    [hss.resourceId, pcrf.resourceId].sort(),
+  );
+  assert.equal(ims.bands.find((band) => band.kind === 'boundary')?.labelKey, 'topology_domain_boundary');
+  const imsMarkup = render(createElement(ActualTopologyCanvas, {
+    layout: ims,
+    search: '',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  assert.ok(imsMarkup.includes('data-boundary="true"'), 'boundary nodes must be explicit');
+  assert.ok(imsMarkup.includes('Boundary'), 'the boundary band must be labelled');
+
+  const imsHidden = buildActualTopology(domainEdges, domainDirectory, {
+    domainMode: 'ims',
+    showBoundary: false,
+  });
+  assert.equal(imsHidden.nodes.length, 3);
+  assert.equal(imsHidden.links.length, 1);
+  assert.equal(imsHidden.hiddenBoundaryNodeCount, 2);
+  assert.equal(imsHidden.hiddenBoundaryLinkCount, 2);
+  assert.equal(imsHidden.crossDomainLinkCount, 2);
+
+  const fiveGc = buildActualTopology(domainEdges, domainDirectory, {
+    domainMode: '5gc',
+    showSupport: true,
+  });
+  assert.equal(fiveGc.supportResourceCount, 1);
+  assert.ok(fiveGc.bands.some((band) => band.kind === 'support'));
+  assert.equal(fiveGc.boundaryNodeCount, 1);
+  assert.equal(fiveGc.crossDomainLinkCount, 1);
+  assert.equal(fiveGc.nodes.length, 5);
+
+  const crossDomain = buildActualTopology(domainEdges, domainDirectory, { domainMode: 'cross-domain' });
+  assert.equal(crossDomain.scopedLinkCount, 4);
+  assert.equal(crossDomain.crossDomainLinkCount, 4);
+  assert.equal(crossDomain.links.length, 4);
+  assert.equal(crossDomain.nodes.length, 7);
+  assert.equal(crossDomain.supportResourceCount, 0);
+  assert.equal(crossDomain.boundaryNodeCount, 0);
+  const crossPairs = crossDomain.links.map((link) => (
+    [link.fromResourceId, link.toResourceId].sort().join('|')
+  ));
+  assert.ok(!crossPairs.includes([amf.resourceId, smf.resourceId].sort().join('|')), 'same-domain edges are excluded');
+  assert.ok(crossPairs.includes([amf.resourceId, mme.resourceId].sort().join('|')), 'cross-domain edges are retained');
+});
+
+test('unknown domains are unclassified and never counted as cross-domain', () => {
+  const amf = domainProjection('b0000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc');
+  const legacy = domainProjection('b0000002-1111-4111-8111-000000000002', 'legacy-01', 'custom', 'legacy');
+  const unknownDirectory: Record<string, ResourceProjection> = {
+    [amf.resourceId]: amf,
+    [legacy.resourceId]: legacy,
+  };
+  const unknownEdge = edge({ edgeId: 'unknown-1', fromResourceId: amf.resourceId, toResourceId: legacy.resourceId });
+
+  const all = buildActualTopology([unknownEdge], unknownDirectory);
+  const legacyNode = all.nodes.find((node) => node.resourceId === legacy.resourceId);
+  assert.equal(legacyNode?.band, 'unclassified');
+  assert.equal(legacyNode?.domainBand, 'unclassified');
+  assert.ok(all.bands.some((band) => band.kind === 'unclassified'));
+  assert.equal(all.crossDomainLinkCount, 0, 'an unknown domain is not inferred as a cross-domain peer');
+
+  const fiveGc = buildActualTopology([unknownEdge], unknownDirectory, { domainMode: '5gc' });
+  const boundaryNode = fiveGc.nodes.find((node) => node.resourceId === legacy.resourceId);
+  assert.equal(boundaryNode?.boundary, true);
+  assert.equal(boundaryNode?.band, 'boundary');
+  assert.equal(fiveGc.boundaryNodeCount, 1);
+  assert.equal(fiveGc.crossDomainLinkCount, 0);
+});
+
+test('proxy nodes keep both declared edges and never create a stitched direct link', () => {
+  const amf = domainProjection('c0000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc');
+  const scp = domainProjection('c0000002-1111-4111-8111-000000000002', 'scp-01', 'scp', '5gc');
+  const smf = domainProjection('c0000003-1111-4111-8111-000000000003', 'smf-01', 'smf', '5gc');
+  const layout = buildActualTopology([
+    edge({ edgeId: 'proxy-1', fromResourceId: amf.resourceId, toResourceId: scp.resourceId }),
+    edge({ edgeId: 'proxy-2', fromResourceId: scp.resourceId, toResourceId: smf.resourceId }),
+  ], {
+    [amf.resourceId]: amf,
+    [scp.resourceId]: scp,
+    [smf.resourceId]: smf,
+  });
+  assert.equal(layout.links.length, 2);
+  assert.equal(layout.proxyNodeCount, 1);
+  assert.equal(layout.nodes.find((node) => node.resourceId === scp.resourceId)?.proxy, true);
+  const pairs = layout.links.map((link) => [link.fromResourceId, link.toResourceId].sort().join('|'));
+  assert.ok(!pairs.includes([amf.resourceId, smf.resourceId].sort().join('|')), 'two proxy edges must not collapse into a direct link');
+
+  const markup = render(createElement(ActualTopologyCanvas, {
+    layout,
+    search: '',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  assert.ok(markup.includes('data-proxy="true"'), 'a proxy node must be explicit');
+  assert.ok(markup.includes('Proxy'), 'the proxy node must carry a proxy label');
+});
+
+test('the actual view exposes domain and boundary controls', () => {
+  const source = read('../src/features/topology/ActualTopologyView.tsx');
+  assert.deepEqual(
+    ACTUAL_DOMAIN_MODE_OPTIONS.map((option) => option.value),
+    ['all', '5gc', 'epc', 'ims', 'charging', 'cross-domain'],
+  );
+  assert.ok(source.includes('data-domain-mode'));
+  assert.ok(source.includes('data-action="toggle-boundary"'));
+  assert.ok(source.includes('ACTUAL_DOMAIN_MODE_OPTIONS'));
+  assert.ok(source.includes('topology_actual_domain_empty_title'));
+  assert.ok(source.includes('topology_actual_proxy_via'));
+  assert.ok(source.includes('data-cross-domain-count'));
+  assert.ok(source.includes('data-boundary-count'));
+
+  const canvas = read('../src/features/topology/components/ActualTopologyCanvas.tsx');
+  assert.ok(canvas.includes('layout.bands.map'));
+  assert.ok(canvas.includes('data-band='));
+  assert.ok(canvas.includes('data-proxy='));
+});
+
 test('relationship labels stay hidden until a path is focused or hovered', () => {
   const layout = buildActualTopology([edge()], directory);
   const props = {
@@ -732,6 +930,10 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_actual_empty_body', 'topology_actual_unavailable_title', 'topology_actual_unavailable_body',
     'topology_actual_support_show', 'topology_actual_support_hide', 'topology_actual_hidden_support',
     'topology_actual_no_nf_title', 'topology_actual_no_nf_body', 'topology_support_resource',
+    'topology_actual_boundary_count', 'topology_actual_cross_domain_count',
+    'topology_actual_boundary_show', 'topology_actual_boundary_hide', 'topology_actual_hidden_boundary',
+    'topology_actual_domain_empty_title', 'topology_actual_domain_empty_body',
+    'topology_actual_boundary_label', 'topology_actual_proxy_label', 'topology_actual_proxy_via',
     'topology_open_ledger', 'topology_zoom_in', 'topology_zoom_out', 'topology_fit_view',
     'topology_reset_view', 'topology_fullscreen', 'topology_exit_fullscreen', 'topology_clear_focus',
     'topology_canvas_controls',
@@ -746,6 +948,14 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     assert.ok(typeof en[key] === 'string' && en[key].length > 0, `en must define ${key}`);
     assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh must define ${key}`);
     assert.notEqual(en[key], zh[key], `${key} must be localized in both languages`);
+  }
+  for (const key of [
+    'topology_domain_all', 'topology_domain_epc', 'topology_domain_5gc', 'topology_domain_ims',
+    'topology_domain_charging', 'topology_domain_cross', 'topology_domain_unclassified',
+    'topology_domain_boundary',
+  ]) {
+    assert.ok(typeof en[key] === 'string' && en[key].length > 0, `en must define ${key}`);
+    assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh must define ${key}`);
   }
   assert.ok(/[\u4e00-\u9fff]/.test(zh.topology_title), 'the Chinese title must contain Chinese characters');
   assert.match(en.topology_actual_unavailable_body, /not evidence that no relationship exists/);

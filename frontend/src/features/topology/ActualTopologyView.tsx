@@ -26,8 +26,8 @@ import { Link } from 'react-router-dom';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useBoundedEdges } from '../operations/use-bounded-edges';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
-import { buildActualTopology, nodeMatches } from './actual-topology-model';
-import { nfRoleLabel } from './nf-classification';
+import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology, nodeMatches } from './actual-topology-model';
+import { nfRoleLabel, type TopologyDomainMode } from './nf-classification';
 import { nodeHealthLabelKey, summarizeNodeHealth, type NodeHealthState } from './actual-topology-health';
 import { useResourceDirectory } from './use-resource-directory';
 import { useTopologyHealth } from './use-topology-health';
@@ -59,6 +59,8 @@ export function ActualTopologyView() {
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | undefined>();
   const [search, setSearch] = useState('');
   const [showSupport, setShowSupport] = useState(false);
+  const [showBoundary, setShowBoundary] = useState(true);
+  const [domainMode, setDomainMode] = useState<TopologyDomainMode>('all');
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -73,8 +75,8 @@ export function ActualTopologyView() {
   );
   const directory = useResourceDirectory(endpointIds);
   const layout = useMemo(
-    () => buildActualTopology(edges, directory, { showSupport }),
-    [edges, directory, showSupport],
+    () => buildActualTopology(edges, directory, { showSupport, showBoundary, domainMode }),
+    [edges, directory, showSupport, showBoundary, domainMode],
   );
   const nodeIds = useMemo(
     () => layout.nodes.filter((node) => node.resourceClass !== 'support').map((node) => node.resourceId),
@@ -88,6 +90,9 @@ export function ActualTopologyView() {
     ? layout.links.filter((link) => link.fromResourceId === selected.resourceId || link.toResourceId === selected.resourceId).length
     : 0;
   const matchedNodes = search.trim() ? layout.nodes.filter((node) => nodeMatches(node, search)) : [];
+  const domainModeLabel = t(
+    ACTUAL_DOMAIN_MODE_OPTIONS.find((option) => option.value === domainMode)?.labelKey ?? 'topology_domain_all',
+  );
   const supportToggle = layout.supportResourceCount > 0 ? (
     <button
       type="button"
@@ -110,6 +115,33 @@ export function ActualTopologyView() {
       })}
     </span>
   ) : null;
+  const boundaryToggle = layout.selectedDomain && layout.boundaryNodeCount > 0 ? (
+    <button
+      type="button"
+      className={styles.actualSupportToggle}
+      data-action="toggle-boundary"
+      aria-pressed={showBoundary}
+      onClick={() => setShowBoundary((current) => !current)}
+    >
+      {showBoundary
+        ? t('topology_actual_boundary_hide', { count: layout.boundaryNodeCount })
+        : t('topology_actual_boundary_show', { count: layout.boundaryNodeCount })}
+    </button>
+  ) : null;
+  const hiddenBoundaryNotice = !showBoundary && layout.boundaryNodeCount > 0 ? (
+    <span className={styles.actualHiddenSupport} data-hidden-boundary="true" role="status">
+      {t('topology_actual_hidden_boundary', {
+        nodes: layout.boundaryNodeCount,
+        links: layout.boundaryLinkCount,
+        cross: layout.crossDomainLinkCount,
+      })}
+    </span>
+  ) : null;
+  const domainEmptyAction = domainMode === 'all' ? supportToggle : (
+    <button type="button" className="btn btn-secondary" onClick={() => setDomainMode('all')}>
+      {t('topology_domain_all')}
+    </button>
+  );
 
   const refreshAll = useCallback(() => {
     refresh();
@@ -183,6 +215,8 @@ export function ActualTopologyView() {
     setSearch('');
     setHoveredEdgeId(undefined);
     setShowSupport(false);
+    setShowBoundary(true);
+    setDomainMode('all');
     fitView();
   };
   const toggleFullscreen = useCallback(() => {
@@ -240,27 +274,23 @@ export function ActualTopologyView() {
     );
   }
 
-  if (!loading && layout.activeLinkCount > 0 && layout.nodes.length === 0) {
-    return (
-      <section className={styles.actualSection} aria-labelledby="actual-topology-title">
-        <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
-        <EmptyState
-          icon={<Layers size={40} />}
-          title={t('topology_actual_no_nf_title')}
-          description={t('topology_actual_no_nf_body', {
-            resources: layout.supportResourceCount,
-            links: layout.supportLinkCount,
-          })}
-          action={supportToggle}
-        />
-      </section>
-    );
-  }
-
   return (
     <section className={styles.actualSection} aria-labelledby="actual-topology-title" aria-busy={loading}>
       <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
       <div className={styles.actualToolbar}>
+        <label className={styles.actualDomainFilter}>
+          <span className="sr-only">{t('topology_domain_filter')}</span>
+          <select
+            value={domainMode}
+            onChange={(event) => setDomainMode(event.target.value as TopologyDomainMode)}
+            aria-label={t('topology_domain_filter')}
+            data-domain-mode={domainMode}
+          >
+            {ACTUAL_DOMAIN_MODE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
+            ))}
+          </select>
+        </label>
         <div className={styles.actualSummary} role="status">
           <span>{t('topology_actual_node_count', { count: layout.nodes.length })}</span>
           <span>{t('topology_showing_edges', { count: layout.links.length })}</span>
@@ -270,6 +300,16 @@ export function ActualTopologyView() {
           >
             {t(`ops_completeness_${coverage}`)}
           </span>
+          {layout.selectedDomain && layout.boundaryNodeCount > 0 ? (
+            <span data-boundary-count="true">
+              {t('topology_actual_boundary_count', { count: layout.boundaryNodeCount })}
+            </span>
+          ) : null}
+          {layout.crossDomainLinkCount > 0 ? (
+            <span data-cross-domain-count="true">
+              {t('topology_actual_cross_domain_count', { count: layout.crossDomainLinkCount })}
+            </span>
+          ) : null}
           {search.trim() ? (
             <span data-search-status="true">
               {matchedNodes.length > 0
@@ -278,10 +318,12 @@ export function ActualTopologyView() {
             </span>
           ) : null}
         </div>
-        {supportToggle || hiddenSupportNotice ? (
+        {supportToggle || hiddenSupportNotice || boundaryToggle || hiddenBoundaryNotice ? (
           <div className={styles.actualSupportBar}>
             {supportToggle}
             {hiddenSupportNotice}
+            {boundaryToggle}
+            {hiddenBoundaryNotice}
           </div>
         ) : null}
         <label className={styles.actualSearch}>
@@ -406,63 +448,86 @@ export function ActualTopologyView() {
           )}
         </div>
       ) : null}
-      <div ref={canvasRef} className={styles.actualCanvasViewport}>
-        <div
-          className={styles.actualCanvasScale}
-          style={{ width: `${layout.width * zoom}px`, height: `${layout.height * zoom}px` }}
-        >
-          <ActualTopologyCanvas
-            layout={layout}
-            selectedResourceId={selectedResourceId}
-            search={search}
-            hoveredEdgeId={hoveredEdgeId}
-            health={health.coverage !== 'unavailable' && health.byResource.size > 0 ? health.byResource : undefined}
-            onSelectResource={(resourceId) => setSelectedResourceId((current) => current === resourceId ? undefined : resourceId)}
-            onHoverEdge={setHoveredEdgeId}
-          />
-        </div>
-      </div>
-      {selected ? (
-        <div className={styles.actualFocus} role="status">
-          <div>
-            <span className={styles.actualFocusEyebrow}>{t('topology_graph_root')}</span>
-            <strong>{selected.displayName || selected.name || selected.resourceId}</strong>
-            <span>
-              {selected.resourceClass === 'support'
-                ? t('topology_support_resource')
-                : selected.resourceClass === 'unresolved'
-                  ? t('topology_unresolved_resource')
-                  : (selected.role ? nfRoleLabel(selected.role) : selected.kind) || t('unknown')}
-              {' / '}
-              {selected.domain ? selected.domain.toUpperCase() : t('unknown')}
-              {' / '}
-              {t('topology_showing_edges', { count: relatedCount })}
-            </span>
-            {selectedHealth ? (
-              <span className={styles.actualFocusHealth} data-focus-health={selectedHealth.state}>
-                <i className={`${styles.actualSwatch} ${healthSwatchClass(selectedHealth.state)}`} aria-hidden="true" />
-                {t('topology_health_label')}: {t(nodeHealthLabelKey(selectedHealth.state))}
-                {selectedHealth.targetId ? (
-                  <Link
-                    className={styles.actualFocusHealthLink}
-                    to={`/nf-health/${encodeURIComponent(selectedHealth.targetId)}`}
-                  >
-                    {t('topology_health_open_target')}
-                  </Link>
-                ) : null}
-              </span>
-            ) : null}
+      {layout.nodes.length === 0 ? (
+        <EmptyState
+          icon={layout.scopedLinkCount === 0 ? <Search size={40} /> : <Layers size={40} />}
+          title={layout.scopedLinkCount === 0
+            ? t('topology_actual_domain_empty_title')
+            : t('topology_actual_no_nf_title')}
+          description={layout.scopedLinkCount === 0
+            ? t('topology_actual_domain_empty_body', { domain: domainModeLabel })
+            : t('topology_actual_no_nf_body', {
+              resources: layout.supportResourceCount,
+              links: layout.supportLinkCount,
+            })}
+          action={layout.scopedLinkCount === 0 ? domainEmptyAction : supportToggle}
+        />
+      ) : (
+        <>
+          <div ref={canvasRef} className={styles.actualCanvasViewport}>
+            <div
+              className={styles.actualCanvasScale}
+              style={{ width: `${layout.width * zoom}px`, height: `${layout.height * zoom}px` }}
+            >
+              <ActualTopologyCanvas
+                layout={layout}
+                selectedResourceId={selectedResourceId}
+                search={search}
+                hoveredEdgeId={hoveredEdgeId}
+                health={health.coverage !== 'unavailable' && health.byResource.size > 0 ? health.byResource : undefined}
+                onSelectResource={(resourceId) => setSelectedResourceId((current) => current === resourceId ? undefined : resourceId)}
+                onHoverEdge={setHoveredEdgeId}
+              />
+            </div>
           </div>
-          <div className={styles.actualFocusActions}>
-            <button type="button" className="btn btn-secondary" onClick={() => setSelectedResourceId(undefined)}>
-              {t('topology_clear_focus')}
-            </button>
-            <Link className="btn btn-secondary" to={`/topology/${encodeURIComponent(selected.resourceId)}`}>
-              <SquareArrowOutUpRight size={15} />
-              {t('topology_open_resource')}
-            </Link>          </div>
-        </div>
-      ) : null}
+          {selected ? (
+            <div className={styles.actualFocus} role="status">
+              <div>
+                <span className={styles.actualFocusEyebrow}>{t('topology_graph_root')}</span>
+                <strong>{selected.displayName || selected.name || selected.resourceId}</strong>
+                <span>
+                  {selected.resourceClass === 'support'
+                    ? t('topology_support_resource')
+                    : selected.resourceClass === 'unresolved'
+                      ? t('topology_unresolved_resource')
+                      : (selected.role ? nfRoleLabel(selected.role) : selected.kind) || t('unknown')}
+                  {' / '}
+                  {selected.domain ? selected.domain.toUpperCase() : t('unknown')}
+                  {' / '}
+                  {t('topology_showing_edges', { count: relatedCount })}
+                </span>
+                {selected.proxy ? (
+                  <span className={styles.actualProxyNote} data-proxy-note="true">
+                    {t('topology_actual_proxy_via', { proxy: nfRoleLabel(selected.role) })}
+                  </span>
+                ) : null}
+                {selectedHealth ? (
+                  <span className={styles.actualFocusHealth} data-focus-health={selectedHealth.state}>
+                    <i className={`${styles.actualSwatch} ${healthSwatchClass(selectedHealth.state)}`} aria-hidden="true" />
+                    {t('topology_health_label')}: {t(nodeHealthLabelKey(selectedHealth.state))}
+                    {selectedHealth.targetId ? (
+                      <Link
+                        className={styles.actualFocusHealthLink}
+                        to={`/nf-health/${encodeURIComponent(selectedHealth.targetId)}`}
+                      >
+                        {t('topology_health_open_target')}
+                      </Link>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
+              <div className={styles.actualFocusActions}>
+                <button type="button" className="btn btn-secondary" onClick={() => setSelectedResourceId(undefined)}>
+                  {t('topology_clear_focus')}
+                </button>
+                <Link className="btn btn-secondary" to={`/topology/${encodeURIComponent(selected.resourceId)}`}>
+                  <SquareArrowOutUpRight size={15} />
+                  {t('topology_open_resource')}
+                </Link>          </div>
+            </div>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }
