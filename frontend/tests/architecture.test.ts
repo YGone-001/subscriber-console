@@ -18,6 +18,7 @@ import { OperationsNav } from '../src/features/operations/OperationsNav';
 import { ArchitectureCanvas, placeLinkLabel } from '../src/features/topology/components/ArchitectureCanvas';
 import {
   bindingLabelKey,
+  countArchitectureTones,
   filterArchitecture,
   normalizeToken,
   resolveArchitecture,
@@ -431,6 +432,42 @@ test('the summary counts bound, unbound and observed roles separately', () => {
   assert.equal(projection.summary.unbound, 19);
   assert.equal(projection.summary.monitored, 1);
   assert.equal(projection.summary.degraded, 1);
+});
+
+test('the dynamic state count includes every visible tone and scopes to the view', () => {
+  const projection = resolveArchitecture({
+    resources: items([
+      resource({ _id: AMF, name: 'amf-01' }),
+      resource({ _id: SMF, name: 'smf-01', role: 'smf' }),
+      resource({ _id: HSS_EPC, name: 'hss-01', role: 'hss', domain: 'epc' }),
+    ], [
+      target({
+        resourceId: AMF,
+        overallState: 'stale',
+        freshness: { state: 'stale', ageSeconds: 999, policySeconds: 300, reason: 'expired' },
+      }),
+      target({
+        resourceId: SMF,
+        targetId: 'target-smf',
+        overallState: 'unknown',
+        freshness: { state: 'unknown', ageSeconds: 0, policySeconds: 300, reason: 'unmeasured' },
+      }),
+    ]),
+  });
+
+  const counts = countArchitectureTones(projection.nodes);
+  assert.equal(counts.find((entry) => entry.tone === 'stale')?.count, 1, 'stale must not be dropped');
+  assert.equal(counts.find((entry) => entry.tone === 'unknown')?.count, 1);
+  assert.equal(counts.find((entry) => entry.tone === 'unmonitored')?.count, 1);
+  assert.ok(!counts.some((entry) => entry.tone === 'healthy'), 'absent tones must not be rendered');
+  assert.deepEqual(
+    counts.map((entry) => entry.tone),
+    ['stale', 'unknown', 'unmonitored', 'unregistered'],
+    'the canonical tone order is deterministic',
+  );
+
+  const epcCounts = countArchitectureTones(filterArchitecture(projection, 'epc').nodes);
+  assert.ok(!epcCounts.some((entry) => entry.tone === 'stale'), 'a scoped view must not summarize hidden roles');
 });
 
 test('token normalization folds punctuation and case', () => {

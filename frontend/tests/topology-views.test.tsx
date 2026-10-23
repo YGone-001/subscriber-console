@@ -277,12 +277,26 @@ test('the unbound copy separates "no explicit binding" from "no resource"', () =
 
 /* -------------------------------------------------------------- legend -- */
 
-test('the legend is collapsed to one line with a dialog for the full vocabulary', () => {
+test('the legend is generated from visible states and keeps evidence persistent', () => {
   const source = read('../src/features/topology/ArchitectureView.tsx');
   assert.ok(source.includes('styles.legendCompact'), 'a compact legend line must render');
   assert.ok(source.includes('styles.legendToggle'), 'the full legend must be behind a control');
-  assert.ok(source.includes('COMPACT_TONES'), 'the compact line must be a subset');
+  assert.ok(!source.includes('COMPACT_TONES'), 'a fixed compact tone array must not hide visible states');
+  assert.ok(source.includes('countArchitectureTones'), 'the legend must be generated from visible tones');
+  assert.ok(source.includes('summarizeArchitecture(visible.nodes)'), 'the summary must be scoped to visible roles');
+  assert.ok(source.includes('data-summary-tone'), 'every present tone must get a summary chip');
+  assert.ok(source.includes('data-evidence-legend'), 'relationship evidence must stay persistently visible');
+  assert.ok(source.includes('data-action="show-hidden-roles"'), 'hidden roles must be inspectable');
+  assert.ok(source.includes('data-action="clear-view-filter"'), 'the view filter must be clearable');
+  assert.ok(source.includes('data-completeness-note'), 'partial and unavailable reads must stay visible');
+  assert.ok(source.includes('ToneMark'), 'states need a shape or border carrier next to colour');
   assert.ok(source.includes('FULL_TONES'), 'the dialog must carry the full vocabulary');
+
+  const css = read('../src/styles/modules/architecture.module.css');
+  for (const tone of ['Stale', 'Unknown', 'Ambiguous', 'Unmonitored', 'Unresolved']) {
+    assert.ok(css.includes(`.legendMark${tone}`), `${tone} must have a distinct legend shape`);
+  }
+  assert.ok(css.includes('.evidenceLineDeclared') && css.includes('.evidenceLineReference'));
 });
 
 /* -------------------------------------------------------------- viewport -- */

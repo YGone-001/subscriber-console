@@ -464,6 +464,40 @@ export function summarizeArchitecture(nodes: ArchitectureNodeView[]): Architectu
   return summary;
 }
 
+/** Canonical order for the dynamic state summary and legend. */
+export const ARCHITECTURE_TONES: readonly NodeTone[] = [
+  'healthy',
+  'degraded',
+  'unhealthy',
+  'stale',
+  'unknown',
+  'unmonitored',
+  'unresolved',
+  'ambiguous',
+  'observed',
+  'unregistered',
+];
+
+export type ArchitectureToneCount = { tone: NodeTone; count: number };
+
+/**
+ * Counts only the tones that actually occur in the supplied node set.
+ *
+ * The architecture summary and compact legend use this instead of a fixed tone
+ * array, so a visible state such as `stale` can never be dropped from the
+ * summary merely because it was not part of a hard-coded list.
+ */
+export function countArchitectureTones(nodes: ArchitectureNodeView[]): ArchitectureToneCount[] {
+  const counts = new Map<NodeTone, number>();
+  for (const node of nodes) {
+    counts.set(node.tone, (counts.get(node.tone) ?? 0) + 1);
+  }
+  return ARCHITECTURE_TONES.flatMap((tone) => {
+    const count = counts.get(tone) ?? 0;
+    return count > 0 ? [{ tone, count }] : [];
+  });
+}
+
 /** Applies the architecture view filter. Hidden roles are not faults. */
 export function filterArchitecture(
   projection: ArchitectureProjection,

@@ -34,11 +34,14 @@ import {
   type OperationsResourcesResponse,
 } from '../operations/operations-resources';
 import {
+  ARCHITECTURE_TONES,
   bindingLabelKey,
+  countArchitectureTones,
   domainLabelKey,
   filterArchitecture,
   resolveArchitecture,
   stateLabelKey,
+  summarizeArchitecture,
   type ArchitectureNodeView,
   type NodeTone,
 } from './architecture-model';
@@ -69,14 +72,15 @@ const VIEW_LABEL_KEY: Record<ArchitectureViewMode, string> = {
   '5gc-nsa': 'arch_view_5gc_nsa',
 };
 
-/* The collapsed legend keeps the states an operator actually triages on. The
- * full vocabulary lives behind the "legend" dialog. */
-const COMPACT_TONES: NodeTone[] = ['healthy', 'degraded', 'unhealthy', 'ambiguous', 'unmonitored'];
+/* The compact legend renders only tones that occur in the visible projection;
+ * the full vocabulary stays behind the "legend" dialog. */
+const FULL_TONES: NodeTone[] = [...ARCHITECTURE_TONES];
 
-const FULL_TONES: NodeTone[] = [
-  'healthy', 'degraded', 'unhealthy', 'stale', 'unknown',
-  'ambiguous', 'unmonitored', 'unresolved', 'observed', 'unregistered',
-];
+/* Binding states already have their own summary chips. Keep the state legend
+ * focused on monitoring/identity states so a tone is not counted twice. */
+const LEGEND_ONLY_TONES = new Set<NodeTone>(['ambiguous', 'observed', 'unregistered']);
+
+const INCOMPLETE_DIMENSIONS = ['inventory', 'monitoring', 'telemetry', 'topology'] as const;
 
 const DOMAINS = ['cp', 'sp', 'up', 'dm', 'legacy'] as const;
 
@@ -94,6 +98,41 @@ function toneClass(tone: string): string {
     ambiguous: styles.toneAmbiguous,
   };
   return map[tone] ?? styles.toneUnknown;
+}
+
+/* Shape and border style are a second carrier next to colour, so a state stays
+ * distinguishable without relying on hue alone. */
+function toneMarkClass(tone: NodeTone): string {
+  const map: Record<NodeTone, string> = {
+    healthy: styles.legendMarkHealthy,
+    degraded: styles.legendMarkDegraded,
+    unhealthy: styles.legendMarkUnhealthy,
+    stale: styles.legendMarkStale,
+    unknown: styles.legendMarkUnknown,
+    unmonitored: styles.legendMarkUnmonitored,
+    unresolved: styles.legendMarkUnresolved,
+    ambiguous: styles.legendMarkAmbiguous,
+    observed: styles.legendMarkObserved,
+    unregistered: styles.legendMarkUnregistered,
+  };
+  return map[tone] ?? styles.legendMarkUnknown;
+}
+
+function ToneMark({ tone }: { tone: NodeTone }) {
+  return (
+    <span
+      className={`${styles.legendMark} ${toneClass(tone)} ${toneMarkClass(tone)}`}
+      aria-hidden="true"
+    />
+  );
+}
+
+function summaryToneClass(tone: NodeTone): string | undefined {
+  if (tone === 'unhealthy') return styles.summaryDanger;
+  if (tone === 'degraded' || tone === 'stale' || tone === 'ambiguous' || tone === 'observed') {
+    return styles.summaryWarn;
+  }
+  return undefined;
 }
 
 function domainClass(domain: string): string {
@@ -187,7 +226,15 @@ export function ArchitectureView({
 
   const loading = resourcesRead.isLoading && items.length === 0;
   const failed = Boolean(resourcesRead.error);
-  const summary = projection.summary;
+  const visibleSummary = useMemo(() => summarizeArchitecture(visible.nodes), [visible.nodes]);
+  const toneCounts = useMemo(() => countArchitectureTones(visible.nodes), [visible.nodes]);
+  const stateTones = useMemo(
+    () => toneCounts.filter(({ tone }) => !LEGEND_ONLY_TONES.has(tone)),
+    [toneCounts],
+  );
+  const incompleteSources = INCOMPLETE_DIMENSIONS.filter(
+    (dimension) => completeness[dimension] !== 'complete',
+  );
 
   const scrollToOrigin = useCallback(() => {
     const viewport = canvasRef.current;
@@ -238,6 +285,11 @@ export function ArchitectureView({
   const resetView = () => {
     autoFitRef.current = false;
     setZoom(1);
+    setSelectedRole(undefined);
+    scrollToOrigin();
+  };
+  const revealAllRoles = () => {
+    setView('all');
     setSelectedRole(undefined);
     scrollToOrigin();
   };
@@ -338,35 +390,72 @@ export function ArchitectureView({
 
           <div className={styles.toolbar}>
             <div className={styles.summaryStrip} role="list">
-              <span role="listitem"><strong>{summary.bound}</strong> {t('arch_summary_bound')}</span>
-              <span role="listitem"><strong>{summary.unbound}</strong> {t('arch_summary_unbound')}</span>
-              <span role="listitem" className={summary.ambiguous > 0 ? styles.summaryWarn : undefined}>
-                <strong>{summary.ambiguous}</strong> {t('arch_binding_ambiguous')}
-              </span>
-              <span role="listitem" className={summary.observedUnmanaged > 0 ? styles.summaryWarn : undefined}>
-                <strong>{summary.observedUnmanaged}</strong> {t('arch_summary_observed')}
-              </span>
-              <span role="listitem"><strong>{summary.monitored}</strong> {t('arch_summary_monitored')}</span>
-              <span role="listitem" className={summary.degraded > 0 ? styles.summaryWarn : undefined}>
-                <strong>{summary.degraded}</strong> {t('arch_summary_degraded')}
-              </span>
-              <span role="listitem" className={summary.unhealthy > 0 ? styles.summaryDanger : undefined}>
-                <strong>{summary.unhealthy}</strong> {t('arch_summary_unhealthy')}
-              </span>
+              <span role="listitem"><strong>{visibleSummary.bound}</strong> {t('arch_summary_bound')}</span>
+              <span role="listitem"><strong>{visibleSummary.unbound}</strong> {t('arch_summary_unbound')}</span>
+              {visibleSummary.ambiguous > 0 ? (
+                <span role="listitem" className={styles.summaryWarn} data-summary-binding="ambiguous">
+                  <strong>{visibleSummary.ambiguous}</strong> {t('arch_binding_ambiguous')}
+                </span>
+              ) : null}
+              {visibleSummary.observedUnmanaged > 0 ? (
+                <span role="listitem" className={styles.summaryWarn} data-summary-binding="observed">
+                  <strong>{visibleSummary.observedUnmanaged}</strong> {t('arch_summary_observed')}
+                </span>
+              ) : null}
+              {visibleSummary.monitored > 0 ? (
+                <span role="listitem" data-summary-monitored={visibleSummary.monitored}>
+                  <strong>{visibleSummary.monitored}</strong> {t('arch_summary_monitored')}
+                </span>
+              ) : null}
+              {stateTones.map(({ tone, count }) => (
+                <span
+                  key={tone}
+                  role="listitem"
+                  className={summaryToneClass(tone)}
+                  data-summary-tone={tone}
+                >
+                  <ToneMark tone={tone} />
+                  {t(stateLabelKey(tone))} <strong>{count}</strong>
+                </span>
+              ))}
             </div>
-            <span className={`${styles.completeness} ${completeness.overall === 'complete' ? styles.toneHealthy : completeness.overall === 'unavailable' ? styles.toneUnhealthy : styles.toneStale}`}>
+            <span
+              className={`${styles.completeness} ${completeness.overall === 'complete' ? styles.toneHealthy : completeness.overall === 'unavailable' ? styles.toneUnhealthy : styles.toneStale}`}
+              data-completeness={completeness.overall}
+              role="status"
+            >
               {t(`ops_completeness_${completeness.overall}`)}
             </span>
           </div>
 
           <div className={styles.legendCompact}>
-            <span className={styles.legendCompactGroup}>
-              {COMPACT_TONES.map((tone) => (
-                <span key={tone} className={styles.legendItem}>
-                  <span className={`${styles.legendDot} ${toneClass(tone)}`} aria-hidden="true" />
-                  {t(stateLabelKey(tone))}
+            <span
+              className={styles.legendCompactGroup}
+              role="group"
+              aria-label={t('arch_legend_states')}
+              data-state-legend="true"
+            >
+              {toneCounts.map(({ tone, count }) => (
+                <span key={tone} className={styles.legendItem} data-legend-tone={tone}>
+                  <ToneMark tone={tone} />
+                  {t(stateLabelKey(tone))} <span className={styles.legendCount}>{count}</span>
                 </span>
               ))}
+            </span>
+            <span
+              className={styles.legendCompactGroup}
+              role="group"
+              aria-label={t('arch_evidence_label')}
+              data-evidence-legend="true"
+            >
+              <span className={styles.legendItem}>
+                <i className={`${styles.evidenceLine} ${styles.evidenceLineDeclared}`} aria-hidden="true" />
+                {t('arch_evidence_declared')}
+              </span>
+              <span className={styles.legendItem}>
+                <i className={`${styles.evidenceLine} ${styles.evidenceLineReference}`} aria-hidden="true" />
+                {t('arch_evidence_reference')}
+              </span>
             </span>
             <button type="button" className={styles.legendToggle} onClick={() => setLegendOpen(true)}>
               {t('arch_legend_toggle')}
@@ -381,8 +470,43 @@ export function ArchitectureView({
             </button>
           </div>
 
+          {completeness.overall !== 'complete' ? (
+            <p
+              className={styles.completenessNote}
+              data-completeness-note={completeness.overall}
+              role="status"
+            >
+              {t('arch_completeness_note', {
+                sources: incompleteSources
+                  .map((dimension) => `${t(`arch_dimension_${dimension}`)} ${t(`ops_completeness_${completeness[dimension]}`)}`)
+                  .join(' · '),
+              })}
+            </p>
+          ) : null}
+
           {visible.hiddenCount > 0 ? (
-            <p className={styles.hiddenNote}>{t('arch_hidden_note', { count: visible.hiddenCount })}</p>
+            <div className={styles.hiddenNote} data-hidden-roles={visible.hiddenCount}>
+              <span>{t('arch_hidden_note', { count: visible.hiddenCount })}</span>
+              <button
+                type="button"
+                className={styles.legendToggle}
+                data-action="show-hidden-roles"
+                onClick={() => {
+                  revealAllRoles();
+                  setListOpen(true);
+                }}
+              >
+                {t('arch_hidden_show')}
+              </button>
+              <button
+                type="button"
+                className={styles.legendToggle}
+                data-action="clear-view-filter"
+                onClick={revealAllRoles}
+              >
+                {t('arch_hidden_clear')}
+              </button>
+            </div>
           ) : null}
 
           <div
@@ -481,10 +605,23 @@ export function ArchitectureView({
             <div className={styles.legendDialogGroup}>
               {FULL_TONES.map((tone) => (
                 <span key={tone} className={styles.legendItem}>
-                  <span className={`${styles.legendDot} ${toneClass(tone)}`} aria-hidden="true" />
+                  <ToneMark tone={tone} />
                   {t(stateLabelKey(tone))}
                 </span>
               ))}
+            </div>
+          </section>
+          <section className={styles.drawerSection}>
+            <h3 className={styles.drawerSectionTitle}>{t('arch_evidence_label')}</h3>
+            <div className={styles.legendDialogGroup}>
+              <span className={styles.legendItem}>
+                <i className={`${styles.evidenceLine} ${styles.evidenceLineDeclared}`} aria-hidden="true" />
+                {t('arch_evidence_declared')}
+              </span>
+              <span className={styles.legendItem}>
+                <i className={`${styles.evidenceLine} ${styles.evidenceLineReference}`} aria-hidden="true" />
+                {t('arch_evidence_reference')}
+              </span>
             </div>
           </section>
           <p className={styles.viewNote}>{t('arch_note')}</p>

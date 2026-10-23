@@ -140,6 +140,12 @@
   color: var(--text-primary, inherit);
 }
 
+.summaryStrip > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
 .summaryWarn strong {
   color: var(--sys-color-status-warning);
 }
@@ -182,11 +188,91 @@
   background: var(--domain);
 }
 
-.legendDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+.legendMark {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--tone);
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.legendMarkHealthy {
   background: var(--tone);
+  border-radius: 50%;
+}
+
+.legendMarkDegraded {
+  width: 11px;
+  height: 10px;
+  border: 0;
+  background: var(--tone);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.legendMarkUnhealthy {
+  border-radius: 1px;
+  background: var(--tone);
+}
+
+.legendMarkStale {
+  border-radius: 50%;
+  border-style: dashed;
+}
+
+.legendMarkUnknown {
+  border-radius: 50%;
+  border-style: dotted;
+}
+
+.legendMarkUnmonitored {
+  border-radius: 1px;
+  border-style: dashed;
+}
+
+.legendMarkUnresolved {
+  width: 9px;
+  height: 9px;
+  margin: 0 1px;
+  border-style: dotted;
+  transform: rotate(45deg);
+}
+
+.legendMarkAmbiguous {
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--tone) 50%, transparent 50%);
+}
+
+.legendMarkObserved {
+  border-radius: 50%;
+  border-width: 3px;
+}
+
+.legendMarkUnregistered {
+  width: 9px;
+  height: 9px;
+  margin: 0 1px;
+  transform: rotate(45deg);
+}
+
+.legendCount {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary, inherit);
+}
+
+.evidenceLine {
+  display: inline-block;
+  width: 20px;
+}
+
+.evidenceLineDeclared {
+  border-top: 2px solid var(--sys-color-action-primary);
+}
+
+.evidenceLineReference {
+  border-top: 2px dashed var(--sys-color-border-default);
 }
 
 .legendDivider {
@@ -202,6 +288,24 @@
   background: var(--sys-color-surface-subtle);
   font-size: 0.72rem;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.completenessNote {
+  margin: 0;
+  padding: var(--space-4) var(--space-16);
+  border: 1px solid var(--sys-color-status-warning);
+  border-radius: var(--ref-radius-small);
+  color: var(--sys-color-status-warning);
+  font-size: 0.72rem;
+}
+
+.completenessNote[data-completeness-note='unavailable'] {
+  border-color: var(--sys-color-action-danger);
+  color: var(--sys-color-action-danger);
 }
 
 /* --------------------------------------------------------------------- body */
@@ -231,6 +335,34 @@
   fill: var(--sys-color-surface-panel);
   stroke: var(--tone);
   stroke-width: 1.5;
+}
+
+.toneStale .nodeRect {
+  stroke-dasharray: 4 2;
+}
+
+.toneUnknown .nodeRect {
+  stroke-dasharray: 2 2;
+}
+
+.toneUnmonitored .nodeRect {
+  stroke-dasharray: 6 3;
+}
+
+.toneUnresolved .nodeRect {
+  stroke-dasharray: 2 3;
+}
+
+.toneObserved .nodeRect {
+  stroke-dasharray: 1 2;
+}
+
+.toneUnregistered .nodeRect {
+  stroke-dasharray: 3 3;
+}
+
+.toneAmbiguous .nodeRect {
+  stroke-width: 2.5;
 }
 
 .nodeBar {
