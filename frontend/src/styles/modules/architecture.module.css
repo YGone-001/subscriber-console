@@ -780,6 +780,48 @@
   color: var(--sys-color-status-warning);
 }
 
+.actualSupportBar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.actualSupportToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 28px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface-field);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.actualSupportToggle:hover {
+  color: var(--text-primary, inherit);
+  background: var(--surface-hover);
+}
+
+.actualSupportToggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.actualSupportToggle[aria-pressed='true'] {
+  color: var(--sys-color-action-primary);
+  border-color: currentColor;
+}
+
+.actualHiddenSupport {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
 .actualSearch {
   display: inline-flex;
   align-items: center;
@@ -1048,6 +1090,18 @@
   fill: var(--sys-color-status-warning);
 }
 
+.actualNodeSupport .actualNodeRect {
+  stroke-dasharray: 3 2;
+}
+
+.actualNodeSupport .actualNodeBar {
+  opacity: 0.55;
+}
+
+.actualNodeSupport .actualNodeName {
+  fill: var(--text-secondary);
+}
+
 .actualNodeBar {
   fill: var(--actual-group);
 }
@@ -1097,8 +1151,10 @@
 .actualGroupDiscovery { --actual-group: var(--sys-color-status-info); }
 .actualGroupData { --actual-group: var(--sys-color-status-warning); }
 .actualGroupPolicy { --actual-group: var(--sys-color-status-warning); }
+.actualGroupIms { --actual-group: var(--sys-color-status-info); }
 .actualGroupUser { --actual-group: var(--sys-color-status-success); }
 .actualGroupOther { --actual-group: var(--sys-color-text-muted); }
+.actualGroupSupport { --actual-group: var(--sys-color-text-muted); }
 
 .actualDimmed {
   opacity: 0.2;

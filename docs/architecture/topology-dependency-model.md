@@ -596,6 +596,35 @@ features/topology/reference-architecture.ts
 styles/modules/architecture.module.css
 ```
 
+### 9.6 Declared topology default view
+
+The `actual` topology view is the default `/topology` tab. It renders only
+resources whose kind is `network_function` or `network_function_instance`.
+
+Every `network_element` and every other Inventory kind is a support resource:
+
+```text
+hidden by default
+counted and named in the loaded topology
+shown only through the explicit "show support resources" toggle
+grouped in a separate support column
+never counted as a network function
+```
+
+Role tokens never decide NF visibility. They are used only for grouping,
+display labels and future interface suggestions.
+
+Unresolved endpoints are never hidden as support: an absent Inventory projection
+is a diagnostic and remains visible. A network function also remains visible
+when every one of its relationships is hidden by the support filter; the
+toolbar reports the hidden support resource and relationship counts. The view
+distinguishes an unavailable read, a genuinely empty topology, and a topology
+that contains only hidden support resources.
+
+The IMS column groups `icscf`, `pcscf`, `scscf` and `smsc`; the support column
+groups every support resource. Grouping uses the stored compact role tokens,
+while node labels use the standard 3GPP forms (`SGW-C`, `P-CSCF`, ...).
+
 ## 10. Explicit Exclusions
 
 This capability does **not** introduce:

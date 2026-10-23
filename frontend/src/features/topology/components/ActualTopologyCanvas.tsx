@@ -18,6 +18,7 @@ import {
 } from '../actual-topology-model';
 import { edgeGeometry, placeEdgeLabels } from '../actual-topology-labels';
 import { nodeHealthLabelKey, type NodeHealth, type NodeHealthState } from '../actual-topology-health';
+import { nfRoleLabel } from '../nf-classification';
 import styles from '../../../styles/modules/architecture.module.css';
 
 function nodeName(node: ActualTopologyNode): string {
@@ -25,8 +26,8 @@ function nodeName(node: ActualTopologyNode): string {
 }
 
 function nodeRole(node: ActualTopologyNode): string {
-  if (node.role) return node.role.toUpperCase();
-  return node.kind || 'RESOURCE';
+  if (node.role) return nfRoleLabel(node.role);
+  return node.kind ? node.kind.toUpperCase() : 'RESOURCE';
 }
 
 function truncate(value: string, max: number): string {
@@ -160,8 +161,9 @@ export function ActualTopologyCanvas({
         const healthLabel = nodeHealth ? t(nodeHealthLabelKey(nodeHealth.state)) : '';
         const meta = [
           domainLabel(node.domain) || t('unknown'),
+          node.resourceClass === 'support' ? t('topology_support_resource') : '',
+          node.resourceClass === 'unresolved' ? t('topology_unresolved_resource') : '',
           node.resolved && node.lifecycleState && node.lifecycleState !== 'active' ? node.lifecycleState.toUpperCase() : '',
-          node.resolved ? '' : t('topology_unresolved_resource'),
         ]
           .filter(Boolean)
           .join(' / ');
@@ -172,11 +174,12 @@ export function ActualTopologyCanvas({
             role="button"
             tabIndex={0}
             data-resource-id={node.resourceId}
+            data-resource-class={node.resourceClass}
             data-group={node.group}
             data-health-state={nodeHealth?.state}
             aria-label={`${role}: ${name}, ${meta}${healthSuffix}`}
             aria-pressed={selected}
-            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${selected ? styles.actualNodeSelected : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
+            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${selected ? styles.actualNodeSelected : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
             onClick={() => onSelectResource(node.resourceId)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {

@@ -376,6 +376,11 @@ function handleApi(req, res, url, context) {
 
   if (pathname === '/api/alerts') return sendJson(res, 200, { alerts: [] });
   if (pathname === '/api/profiles') return sendJson(res, 200, { profiles: [] });
+  if (pathname === '/api/nf-health/targets' && url.searchParams.has('resourceIds')) {
+    // The actual topology resolves monitoring associations for visible NF
+    // nodes. An empty result is a completed lookup with no configured targets.
+    return sendJson(res, 200, { targets: [], page: { limit: 200, nextCursor: null, hasMore: false } });
+  }
   if (pathname === '/api/system/health') return sendJson(res, 200, healthPayload());
   if (pathname === '/api/system/audit/status') return sendJson(res, 200, { lastSaveTime: 1_760_000_000_000 });
   if (pathname === '/api/system/mongo/health') return sendJson(res, 200, healthPayload().subsystems.database.report);

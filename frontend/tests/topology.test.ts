@@ -37,6 +37,11 @@ import { en } from '../src/lib/locales/en';
 import { zh } from '../src/lib/locales/zh';
 import { buildActualTopology, groupForResource, nodeMatches } from '../src/features/topology/actual-topology-model';
 import {
+  classifyResource,
+  nfRoleLabel,
+  normalizeRoleToken,
+} from '../src/features/topology/nf-classification';
+import {
   edgeGeometry,
   placeEdgeLabels,
   pointOnGeometry,
@@ -88,6 +93,15 @@ function projection(resourceId: string, name: string, domain = '5gc'): ResourceP
 
 function roleProjection(resourceId: string, name: string, role: string): ResourceProjection {
   return { resourceId, kind: 'network_function', name, displayName: name, domain: '5gc', role, lifecycleState: 'active' };
+}
+
+function supportProjection(
+  resourceId: string,
+  name: string,
+  kind = 'host',
+  role = '',
+): ResourceProjection {
+  return { resourceId, kind, name, displayName: name, domain: 'platform', role, lifecycleState: 'active' };
 }
 
 function edge(overrides: Partial<TopologyEdge> = {}): TopologyEdge {
@@ -358,6 +372,157 @@ test('an unresolved endpoint remains an explicit diagnostic node', () => {
   assert.ok(markup.includes(PCF), 'the identifier stays visible instead of a guessed name');
 });
 
+test('resource classification is kind-only and role aliases never change NF visibility', () => {
+  assert.equal(classifyResource(projection(SMF, 'smf-01')), 'nf');
+  assert.equal(classifyResource({ ...projection(SMF, 'smf-01'), kind: 'network_function_instance' }), 'nf');
+  assert.equal(classifyResource(supportProjection('11111111-1111-4111-8111-111111111111', 'mme-01', 'network_element', 'mme')), 'support');
+  assert.equal(classifyResource(supportProjection('22222222-2222-4222-8222-222222222222', 'host-01', 'host')), 'support');
+  assert.equal(classifyResource({ ...projection(SMF, 'smf-01'), kind: '' }), 'unresolved');
+
+  assert.equal(normalizeRoleToken('SGW-C'), 'sgwc');
+  assert.equal(normalizeRoleToken('sgw_c'), 'sgwc');
+  assert.equal(nfRoleLabel('sgwc'), 'SGW-C');
+  assert.equal(nfRoleLabel('pgwu'), 'PGW-U');
+  assert.equal(nfRoleLabel('p-cscf'), 'P-CSCF');
+  assert.equal(nfRoleLabel('icscf'), 'I-CSCF');
+  assert.equal(nfRoleLabel('scscf'), 'S-CSCF');
+  assert.equal(nfRoleLabel('smsc'), 'SMSC');
+  assert.equal(nfRoleLabel('custom-role'), 'CUSTOM-ROLE');
+});
+
+test('network functions and instances stay visible regardless of role token', () => {
+  const mme = roleProjection('11111111-1111-4111-9111-111111111111', 'mme-01', 'mme');
+  const custom = roleProjection('22222222-2222-4222-9222-222222222222', 'custom-01', 'custom');
+  const instance = {
+    ...roleProjection('33333333-3333-4333-9333-333333333333', 'smf-instance-01', 'smf'),
+    kind: 'network_function_instance',
+  };
+  const layout = buildActualTopology([
+    edge({ edgeId: 'mme-edge', fromResourceId: SMF, toResourceId: mme.resourceId }),
+    edge({ edgeId: 'custom-edge', fromResourceId: SMF, toResourceId: custom.resourceId }),
+    edge({ edgeId: 'instance-edge', fromResourceId: SMF, toResourceId: instance.resourceId }),
+  ], {
+    ...directory,
+    [mme.resourceId]: mme,
+    [custom.resourceId]: custom,
+    [instance.resourceId]: instance,
+  });
+
+  assert.equal(layout.nodes.length, 4, 'every network_function/instance endpoint stays visible');
+  assert.equal(layout.nodes.find((node) => node.resourceId === mme.resourceId)?.group, 'access');
+  assert.equal(layout.nodes.find((node) => node.resourceId === custom.resourceId)?.group, 'other');
+  assert.equal(layout.nodes.find((node) => node.resourceId === instance.resourceId)?.resourceClass, 'nf');
+  assert.equal(layout.nodes.find((node) => node.resourceId === instance.resourceId)?.group, 'session');
+});
+
+test('the default topology view is kind-only and hides support resources with counts', () => {
+  const hostId = '11111111-aaaa-4aaa-8aaa-111111111111';
+  const elementId = '22222222-bbbb-4bbb-8bbb-222222222222';
+  const host = supportProjection(hostId, 'host-01', 'host');
+  const element = supportProjection(elementId, 'mme-element', 'network_element', 'mme');
+  const supportDirectory: Record<string, ResourceProjection> = {
+    ...directory,
+    [hostId]: host,
+    [elementId]: element,
+  };
+  const edges = [
+    edge({ edgeId: 'nf-edge', fromResourceId: SMF, toResourceId: PCF }),
+    edge({ edgeId: 'host-edge', fromResourceId: SMF, toResourceId: hostId }),
+    edge({ edgeId: 'element-edge', fromResourceId: PCF, toResourceId: elementId }),
+  ];
+
+  const hidden = buildActualTopology(edges, supportDirectory);
+  assert.equal(hidden.activeLinkCount, 3);
+  assert.equal(hidden.nfResourceCount, 2);
+  assert.equal(hidden.supportResourceCount, 2);
+  assert.equal(hidden.supportLinkCount, 2);
+  assert.equal(hidden.unresolvedResourceCount, 0);
+  assert.deepEqual(hidden.nodes.map((node) => node.resourceId).sort(), [SMF, PCF].sort());
+  assert.equal(hidden.links.length, 1, 'support relationships are hidden by default');
+  assert.ok(!hidden.groups.includes('support'), 'a hidden support group must not consume a column');
+
+  const onlySupportEdge = buildActualTopology([edges[1]], supportDirectory);
+  assert.deepEqual(onlySupportEdge.nodes.map((node) => node.resourceId), [SMF], 'an NF stays visible even when every edge is filtered out');
+  assert.equal(onlySupportEdge.links.length, 0);
+  assert.equal(onlySupportEdge.supportLinkCount, 1);
+
+  const supportOnlyLayout = buildActualTopology([
+    edge({ edgeId: 'support-only', fromResourceId: hostId, toResourceId: elementId }),
+  ], supportDirectory);
+  assert.equal(supportOnlyLayout.activeLinkCount, 1);
+  assert.equal(supportOnlyLayout.nodes.length, 0, 'a support-only topology renders the filtered empty state');
+  assert.equal(supportOnlyLayout.supportResourceCount, 2);
+  assert.equal(supportOnlyLayout.supportLinkCount, 1);
+
+  const shown = buildActualTopology(edges, supportDirectory, { showSupport: true });
+  assert.equal(shown.nodes.length, 4);
+  assert.equal(shown.links.length, 3);
+  const elementNode = shown.nodes.find((node) => node.resourceId === elementId);
+  assert.equal(elementNode?.resourceClass, 'support');
+  assert.equal(elementNode?.group, 'support', 'network_element is support, never grouped as an NF role');
+  assert.ok(shown.groups.includes('support'));
+});
+
+test('unresolved endpoints remain visible when support resources are hidden', () => {
+  const missingId = '33333333-cccc-4ccc-8ccc-333333333333';
+  const layout = buildActualTopology(
+    [edge({ edgeId: 'missing-edge', fromResourceId: SMF, toResourceId: missingId })],
+    { [SMF]: root },
+  );
+  assert.equal(layout.unresolvedResourceCount, 1);
+  assert.equal(layout.supportResourceCount, 0);
+  assert.equal(layout.nodes.length, 2, 'an unresolved endpoint is a diagnostic, not a support resource');
+  assert.equal(layout.links.length, 1);
+  assert.equal(layout.nodes.find((node) => node.resourceId === missingId)?.resourceClass, 'unresolved');
+});
+
+test('IMS roles use compact tokens for grouping and standard labels for display', () => {
+  const pcscf = { ...roleProjection('44444444-dddd-4ddd-8ddd-444444444444', 'pcscf-01', 'p-cscf'), domain: 'ims' };
+  const icscf = { ...roleProjection('55555555-eeee-4eee-8eee-555555555555', 'icscf-01', 'icscf'), domain: 'ims' };
+  const scscf = { ...roleProjection('66666666-ffff-4fff-8fff-666666666666', 'scscf-01', 'scscf'), domain: 'ims' };
+  const smsc = { ...roleProjection('77777777-aaaa-4aaa-8aaa-777777777777', 'smsc-01', 'smsc'), domain: 'ims' };
+  const imsDirectory: Record<string, ResourceProjection> = {
+    [pcscf.resourceId]: pcscf,
+    [icscf.resourceId]: icscf,
+    [scscf.resourceId]: scscf,
+    [smsc.resourceId]: smsc,
+  };
+  const layout = buildActualTopology([
+    edge({ edgeId: 'ims-1', fromResourceId: pcscf.resourceId, toResourceId: icscf.resourceId }),
+    edge({ edgeId: 'ims-2', fromResourceId: icscf.resourceId, toResourceId: scscf.resourceId }),
+    edge({ edgeId: 'ims-3', fromResourceId: scscf.resourceId, toResourceId: smsc.resourceId }),
+  ], imsDirectory);
+
+  assert.ok(layout.groups.includes('ims'));
+  for (const resource of [pcscf, icscf, scscf, smsc]) {
+    assert.equal(layout.nodes.find((node) => node.resourceId === resource.resourceId)?.group, 'ims');
+  }
+  assert.equal(nfRoleLabel(pcscf.role), 'P-CSCF');
+  assert.equal(nfRoleLabel(icscf.role), 'I-CSCF');
+  assert.equal(nfRoleLabel(scscf.role), 'S-CSCF');
+  assert.equal(nfRoleLabel(smsc.role), 'SMSC');
+});
+
+test('support resources render with a distinct class, group and label when shown', () => {
+  const hostId = '88888888-bbbb-4bbb-8bbb-888888888888';
+  const host = supportProjection(hostId, 'host-01', 'host');
+  const layout = buildActualTopology(
+    [edge({ edgeId: 'host-edge', fromResourceId: SMF, toResourceId: hostId })],
+    { ...directory, [hostId]: host },
+    { showSupport: true },
+  );
+  const markup = render(createElement(ActualTopologyCanvas, {
+    layout,
+    search: '',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  assert.ok(markup.includes('data-resource-class="support"'), 'support nodes must expose their class');
+  assert.ok(markup.includes('data-group="support"'), 'support nodes must stay out of NF columns');
+  assert.ok(markup.includes('Support resource'), 'support nodes must say what they are');
+  assert.ok(markup.includes('actualNodeSupport'), 'support nodes must carry a distinct visual state');
+});
+
 test('relationship labels stay hidden until a path is focused or hovered', () => {
   const layout = buildActualTopology([edge()], directory);
   const props = {
@@ -406,15 +571,19 @@ test('the actual view sizes from the layout and exposes fit, zoom, reset and ful
   assert.ok(!source.includes('`${zoom * 100}%`'), 'percentage width stretching would resize the nodes with the viewport');
 });
 
-test('the actual view separates an unavailable read from an empty topology', () => {
+test('the actual view separates an unavailable read from empty and filtered states', () => {
   const source = read('../src/features/topology/ActualTopologyView.tsx');
   const unavailable = source.indexOf("coverage === 'unavailable'");
-  const empty = source.indexOf('layout.links.length === 0');
+  const empty = source.indexOf('layout.activeLinkCount === 0');
+  const filteredEmpty = source.indexOf('layout.nodes.length === 0');
   assert.ok(unavailable >= 0, 'an unavailable read must have its own state');
   assert.ok(empty >= 0, 'a genuinely empty topology must have its own state');
+  assert.ok(filteredEmpty > empty, 'a topology with only hidden support resources must have its own state');
   assert.ok(unavailable < empty, 'a failed read must never fall through to the empty state');
   assert.ok(source.includes("topology_actual_unavailable_title"));
   assert.ok(source.includes("topology_actual_empty_title"));
+  assert.ok(source.includes("topology_actual_no_nf_title"));
+  assert.ok(source.includes('data-action="toggle-support"'), 'support visibility must be an explicit control');
 });
 
 /* ------------------------------------------------------------------ table -- */
@@ -561,6 +730,8 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_actual_partial_notice',
     'topology_search_matches', 'topology_search_no_match', 'topology_actual_empty_title',
     'topology_actual_empty_body', 'topology_actual_unavailable_title', 'topology_actual_unavailable_body',
+    'topology_actual_support_show', 'topology_actual_support_hide', 'topology_actual_hidden_support',
+    'topology_actual_no_nf_title', 'topology_actual_no_nf_body', 'topology_support_resource',
     'topology_open_ledger', 'topology_zoom_in', 'topology_zoom_out', 'topology_fit_view',
     'topology_reset_view', 'topology_fullscreen', 'topology_exit_fullscreen', 'topology_clear_focus',
     'topology_canvas_controls',
@@ -570,7 +741,7 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh must define ${key}`);
     assert.notEqual(en[key], zh[key], `${key} must be localized in both languages`);
   }
-  for (const group of ['access', 'session', 'discovery', 'data', 'policy', 'user', 'other']) {
+  for (const group of ['access', 'session', 'discovery', 'data', 'policy', 'ims', 'user', 'other', 'support']) {
     const key = `topology_group_${group}`;
     assert.ok(typeof en[key] === 'string' && en[key].length > 0, `en must define ${key}`);
     assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh must define ${key}`);

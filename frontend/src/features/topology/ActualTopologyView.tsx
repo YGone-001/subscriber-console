@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Expand,
   GitBranch,
+  Layers,
   Minimize,
   Minus,
   RefreshCw,
@@ -26,6 +27,7 @@ import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useBoundedEdges } from '../operations/use-bounded-edges';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { buildActualTopology, nodeMatches } from './actual-topology-model';
+import { nfRoleLabel } from './nf-classification';
 import { nodeHealthLabelKey, summarizeNodeHealth, type NodeHealthState } from './actual-topology-health';
 import { useResourceDirectory } from './use-resource-directory';
 import { useTopologyHealth } from './use-topology-health';
@@ -56,6 +58,7 @@ export function ActualTopologyView() {
   const [selectedResourceId, setSelectedResourceId] = useState<string | undefined>();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | undefined>();
   const [search, setSearch] = useState('');
+  const [showSupport, setShowSupport] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -69,8 +72,14 @@ export function ActualTopologyView() {
     [edges],
   );
   const directory = useResourceDirectory(endpointIds);
-  const layout = useMemo(() => buildActualTopology(edges, directory), [edges, directory]);
-  const nodeIds = useMemo(() => layout.nodes.map((node) => node.resourceId), [layout.nodes]);
+  const layout = useMemo(
+    () => buildActualTopology(edges, directory, { showSupport }),
+    [edges, directory, showSupport],
+  );
+  const nodeIds = useMemo(
+    () => layout.nodes.filter((node) => node.resourceClass !== 'support').map((node) => node.resourceId),
+    [layout.nodes],
+  );
   const health = useTopologyHealth(nodeIds);
   const healthCounts = useMemo(() => summarizeNodeHealth(health.byResource), [health.byResource]);
   const selected = layout.nodes.find((node) => node.resourceId === selectedResourceId);
@@ -79,6 +88,28 @@ export function ActualTopologyView() {
     ? layout.links.filter((link) => link.fromResourceId === selected.resourceId || link.toResourceId === selected.resourceId).length
     : 0;
   const matchedNodes = search.trim() ? layout.nodes.filter((node) => nodeMatches(node, search)) : [];
+  const supportToggle = layout.supportResourceCount > 0 ? (
+    <button
+      type="button"
+      className={styles.actualSupportToggle}
+      data-action="toggle-support"
+      aria-pressed={showSupport}
+      onClick={() => setShowSupport((current) => !current)}
+    >
+      <Layers size={15} aria-hidden="true" />
+      {showSupport
+        ? t('topology_actual_support_hide', { count: layout.supportResourceCount })
+        : t('topology_actual_support_show', { count: layout.supportResourceCount })}
+    </button>
+  ) : null;
+  const hiddenSupportNotice = !showSupport && layout.supportResourceCount > 0 ? (
+    <span className={styles.actualHiddenSupport} data-hidden-support="true" role="status">
+      {t('topology_actual_hidden_support', {
+        resources: layout.supportResourceCount,
+        links: layout.supportLinkCount,
+      })}
+    </span>
+  ) : null;
 
   const refreshAll = useCallback(() => {
     refresh();
@@ -134,6 +165,15 @@ export function ActualTopologyView() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedResourceId]);
 
+  useEffect(() => {
+    if (selectedResourceId && !layout.nodes.some((node) => node.resourceId === selectedResourceId)) {
+      setSelectedResourceId(undefined);
+    }
+    if (hoveredEdgeId && !layout.links.some((link) => link.edgeId === hoveredEdgeId)) {
+      setHoveredEdgeId(undefined);
+    }
+  }, [layout.nodes, layout.links, selectedResourceId, hoveredEdgeId]);
+
   const updateZoom = (delta: number) => {
     autoFitRef.current = false;
     setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
@@ -142,6 +182,7 @@ export function ActualTopologyView() {
     setSelectedResourceId(undefined);
     setSearch('');
     setHoveredEdgeId(undefined);
+    setShowSupport(false);
     fitView();
   };
   const toggleFullscreen = useCallback(() => {
@@ -180,7 +221,7 @@ export function ActualTopologyView() {
     );
   }
 
-  if (!loading && layout.links.length === 0) {
+  if (!loading && layout.activeLinkCount === 0) {
     return (
       <section className={styles.actualSection} aria-labelledby="actual-topology-title">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
@@ -194,6 +235,23 @@ export function ActualTopologyView() {
               {t('topology_open_ledger')}
             </Link>
           )}
+        />
+      </section>
+    );
+  }
+
+  if (!loading && layout.activeLinkCount > 0 && layout.nodes.length === 0) {
+    return (
+      <section className={styles.actualSection} aria-labelledby="actual-topology-title">
+        <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
+        <EmptyState
+          icon={<Layers size={40} />}
+          title={t('topology_actual_no_nf_title')}
+          description={t('topology_actual_no_nf_body', {
+            resources: layout.supportResourceCount,
+            links: layout.supportLinkCount,
+          })}
+          action={supportToggle}
         />
       </section>
     );
@@ -220,6 +278,12 @@ export function ActualTopologyView() {
             </span>
           ) : null}
         </div>
+        {supportToggle || hiddenSupportNotice ? (
+          <div className={styles.actualSupportBar}>
+            {supportToggle}
+            {hiddenSupportNotice}
+          </div>
+        ) : null}
         <label className={styles.actualSearch}>
           <Search size={15} aria-hidden="true" />
           <span className="sr-only">{t('topology_picker_search_placeholder')}</span>
@@ -364,9 +428,13 @@ export function ActualTopologyView() {
             <span className={styles.actualFocusEyebrow}>{t('topology_graph_root')}</span>
             <strong>{selected.displayName || selected.name || selected.resourceId}</strong>
             <span>
-              {[selected.role ? selected.role.toUpperCase() : selected.kind, selected.domain ? selected.domain.toUpperCase() : t('unknown')]
-                .filter(Boolean)
-                .join(' / ')}
+              {selected.resourceClass === 'support'
+                ? t('topology_support_resource')
+                : selected.resourceClass === 'unresolved'
+                  ? t('topology_unresolved_resource')
+                  : (selected.role ? nfRoleLabel(selected.role) : selected.kind) || t('unknown')}
+              {' / '}
+              {selected.domain ? selected.domain.toUpperCase() : t('unknown')}
               {' / '}
               {t('topology_showing_edges', { count: relatedCount })}
             </span>

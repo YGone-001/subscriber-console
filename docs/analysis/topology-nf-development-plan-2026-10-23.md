@@ -1,6 +1,6 @@
 # 核心网网元拓扑开发计划（换机交接版）
 
-> 状态：5 项决策已确认；阶段 1 已完成，阶段 2 待开始。
+> 状态：5 项决策已确认；阶段 1、阶段 2 已完成，阶段 3 待开始。
 > 基线：`develop` 分支，commit `d2e0dbf`（feat(frontend): make declared topology the primary topology view）。
 > 配套文档：`docs/analysis/topology-interface-catalog-draft-2026-10-23.md`（接口词表与契约草案）。
 > 用途：换机后在新 Qoder CN 会话中按本计划继续实施。
@@ -161,20 +161,22 @@ POST/PUT 边可保存 interfaceNames，旧边返回 []
 
 任务：
 
-- [ ] 新增前端集中式 NF 判定模块（`frontend/src/features/topology/nf-classification.ts`）：
+- [x] 新增前端集中式 NF 判定模块（`frontend/src/features/topology/nf-classification.ts`）：
   - kind-only：`network_function`、`network_function_instance` 为 NF；
   - `network_element` 归入 support，默认隐藏，可切换查看，但不计入 NF；
   - role token 规范化仅用于分组、显示标签和接口建议，兼容 `sgwc` / `sgw-c` / `sgw_c` 等历史写法；
   - 显示标签使用规范形式（`SGW-C`、`P-CSCF` 等），存储匹配仍用紧凑 token。
-- [ ] 修改 `actual-topology-model.ts`：
+- [x] 修改 `actual-topology-model.ts`：
   - 过滤非 NF 端点及其边；
   - 统计被隐藏的支撑资源与关系数；
   - NF 分组使用真实紧凑 role，并新增 `ims` 分组（`icscf` / `pcscf` / `scscf` / `smsc`）。
-- [ ] 修改 `ActualTopologyView.tsx`：
+- [x] 修改 `ActualTopologyView.tsx`：
   - 显示“已隐藏 N 个支撑资源 / M 条关系”；
   - 提供“显示支撑资源”开关（包含 `network_element`，但不计入 NF）；
   - 空图与不可用状态保持现有诚实语义。
-- [ ] 测试：NF 过滤、`network_element` 默认隐藏、host/site 隐藏、`network_function` 未知 role 仍显示、`network_function_instance` 显示、隐藏计数、开关、空态。
+- [x] 测试：NF 过滤、`network_element` 默认隐藏、host/site 隐藏、`network_function` 未知 role 仍显示、`network_function_instance` 显示、隐藏计数、开关、空态。
+
+实现记录（fixture 浏览器验收）：默认 5 个 NF 节点、4 条关系，2 个支撑资源隐藏；切换后 7 个节点、6 条关系，`network_element(role=mme)` 保持在 `support` 分组并显示 `MME / Support resource`。未解析端点始终保留。
 
 验收：
 
