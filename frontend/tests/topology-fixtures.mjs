@@ -31,6 +31,7 @@ export const EDGE_IDS = {
   uses: '7e2d2b20-0013-4b13-9c13-000000000013',
   registers: '7e2d2b20-0014-4b14-9c14-000000000014',
   exposes: '7e2d2b20-0015-4b15-9c15-000000000015',
+  serves: '7e2d2b20-0016-4b16-9c16-000000000016',
 };
 
 /* Fixed timestamps keep ordering and rendering deterministic. */
@@ -77,7 +78,7 @@ export const RESOURCES = [
 
 /* ------------------------------------------------------------------ edges -- */
 
-function topologyEdge(edgeId, relationshipType, fromResourceId, toResourceId, lifecycleState, revision, description, updatedAt) {
+function topologyEdge(edgeId, relationshipType, fromResourceId, toResourceId, lifecycleState, revision, description, updatedAt, interfaceNames = []) {
   return {
     edgeId,
     schemaVersion: 1,
@@ -85,8 +86,9 @@ function topologyEdge(edgeId, relationshipType, fromResourceId, toResourceId, li
     fromResourceId,
     toResourceId,
     description,
-    labels: { scenario: 'stage2-acceptance' },
+    labels: { scenario: 'stage4-acceptance' },
     attributes: { declaredBy: 'fixture' },
+    interfaceNames,
     lifecycleState,
     source: SOURCE,
     revision,
@@ -99,10 +101,12 @@ function topologyEdge(edgeId, relationshipType, fromResourceId, toResourceId, li
 
 export const EDGES = [
   /* SMF-01 neighbourhood: one inbound, two outbound. */
-  topologyEdge(EDGE_IDS.depends, 'depends_on', RESOURCE_IDS.smf, RESOURCE_IDS.pcf, 'active', 1, 'SMF depends on PCF', TS.t5),
-  topologyEdge(EDGE_IDS.connects, 'connects_to', RESOURCE_IDS.amf, RESOURCE_IDS.smf, 'active', 1, 'AMF connects to SMF', TS.t4),
-  topologyEdge(EDGE_IDS.uses, 'uses', RESOURCE_IDS.smf, RESOURCE_IDS.upf, 'active', 2, 'SMF uses UPF', TS.t3),
-  topologyEdge(EDGE_IDS.registers, 'registers_with', RESOURCE_IDS.nrf, RESOURCE_IDS.amf, 'active', 1, 'NRF registers AMF', TS.t2),
+  topologyEdge(EDGE_IDS.depends, 'depends_on', RESOURCE_IDS.smf, RESOURCE_IDS.pcf, 'active', 1, 'SMF depends on PCF', TS.t5, ['N7']),
+  topologyEdge(EDGE_IDS.connects, 'connects_to', RESOURCE_IDS.amf, RESOURCE_IDS.smf, 'active', 1, 'AMF connects to SMF', TS.t4, ['N11']),
+  topologyEdge(EDGE_IDS.uses, 'uses', RESOURCE_IDS.smf, RESOURCE_IDS.upf, 'active', 2, 'SMF uses UPF', TS.t3, ['N4']),
+  topologyEdge(EDGE_IDS.registers, 'registers_with', RESOURCE_IDS.nrf, RESOURCE_IDS.amf, 'active', 1, 'NRF registers AMF', TS.t2, ['Nnrf']),
+  /* Active but unannotated: exercises the explicit legacy fallback. */
+  topologyEdge(EDGE_IDS.serves, 'serves', RESOURCE_IDS.pcf, RESOURCE_IDS.upf, 'active', 1, 'PCF serves UPF', TS.t2),
   /* Retired relationship: still readable, never shown as active. */
   topologyEdge(EDGE_IDS.exposes, 'exposes', RESOURCE_IDS.pcf, RESOURCE_IDS.nrf, 'retired', 3, 'PCF exposes NRF (retired)', TS.t1),
 ];
@@ -124,6 +128,26 @@ export const INVENTORY_DOMAINS = [
 ];
 
 export const INVENTORY_LIFECYCLE_STATES = ['planned', 'active', 'maintenance', 'retired'];
+
+/* Representative controlled catalog for form, filter and label acceptance. */
+export const INTERFACE_CATALOG = [
+  { name: 'N4', category: 'reference_point', domains: ['5gc'], plane: 'control', scope: 'nf_nf', endpoints: [['smf', 'upf']], spec: '3GPP TS 23.501 4.2', description: 'SMF to UPF.' },
+  { name: 'N7', category: 'reference_point', domains: ['5gc'], plane: 'control', scope: 'nf_nf', endpoints: [['smf', 'pcf']], spec: '3GPP TS 23.501 4.2', description: 'SMF to PCF.' },
+  { name: 'N11', category: 'reference_point', domains: ['5gc'], plane: 'control', scope: 'nf_nf', endpoints: [['amf', 'smf']], spec: '3GPP TS 23.501 4.2', description: 'AMF to SMF.' },
+  { name: 'N15', category: 'reference_point', domains: ['5gc'], plane: 'control', scope: 'nf_nf', endpoints: [['pcf', 'amf']], spec: '3GPP TS 23.501 4.2', description: 'PCF to AMF.' },
+  { name: 'N22', category: 'reference_point', domains: ['5gc'], plane: 'control', scope: 'nf_nf', endpoints: [['amf', 'nssf']], spec: '3GPP TS 23.501 4.2', description: 'AMF to NSSF.' },
+  { name: 'N26', category: 'reference_point', domains: ['5gc', 'epc'], plane: 'control', scope: 'nf_nf', endpoints: [['amf', 'mme']], spec: '3GPP TS 23.501 4.2', description: 'AMF to MME.' },
+  { name: 'N35', category: 'reference_point', domains: ['5gc'], plane: 'control', scope: 'nf_nf', endpoints: [['udm', 'udr']], spec: '3GPP TS 23.501 4.2', description: 'UDM to UDR.' },
+  { name: 'N36', category: 'reference_point', domains: ['5gc'], plane: 'control', scope: 'nf_nf', endpoints: [['pcf', 'udr']], spec: '3GPP TS 23.501 4.2', description: 'PCF to UDR.' },
+  { name: 'Nnrf', category: 'sbi', domains: ['5gc'], plane: 'control', scope: 'nf_nf', producerRole: 'nrf', spec: '3GPP TS 23.501 / TS 29.500', description: 'NRF service interface.' },
+  { name: 'Nsmf', category: 'sbi', domains: ['5gc'], plane: 'control', scope: 'nf_nf', producerRole: 'smf', spec: '3GPP TS 23.501 / TS 29.500', description: 'SMF service interface.' },
+  { name: 'S5', category: 'reference_point', domains: ['epc'], plane: 'both', scope: 'nf_nf', endpoints: [['sgwc', 'pgwc'], ['sgwu', 'pgwu']], spec: '3GPP TS 23.401 4.2', description: 'SGW to PGW.' },
+  { name: 'S6a', category: 'reference_point', domains: ['epc'], plane: 'control', scope: 'nf_nf', endpoints: [['mme', 'hss']], spec: '3GPP TS 23.401 4.2', description: 'MME to HSS.' },
+  { name: 'Gx', category: 'reference_point', domains: ['epc', 'charging'], plane: 'control', scope: 'nf_nf', endpoints: [['pcrf', 'pgwc']], spec: '3GPP TS 23.203', description: 'PCRF to PGW-C.' },
+  { name: 'Gy', category: 'reference_point', domains: ['epc', 'charging'], plane: 'control', scope: 'nf_nf', endpoints: [['pgwc', 'ocs']], spec: '3GPP TS 32.240 / TS 32.299', description: 'PGW-C to OCS.' },
+  { name: 'Mw', category: 'reference_point', domains: ['ims'], plane: 'control', scope: 'nf_nf', endpoints: [['pcscf', 'icscf'], ['icscf', 'scscf'], ['pcscf', 'scscf']], spec: '3GPP TS 23.228 / TS 24.229', description: 'CSCF SIP reference point.' },
+  { name: 'Cx', category: 'reference_point', domains: ['ims'], plane: 'control', scope: 'nf_nf', endpoints: [['icscf', 'hss'], ['scscf', 'hss']], spec: '3GPP TS 29.228 / TS 29.229', description: 'CSCF to HSS.' },
+];
 
 /* -------------------------------------------------------------- sessions -- */
 
@@ -358,6 +382,19 @@ function handleApi(req, res, url, context) {
   if (pathname === '/api/auth/me') return sendJson(res, 200, session);
   if (pathname === '/api/auth/permissions') return sendJson(res, 200, { permissions: session.permissions });
 
+  if (pathname === '/api/runtime/stream') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 600000\n\n');
+    context.openStreams.add(res);
+    req.on('close', () => context.openStreams.delete(res));
+    return undefined;
+  }
+
   if (pathname === '/api/notifications/stream') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -441,12 +478,41 @@ function handleApi(req, res, url, context) {
     return sendJson(res, 200, resource);
   }
 
+  if (pathname === '/api/operations/resources') {
+    return sendJson(res, 200, {
+      generatedAt: TS.t5,
+      completeness: {
+        inventory: 'complete',
+        monitoring: 'complete',
+        telemetry: 'complete',
+        overall: 'complete',
+      },
+      page: { limit: 200, hasMore: false, nextCursor: null },
+      resources: RESOURCES.map((resource) => ({
+        resourceId: resource.resourceId,
+        name: resource.name,
+        displayName: resource.displayName,
+        domain: resource.domain,
+        kind: resource.kind,
+        role: resource.role,
+        lifecycleState: resource.lifecycleState,
+        isNetworkFunction: resource.kind === 'network_function' || resource.kind === 'network_function_instance',
+        association: 'absent',
+      })),
+    });
+  }
+
   /* ------------------------------------------------------------- topology -- */
   if (pathname === '/api/topology/meta') {
     return sendJson(res, 200, {
       schemaVersion: 1,
       relationshipTypes: RELATIONSHIP_TYPES,
       lifecycleStates: ['active', 'retired'],
+      catalogVersion: 'fixture-2026-10-23.1',
+      interfaceCategories: ['reference_point', 'sbi'],
+      interfaceScopes: ['nf_nf', 'external'],
+      interfacePlanes: ['control', 'user', 'both'],
+      interfaceCatalog: INTERFACE_CATALOG,
     });
   }
   if (pathname === '/api/topology/edges' && req.method === 'GET') {
@@ -476,6 +542,7 @@ function handleApi(req, res, url, context) {
         description: payload?.description ?? '',
         labels: payload?.labels ?? {},
         attributes: payload?.attributes ?? {},
+        interfaceNames: payload?.interfaceNames ?? [],
         lifecycleState: 'active',
         source: SOURCE,
         revision: 1,
@@ -507,6 +574,7 @@ function handleApi(req, res, url, context) {
         description: payload?.edge?.description ?? edge.description,
         labels: payload?.edge?.labels ?? edge.labels,
         attributes: payload?.edge?.attributes ?? edge.attributes,
+        interfaceNames: payload?.edge?.interfaceNames ?? edge.interfaceNames ?? [],
         revision: edge.revision + 1,
         updatedAt: TS.t5,
       });

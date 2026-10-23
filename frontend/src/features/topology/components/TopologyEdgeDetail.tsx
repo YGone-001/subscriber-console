@@ -9,6 +9,7 @@ import { ExternalLink, Pencil, RotateCcw } from 'lucide-react';
 import { useI18n } from '../../../providers/I18nProvider';
 import type { ResourceProjection, TopologyEdge } from '../topology-types';
 import { RELATIONSHIP_PRESENTATION } from '../topology-types';
+import { edgeInterfaceNames } from '../interface-catalog';
 import styles from '../../../styles/modules/topology.module.css';
 
 export interface TopologyEdgeDetailProps {
@@ -45,6 +46,7 @@ export function TopologyEdgeDetail({
   const presentation = RELATIONSHIP_PRESENTATION[edge.relationshipType];
   const relationshipLabel = presentation ? t(presentation.labelKey) : edge.relationshipType;
   const retired = edge.lifecycleState === 'retired';
+  const interfaceNames = edgeInterfaceNames(edge);
 
   return (
     <aside className={styles.detailPanel} aria-label={t('topology_detail_title')}>
@@ -65,6 +67,20 @@ export function TopologyEdgeDetail({
         <div>
           <dt>{t('topology_relationship')}</dt>
           <dd>{relationshipLabel}</dd>
+        </div>
+        <div>
+          <dt>{t('topology_interfaces')}</dt>
+          <dd>
+            {interfaceNames.length > 0 ? (
+              <div className={styles.interfaceNames} data-interface-names={interfaceNames.join(' ')}>
+                {interfaceNames.map((name) => (
+                  <span key={name} className={styles.interfaceBadge}>{name}</span>
+                ))}
+              </div>
+            ) : (
+              <span className={styles.muted}>{t('topology_interface_unannotated')}</span>
+            )}
+          </dd>
         </div>
         <div>
           <dt>{t('topology_from_resource')}</dt>

@@ -26,6 +26,7 @@ import {
 import {
   ARCHITECTURE_LINKS,
   ARCHITECTURE_NODES,
+  ARCHITECTURE_ROLE_TOKENS,
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   NODE_HEIGHT,
@@ -111,6 +112,22 @@ test('the reference skeleton is internally consistent', () => {
   assert.ok(ARCHITECTURE_LINKS.length >= 30, 'the skeleton must cover the main reference points');
 });
 
+test('the reference skeleton uses corrected 3GPP labels and compact stored role tokens', () => {
+  const link = (source: string, target: string) => (
+    ARCHITECTURE_LINKS.find((entry) => entry.source === source && entry.target === target)
+  );
+  assert.equal(link('amf', 'pcf')?.interfaceLabel, 'N15', 'AMF to PCF is N15, not N8');
+  assert.equal(link('amf', 'udm')?.interfaceLabel, 'N8', 'AMF to UDM keeps N8');
+  assert.equal(link('pcf', 'udr')?.interfaceLabel, 'N36', 'PCF to UDR is N36, not N5');
+
+  const sgwc = ARCHITECTURE_NODES.find((node) => node.role === 'sgwc');
+  assert.equal(sgwc?.label, 'SGW-C', 'the display label stays the standard hyphenated form');
+  assert.ok(sgwc?.roleTokens.includes('sgwc'), 'the stored compact token must bind');
+  assert.ok(sgwc?.roleTokens.includes('sgw-c'), 'the historical hyphenated alias remains readable');
+  assert.ok(ARCHITECTURE_ROLE_TOKENS.includes('sgwc'));
+  assert.ok(ARCHITECTURE_ROLE_TOKENS.includes('pgwu'));
+});
+
 test('every node sits inside the canvas and no two nodes overlap', () => {
   for (const node of ARCHITECTURE_NODES) {
     assert.ok(node.x >= 0 && node.x + NODE_WIDTH <= CANVAS_WIDTH, `${node.role} must fit horizontally`);
@@ -130,7 +147,7 @@ test('every node sits inside the canvas and no two nodes overlap', () => {
 
 test('an explicit Inventory role binds a role token', () => {
   const projection = resolveArchitecture({ resources: items([resource({ role: 'SGW-C', name: 'sgwc-node', domain: 'epc' })]) });
-  const sgwc = projection.nodes.find((node) => node.role === 'sgw-c');
+  const sgwc = projection.nodes.find((node) => node.role === 'sgwc');
   assert.ok(sgwc);
   assert.equal(sgwc.binding, 'bound');
   assert.equal(sgwc.resourceName, 'sgwc-node');

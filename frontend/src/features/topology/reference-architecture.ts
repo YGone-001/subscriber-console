@@ -60,8 +60,8 @@ export const ARCHITECTURE_NODES: ArchitectureNode[] = [
   { role: 'mme', label: 'MME', domain: 'cp', icon: 'server', x: 40, y: 170, roleTokens: ['mme'], nameTokens: ['mme', 'mmed'], inventoryDomain: 'epc' },
 
   { role: 'smf', label: 'SMF', domain: 'sp', icon: 'server', x: 220, y: 60, roleTokens: ['smf'], nameTokens: ['smf', 'smfd'], inventoryDomain: '5gc' },
-  { role: 'sgw-c', label: 'SGW-C', domain: 'sp', icon: 'server', x: 220, y: 170, roleTokens: ['sgw-c', 'sgwc'], nameTokens: ['sgwc', 'sgwcd'], inventoryDomain: 'epc' },
-  { role: 'pgw-c', label: 'PGW-C', domain: 'sp', icon: 'server', x: 220, y: 280, roleTokens: ['pgw-c', 'pgwc'], nameTokens: ['pgwc', 'pgwcd'], inventoryDomain: 'epc' },
+  { role: 'sgwc', label: 'SGW-C', domain: 'sp', icon: 'server', x: 220, y: 170, roleTokens: ['sgwc', 'sgw-c'], nameTokens: ['sgwc', 'sgwcd'], inventoryDomain: 'epc' },
+  { role: 'pgwc', label: 'PGW-C', domain: 'sp', icon: 'server', x: 220, y: 280, roleTokens: ['pgwc', 'pgw-c'], nameTokens: ['pgwc', 'pgwcd'], inventoryDomain: 'epc' },
 
   { role: 'nrf', label: 'NRF', domain: 'sp', icon: 'server', x: 400, y: 60, roleTokens: ['nrf'], nameTokens: ['nrf', 'nrfd'], inventoryDomain: '5gc' },
   { role: 'nssf', label: 'NSSF', domain: 'sp', icon: 'server', x: 400, y: 170, roleTokens: ['nssf'], nameTokens: ['nssf', 'nssfd'], inventoryDomain: '5gc' },
@@ -79,8 +79,8 @@ export const ARCHITECTURE_NODES: ArchitectureNode[] = [
   { role: 'pcrf', label: 'PCRF', domain: 'legacy', icon: 'server', x: 760, y: 500, roleTokens: ['pcrf'], nameTokens: ['pcrf', 'pcrfd'], inventoryDomain: 'epc' },
 
   { role: 'upf', label: 'UPF', domain: 'up', icon: 'router', x: 220, y: 580, roleTokens: ['upf'], nameTokens: ['upf', 'upfd'], inventoryDomain: '5gc' },
-  { role: 'sgw-u', label: 'SGW-U', domain: 'up', icon: 'router', x: 400, y: 580, roleTokens: ['sgw-u', 'sgwu'], nameTokens: ['sgwu', 'sgwud'], inventoryDomain: 'epc' },
-  { role: 'pgw-u', label: 'PGW-U', domain: 'up', icon: 'router', x: 580, y: 580, roleTokens: ['pgw-u', 'pgwu'], nameTokens: ['pgwu', 'pgwud'], inventoryDomain: 'epc' },
+  { role: 'sgwu', label: 'SGW-U', domain: 'up', icon: 'router', x: 400, y: 580, roleTokens: ['sgwu', 'sgw-u'], nameTokens: ['sgwu', 'sgwud'], inventoryDomain: 'epc' },
+  { role: 'pgwu', label: 'PGW-U', domain: 'up', icon: 'router', x: 580, y: 580, roleTokens: ['pgwu', 'pgw-u'], nameTokens: ['pgwu', 'pgwud'], inventoryDomain: 'epc' },
 ];
 
 export const ARCHITECTURE_LINKS: ArchitectureLink[] = [
@@ -88,7 +88,7 @@ export const ARCHITECTURE_LINKS: ArchitectureLink[] = [
   { source: 'amf', target: 'smf', interfaceLabel: 'N11' },
   { source: 'amf', target: 'ausf', interfaceLabel: 'N12' },
   { source: 'amf', target: 'udm', interfaceLabel: 'N8' },
-  { source: 'amf', target: 'pcf', interfaceLabel: 'N8' },
+  { source: 'amf', target: 'pcf', interfaceLabel: 'N15' },
   { source: 'amf', target: 'nrf', interfaceLabel: 'Nnrf' },
   { source: 'amf', target: 'nssf', interfaceLabel: 'Nnssf' },
   { source: 'smf', target: 'upf', interfaceLabel: 'N4' },
@@ -96,7 +96,7 @@ export const ARCHITECTURE_LINKS: ArchitectureLink[] = [
   { source: 'smf', target: 'udm', interfaceLabel: 'N10' },
   { source: 'smf', target: 'nrf', interfaceLabel: 'Nnrf' },
   { source: 'smf', target: 'bsf', interfaceLabel: 'Nbsf' },
-  { source: 'pcf', target: 'udr', interfaceLabel: 'N5' },
+  { source: 'pcf', target: 'udr', interfaceLabel: 'N36' },
   { source: 'pcf', target: 'bsf', interfaceLabel: 'Nbsf' },
   { source: 'pcf', target: 'nrf', interfaceLabel: 'Nnrf' },
   { source: 'ausf', target: 'udm', interfaceLabel: 'N13' },
@@ -108,29 +108,29 @@ export const ARCHITECTURE_LINKS: ArchitectureLink[] = [
 
   // EPC / legacy interfaces
   { source: 'mme', target: 'hss', interfaceLabel: 'S6a' },
-  { source: 'mme', target: 'sgw-c', interfaceLabel: 'S11' },
+  { source: 'mme', target: 'sgwc', interfaceLabel: 'S11' },
   { source: 'mme', target: 'dra', interfaceLabel: 'S6a' },
-  { source: 'sgw-c', target: 'pgw-c', interfaceLabel: 'S5' },
-  { source: 'sgw-c', target: 'sgw-u', interfaceLabel: 'Sxa' },
-  { source: 'pgw-c', target: 'pgw-u', interfaceLabel: 'Sxb' },
-  { source: 'pgw-c', target: 'pcrf', interfaceLabel: 'Gx' },
-  { source: 'pgw-c', target: 'ocs', interfaceLabel: 'Gy' },
+  { source: 'sgwc', target: 'pgwc', interfaceLabel: 'S5' },
+  { source: 'sgwc', target: 'sgwu', interfaceLabel: 'Sxa' },
+  { source: 'pgwc', target: 'pgwu', interfaceLabel: 'Sxb' },
+  { source: 'pgwc', target: 'pcrf', interfaceLabel: 'Gx' },
+  { source: 'pgwc', target: 'ocs', interfaceLabel: 'Gy' },
   { source: 'pcrf', target: 'ocs', interfaceLabel: 'Sy' },
   { source: 'hss', target: 'dra', interfaceLabel: 'S6a' },
-  { source: 'pgw-c', target: 'dra', interfaceLabel: 'Gx' },
+  { source: 'pgwc', target: 'dra', interfaceLabel: 'Gx' },
   { source: 'hss', target: 'udr', interfaceLabel: 'Ud' },
 
   // Interworking
   { source: 'amf', target: 'mme', interfaceLabel: 'N26' },
 ];
 
-const EPC_ROLES = new Set(['mme', 'sgw-c', 'sgw-u', 'pgw-c', 'pgw-u', 'hss', 'pcrf', 'dra', 'ocs']);
+const EPC_ROLES = new Set(['mme', 'sgwc', 'sgwu', 'pgwc', 'pgwu', 'hss', 'pcrf', 'dra', 'ocs']);
 
 const SA_ROLES = new Set([
   'amf', 'smf', 'upf', 'udm', 'udr', 'ausf', 'pcf', 'nssf', 'nrf', 'scp', 'bsf',
 ]);
 
-const NSA_ROLES = new Set(['amf', 'mme', 'smf', 'pgw-c', 'pgw-u', 'upf', 'hss', 'udm']);
+const NSA_ROLES = new Set(['amf', 'mme', 'smf', 'pgwc', 'pgwu', 'upf', 'hss', 'udm']);
 
 /** Roles visible in a view. A role absent from the view is not a fault. */
 /**

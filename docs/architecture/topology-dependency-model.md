@@ -596,6 +596,11 @@ features/topology/reference-architecture.ts
 styles/modules/architecture.module.css
 ```
 
+The static reference labels use `N15` for AMF–PCF and `N36` for PCF–UDR;
+`N8` remains AMF–UDM. Reference role keys and accepted role tokens use the
+stored compact values (`sgwc`, `pgwc`, `sgwu`, `pgwu`), while the rendered node
+labels remain the standard 3GPP forms (`SGW-C`, `PGW-C`, `SGW-U`, `PGW-U`).
+
 ### 9.6 Declared topology default view
 
 The `actual` topology view is the default `/topology` tab. It renders only
@@ -671,6 +676,38 @@ DRA and SCP are proxy nodes, not logical interface endpoints. They are rendered
 with a low-emphasis proxy treatment and their detail states
 `via DRA` / `via SCP`. Two declared edges through a proxy remain two edges; they
 are never collapsed into a synthetic direct link.
+
+### 9.8 Interface names in the UI
+
+The edge form consumes `interfaceCatalog` from `GET /api/topology/meta` and
+renders a controlled searchable checkbox list grouped by category and primary
+domain. Each option shows its domains, plane, specification and suggested
+endpoint roles or SBI producer. There is no free-text interface input, and the
+form enforces the maximum of eight selections. Unannotated relationships remain
+valid.
+
+The ledger and the relationship detail render every annotated interface name.
+An edge stored without names is shown explicitly as `Unannotated`; no name is
+inferred from its endpoints or relationship type.
+
+The declared-topology canvas prefers interface names for its edge labels
+(multiple names are joined with ` / `) and falls back to the relationship type
+when no name is present. Labels remain focus/hover-driven by default; a
+`Show all interface names` control reveals labels for every annotated edge in
+the current view. The rendered label carries an explicit interface/relationship
+kind for visual and test distinction.
+
+The actual-topology toolbar also provides:
+
+```text
+interface filter: all / an annotated name / unannotated
+annotated coverage over the loaded relationships
+show-all interface labels toggle
+```
+
+The filter is client-side over the bounded loaded edge set. A partial read is
+never presented as a complete annotation population; the existing coverage
+indicator remains authoritative.
 
 ## 10. Explicit Exclusions
 

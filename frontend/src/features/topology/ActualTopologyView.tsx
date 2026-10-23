@@ -28,6 +28,13 @@ import { useBoundedEdges } from '../operations/use-bounded-edges';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology, nodeMatches } from './actual-topology-model';
 import { nfRoleLabel, type TopologyDomainMode } from './nf-classification';
+import {
+  filterEdgesByInterface,
+  interfaceCoverage,
+  interfaceNamesInEdges,
+  interfaceUsageCounts,
+  UNANNOTATED_INTERFACE_FILTER,
+} from './interface-catalog';
 import { nodeHealthLabelKey, summarizeNodeHealth, type NodeHealthState } from './actual-topology-health';
 import { useResourceDirectory } from './use-resource-directory';
 import { useTopologyHealth } from './use-topology-health';
@@ -61,6 +68,8 @@ export function ActualTopologyView() {
   const [showSupport, setShowSupport] = useState(false);
   const [showBoundary, setShowBoundary] = useState(true);
   const [domainMode, setDomainMode] = useState<TopologyDomainMode>('all');
+  const [interfaceFilter, setInterfaceFilter] = useState('');
+  const [showAllInterfaceNames, setShowAllInterfaceNames] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -74,9 +83,16 @@ export function ActualTopologyView() {
     [edges],
   );
   const directory = useResourceDirectory(endpointIds);
+  const availableInterfaces = useMemo(() => interfaceNamesInEdges(edges), [edges]);
+  const interfaceCounts = useMemo(() => interfaceUsageCounts(edges), [edges]);
+  const coverageCounts = useMemo(() => interfaceCoverage(edges), [edges]);
+  const interfaceScopedEdges = useMemo(
+    () => filterEdgesByInterface(edges, interfaceFilter),
+    [edges, interfaceFilter],
+  );
   const layout = useMemo(
-    () => buildActualTopology(edges, directory, { showSupport, showBoundary, domainMode }),
-    [edges, directory, showSupport, showBoundary, domainMode],
+    () => buildActualTopology(interfaceScopedEdges, directory, { showSupport, showBoundary, domainMode }),
+    [interfaceScopedEdges, directory, showSupport, showBoundary, domainMode],
   );
   const nodeIds = useMemo(
     () => layout.nodes.filter((node) => node.resourceClass !== 'support').map((node) => node.resourceId),
@@ -142,6 +158,28 @@ export function ActualTopologyView() {
       {t('topology_domain_all')}
     </button>
   );
+  const interfaceFilterLabel = interfaceFilter === UNANNOTATED_INTERFACE_FILTER
+    ? t('topology_interface_unannotated')
+    : interfaceFilter;
+  const emptyReason = layout.nodes.length > 0
+    ? null
+    : layout.activeLinkCount === 0
+      ? (interfaceFilter ? 'interface' : 'domain')
+      : layout.scopedLinkCount === 0
+        ? 'domain'
+        : 'support';
+  const emptyAction = emptyReason === 'interface' ? (
+    <button
+      type="button"
+      className="btn btn-secondary"
+      data-action="clear-interface-filter"
+      onClick={() => setInterfaceFilter('')}
+    >
+      {t('topology_interface_clear_filter')}
+    </button>
+  ) : emptyReason === 'domain'
+    ? domainEmptyAction
+    : supportToggle;
 
   const refreshAll = useCallback(() => {
     refresh();
@@ -206,6 +244,11 @@ export function ActualTopologyView() {
     }
   }, [layout.nodes, layout.links, selectedResourceId, hoveredEdgeId]);
 
+  useEffect(() => {
+    if (!interfaceFilter || interfaceFilter === UNANNOTATED_INTERFACE_FILTER) return;
+    if (!availableInterfaces.includes(interfaceFilter)) setInterfaceFilter('');
+  }, [availableInterfaces, interfaceFilter]);
+
   const updateZoom = (delta: number) => {
     autoFitRef.current = false;
     setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
@@ -217,6 +260,8 @@ export function ActualTopologyView() {
     setShowSupport(false);
     setShowBoundary(true);
     setDomainMode('all');
+    setInterfaceFilter('');
+    setShowAllInterfaceNames(false);
     fitView();
   };
   const toggleFullscreen = useCallback(() => {
@@ -255,7 +300,7 @@ export function ActualTopologyView() {
     );
   }
 
-  if (!loading && layout.activeLinkCount === 0) {
+  if (!loading && edges.length === 0) {
     return (
       <section className={styles.actualSection} aria-labelledby="actual-topology-title">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
@@ -375,6 +420,43 @@ export function ActualTopologyView() {
           </button>
         </div>
       </div>
+      <div className={styles.actualSecondaryToolbar}>
+        <label className={styles.actualInterfaceFilter}>
+          <span>{t('topology_interface_filter')}</span>
+          <select
+            value={interfaceFilter}
+            onChange={(event) => setInterfaceFilter(event.target.value)}
+            data-interface-filter
+          >
+            <option value="">{t('topology_interface_filter_all')}</option>
+            {availableInterfaces.map((name) => (
+              <option key={name} value={name}>
+                {`${name} (${interfaceCounts.get(name) ?? 0})`}
+              </option>
+            ))}
+            <option value={UNANNOTATED_INTERFACE_FILTER}>{t('topology_interface_unannotated')}</option>
+          </select>
+        </label>
+        <span className={styles.actualInterfaceCoverage} data-interface-coverage="true">
+          {t('topology_interface_coverage', {
+            annotated: coverageCounts.annotated,
+            total: coverageCounts.total,
+          })}
+        </span>
+        {coverageCounts.annotated > 0 && interfaceFilter !== UNANNOTATED_INTERFACE_FILTER ? (
+          <button
+            type="button"
+            className={styles.actualSupportToggle}
+            data-action="toggle-interface-labels"
+            aria-pressed={showAllInterfaceNames}
+            onClick={() => setShowAllInterfaceNames((current) => !current)}
+          >
+            {showAllInterfaceNames
+              ? t('topology_interface_hide_all')
+              : t('topology_interface_show_all')}
+          </button>
+        ) : null}
+      </div>
       <p className={styles.actualNote}>{t('topology_declared_notice')}</p>
       {coverage === 'partial' ? (
         <p className={styles.actualCoverageNote} role="status">{t('topology_actual_partial_notice')}</p>
@@ -450,17 +532,21 @@ export function ActualTopologyView() {
       ) : null}
       {layout.nodes.length === 0 ? (
         <EmptyState
-          icon={layout.scopedLinkCount === 0 ? <Search size={40} /> : <Layers size={40} />}
-          title={layout.scopedLinkCount === 0
-            ? t('topology_actual_domain_empty_title')
-            : t('topology_actual_no_nf_title')}
-          description={layout.scopedLinkCount === 0
-            ? t('topology_actual_domain_empty_body', { domain: domainModeLabel })
-            : t('topology_actual_no_nf_body', {
-              resources: layout.supportResourceCount,
-              links: layout.supportLinkCount,
-            })}
-          action={layout.scopedLinkCount === 0 ? domainEmptyAction : supportToggle}
+          icon={emptyReason === 'support' ? <Layers size={40} /> : <Search size={40} />}
+          title={emptyReason === 'interface'
+            ? t('topology_interface_empty_title')
+            : emptyReason === 'domain'
+              ? t('topology_actual_domain_empty_title')
+              : t('topology_actual_no_nf_title')}
+          description={emptyReason === 'interface'
+            ? t('topology_interface_empty_body', { interface: interfaceFilterLabel })
+            : emptyReason === 'domain'
+              ? t('topology_actual_domain_empty_body', { domain: domainModeLabel })
+              : t('topology_actual_no_nf_body', {
+                resources: layout.supportResourceCount,
+                links: layout.supportLinkCount,
+              })}
+          action={emptyAction}
         />
       ) : (
         <>
@@ -475,6 +561,7 @@ export function ActualTopologyView() {
                 search={search}
                 hoveredEdgeId={hoveredEdgeId}
                 health={health.coverage !== 'unavailable' && health.byResource.size > 0 ? health.byResource : undefined}
+                showAllInterfaceNames={showAllInterfaceNames}
                 onSelectResource={(resourceId) => setSelectedResourceId((current) => current === resourceId ? undefined : resourceId)}
                 onHoverEdge={setHoveredEdgeId}
               />

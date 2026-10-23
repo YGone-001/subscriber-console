@@ -38,6 +38,22 @@ export interface SourceMetadata {
   authority: string;
 }
 
+export type InterfaceCategory = 'reference_point' | 'sbi';
+export type InterfacePlane = 'control' | 'user' | 'both';
+export type InterfaceScope = 'nf_nf' | 'external';
+
+export interface InterfaceEntry {
+  name: string;
+  category: InterfaceCategory;
+  domains: string[];
+  plane: InterfacePlane;
+  scope: InterfaceScope;
+  endpoints?: string[][];
+  producerRole?: string;
+  spec: string;
+  description: string;
+}
+
 export interface TopologyEdge {
   edgeId: string;
   schemaVersion: number;
@@ -47,6 +63,7 @@ export interface TopologyEdge {
   description?: string;
   labels?: Record<string, string>;
   attributes?: Record<string, unknown>;
+  interfaceNames?: string[];
   lifecycleState: TopologyLifecycleState | string;
   source: SourceMetadata;
   revision: number;
@@ -63,12 +80,14 @@ export interface CreateEdgeRequest {
   description?: string;
   labels?: Record<string, string>;
   attributes?: Record<string, unknown>;
+  interfaceNames?: string[];
 }
 
 export interface MutableEdge {
   description?: string;
   labels?: Record<string, string>;
   attributes?: Record<string, unknown>;
+  interfaceNames?: string[];
 }
 
 export interface UpdateEdgeRequest {
@@ -85,6 +104,11 @@ export interface TopologyMetaResponse {
   schemaVersion: number;
   relationshipTypes: string[];
   lifecycleStates: string[];
+  catalogVersion: string;
+  interfaceCategories: string[];
+  interfaceScopes: string[];
+  interfacePlanes: string[];
+  interfaceCatalog: InterfaceEntry[];
 }
 
 export interface PageInfo {

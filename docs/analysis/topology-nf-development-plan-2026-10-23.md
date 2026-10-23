@@ -1,6 +1,6 @@
 # 核心网网元拓扑开发计划（换机交接版）
 
-> 状态：5 项决策已确认；阶段 1、2、3 已完成，阶段 4 待开始。
+> 状态：5 项决策已确认；阶段 1–4 已完成，阶段 5 待开始。
 > 基线：`develop` 分支，commit `d2e0dbf`（feat(frontend): make declared topology the primary topology view）。
 > 配套文档：`docs/analysis/topology-interface-catalog-draft-2026-10-23.md`（接口词表与契约草案）。
 > 用途：换机后在新 Qoder CN 会话中按本计划继续实施。
@@ -226,17 +226,24 @@ network_function_instance 仍显示；
 
 任务：
 
-- [ ] `topology-types.ts`：边/请求/meta 增加接口字段和目录类型。
-- [ ] `TopologyEdgeForm`：受控多选（按域/类别分组、可搜索），不回显词表外名称；端点建议按真实紧凑 role token 匹配，显示规范标签。
-- [ ] `TopologyEdgeTable` / `TopologyEdgeDetail`：展示全部接口名；旧边显示“未标注接口”。
-- [ ] `ActualTopologyCanvas`：标签优先接口名（多个用 ` / ` 连接），否则回退关系类型；默认聚焦/悬停显示。
-- [ ] `ActualTopologyView`：接口筛选、已标注覆盖率、“显示全部接口名”开关。
-- [ ] 参考架构修正：
+- [x] `topology-types.ts`：边/请求/meta 增加接口字段和目录类型。
+- [x] `TopologyEdgeForm`：受控多选（按域/类别分组、可搜索），不回显词表外名称；端点建议按真实紧凑 role token 匹配，显示规范标签。
+- [x] `TopologyEdgeTable` / `TopologyEdgeDetail`：展示全部接口名；旧边显示“未标注接口”。
+- [x] `ActualTopologyCanvas`：标签优先接口名（多个用 ` / ` 连接），否则回退关系类型；默认聚焦/悬停显示。
+- [x] `ActualTopologyView`：接口筛选、已标注覆盖率、“显示全部接口名”开关。
+- [x] 参考架构修正：
   - AMF–PCF：`N8 → N15`；
   - PCF–UDR：`N5 → N36`；
   - `role` / `roleTokens` 与 Inventory 真实紧凑 token 对齐，显示标签保持 `SGW-C` / `P-CSCF` 等规范形式；
   - 增加映射测试，防止回归。
-- [ ] 中英文 locale 同步。
+- [x] 中英文 locale 同步。
+
+实现记录（fixture 浏览器验收）：
+- 实际拓扑：4/5 条关系已标注；显示全部接口名后出现 `N11 / N4 / N7 / Nnrf`；N7 筛选得到 2 节点/1 边；未标注筛选得到 2 节点/1 边，聚焦显示关系回退 `serves`。
+- 新建表单：只能从词表选项选择；搜索 `Nnrf` 后仅保留该选项；选中计数 `1/8`；接口区域没有自由文本输入。
+- 关系台账/详情：显示 `N7` 等接口名；旧边显示 `Unannotated`。
+- 参考架构：5G SA 显示 `N15` / `N36` / `N8`，不再显示旧的 `N5`；EPC 视图显示 `SGW-C` / `PGW-U`。
+- 900px 视口：实际拓扑与表单均无横向溢出，表单对话框在视口内。
 
 验收：
 
@@ -382,6 +389,8 @@ frontend/src/features/topology/components/TopologyEdgeTable.tsx
 frontend/src/features/topology/components/TopologyEdgeDetail.tsx
 frontend/src/features/topology/reference-architecture.ts
 frontend/src/features/topology/nf-classification.ts     新增
+frontend/src/features/topology/interface-catalog.ts     新增
+frontend/src/features/topology/components/TopologyInterfaceSelector.tsx  新增
 frontend/src/lib/locales/en.ts
 frontend/src/lib/locales/zh.ts
 frontend/src/styles/modules/architecture.module.css
@@ -495,7 +504,7 @@ go build ./...
 
 基线 commit：d2e0dbf。工作区可能还有未提交的文档和 frontend/package-lock.json；不要提交 package-lock.json。
 
-任务：按计划第 4 节从阶段 4 开始：接口 UI、筛选与参考架构修正。
+任务：按计划第 4 节从阶段 5 开始：验证、文档与提交。
 约束：
 - NF 默认视图只按 kind；network_element 不计入 NF；role 不参与可见性；
 - 接口名只能来自服务端词表，参考点和 SBI 都收录并分类；v1 46 条 nf_nf，external 不进入表单；

@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { useI18n } from '../../../providers/I18nProvider';
 import type { ResourceProjection, TopologyEdge } from '../topology-types';
 import { RELATIONSHIP_PRESENTATION } from '../topology-types';
+import { edgeInterfaceNames } from '../interface-catalog';
 import styles from '../../../styles/modules/topology.module.css';
 
 export interface TopologyEdgeTableProps {
@@ -54,6 +55,21 @@ function CopyIdButton({ value }: { value: string }) {
     >
       {copied ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
     </button>
+  );
+}
+
+function InterfaceCell({ edge }: { edge: TopologyEdge }) {
+  const { t } = useI18n();
+  const names = edgeInterfaceNames(edge);
+  if (names.length === 0) {
+    return <span className={styles.muted}>{t('topology_interface_unannotated')}</span>;
+  }
+  return (
+    <div className={styles.interfaceNames} data-interface-names={names.join(' ')}>
+      {names.map((name) => (
+        <span key={name} className={styles.interfaceBadge}>{name}</span>
+      ))}
+    </div>
   );
 }
 
@@ -130,6 +146,7 @@ export function TopologyEdgeTable({
         <colgroup>
           <col className={styles.fromCol} />
           <col className={styles.relCol} />
+          <col className={styles.interfaceCol} />
           <col className={styles.dirCol} />
           <col className={styles.toCol} />
           <col className={styles.stateCol} />
@@ -141,6 +158,7 @@ export function TopologyEdgeTable({
           <tr>
             <th scope="col">{t('topology_from_resource')}</th>
             <th scope="col">{t('topology_relationship')}</th>
+            <th scope="col">{t('topology_interfaces')}</th>
             <th scope="col">{t('topology_direction')}</th>
             <th scope="col">{t('topology_to_resource')}</th>
             <th scope="col">{t('topology_lifecycle')}</th>
@@ -174,6 +192,9 @@ export function TopologyEdgeTable({
                   <span className={styles.relBadge} data-relationship={edge.relationshipType}>
                     {relationshipLabel(edge.relationshipType)}
                   </span>
+                </td>
+                <td>
+                  <InterfaceCell edge={edge} />
                 </td>
                 <td>
                   {direction ? (

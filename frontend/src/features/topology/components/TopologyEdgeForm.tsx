@@ -14,10 +14,17 @@ import { Field } from '../../../components/ui/Field';
 import type { Resource } from '../../inventory/inventory-types';
 import { useI18n } from '../../../providers/I18nProvider';
 import { buildCreateEdgeRequest, buildUpdateEdgeRequest } from '../topology-builders';
-import type { CreateEdgeRequest, TopologyEdge, UpdateEdgeRequest } from '../topology-types';
+import type {
+  CreateEdgeRequest,
+  InterfaceEntry,
+  TopologyEdge,
+  UpdateEdgeRequest,
+} from '../topology-types';
 import { RELATIONSHIP_PRESENTATION } from '../topology-types';
+import { edgeInterfaceNames } from '../interface-catalog';
 import { primeResourceDirectory } from '../use-resource-directory';
 import { TopologyResourcePicker } from './TopologyResourcePicker';
+import { TopologyInterfaceSelector } from './TopologyInterfaceSelector';
 import styles from '../../../styles/modules/topology.module.css';
 
 interface LabelRow {
@@ -28,6 +35,7 @@ interface LabelRow {
 export interface TopologyEdgeFormProps {
   mode: 'create' | 'edit';
   relationshipTypes: string[];
+  interfaceCatalog?: InterfaceEntry[];
   initialEdge?: TopologyEdge;
   submitting: boolean;
   serverError: string | null;
@@ -53,6 +61,7 @@ function labelsToRows(labels?: Record<string, string>): LabelRow[] {
 export function TopologyEdgeForm({
   mode,
   relationshipTypes,
+  interfaceCatalog = [],
   initialEdge,
   submitting,
   serverError,
@@ -66,6 +75,9 @@ export function TopologyEdgeForm({
   const [toResource, setToResource] = useState<Resource | null>(null);
   const [relationshipType, setRelationshipType] = useState(
     initialEdge?.relationshipType ?? relationshipTypes[0] ?? '',
+  );
+  const [interfaceNames, setInterfaceNames] = useState<string[]>(
+    initialEdge ? edgeInterfaceNames(initialEdge) : [],
   );
   const [description, setDescription] = useState(initialEdge?.description ?? '');
   const [labelRows, setLabelRows] = useState<LabelRow[]>(labelsToRows(initialEdge?.labels));
@@ -106,6 +118,7 @@ export function TopologyEdgeForm({
           description: description || undefined,
           labels: Object.keys(labels).length > 0 ? labels : undefined,
           attributes,
+          interfaceNames,
         });
         primeResourceDirectory([fromResource as Resource, toResource as Resource]);
         onCreate?.(req);
@@ -119,6 +132,7 @@ export function TopologyEdgeForm({
         description,
         labels,
         attributes,
+        interfaceNames,
       });
       onUpdate?.(req);
     } catch (error) {
@@ -192,6 +206,13 @@ export function TopologyEdgeForm({
           </div>
         </dl>
       ) : null}
+
+      <TopologyInterfaceSelector
+        catalog={interfaceCatalog}
+        selected={interfaceNames}
+        onChange={setInterfaceNames}
+        disabled={submitting}
+      />
 
       <Field htmlFor="topology-description" label={t('topology_edge_description')}>
         <textarea

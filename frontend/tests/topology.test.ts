@@ -29,10 +29,19 @@ import {
 import {
   RELATIONSHIP_PRESENTATION,
   DOMAIN_FILTER_BUCKETS,
+  type InterfaceEntry,
   type Neighbor,
   type ResourceProjection,
   type TopologyEdge,
 } from '../src/features/topology/topology-types';
+import {
+  edgeInterfaceNames,
+  filterEdgesByInterface,
+  interfaceCoverage,
+  interfaceNamesInEdges,
+  normalizeInterfaceNames,
+  UNANNOTATED_INTERFACE_FILTER,
+} from '../src/features/topology/interface-catalog';
 import { en } from '../src/lib/locales/en';
 import { zh } from '../src/lib/locales/zh';
 import {
@@ -138,6 +147,59 @@ function edge(overrides: Partial<TopologyEdge> = {}): TopologyEdge {
     ...overrides,
   };
 }
+
+const INTERFACE_CATALOG: InterfaceEntry[] = [
+  {
+    name: 'N4',
+    category: 'reference_point',
+    domains: ['5gc'],
+    plane: 'control',
+    scope: 'nf_nf',
+    endpoints: [['smf', 'upf']],
+    spec: '3GPP TS 23.501 4.2',
+    description: 'SMF to UPF',
+  },
+  {
+    name: 'N7',
+    category: 'reference_point',
+    domains: ['5gc'],
+    plane: 'control',
+    scope: 'nf_nf',
+    endpoints: [['smf', 'pcf']],
+    spec: '3GPP TS 23.501 4.2',
+    description: 'SMF to PCF',
+  },
+  {
+    name: 'N11',
+    category: 'reference_point',
+    domains: ['5gc'],
+    plane: 'control',
+    scope: 'nf_nf',
+    endpoints: [['amf', 'smf']],
+    spec: '3GPP TS 23.501 4.2',
+    description: 'AMF to SMF',
+  },
+  {
+    name: 'Nnrf',
+    category: 'sbi',
+    domains: ['5gc'],
+    plane: 'control',
+    scope: 'nf_nf',
+    producerRole: 'nrf',
+    spec: '3GPP TS 23.501 / TS 29.500',
+    description: 'NRF service interface',
+  },
+  {
+    name: 'S5',
+    category: 'reference_point',
+    domains: ['epc'],
+    plane: 'both',
+    scope: 'nf_nf',
+    endpoints: [['sgwc', 'pgwc'], ['sgwu', 'pgwu']],
+    spec: '3GPP TS 23.401 4.2',
+    description: 'SGW to PGW',
+  },
+];
 
 const root = projection(SMF, 'smf-01');
 
@@ -772,16 +834,161 @@ test('the actual view sizes from the layout and exposes fit, zoom, reset and ful
 test('the actual view separates an unavailable read from empty and filtered states', () => {
   const source = read('../src/features/topology/ActualTopologyView.tsx');
   const unavailable = source.indexOf("coverage === 'unavailable'");
-  const empty = source.indexOf('layout.activeLinkCount === 0');
+  const empty = source.indexOf('!loading && edges.length === 0');
   const filteredEmpty = source.indexOf('layout.nodes.length === 0');
   assert.ok(unavailable >= 0, 'an unavailable read must have its own state');
   assert.ok(empty >= 0, 'a genuinely empty topology must have its own state');
-  assert.ok(filteredEmpty > empty, 'a topology with only hidden support resources must have its own state');
+  assert.ok(filteredEmpty > empty, 'a topology with only hidden support resources or a filter must have its own state');
   assert.ok(unavailable < empty, 'a failed read must never fall through to the empty state');
   assert.ok(source.includes("topology_actual_unavailable_title"));
   assert.ok(source.includes("topology_actual_empty_title"));
   assert.ok(source.includes("topology_actual_no_nf_title"));
+  assert.ok(source.includes("topology_interface_empty_title"));
   assert.ok(source.includes('data-action="toggle-support"'), 'support visibility must be an explicit control');
+  assert.ok(source.includes('data-interface-filter'), 'the interface filter must be explicit');
+  assert.ok(source.includes('data-interface-coverage'), 'the annotated coverage must be visible');
+  assert.ok(source.includes('data-action="toggle-interface-labels"'), 'all interface labels must be an explicit toggle');
+});
+
+/* -------------------------------------------------------------- interfaces -- */
+
+test('interface helpers never invent names and scope the view filters', () => {
+  assert.deepEqual(edgeInterfaceNames({ interfaceNames: ['N7'] }), ['N7']);
+  assert.deepEqual(edgeInterfaceNames({ interfaceNames: 'N7' }), []);
+  assert.deepEqual(edgeInterfaceNames(undefined), []);
+
+  const edges = [
+    edge({ edgeId: 'iface-a', interfaceNames: ['N7'] }),
+    edge({ edgeId: 'iface-b', interfaceNames: ['N4', 'N11'] }),
+    edge({ edgeId: 'iface-c' }),
+  ];
+  assert.deepEqual(interfaceCoverage(edges), { annotated: 2, total: 3 });
+  assert.deepEqual(
+    filterEdgesByInterface(edges, 'N7').map((item) => item.edgeId),
+    ['iface-a'],
+  );
+  assert.deepEqual(
+    filterEdgesByInterface(edges, UNANNOTATED_INTERFACE_FILTER).map((item) => item.edgeId),
+    ['iface-c'],
+  );
+  assert.ok(interfaceNamesInEdges(edges).includes('N11'));
+  assert.deepEqual(normalizeInterfaceNames([' N7 ', 'N7', '']), ['N7']);
+  assert.equal(normalizeInterfaceNames(undefined), undefined);
+  assert.throws(
+    () => normalizeInterfaceNames(['N4', 'N7', 'N11', 'N15', 'N22', 'N26', 'N35', 'N36', 'Nnrf']),
+    /At most 8/,
+  );
+});
+
+test('the production builders preserve the interface-name contract', () => {
+  const create = buildCreateEdgeRequest({
+    relationshipType: 'depends_on',
+    fromResourceId: SMF,
+    toResourceId: PCF,
+    interfaceNames: [' N7 ', 'N7', 'N11'],
+  });
+  assert.deepEqual(create.interfaceNames, ['N7', 'N11']);
+
+  const update = buildUpdateEdgeRequest(2, { interfaceNames: ['N4'] });
+  assert.deepEqual(update.edge.interfaceNames, ['N4']);
+  const preserve = buildUpdateEdgeRequest(2, {});
+  assert.equal('interfaceNames' in preserve.edge, false, 'an omitted update preserves the server value');
+  const clear = buildUpdateEdgeRequest(2, { interfaceNames: [] });
+  assert.deepEqual(clear.edge.interfaceNames, []);
+});
+
+test('the create form offers only controlled catalog interfaces and suggested endpoints', () => {
+  const markup = render(createElement(TopologyEdgeForm, {
+    mode: 'create',
+    relationshipTypes: ['depends_on'],
+    interfaceCatalog: INTERFACE_CATALOG,
+    submitting: false,
+    serverError: null,
+    onCancel: () => {},
+  }));
+  assert.ok(markup.includes('data-interface-selector="true"'));
+  assert.ok(markup.includes('data-interface-name="N7"'));
+  assert.ok(markup.includes('data-interface-name="Nnrf"'));
+  assert.ok(markup.includes('data-interface-group="reference_point:5gc"'));
+  assert.ok(markup.includes('data-interface-group="sbi:5gc"'));
+  assert.ok(markup.includes('Suggested endpoints: SMF / PCF'));
+  assert.ok(markup.includes('Producer: NRF'));
+  assert.ok(markup.includes('0 of 8 selected'));
+});
+
+test('the edit form shows current interface names as controlled selections', () => {
+  const markup = render(createElement(TopologyEdgeForm, {
+    mode: 'edit',
+    relationshipTypes: ['depends_on'],
+    interfaceCatalog: INTERFACE_CATALOG,
+    initialEdge: edge({ interfaceNames: ['N7'] }),
+    submitting: false,
+    serverError: null,
+    onCancel: () => {},
+  }));
+  assert.ok(markup.includes('data-selected-interface="N7"'));
+  assert.ok(markup.includes('data-interface-name="N7"'));
+  assert.ok(markup.includes('1 of 8 selected'));
+});
+
+test('canvas labels prefer interface names and distinguish the relationship fallback', () => {
+  const annotated = edge({ edgeId: 'interface-label', interfaceNames: ['N7'] });
+  const fallback = edge({ edgeId: 'relationship-label', fromResourceId: AMF, toResourceId: PCF });
+  const multi = edge({ edgeId: 'multi-label', interfaceNames: ['N7', 'N15'] });
+  const layout = buildActualTopology([annotated, fallback], directory);
+  const props = {
+    layout,
+    search: '',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  };
+
+  const quiet = render(createElement(ActualTopologyCanvas, props));
+  assert.ok(!quiet.includes('data-edge-label'), 'a quiet graph reveals no label');
+
+  const focused = render(createElement(ActualTopologyCanvas, { ...props, selectedResourceId: PCF }));
+  assert.ok(focused.includes('N7'), 'the annotated edge reveals its interface name');
+  assert.ok(focused.includes('depends on'), 'the unannotated edge falls back to its relationship type');
+  assert.ok(focused.includes('data-label-kind="interface"'));
+  assert.ok(focused.includes('data-label-kind="relationship"'));
+
+  const allLabels = render(createElement(ActualTopologyCanvas, { ...props, showAllInterfaceNames: true }));
+  assert.ok(allLabels.includes('N7'), 'the show-all control reveals annotated interface names');
+  assert.ok(!allLabels.includes('depends on'), 'the show-all control does not reveal unannotated relationship labels');
+
+  const multiLayout = buildActualTopology([multi], directory);
+  const multiMarkup = render(createElement(ActualTopologyCanvas, {
+    ...props,
+    layout: multiLayout,
+    selectedResourceId: SMF,
+  }));
+  assert.ok(multiMarkup.includes('N7 / N15'), 'multiple interface names are joined with a slash');
+});
+
+test('the relationship table and detail show annotated and unannotated interfaces', () => {
+  const annotated = edge({ edgeId: 'table-annotated', interfaceNames: ['N7', 'N15'] });
+  const plain = edge({ edgeId: 'table-plain' });
+  const table = render(createElement(TopologyEdgeTable, {
+    edges: [annotated, plain],
+    directory,
+    caption: 'Topology relationships',
+    canConfigure: false,
+  }));
+  assert.ok(table.includes('data-interface-names="N7 N15"'));
+  assert.ok(table.includes('Unannotated'));
+
+  const detail = render(createElement(TopologyEdgeDetail, {
+    edge: annotated,
+    directory,
+    canConfigure: false,
+  }));
+  assert.ok(detail.includes('data-interface-names="N7 N15"'));
+  const plainDetail = render(createElement(TopologyEdgeDetail, {
+    edge: plain,
+    directory,
+    canConfigure: false,
+  }));
+  assert.ok(plainDetail.includes('Unannotated'));
 });
 
 /* ------------------------------------------------------------------ table -- */
@@ -956,6 +1163,23 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
   ]) {
     assert.ok(typeof en[key] === 'string' && en[key].length > 0, `en must define ${key}`);
     assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh must define ${key}`);
+  }
+  for (const key of [
+    'topology_interfaces', 'topology_interface_title', 'topology_interface_hint',
+    'topology_interface_search', 'topology_interface_selected',
+    'topology_interface_category_reference_point', 'topology_interface_category_sbi',
+    'topology_interface_plane_control', 'topology_interface_plane_user', 'topology_interface_plane_both',
+    'topology_interface_producer', 'topology_interface_endpoints', 'topology_interface_variable_endpoints',
+    'topology_interface_unannotated', 'topology_interface_catalog_unavailable',
+    'topology_interface_no_match', 'topology_interface_limit', 'topology_interface_remove',
+    'topology_interface_coverage', 'topology_interface_filter', 'topology_interface_filter_all',
+    'topology_interface_show_all', 'topology_interface_hide_all',
+    'topology_interface_empty_title', 'topology_interface_empty_body',
+    'topology_interface_clear_filter',
+  ]) {
+    assert.ok(typeof en[key] === 'string' && en[key].length > 0, `en must define ${key}`);
+    assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh must define ${key}`);
+    assert.notEqual(en[key], zh[key], `${key} must be localized in both languages`);
   }
   assert.ok(/[\u4e00-\u9fff]/.test(zh.topology_title), 'the Chinese title must contain Chinese characters');
   assert.match(en.topology_actual_unavailable_body, /not evidence that no relationship exists/);

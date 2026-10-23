@@ -913,6 +913,48 @@
   text-align: center;
 }
 
+.actualSecondaryToolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.actualInterfaceFilter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 28px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+}
+
+.actualInterfaceFilter span {
+  color: var(--text-muted);
+}
+
+.actualInterfaceFilter select {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary, inherit);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.actualInterfaceFilter:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.actualInterfaceCoverage {
+  color: var(--text-muted);
+}
+
 .actualNote {
   margin: 0;
   font-size: 0.75rem;
@@ -1111,6 +1153,14 @@
   fill: var(--sys-color-text-primary);
   font-family: var(--font-data);
   font-size: 11.5px;
+}
+
+.actualLinkLabelInterface {
+  font-weight: 600;
+}
+
+.actualLinkLabelRelationship {
+  fill: var(--sys-color-text-secondary);
 }
 
 .actualNode {

@@ -322,14 +322,15 @@
  * The complete endpoint UUID remains reachable through the cell title and the
  * adjacent copy control even where the fixed-width column ellipsizes it.
  */
-.fromCol { width: 18.5%; }
+.fromCol { width: 17%; }
 .relCol { width: 11%; }
+.interfaceCol { width: 10%; }
 .dirCol { width: 7.5%; }
-.toCol { width: 18.5%; }
-.stateCol { width: 8%; }
-.revCol { width: 8%; }
-.updatedCol { width: 13.5%; }
-.actionsCol { width: 15%; }
+.toCol { width: 17%; }
+.stateCol { width: 7%; }
+.revCol { width: 7%; }
+.updatedCol { width: 11.5%; }
+.actionsCol { width: 13%; }
 
 .endpoint {
   display: grid;
@@ -989,4 +990,205 @@
   margin: 0 0 var(--space-8);
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------- interfaces ---- */
+
+.interfaceNames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.interfaceBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface-field);
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.interfaceSet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+}
+
+.interfaceSet legend {
+  padding: 0 var(--space-4);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.interfaceHint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.interfaceSetHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.interfaceSearch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: min(100%, 240px);
+  padding: 0 var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  color: var(--text-muted);
+  background: var(--surface-field);
+}
+
+.interfaceSearch:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.interfaceSearch input {
+  width: 100%;
+  min-height: calc(var(--control-height) - 4px);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.interfaceCounter {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.interfaceSelected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.interfaceChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface-field);
+  color: var(--text-primary, inherit);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.interfaceChip:hover {
+  background: var(--surface-hover);
+}
+
+.interfaceChip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.interfaceOptions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  max-height: 240px;
+  overflow: auto;
+  padding-right: var(--space-4);
+}
+
+.interfaceGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.interfaceGroupTitle {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.interfaceOption {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  padding: var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-small);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.interfaceOption:hover {
+  background: var(--surface-hover);
+}
+
+.interfaceOptionSelected {
+  border-color: var(--sys-color-action-primary);
+}
+
+.interfaceOption input {
+  margin-top: 2px;
+}
+
+.interfaceOptionBody {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.interfaceOptionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.interfaceBadges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.interfaceOptionMeta,
+.interfaceSuggestion {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.interfaceSuggestion {
+  color: var(--text-secondary);
+}
+
+.interfaceEmpty {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.interfaceLimit {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--sys-color-status-warning);
 }

@@ -423,7 +423,7 @@ export function TopologyPage() {
             />
           </div>
         ) : loading && edges.length === 0 ? (
-          <LoadingRows columns={8} rows={5} />
+          <LoadingRows columns={9} rows={5} />
         ) : edges.length === 0 ? (
           <div className={styles.stateWrap}>
             <EmptyState
@@ -500,6 +500,7 @@ export function TopologyPage() {
           <TopologyEdgeForm
             mode="create"
             relationshipTypes={meta?.relationshipTypes ?? []}
+            interfaceCatalog={meta?.interfaceCatalog ?? []}
             submitting={submitting}
             serverError={formError}
             onCancel={() => setCreateOpen(false)}
@@ -523,6 +524,7 @@ export function TopologyPage() {
             <TopologyEdgeForm
               mode="edit"
               relationshipTypes={meta?.relationshipTypes ?? []}
+              interfaceCatalog={meta?.interfaceCatalog ?? []}
               initialEdge={editTarget}
               submitting={submitting}
               serverError={formError}

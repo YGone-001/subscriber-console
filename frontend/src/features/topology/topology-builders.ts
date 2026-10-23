@@ -10,6 +10,7 @@ import {
   validateDescription,
   validateLabels,
 } from './topology-validation';
+import { normalizeInterfaceNames } from './interface-catalog';
 
 const UUID_V4_PATTERN =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
@@ -55,6 +56,7 @@ export function buildCreateEdgeRequest(input: Partial<CreateEdgeRequest>): Creat
 
   const description = input.description?.trim();
   validateMetadata(description, input.labels, input.attributes);
+  const interfaceNames = normalizeInterfaceNames(input.interfaceNames);
 
   const req: CreateEdgeRequest = {
     relationshipType: input.relationshipType.trim(),
@@ -64,6 +66,7 @@ export function buildCreateEdgeRequest(input: Partial<CreateEdgeRequest>): Creat
   if (description) req.description = description;
   if (input.labels && Object.keys(input.labels).length > 0) req.labels = input.labels;
   if (input.attributes && Object.keys(input.attributes).length > 0) req.attributes = input.attributes;
+  if (interfaceNames !== undefined) req.interfaceNames = interfaceNames;
 
   return req;
 }
@@ -79,14 +82,18 @@ export function buildUpdateEdgeRequest(
 
   const description = input.description?.trim();
   validateMetadata(description, input.labels, input.attributes);
+  const interfaceNames = normalizeInterfaceNames(input.interfaceNames);
 
   // An empty metadata replacement is explicitly supported: omitted keys clear
-  // the stored value rather than preserving the previous one.
+  // the stored value rather than preserving the previous one. Interface names
+  // follow the same rule when supplied; an omitted array preserves the server
+  // value for old clients.
   const edge: MutableEdge = {
     description: description ?? '',
     labels: input.labels ?? {},
     attributes: input.attributes ?? {},
   };
+  if (interfaceNames !== undefined) edge.interfaceNames = interfaceNames;
 
   return { expectedRevision, edge };
 }

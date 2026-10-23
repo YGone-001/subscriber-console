@@ -19,6 +19,7 @@ import {
 import { edgeGeometry, placeEdgeLabels } from '../actual-topology-labels';
 import { nodeHealthLabelKey, type NodeHealth, type NodeHealthState } from '../actual-topology-health';
 import { nfRoleLabel } from '../nf-classification';
+import { edgeInterfaceNames, formatInterfaceNames } from '../interface-catalog';
 import styles from '../../../styles/modules/architecture.module.css';
 
 function nodeName(node: ActualTopologyNode): string {
@@ -58,6 +59,7 @@ export function ActualTopologyCanvas({
   search,
   hoveredEdgeId,
   health,
+  showAllInterfaceNames = false,
   onSelectResource,
   onHoverEdge,
 }: {
@@ -66,6 +68,7 @@ export function ActualTopologyCanvas({
   search: string;
   hoveredEdgeId?: string;
   health?: ReadonlyMap<string, NodeHealth>;
+  showAllInterfaceNames?: boolean;
   onSelectResource: (resourceId: string) => void;
   onHoverEdge: (edgeId?: string) => void;
 }) {
@@ -80,19 +83,25 @@ export function ActualTopologyCanvas({
   }, [layout.links, selectedResourceId]);
   const isFocused = (node: ActualTopologyNode) => !selectedResourceId || relatedIds.has(node.resourceId);
   const labels = useMemo(() => {
-    if (!selectedResourceId && !hoveredEdgeId) return [];
+    if (!selectedResourceId && !hoveredEdgeId && !showAllInterfaceNames) return [];
     const relatedLinks = layout.links.filter((link) => {
       const related = Boolean(selectedResourceId)
         && (link.fromResourceId === selectedResourceId || link.toResourceId === selectedResourceId);
-      return related || link.edgeId === hoveredEdgeId;
+      const annotated = edgeInterfaceNames(link).length > 0;
+      return related || link.edgeId === hoveredEdgeId || (showAllInterfaceNames && annotated);
     });
     const text = new Map<string, string>();
     for (const link of relatedLinks) {
+      const interfaceNames = edgeInterfaceNames(link);
+      if (interfaceNames.length > 0) {
+        text.set(link.edgeId, formatInterfaceNames(interfaceNames));
+        continue;
+      }
       const presentation = RELATIONSHIP_PRESENTATION[link.relationshipType];
       text.set(link.edgeId, presentation ? t(presentation.labelKey) : link.relationshipType);
     }
     return placeEdgeLabels(relatedLinks, text, layout.nodes, layout.width, layout.height);
-  }, [layout.links, layout.nodes, layout.width, layout.height, selectedResourceId, hoveredEdgeId, t]);
+  }, [layout.links, layout.nodes, layout.width, layout.height, selectedResourceId, hoveredEdgeId, showAllInterfaceNames, t]);
 
   return (
     <svg
@@ -233,19 +242,30 @@ export function ActualTopologyCanvas({
       })}
 
       <g aria-hidden="true" className={styles.actualLabels}>
-        {labels.map(({ edgeId, label, labelX, labelY, width, height }) => (
-          <g key={edgeId} data-edge-label={edgeId}>
-            <rect
-              x={labelX - width / 2}
-              y={labelY - height / 2}
-              width={width}
-              height={height}
-              rx={3}
-              className={styles.actualLinkLabelBackdrop}
-            />
-            <text x={labelX} y={labelY + 4} textAnchor="middle" className={styles.actualLinkLabel}>{label}</text>
-          </g>
-        ))}
+        {labels.map(({ edgeId, label, labelX, labelY, width, height }) => {
+          const link = layout.links.find((candidate) => candidate.edgeId === edgeId);
+          const kind = link && edgeInterfaceNames(link).length > 0 ? 'interface' : 'relationship';
+          return (
+            <g key={edgeId} data-edge-label={edgeId} data-label-kind={kind}>
+              <rect
+                x={labelX - width / 2}
+                y={labelY - height / 2}
+                width={width}
+                height={height}
+                rx={3}
+                className={styles.actualLinkLabelBackdrop}
+              />
+              <text
+                x={labelX}
+                y={labelY + 4}
+                textAnchor="middle"
+                className={`${styles.actualLinkLabel} ${kind === 'interface' ? styles.actualLinkLabelInterface : styles.actualLinkLabelRelationship}`}
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })}
       </g>
     </svg>
   );
