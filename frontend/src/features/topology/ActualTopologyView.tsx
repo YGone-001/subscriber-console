@@ -39,7 +39,6 @@ import { nodeHealthLabelKey, summarizeNodeHealth, type NodeHealthState } from '.
 import { useResourceDirectory } from './use-resource-directory';
 import { useTopologyHealth } from './use-topology-health';
 import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
-import { LiveTopologyView } from './LiveTopologyView';
 import styles from '../../styles/modules/architecture.module.css';
 
 const MIN_ZOOM = 0.5;
@@ -60,7 +59,7 @@ function healthSwatchClass(state: NodeHealthState): string {
   }
 }
 
-export function ActualTopologyView() {
+export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => void } = {}) {
   const { t } = useI18n();
   const { edges, coverage, loading, refresh } = useBoundedEdges();
   const [selectedResourceId, setSelectedResourceId] = useState<string | undefined>();
@@ -305,18 +304,30 @@ export function ActualTopologyView() {
     return (
       <section className={styles.actualSection} aria-labelledby="actual-topology-title">
         <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
-        <div className={styles.actualSuggestedNotice} role="status">
-          <Layers size={22} aria-hidden="true" />
-          <div>
-            <strong>{t('topology_actual_suggested_title')}</strong>
-            <span>{t('topology_actual_suggested_body')}</span>
-          </div>
-          <Link className="btn btn-secondary" to="/topology?view=relationships">
-            <GitBranch size={15} />
-            {t('topology_open_ledger')}
-          </Link>
-        </div>
-        <LiveTopologyView />
+        <EmptyState
+          icon={<GitBranch size={40} />}
+          title={t('topology_actual_empty_declared_title')}
+          description={t('topology_actual_empty_declared_body')}
+          action={(
+            <div className={styles.actualEmptyActions}>
+              {onShowRuntime ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  data-action="show-runtime-source"
+                  onClick={onShowRuntime}
+                >
+                  <Layers size={15} aria-hidden="true" />
+                  {t('topology_actual_open_runtime')}
+                </button>
+              ) : null}
+              <Link className="btn btn-secondary" to="/topology?view=ledger">
+                <GitBranch size={15} />
+                {t('topology_open_ledger')}
+              </Link>
+            </div>
+          )}
+        />
       </section>
     );
   }

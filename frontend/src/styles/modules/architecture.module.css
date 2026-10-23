@@ -736,32 +736,12 @@
   margin-bottom: var(--space-24);
 }
 
-.actualSuggestedNotice {
+.actualEmptyActions {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-12);
   flex-wrap: wrap;
-  padding: var(--space-12);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-panel);
-  background: var(--sys-color-surface-panel);
-  color: var(--text-muted);
-}
-
-.actualSuggestedNotice > div {
-  display: grid;
-  flex: 1;
-  gap: 2px;
-  min-width: 220px;
-}
-
-.actualSuggestedNotice strong {
-  color: var(--text-primary, inherit);
-  font-size: 0.8rem;
-}
-
-.actualSuggestedNotice span {
-  font-size: 0.74rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
 }
 
 .actualToolbar,

@@ -29,6 +29,8 @@ export type OperationsUrlStateOptions = {
   /* Views the page implements; omitted when the page has no view switch. */
   views?: readonly string[];
   defaultView?: string;
+  /* Filter keys cleared by `clearFilters`; defaults to every filter key. */
+  clearKeys?: readonly string[];
 };
 
 export type OperationsUrlState = {
@@ -44,8 +46,9 @@ export type OperationsUrlState = {
 };
 
 export function useOperationsUrlState(options: OperationsUrlStateOptions): OperationsUrlState {
-  const { keys, views, defaultView = '' } = options;
+  const { keys, views, defaultView = '', clearKeys } = options;
   const keySignature = keys.join(',');
+  const clearSignature = clearKeys?.join(',');
 
   const allowList = useMemo(
     () => [...new Set([...keySignature.split(',').filter(Boolean), OPERATIONS_VIEW_PARAM, OPERATIONS_CURSOR_PARAM])],
@@ -109,13 +112,16 @@ export function useOperationsUrlState(options: OperationsUrlStateOptions): Opera
   );
 
   const clearFilters = useCallback(() => {
+    const clearable = clearSignature === undefined
+      ? allowList
+      : clearSignature.split(',').filter(Boolean);
     const patch: OperationsPatch = {};
-    for (const key of allowList) {
+    for (const key of clearable) {
       if (key === OPERATIONS_VIEW_PARAM || key === OPERATIONS_CURSOR_PARAM) continue;
       patch[key] = null;
     }
     apply(patch);
-  }, [apply, allowList]);
+  }, [apply, allowList, clearSignature]);
 
   const hasFilters = Object.keys(filters).length > 0;
 

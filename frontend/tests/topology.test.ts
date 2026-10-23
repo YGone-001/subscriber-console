@@ -845,8 +845,12 @@ test('the actual view separates an unavailable read from empty and filtered stat
   assert.ok(source.includes("topology_actual_unavailable_title"));
   assert.ok(source.includes("topology_actual_no_nf_title"));
   assert.ok(source.includes("topology_interface_empty_title"));
-  assert.ok(source.includes("topology_actual_suggested_title"));
-  assert.ok(source.includes('<LiveTopologyView />'), 'the empty declared view must fall through to the live runtime projection');
+  assert.ok(source.includes("topology_actual_empty_declared_title"), 'an empty declared source must state its own meaning');
+  assert.ok(source.includes('onShowRuntime'), 'an empty declared source must offer the runtime source explicitly');
+  assert.ok(
+    !source.includes('<LiveTopologyView'),
+    'the declared source must never silently fall through to runtime evidence',
+  );
   assert.ok(source.includes('data-action="toggle-support"'), 'support visibility must be an explicit control');
   assert.ok(source.includes('data-interface-filter'), 'the interface filter must be explicit');
   assert.ok(source.includes('data-interface-coverage'), 'the annotated coverage must be visible');
@@ -1211,7 +1215,15 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_actual_unavailable_title', 'topology_actual_unavailable_body',
     'topology_actual_support_show', 'topology_actual_support_hide', 'topology_actual_hidden_support',
     'topology_actual_no_nf_title', 'topology_actual_no_nf_body', 'topology_support_resource',
-    'topology_actual_suggested_title', 'topology_actual_suggested_body',
+    'topology_actual_empty_declared_title', 'topology_actual_empty_declared_body',
+    'topology_actual_open_runtime',
+    'topology_primary_view_label', 'topology_primary_graph', 'topology_primary_ledger',
+    'topology_source_label', 'topology_source_declared', 'topology_source_runtime',
+    'topology_source_reference', 'topology_source_evidence_declared',
+    'topology_source_evidence_runtime', 'topology_source_evidence_reference',
+    'topology_source_notes', 'topology_source_note_declared', 'topology_source_note_runtime',
+    'topology_source_note_reference', 'topology_runtime_scope_label',
+    'topology_runtime_scope_config', 'topology_runtime_scope_hierarchy',
     'topology_runtime_label',
     'topology_live_title', 'topology_live_subtitle', 'topology_live_runtime_total',
     'topology_live_attention', 'topology_live_search_placeholder',
@@ -1285,15 +1297,16 @@ test('the relationship presentation covers exactly the nine canonical types', ()
 
 /* ------------------------------------------------------------------ pages -- */
 
-test('the topology page defaults to actual topology and still renders', () => {
+test('the topology page defaults to the declared graph and still renders', () => {
   const markup = renderPage(createElement(TopologyPage));
   assert.ok(markup.includes('Topology'), 'the page title must render');
-  assert.ok(markup.includes('data-topology-view="actual"'), 'the actual topology view must render');
-  assert.ok(markup.includes('data-topology-view="architecture"'), 'the view switch must render');
-  assert.ok(markup.includes('actual-topology-title'), 'the actual topology section must be rendered');
+  assert.ok(markup.includes('data-topology-view="actual"'), 'the graph view must render');
+  assert.ok(markup.includes('data-topology-view="ledger"'), 'the primary view switch must render');
+  assert.ok(markup.includes('data-topology-source-bar="declared"'), 'the declared source must be selected');
+  assert.ok(markup.includes('actual-topology-title'), 'the graph section must be rendered');
   // The relationship ledger and runtime tree are exclusive views, so neither
-  // is rendered behind the default topology canvas.
-  assert.ok(!markup.includes('topology-filter-from'), 'the ledger must not render on the architecture view');
+  // is rendered behind the default graph canvas.
+  assert.ok(!markup.includes('topology-filter-from'), 'the ledger must not render behind the graph');
   assert.ok(!markup.includes('data-testid="runtime-discovery"'), 'the runtime surface must not render behind the canvas');
 });
 
@@ -1303,10 +1316,11 @@ test('the relationship ledger renders on its own view', () => {
   assert.ok(markup.includes('topology-filter-to'), 'the to-resource filter must render');
 });
 
-test('the reference architecture stays reachable without replacing the actual view', () => {
+test('the reference architecture stays reachable without replacing the graph', () => {
   const markup = renderPage(createElement(TopologyPage), '/topology?view=architecture');
-  assert.ok(markup.includes('id="architecture-title"'), 'the reference canvas must render on its own view');
-  assert.ok(!markup.includes('id="actual-topology-title"'), 'the actual canvas must not render behind it');
+  assert.ok(markup.includes('id="architecture-title"'), 'the reference canvas must render on its own source');
+  assert.ok(markup.includes('data-topology-source-bar="reference"'), 'the source switch must name the evidence');
+  assert.ok(!markup.includes('id="actual-topology-title"'), 'the declared graph must not render behind it');
 });
 
 test('the resource topology page renders a loading state for a resource, never fabricated data', () => {

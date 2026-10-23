@@ -58,12 +58,14 @@ function renderTopology(path: string): string {
 
 /* --------------------------------------------------------------- views -- */
 
-test('the topology page defaults to the actual topology view', () => {
+test('the topology page defaults to the declared graph', () => {
   const markup = renderTopology('/topology');
-  assert.ok(markup.includes('data-topology-view="actual"'), 'the actual view must be present in the switch');
-  assert.ok(markup.includes('data-topology-view="architecture"'), 'the view switch must render');
+  assert.ok(markup.includes('data-topology-view="actual"'), 'the graph view must be present in the switch');
+  assert.ok(markup.includes('data-topology-view="ledger"'), 'the ledger view must be present in the switch');
+  assert.ok(markup.includes('data-topology-source-bar="declared"'), 'the declared source must be selected by default');
+  assert.ok(markup.includes('data-topology-source="declared"'), 'the source switch must render');
   assert.ok(markup.includes('aria-pressed="true"'), 'the default view must be pressed');
-  assert.ok(markup.includes('id="actual-topology-title"'), 'the actual topology section must render');
+  assert.ok(markup.includes('id="actual-topology-title"'), 'the graph section must render');
   assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render by default');
 });
 
@@ -79,37 +81,83 @@ test('the runtime hierarchy is not rendered behind the actual topology', () => {
 });
 
 test('the ledger view renders its own filters and no canvas', () => {
-  const markup = renderTopology('/topology?view=relationships');
-  assert.ok(markup.includes('data-topology-view="relationships"'));
-  assert.ok(markup.includes('topology-filter-from'));
-  assert.ok(markup.includes('topology-filter-to'));
-  assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render on the ledger view');
-  assert.ok(!markup.includes('id="actual-topology-title"'), 'the actual canvas must not render on the ledger view');
+  for (const path of ['/topology?view=ledger', '/topology?view=relationships']) {
+    const markup = renderTopology(path);
+    assert.ok(markup.includes('data-topology-view="ledger"'), `${path} must select the ledger`);
+    assert.ok(markup.includes('topology-filter-from'));
+    assert.ok(markup.includes('topology-filter-to'));
+    assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render on the ledger view');
+    assert.ok(!markup.includes('id="actual-topology-title"'), 'the graph must not render on the ledger view');
+  }
 });
 
-test('the runtime view renders its own disclaimer', () => {
-  const markup = renderTopology('/topology?view=runtime');
-  assert.ok(markup.includes('data-topology-view="runtime"'));
+test('the runtime hierarchy remains a sub-view of the runtime source', () => {
+  const legacy = renderTopology('/topology?view=runtime');
+  assert.ok(legacy.includes('data-topology-source-bar="runtime"'), 'the legacy runtime view maps to the runtime source');
+  assert.ok(legacy.includes('data-runtime-scope-view="hierarchy"'));
+  assert.ok(legacy.includes('data-testid="runtime-hierarchy"'));
   assert.ok(
-    markup.includes('Observed local runtime hierarchy'),
-    'the runtime view must state that it is not a protocol relationship',
+    legacy.includes('Observed local runtime hierarchy'),
+    'the runtime hierarchy must state that it is not a protocol relationship',
   );
-  assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render on the runtime view');
-  assert.ok(!markup.includes('id="actual-topology-title"'), 'the actual canvas must not render on the runtime view');
+  assert.ok(!legacy.includes('id="architecture-title"'), 'the reference canvas must not render on the runtime sub-view');
+  assert.ok(!legacy.includes('id="actual-topology-title"'), 'the declared graph must not render on the runtime sub-view');
+
+  const config = renderTopology('/topology?view=actual&source=runtime');
+  assert.ok(config.includes('data-topology-source-bar="runtime"'));
+  assert.ok(config.includes('data-runtime-scope="config"'));
+  assert.ok(!config.includes('data-testid="runtime-hierarchy"'), 'the configured projection is the default runtime sub-view');
+});
+
+test('the reference source keeps the architecture canvas on its own source', () => {
+  for (const path of ['/topology?view=architecture', '/topology?view=actual&source=reference']) {
+    const markup = renderTopology(path);
+    assert.ok(markup.includes('data-topology-source-bar="reference"'), `${path} must select the reference source`);
+    assert.ok(markup.includes('id="architecture-title"'), 'the reference canvas must render');
+    assert.ok(!markup.includes('id="actual-topology-title"'), 'the declared graph must not render behind it');
+  }
+});
+
+test('each graph source states its evidence and offers expandable data notes', () => {
+  const cases = [
+    ['declared', 'Inventory nodes + persisted Topology edges'],
+    ['runtime', 'Runtime observation + explicit configuration'],
+    ['reference', 'Standard reference, not deployment fact'],
+  ];
+  for (const [source, evidence] of cases) {
+    const markup = renderTopology(`/topology?view=actual&source=${source}`);
+    assert.ok(markup.includes(`data-evidence-badge="${source}"`), `${source} must carry an evidence badge`);
+    assert.ok(markup.includes(evidence), `${source} must name its evidence`);
+    assert.ok(markup.includes(`data-source-notes="${source}"`), `${source} must expose the data notes`);
+    assert.ok(markup.includes('Data notes'), 'the notes must be behind a disclosure');
+  }
+});
+
+test('an unknown view falls back to the declared graph instead of an empty page', () => {
+  const markup = renderTopology('/topology?view=unknown&source=unknown');
+  assert.ok(markup.includes('data-topology-source-bar="declared"'));
+  assert.ok(markup.includes('id="actual-topology-title"'));
+  assert.ok(!markup.includes('id="architecture-title"'));
 });
 
 test('every topology view keeps one tab strip and one refresh control', () => {
-  for (const view of ['actual', 'architecture', 'relationships', 'runtime']) {
-    const markup = renderTopology(`/topology?view=${view}`);
+  const paths = [
+    '/topology',
+    '/topology?view=ledger',
+    '/topology?view=actual&source=runtime',
+    '/topology?view=architecture',
+  ];
+  for (const path of paths) {
+    const markup = renderTopology(path);
     assert.equal(
       markup.split('data-operations-refresh="page"').length - 1,
       1,
-      `${view} must expose exactly one refresh control`,
+      `${path} must expose exactly one refresh control`,
     );
     assert.equal(
       markup.split('data-operations-nav="workbench"').length - 1,
       1,
-      `${view} must expose exactly one tab strip`,
+      `${path} must expose exactly one tab strip`,
     );
   }
 });

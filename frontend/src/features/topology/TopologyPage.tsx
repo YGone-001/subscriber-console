@@ -47,19 +47,47 @@ import { OperationsPageFrame } from '../operations/OperationsPageFrame';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { ArchitectureView } from './ArchitectureView';
 import { ActualTopologyView } from './ActualTopologyView';
+import { LiveTopologyView } from './LiveTopologyView';
+import {
+  TOPOLOGY_GRAPH_SOURCES,
+  TOPOLOGY_PRIMARY_VIEWS,
+  TOPOLOGY_RUNTIME_SCOPES,
+  useTopologyViewState,
+  type TopologyGraphSource,
+  type TopologyPrimaryView,
+  type TopologyRuntimeScope,
+} from './topology-view-state';
 
 const PAGE_LIMIT = 20;
 
-/* UX-3: three exclusive in-page views. No SPA route is added: the workbench
- * keeps one canonical `/topology` route and one tab. */
-const TOPOLOGY_VIEWS = ['actual', 'architecture', 'relationships', 'runtime'] as const;
-type TopologyView = (typeof TOPOLOGY_VIEWS)[number];
+/* Two primary views share one canonical `/topology` route. The graph keeps the
+ * legacy `actual` URL value; the ledger adds `ledger`. */
+const PRIMARY_LABEL_KEY: Record<TopologyPrimaryView, string> = {
+  actual: 'topology_primary_graph',
+  ledger: 'topology_primary_ledger',
+};
 
-const TOPOLOGY_VIEW_LABEL: Record<TopologyView, string> = {
-  actual: 'topology_view_actual',
-  architecture: 'topology_view_architecture',
-  relationships: 'topology_view_relationships',
-  runtime: 'topology_view_runtime',
+const SOURCE_LABEL_KEY: Record<TopologyGraphSource, string> = {
+  declared: 'topology_source_declared',
+  runtime: 'topology_source_runtime',
+  reference: 'topology_source_reference',
+};
+
+const SOURCE_EVIDENCE_KEY: Record<TopologyGraphSource, string> = {
+  declared: 'topology_source_evidence_declared',
+  runtime: 'topology_source_evidence_runtime',
+  reference: 'topology_source_evidence_reference',
+};
+
+const SOURCE_NOTE_KEY: Record<TopologyGraphSource, string> = {
+  declared: 'topology_source_note_declared',
+  runtime: 'topology_source_note_runtime',
+  reference: 'topology_source_note_reference',
+};
+
+const RUNTIME_SCOPE_LABEL_KEY: Record<TopologyRuntimeScope, string> = {
+  config: 'topology_runtime_scope_config',
+  hierarchy: 'topology_runtime_scope_hierarchy',
 };
 
 export function TopologyPage() {
@@ -72,12 +100,18 @@ export function TopologyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const topology = useTopologyViewState(['state', 'relationship', 'from', 'to']);
+  const primary = topology.primary;
+  const source = topology.source;
+  const runtimeScope = topology.runtimeScope;
+
+  /* `source` and `scope` are registered here so the ledger filter normalization
+   * never strips the graph's evidence context; `clearKeys` keeps the ledger's
+   * "clear filters" action scoped to its own parameters. */
   const url = useOperationsUrlState({
-    keys: ['state', 'relationship', 'from', 'to'],
-    views: TOPOLOGY_VIEWS,
-    defaultView: 'actual',
+    keys: ['state', 'relationship', 'from', 'to', 'source', 'scope'],
+    clearKeys: ['state', 'relationship', 'from', 'to'],
   });
-  const topologyView = url.view as TopologyView;
 
   /* `active` stays the effective default without being written into the URL, so
    * an untouched page keeps a clean, shareable address. */
@@ -135,17 +169,17 @@ export function TopologyPage() {
     [fromResourceId, toResourceId, relationshipType, lifecycleState, t],
   );
 
-  /* The relationship ledger is only read on its own view: the architecture
-   * canvas and the runtime hierarchy must not pay for a query they do not show. */
+  /* The relationship ledger is only read on its own view: the graph sources
+   * must not pay for a query they do not show. */
   useEffect(() => {
-    if (topologyView !== 'relationships') return;
+    if (primary !== 'ledger') return;
     const queryKey = `${lifecycleState}|${relationshipType}|${fromResourceId}|${toResourceId}`;
     if (queryKeyRef.current !== queryKey) {
       queryKeyRef.current = queryKey;
       setCursorHistory([]);
     }
     void loadEdges(url.cursor);
-  }, [topologyView, loadEdges, url.cursor, lifecycleState, relationshipType, fromResourceId, toResourceId]);
+  }, [primary, loadEdges, url.cursor, lifecycleState, relationshipType, fromResourceId, toResourceId]);
 
   const endpointIds = useMemo(
     () => [
@@ -288,24 +322,24 @@ export function TopologyPage() {
       description={t('topology_description')}
       icon={<GitBranch size={23} />}
       viewSwitch={(
-        <div className={styles.viewToggle} role="group" aria-label={t('topology_view_label')}>
-          {TOPOLOGY_VIEWS.map((view) => (
+        <div className={styles.viewToggle} role="group" aria-label={t('topology_primary_view_label')}>
+          {TOPOLOGY_PRIMARY_VIEWS.map((view) => (
             <button
               key={view}
               type="button"
               data-topology-view={view}
-              className={topologyView === view ? styles.viewToggleActive : undefined}
-              aria-pressed={topologyView === view}
-              onClick={() => url.setView(view)}
+              className={primary === view ? styles.viewToggleActive : undefined}
+              aria-pressed={primary === view}
+              onClick={() => topology.setPrimaryView(view)}
             >
-              {t(TOPOLOGY_VIEW_LABEL[view])}
+              {t(PRIMARY_LABEL_KEY[view])}
             </button>
           ))}
         </div>
       )}
-      onRefresh={topologyView === 'relationships' ? () => loadEdges(url.cursor) : undefined}
+      onRefresh={primary === 'ledger' ? () => loadEdges(url.cursor) : undefined}
       actions={
-        canConfigure && topologyView === 'relationships' ? (
+        canConfigure && primary === 'ledger' ? (
           <button
             type="button"
             className="btn btn-primary"
@@ -320,18 +354,79 @@ export function TopologyPage() {
         ) : undefined
       }
     >
-      {topologyView === 'actual' ? <ActualTopologyView /> : null}
+      {primary === 'actual' ? (
+        <>
+          <section
+            className={styles.graphBar}
+            aria-label={t('topology_source_label')}
+            data-topology-source-bar={source}
+          >
+            <div className={styles.sourceToggle} role="group" aria-label={t('topology_source_label')}>
+              {TOPOLOGY_GRAPH_SOURCES.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  data-topology-source={value}
+                  className={source === value ? styles.viewToggleActive : undefined}
+                  aria-pressed={source === value}
+                  onClick={() => topology.setSource(value)}
+                >
+                  {t(SOURCE_LABEL_KEY[value])}
+                </button>
+              ))}
+            </div>
+            <span className={styles.evidenceBadge} data-evidence-badge={source}>
+              {t(SOURCE_EVIDENCE_KEY[source])}
+            </span>
+            <details className={styles.sourceNotes} data-source-notes={source}>
+              <summary>{t('topology_source_notes')}</summary>
+              <div className={styles.sourceNotesBody}>
+                <p>{t(SOURCE_NOTE_KEY[source])}</p>
+                <p>{t('topology_description')}</p>
+              </div>
+            </details>
+            {source === 'runtime' ? (
+              <div className={styles.sourceToggle} role="group" aria-label={t('topology_runtime_scope_label')}>
+                {TOPOLOGY_RUNTIME_SCOPES.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    data-runtime-scope={value}
+                    className={runtimeScope === value ? styles.viewToggleActive : undefined}
+                    aria-pressed={runtimeScope === value}
+                    onClick={() => topology.setRuntimeScope(value)}
+                  >
+                    {t(RUNTIME_SCOPE_LABEL_KEY[value])}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </section>
 
-      {topologyView === 'architecture' ? <ArchitectureView /> : null}
+          {source === 'declared' ? (
+            <ActualTopologyView onShowRuntime={() => topology.setSource('runtime')} />
+          ) : null}
 
-      {topologyView === 'runtime' ? (
-        <section className="dash-card" aria-label={t('topology_view_runtime')}>
-          <p className={styles.viewNote}>{t('topology_runtime_note')}</p>
-          <RuntimeHierarchy />
-        </section>
+          {source === 'runtime' ? (
+            runtimeScope === 'hierarchy' ? (
+              <section
+                className="dash-card"
+                aria-label={t('topology_runtime_scope_hierarchy')}
+                data-runtime-scope-view="hierarchy"
+              >
+                <p className={styles.viewNote}>{t('topology_runtime_note')}</p>
+                <RuntimeHierarchy />
+              </section>
+            ) : (
+              <LiveTopologyView />
+            )
+          ) : null}
+
+          {source === 'reference' ? <ArchitectureView /> : null}
+        </>
       ) : null}
 
-      {topologyView === 'relationships' ? (
+      {primary === 'ledger' ? (
         <>
       {conflictNotice ? (
         <div className={styles.conflictBanner} role="alert">

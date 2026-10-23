@@ -81,7 +81,7 @@ export function LiveTopologyView() {
               <RefreshCw size={15} />
               {t('retry')}
             </button>
-            <Link className="btn btn-secondary" to="/topology?view=architecture">
+            <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
               {t('topology_live_open_architecture')}
             </Link>
           </div>
@@ -128,11 +128,7 @@ export function LiveTopologyView() {
           ) : null}
         </div>
         <div className={styles.liveActions}>
-          <button type="button" className="btn btn-secondary" onClick={refresh} disabled={live.isLoading}>
-            <RefreshCw size={15} />
-            {t('refresh')}
-          </button>
-          <Link className="btn btn-secondary" to="/topology?view=architecture">
+          <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
             {t('topology_live_open_architecture')}
           </Link>
         </div>

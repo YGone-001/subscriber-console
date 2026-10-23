@@ -948,7 +948,99 @@
 }
 
 /* ---------------------------------------------------------------- UX-3 ---- */
-/* In-page view switch for architecture / relationships / runtime. */
+/* In-page primary view switch and graph evidence source. */
+
+.graphBar {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) var(--space-12);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface-subtle);
+}
+
+.sourceToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+}
+
+.sourceToggle button {
+  min-height: calc(var(--control-height) - 6px);
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: var(--ref-radius-small);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.sourceToggle button:hover {
+  color: inherit;
+}
+
+.sourceToggle button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.evidenceBadge {
+  padding: 2px var(--space-8);
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--surface-border));
+  border-radius: var(--ref-radius-pill);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.sourceNotes {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.sourceNotes summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  cursor: pointer;
+}
+
+.sourceNotes summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--ref-radius-small);
+}
+
+.sourceNotesBody {
+  position: absolute;
+  right: var(--space-12);
+  z-index: 5;
+  width: min(420px, calc(100vw - 48px));
+  margin-top: var(--space-8);
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.sourceNotesBody p {
+  margin: 0 0 var(--space-8);
+  line-height: 1.55;
+}
+
+.sourceNotesBody p:last-child {
+  margin-bottom: 0;
+}
 
 .viewToggle {
   display: inline-flex;
