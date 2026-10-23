@@ -511,6 +511,43 @@ function handleApi(req, res, url, context) {
     return sendJson(res, 200, resource);
   }
 
+  if (pathname === '/api/operations/summary') {
+    const byKind = {};
+    const byLifecycleState = {};
+    const byDomain = {};
+    for (const resource of RESOURCES) {
+      byKind[resource.kind] = (byKind[resource.kind] ?? 0) + 1;
+      byLifecycleState[resource.lifecycleState] = (byLifecycleState[resource.lifecycleState] ?? 0) + 1;
+      byDomain[resource.domain] = (byDomain[resource.domain] ?? 0) + 1;
+    }
+    return sendJson(res, 200, {
+      generatedAt: TS.t5,
+      sections: ['inventory', 'health'],
+      inventory: {
+        completeness: 'complete',
+        scope: 'full_collection',
+        counts: {
+          total: RESOURCES.length,
+          byKind,
+          byLifecycleState,
+          byDomain,
+        },
+      },
+      health: {
+        completeness: 'complete',
+        scope: 'full_collection',
+        targets: {
+          configured: 0,
+          enabled: 0,
+          failed: 0,
+          freshnessByState: {},
+          overallByState: {},
+          layersByState: {},
+        },
+      },
+    });
+  }
+
   if (pathname === '/api/operations/resources') {
     return sendJson(res, 200, {
       generatedAt: TS.t5,

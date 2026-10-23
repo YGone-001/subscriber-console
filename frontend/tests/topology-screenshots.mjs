@@ -26,13 +26,21 @@ const repoRoot = resolve(frontendRoot, '..');
 const distDir = resolve(frontendRoot, 'dist');
 const outDir = resolve(repoRoot, 'reports', 'ops', 'topology-ui-screenshots');
 
-const EXPECTED_SCREENSHOT_COUNT = 24;
+const EXPECTED_SCREENSHOT_COUNT = 27;
 const MIN_PNG_BYTES = 8192;
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900 },
   tablet: { width: 768, height: 1024 },
   mobile: { width: 390, height: 844 },
+};
+
+/* The reference architecture is asserted at the three desktop acceptance
+ * sizes, where a width-driven SVG used to push the drawing below the fold. */
+const ARCHITECTURE_VIEWPORTS = {
+  '1280x720': { width: 1280, height: 720 },
+  '1440x900': { width: 1440, height: 900 },
+  '1920x1080': { width: 1920, height: 1080 },
 };
 
 /* Console messages that are benign and explicitly documented. */
@@ -167,7 +175,7 @@ async function main() {
   }
 
   const { origin } = operatorServer;
-  const topologyList = '/topology';
+  const topologyLedger = '/topology?view=ledger';
   const topologyGraph = `/topology/${RESOURCE_IDS.smf}`;
 
   try {
@@ -175,7 +183,7 @@ async function main() {
     for (const [sizeName, viewport] of Object.entries(VIEWPORTS)) {
       for (const theme of ['light', 'dark']) {
         const { context, page } = await newSession(browser, { ...viewport, theme, locale: 'en', session: 'operator' });
-        await page.goto(`${origin}${topologyList}`, { waitUntil: 'domcontentloaded' });
+        await page.goto(`${origin}${topologyLedger}`, { waitUntil: 'domcontentloaded' });
         await settle(page, 'Create Relationship');
 
         check(`auth_gate_allows_session:${sizeName}-${theme}`, !page.url().includes('/login'), `url=${page.url()}`);
@@ -189,7 +197,7 @@ async function main() {
         await assertNoHorizontalOverflow(page, `${sizeName}-${theme}`);
 
         await capture(page, `topology-list-${sizeName}-${theme}.png`, {
-          route: topologyList,
+          route: topologyLedger,
           viewportWidth: viewport.width,
           viewportHeight: viewport.height,
           theme,
@@ -238,6 +246,83 @@ async function main() {
       }
     }
 
+    /* ================= A2. reference architecture viewports ================ */
+    for (const [sizeName, viewport] of Object.entries(ARCHITECTURE_VIEWPORTS)) {
+      const { context, page } = await newSession(browser, {
+        ...viewport,
+        theme: 'light',
+        locale: 'en',
+        session: 'operator',
+      });
+      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
+      await settle(page);
+
+      const initial = await page.evaluate(() => {
+        const canvas = document.querySelector('[data-architecture-viewport]');
+        const rect = canvas.getBoundingClientRect();
+        const nodes = [...canvas.querySelectorAll('[data-role]')];
+        const visible = nodes.filter((node) => {
+          const box = node.getBoundingClientRect();
+          return box.bottom > rect.top && box.top < rect.bottom
+            && box.right > rect.left && box.left < rect.right;
+        }).length;
+        return {
+          top: Math.round(rect.top),
+          height: Math.round(rect.height),
+          viewportHeight: window.innerHeight,
+          nodes: nodes.length,
+          visible,
+        };
+      });
+      check(
+        `architecture_canvas_enters_first_screen:${sizeName}`,
+        initial.top < initial.viewportHeight - 100,
+        JSON.stringify(initial),
+      );
+      check(
+        `architecture_roles_visible:${sizeName}`,
+        initial.nodes >= 9 && initial.visible >= 5,
+        JSON.stringify(initial),
+      );
+      for (const action of ['zoom-out', 'zoom-in', 'fit', 'reset', 'fullscreen']) {
+        check(
+          `architecture_control:${action}:${sizeName}`,
+          await page.locator(`[data-action="${action}"]`).isVisible(),
+          action,
+        );
+      }
+
+      await page.locator('[data-action="fit"]').click();
+      await page.waitForTimeout(200);
+      const fitted = await page.evaluate(() => {
+        const canvas = document.querySelector('[data-architecture-viewport]');
+        const rect = canvas.getBoundingClientRect();
+        const outside = [...canvas.querySelectorAll('[data-role]')].filter((node) => {
+          const box = node.getBoundingClientRect();
+          return box.top < rect.top - 2 || box.bottom > rect.bottom + 2
+            || box.left < rect.left - 2 || box.right > rect.right + 2;
+        }).length;
+        return { outside };
+      });
+      check(`architecture_fit_contains_roles:${sizeName}`, fitted.outside === 0, `outside=${fitted.outside}`);
+
+      await page.locator('[data-action="reset"]').click();
+      await page.waitForTimeout(150);
+      await assertNoRawKeys(page, `architecture-${sizeName}`);
+      await assertNoHorizontalOverflow(page, `architecture-${sizeName}`);
+      await capture(page, `topology-architecture-${sizeName}.png`, {
+        route: '/topology?view=actual&source=reference',
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+        theme: 'light',
+        locale: 'en',
+        fixtureScenario: 'reference-architecture-5gc-sa',
+        session: 'operator',
+      });
+      await context.close();
+    }
+
     /* ========================= B. interactive dialogs ======================= */
     const dialogCases = [
       { name: 'create', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'light' },
@@ -255,7 +340,7 @@ async function main() {
         locale: 'en',
         session: 'operator',
       });
-      await page.goto(`${origin}${topologyList}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}${topologyLedger}`, { waitUntil: 'domcontentloaded' });
       await settle(page, 'Create Relationship');
 
       if (testCase.name === 'create') {
@@ -309,7 +394,7 @@ async function main() {
 
       await assertNoHorizontalOverflow(page, `dialog-${testCase.name}-${testCase.sizeName}-${testCase.theme}`);
       await capture(page, `topology-${testCase.name}-${testCase.sizeName}-${testCase.theme}.png`, {
-        route: topologyList,
+        route: topologyLedger,
         viewportWidth: testCase.viewport.width,
         viewportHeight: testCase.viewport.height,
         theme: testCase.theme,
@@ -373,15 +458,19 @@ async function main() {
       await settle(page);
       await page.locator('#xcloud-primary-sidebar').getByRole('link', { name: /Topology/i }).first().click();
       await page.waitForURL(/\/topology$/, { timeout: 15000 });
-      await settle(page, 'Create Relationship');
-      check('sidebar_topology_navigation', page.url().endsWith('/topology'), `url=${page.url()}`);
+      await settle(page);
+      check(
+        'sidebar_topology_navigation',
+        page.url().endsWith('/topology') && await page.locator('[data-actual-canvas]').first().isVisible(),
+        `url=${page.url()}`,
+      );
       await context.close();
     }
 
     /* Chinese locale renders Chinese labels. */
     {
       const { context, page } = await newSession(browser, { ...VIEWPORTS.desktop, theme: 'light', locale: 'zh', session: 'operator' });
-      await page.goto(`${origin}${topologyList}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}${topologyLedger}`, { waitUntil: 'domcontentloaded' });
       await settle(page, '创建关系');
       const text = await page.locator('body').innerText();
       check('chinese_locale_labels', /[\u4e00-\u9fff]/.test(text) && /创建关系/.test(text), 'zh labels');
@@ -393,7 +482,7 @@ async function main() {
     /* Viewer session is read-only. */
     {
       const { context, page } = await newSession(browser, { ...VIEWPORTS.desktop, theme: 'light', locale: 'en', session: 'viewer' });
-      await page.goto(`${viewerServer.origin}${topologyList}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${viewerServer.origin}${topologyLedger}`, { waitUntil: 'domcontentloaded' });
       await settle(page);
       const text = await page.locator('body').innerText();
       check('viewer_read_only_controls', !/Create Relationship/.test(text) && !/^\s*Retire\s*$/m.test(text), 'no mutation controls');
@@ -404,10 +493,18 @@ async function main() {
     /* Retired relationships are readable when explicitly requested. */
     {
       const { context, page } = await newSession(browser, { ...VIEWPORTS.desktop, theme: 'light', locale: 'en', session: 'operator' });
-      await page.goto(`${origin}${topologyList}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}${topologyLedger}`, { waitUntil: 'domcontentloaded' });
       await settle(page, 'Create Relationship');
+      const retiredResponse = page.waitForResponse((response) => (
+        response.url().includes('/api/topology/edges')
+        && response.url().includes('lifecycleState=retired')
+      ), { timeout: 15000 });
       await page.getByLabel(/Lifecycle/i).selectOption('retired');
-      await page.locator('table tbody tr').first().waitFor({ state: 'visible', timeout: 15000 });
+      await retiredResponse;
+      await page.waitForFunction(() => {
+        const body = document.querySelector('table tbody');
+        return Boolean(body && /retired/i.test(body.textContent ?? ''));
+      }, null, { timeout: 15000 });
       const retiredRows = await page.locator('table tbody tr').count();
       /* The status badge is uppercased by the shared badge stylesheet, so the
        * rendered text is "RETIRED"; match case-insensitively. */
@@ -419,7 +516,7 @@ async function main() {
     /* Write interactions return contract-valid responses. */
     {
       const { context, page } = await newSession(browser, { ...VIEWPORTS.desktop, theme: 'light', locale: 'en', session: 'operator' });
-      await page.goto(`${origin}${topologyList}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}${topologyLedger}`, { waitUntil: 'domcontentloaded' });
       await settle(page, 'Create Relationship');
       await page.getByRole('button', { name: /Create Relationship/i }).first().click();
       await page.locator('#topology-create-title').waitFor({ state: 'visible', timeout: 15000 });

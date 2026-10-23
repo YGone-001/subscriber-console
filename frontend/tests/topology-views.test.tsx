@@ -284,3 +284,30 @@ test('the legend is collapsed to one line with a dialog for the full vocabulary'
   assert.ok(source.includes('COMPACT_TONES'), 'the compact line must be a subset');
   assert.ok(source.includes('FULL_TONES'), 'the dialog must carry the full vocabulary');
 });
+
+/* -------------------------------------------------------------- viewport -- */
+
+test('the reference canvas owns a sized viewport with the shared controls', () => {
+  const source = read('../src/features/topology/ArchitectureView.tsx');
+  assert.ok(source.includes('TopologyGraphToolbar'), 'zoom and fullscreen must use the shared toolbar');
+  assert.ok(source.includes('data-architecture-viewport'), 'the canvas needs its own scroll viewport');
+  assert.ok(source.includes('CANVAS_WIDTH * zoom'), 'the drawing must scale from its logical size, not the viewport width');
+  assert.ok(source.includes('fitView'), 'fit must size the drawing into the viewport');
+  assert.ok(source.includes('toggleFullscreen'), 'the canvas must own fullscreen state');
+  assert.ok(source.includes('beginPan'), 'the canvas must be pannable');
+  assert.ok(
+    source.includes("closest('[data-role], a, button, input, select, textarea')"),
+    'a press on a role must keep selection semantics',
+  );
+
+  const canvas = read('../src/features/topology/components/ArchitectureCanvas.tsx');
+  assert.ok(!canvas.includes('canvasWrap'), 'the canvas must not own the sized wrapper');
+
+  const css = read('../src/styles/modules/architecture.module.css');
+  assert.match(
+    css,
+    /\.archCanvasViewport\s*\{[^}]*height:\s*clamp\(/s,
+    'the viewport must have an explicit responsive height',
+  );
+  assert.ok(!css.includes('.canvasWrap'), 'the width-driven wrapper must be gone');
+});

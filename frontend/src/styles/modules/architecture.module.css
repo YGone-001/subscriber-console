@@ -216,16 +216,10 @@
   background: var(--sys-color-surface-panel);
 }
 
-.canvasWrap {
-  min-width: 0;
-  padding: var(--space-8);
-  background: var(--sys-color-surface-canvas);
-}
-
 .canvas {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
 }
 
 /* -------------------------------------------------------------------- nodes */
@@ -543,13 +537,44 @@
   --tone: var(--sys-color-status-warning, #b45309);
 }
 
-.canvasWrapFull {
-  min-height: clamp(420px, calc(100vh - 320px), 720px);
+/* The reference canvas owns an explicit responsive viewport. The SVG keeps its
+ * fixed viewBox inside it, so a wide screen can never stretch the drawing and
+ * push the architecture below the first screen. */
+
+.archCanvasViewport {
+  height: clamp(320px, calc(100vh - 330px), 720px);
+  overflow: auto;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--sys-color-surface-canvas);
+  cursor: grab;
+  user-select: none;
 }
 
-.canvasWrapFull .canvas {
-  height: 100%;
-  min-height: inherit;
+.archCanvasViewport[data-panning='true'] {
+  cursor: grabbing;
+}
+
+.archCanvasViewport [data-role] {
+  cursor: pointer;
+}
+
+.archCanvasViewport[data-panning='true'] * {
+  cursor: grabbing;
+}
+
+.archCanvasViewport:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  padding: var(--space-24);
+  border: 0;
+  border-radius: 0;
+  background: var(--sys-color-surface-canvas);
+}
+
+.archCanvasScale {
+  margin: 0 auto;
 }
 
 .legendCompact {
@@ -692,8 +717,8 @@
 }
 
 @media (max-width: 900px) {
-  .canvasWrapFull {
-    min-height: 360px;
+  .archCanvasViewport {
+    height: clamp(300px, calc(100vh - 260px), 560px);
   }
 }
 

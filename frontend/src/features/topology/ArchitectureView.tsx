@@ -19,7 +19,7 @@
  * Nothing is written back: the view is a read-only projection. Every unavailable
  * fact is rendered as an explicit state instead of a zero or a green indicator.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Layers } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
@@ -45,16 +45,22 @@ import {
 import {
   ARCHITECTURE_ROLE_TOKENS,
   ARCHITECTURE_VIEW_MODES,
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
   type ArchitectureViewMode,
 } from './reference-architecture';
 import { ArchitectureCanvas } from './components/ArchitectureCanvas';
 import { ArchitectureDetailDrawer } from './components/ArchitectureDetailDrawer';
+import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import type { RuntimeObservations } from '../runtime/runtime-types';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import styles from '../../styles/modules/architecture.module.css';
 
 const REFRESH_INTERVAL_MS = 30000;
 const ARCHITECTURE_RESOURCE_LIMIT = 200;
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 1.75;
+const ZOOM_STEP = 0.15;
 
 const VIEW_LABEL_KEY: Record<ArchitectureViewMode, string> = {
   all: 'arch_view_all',
@@ -113,6 +119,18 @@ export function ArchitectureView({
   const [selectedRole, setSelectedRole] = useState<string | undefined>(undefined);
   const [legendOpen, setLegendOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [panning, setPanning] = useState(false);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const autoFitRef = useRef(false);
+  const panRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
 
   // One bounded projection read: every skeleton role in a single request, with
   // the authoritative monitoring association resolved server-side.
@@ -171,6 +189,103 @@ export function ArchitectureView({
   const failed = Boolean(resourcesRead.error);
   const summary = projection.summary;
 
+  const scrollToOrigin = useCallback(() => {
+    const viewport = canvasRef.current;
+    if (!viewport) return;
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = 0;
+  }, []);
+
+  const fitView = useCallback(() => {
+    const viewport = canvasRef.current;
+    if (!viewport) {
+      setZoom(1);
+      return;
+    }
+    const computed = window.getComputedStyle(viewport);
+    const paddingX = (Number.parseFloat(computed.paddingLeft) || 0) + (Number.parseFloat(computed.paddingRight) || 0);
+    const paddingY = (Number.parseFloat(computed.paddingTop) || 0) + (Number.parseFloat(computed.paddingBottom) || 0);
+    const availableWidth = viewport.clientWidth - paddingX - 2;
+    const availableHeight = viewport.clientHeight - paddingY - 2;
+    const scale = Math.min(1, availableWidth / CANVAS_WIDTH, availableHeight / CANVAS_HEIGHT);
+    const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Number(scale.toFixed(2))));
+    autoFitRef.current = true;
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = 0;
+    setZoom(next);
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (autoFitRef.current) fitView();
+    };
+    const onFullscreenChange = () => {
+      setFullscreen(document.fullscreenElement === canvasRef.current);
+      if (autoFitRef.current) window.requestAnimationFrame(fitView);
+    };
+    window.addEventListener('resize', onResize);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    };
+  }, [fitView]);
+
+  const updateZoom = (delta: number) => {
+    autoFitRef.current = false;
+    setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
+  };
+  const resetView = () => {
+    autoFitRef.current = false;
+    setZoom(1);
+    setSelectedRole(undefined);
+    scrollToOrigin();
+  };
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.();
+    } else {
+      void canvasRef.current?.requestFullscreen?.();
+    }
+  }, []);
+
+  /* Dragging the empty canvas pans the viewport. Presses that start on a role
+   * keep their own selection and keyboard behaviour. */
+  const beginPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    const target = event.target as Element | null;
+    if (target?.closest('[data-role], a, button, input, select, textarea')) return;
+    const viewport = canvasRef.current;
+    if (!viewport) return;
+    panRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+    viewport.setPointerCapture?.(event.pointerId);
+    setPanning(true);
+  };
+  const movePan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current;
+    if (!pan || pan.pointerId !== event.pointerId) return;
+    const viewport = canvasRef.current;
+    if (!viewport) return;
+    viewport.scrollLeft = pan.scrollLeft - (event.clientX - pan.startX);
+    viewport.scrollTop = pan.scrollTop - (event.clientY - pan.startY);
+  };
+  const endPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current;
+    if (!pan || pan.pointerId !== event.pointerId) return;
+    panRef.current = null;
+    setPanning(false);
+    const viewport = canvasRef.current;
+    if (viewport?.hasPointerCapture?.(event.pointerId)) {
+      viewport.releasePointerCapture(event.pointerId);
+    }
+  };
+
   return (
     <section
       className={styles.section}
@@ -189,23 +304,39 @@ export function ArchitectureView({
         />
       ) : (
         <>
+          <TopologyGraphToolbar
+            filters={(
+              <div className={styles.viewSwitch} role="group" aria-label={t('arch_view_label')}>
+                {ARCHITECTURE_VIEW_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={view === mode}
+                    className={view === mode ? styles.viewSwitchActive : undefined}
+                    onClick={() => {
+                      setView(mode);
+                      setSelectedRole(undefined);
+                      scrollToOrigin();
+                    }}
+                  >
+                    {t(VIEW_LABEL_KEY[mode])}
+                  </button>
+                ))}
+              </div>
+            )}
+            zoom={{
+              value: zoom,
+              min: MIN_ZOOM,
+              max: MAX_ZOOM,
+              onIn: () => updateZoom(ZOOM_STEP),
+              onOut: () => updateZoom(-ZOOM_STEP),
+              onFit: fitView,
+              onReset: resetView,
+            }}
+            fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
+          />
+
           <div className={styles.toolbar}>
-            <div className={styles.viewSwitch} role="group" aria-label={t('arch_view_label')}>
-              {ARCHITECTURE_VIEW_MODES.map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-pressed={view === mode}
-                  className={view === mode ? styles.viewSwitchActive : undefined}
-                  onClick={() => {
-                    setView(mode);
-                    setSelectedRole(undefined);
-                  }}
-                >
-                  {t(VIEW_LABEL_KEY[mode])}
-                </button>
-              ))}
-            </div>
             <div className={styles.summaryStrip} role="list">
               <span role="listitem"><strong>{summary.bound}</strong> {t('arch_summary_bound')}</span>
               <span role="listitem"><strong>{summary.unbound}</strong> {t('arch_summary_unbound')}</span>
@@ -254,13 +385,27 @@ export function ArchitectureView({
             <p className={styles.hiddenNote}>{t('arch_hidden_note', { count: visible.hiddenCount })}</p>
           ) : null}
 
-          <div className={`${styles.canvasWrap} ${styles.canvasWrapFull}`}>
-            <ArchitectureCanvas
-              nodes={visible.nodes}
-              links={visible.links}
-              selectedRole={selectedRole}
-              onSelect={(role) => setSelectedRole((current) => (current === role ? undefined : role))}
-            />
+          <div
+            ref={canvasRef}
+            className={styles.archCanvasViewport}
+            data-architecture-viewport="true"
+            data-panning={panning ? 'true' : undefined}
+            onPointerDown={beginPan}
+            onPointerMove={movePan}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
+          >
+            <div
+              className={styles.archCanvasScale}
+              style={{ width: `${CANVAS_WIDTH * zoom}px`, height: `${CANVAS_HEIGHT * zoom}px` }}
+            >
+              <ArchitectureCanvas
+                nodes={visible.nodes}
+                links={visible.links}
+                selectedRole={selectedRole}
+                onSelect={(role) => setSelectedRole((current) => (current === role ? undefined : role))}
+              />
+            </div>
           </div>
 
           {/* Equivalent list representation: the same state as the canvas, in

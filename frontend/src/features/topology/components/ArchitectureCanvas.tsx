@@ -113,104 +113,103 @@ export function ArchitectureCanvas({
   const byRole = new Map(nodes.map((node) => [node.role, node]));
 
   return (
-    <div className={styles.canvasWrap}>
-      <svg
-        className={styles.canvas}
-        viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
-        role="img"
-        aria-label={t('arch_canvas_aria')}
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <title>{t('arch_canvas_aria')}</title>
-        <desc>{t('arch_canvas_desc')}</desc>
+    <svg
+      className={styles.canvas}
+      viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+      role="img"
+      aria-label={t('arch_canvas_aria')}
+      preserveAspectRatio="xMidYMid meet"
+      data-architecture-svg="true"
+    >
+      <title>{t('arch_canvas_aria')}</title>
+      <desc>{t('arch_canvas_desc')}</desc>
 
-        <g aria-hidden="true">
-          {links.map((link) => {
-            const source = byRole.get(link.source);
-            const target = byRole.get(link.target);
-            if (!source || !target) return null;
-            const from = clipToNode(center(source), center(target));
-            const to = clipToNode(center(target), center(source));
-            const anchor = placeLinkLabel(from, to, nodes);
-            const labelX = anchor.x;
-            const labelY = anchor.y - 5;
-            const width = link.interfaceLabel.length * 5.6 + 8;
-            return (
-              <g key={link.key}>
-                <line
-                  x1={from.x}
-                  y1={from.y}
-                  x2={to.x}
-                  y2={to.y}
-                  className={link.declared ? styles.linkDeclared : styles.linkReference}
-                />
-                <rect
-                  x={labelX - width / 2}
-                  y={labelY - 9}
-                  width={width}
-                  height={13}
-                  rx={3}
-                  className={styles.linkLabelBackdrop}
-                />
-                <text x={labelX} y={labelY} textAnchor="middle" className={styles.linkLabel}>
-                  {link.interfaceLabel}
-                </text>
-              </g>
-            );
-          })}
-        </g>
-
-        {nodes.map((node) => {
-          const selected = node.role === selectedRole;
-          const stateText = t(stateLabelKey(node.tone));
-          const ariaLabel = `${node.label} ${t(domainLabelKey(node.domain))}: ${stateText}`;
-          const activate = () => onSelect?.(node.role);
+      <g aria-hidden="true">
+        {links.map((link) => {
+          const source = byRole.get(link.source);
+          const target = byRole.get(link.target);
+          if (!source || !target) return null;
+          const from = clipToNode(center(source), center(target));
+          const to = clipToNode(center(target), center(source));
+          const anchor = placeLinkLabel(from, to, nodes);
+          const labelX = anchor.x;
+          const labelY = anchor.y - 5;
+          const width = link.interfaceLabel.length * 5.6 + 8;
           return (
-            <g
-              key={node.role}
-              role="button"
-              tabIndex={0}
-              aria-label={ariaLabel}
-              aria-pressed={selected}
-              data-binding={node.binding}
-              data-role={node.role}
-              className={`${styles.node} ${TONE_CLASS[node.tone]} ${DOMAIN_CLASS[node.domain]} ${selected ? styles.nodeSelected : ''}`}
-              onClick={activate}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  activate();
-                }
-              }}
-            >
-              <rect
-                x={node.x}
-                y={node.y}
-                width={NODE_WIDTH}
-                height={NODE_HEIGHT}
-                rx={10}
-                className={styles.nodeRect}
+            <g key={link.key}>
+              <line
+                x1={from.x}
+                y1={from.y}
+                x2={to.x}
+                y2={to.y}
+                className={link.declared ? styles.linkDeclared : styles.linkReference}
               />
               <rect
-                x={node.x}
-                y={node.y + 8}
-                width={3.5}
-                height={NODE_HEIGHT - 16}
-                rx={1.75}
-                className={styles.nodeBar}
+                x={labelX - width / 2}
+                y={labelY - 9}
+                width={width}
+                height={13}
+                rx={3}
+                className={styles.linkLabelBackdrop}
               />
-              <text x={node.x + 14} y={node.y + 23} className={styles.nodeLabel}>
-                {node.label}
+              <text x={labelX} y={labelY} textAnchor="middle" className={styles.linkLabel}>
+                {link.interfaceLabel}
               </text>
-              <text x={node.x + 14} y={node.y + 41} className={styles.nodeState}>
-                {stateText}
-              </text>
-              <circle cx={node.x + NODE_WIDTH - 14} cy={node.y + 16} r={4} className={styles.nodeDot} />
             </g>
           );
         })}
-      </svg>
-    </div>
+      </g>
+
+      {nodes.map((node) => {
+        const selected = node.role === selectedRole;
+        const stateText = t(stateLabelKey(node.tone));
+        const ariaLabel = `${node.label} ${t(domainLabelKey(node.domain))}: ${stateText}`;
+        const activate = () => onSelect?.(node.role);
+        return (
+          <g
+            key={node.role}
+            role="button"
+            tabIndex={0}
+            aria-label={ariaLabel}
+            aria-pressed={selected}
+            data-binding={node.binding}
+            data-role={node.role}
+            className={`${styles.node} ${TONE_CLASS[node.tone]} ${DOMAIN_CLASS[node.domain]} ${selected ? styles.nodeSelected : ''}`}
+            onClick={activate}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                activate();
+              }
+            }}
+          >
+            <rect
+              x={node.x}
+              y={node.y}
+              width={NODE_WIDTH}
+              height={NODE_HEIGHT}
+              rx={10}
+              className={styles.nodeRect}
+            />
+            <rect
+              x={node.x}
+              y={node.y + 8}
+              width={3.5}
+              height={NODE_HEIGHT - 16}
+              rx={1.75}
+              className={styles.nodeBar}
+            />
+            <text x={node.x + 14} y={node.y + 23} className={styles.nodeLabel}>
+              {node.label}
+            </text>
+            <text x={node.x + 14} y={node.y + 41} className={styles.nodeState}>
+              {stateText}
+            </text>
+            <circle cx={node.x + NODE_WIDTH - 14} cy={node.y + 16} r={4} className={styles.nodeDot} />
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
