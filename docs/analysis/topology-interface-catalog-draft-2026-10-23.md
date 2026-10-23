@@ -1,6 +1,7 @@
-# 拓扑接口词表与契约变更草案
+# 拓扑接口词表与契约（已实施）
 
-> 状态：DRAFT（评审用，不是当前运行时契约，也未写入代码）。
+> 状态：IMPLEMENTED（v1 已落地；本文件保留设计、决策与契约记录）。
+> 实现位置：`backend/internal/topology/catalog.go`；`frontend/src/features/topology/interface-catalog.ts`、`components/TopologyInterfaceSelector.tsx`；当前契约见 `docs/architecture/topology-dependency-model.md`。
 > 范围：核心网网元之间的接口，EPC / 5GC / IMS / Charging，同时收录参考点与 SBI 服务接口。
 > 原则：接口名只能来自服务端受控词表，不允许自由输入，不从两端网元推断。
 

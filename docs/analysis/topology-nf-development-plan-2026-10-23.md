@@ -1,6 +1,6 @@
 # 核心网网元拓扑开发计划（换机交接版）
 
-> 状态：5 项决策已确认；阶段 1–4 已完成，阶段 5 待开始。
+> 状态：5 项决策已确认；阶段 1–5 已完成。
 > 基线：`develop` 分支，commit `d2e0dbf`（feat(frontend): make declared topology the primary topology view）。
 > 配套文档：`docs/analysis/topology-interface-catalog-draft-2026-10-23.md`（接口词表与契约草案）。
 > 用途：换机后在新 Qoder CN 会话中按本计划继续实施。
@@ -257,12 +257,33 @@ network_function_instance 仍显示；
 
 ### 阶段 5：验证、文档与提交
 
-- [ ] 后端门禁：`gofmt -w .`、`go test ./...`、`go test -race ./...`、`go vet ./...`、`go build ./...`。
-- [ ] 前端门禁：`npm run lint`、`npm run typecheck`、`npm test`、`npm run build`、`npm run check:fonts`。
-- [ ] 文档门禁：`node scripts/test-current-architecture-docs.mjs`、`test-documentation-integrity.mjs`、`test-api-ownership-invariants.mjs`、`test-agent-docs-parity.mjs` 等。
-- [ ] 浏览器验收：构建到临时目录 + fixture server + Playwright；覆盖默认、单域、互通、聚焦、接口筛选、旧边未标注、窄屏。
-- [ ] 文档：更新 `docs/architecture/topology-dependency-model.md`；把词表草案转为当前事实文档或保留在 analysis 并标注已实现。
-- [ ] 提交：按阶段拆分 commit；不 push；不包含 `frontend/package-lock.json`。
+- [x] 后端门禁：`go test ./...`、`go test -race ./...`、`go vet ./...`、`go build ./...` 全部通过；topology 包已格式化。`gofmt -l .` 仍列出 4 个基线文件（`internal/discovery/stats.go`、`internal/operationsview/handler.go`、`handler_test.go`、`model.go`），不在本轮范围。
+- [x] 前端门禁：`npm run lint`、`npm run typecheck`、`npm test`、`npm run check:fonts` 通过（全量 441/443，仅保留两个既有失败）；`npm run build` 因 root-owned `frontend/dist/assets` 无法清空，已用 `/tmp` 输出完成生产构建验证。
+- [x] 文档门禁：current-architecture-docs、documentation-integrity、api-ownership-invariants、agent-docs-parity、production-architecture、frontend-runtime-boundary 通过；已知既有失败保持不变。
+- [x] 浏览器验收：最终构建 + fixture server + Playwright 覆盖全部域、单域、跨域互通、边界隐藏、代理详情、接口筛选、旧边未标注、域空态/真实空态、聚焦与 900px 窄屏。
+- [x] 文档：更新 `docs/architecture/topology-dependency-model.md`；词表草案已标注 IMPLEMENTED 并保留设计与决策记录。
+- [x] 提交：阶段 1–4 已分别提交；阶段 5 仅包含文档收尾，不 push，不包含 `frontend/package-lock.json`。
+
+最终验证记录：
+
+```text
+backend tests / race / vet / build = PASS
+frontend lint / typecheck / fonts = PASS
+frontend full tests = 441/443 (2 known pre-existing failures)
+frontend production build (temp outDir) = PASS
+topology + architecture tests = 90/90
+browser matrix: all/single/cross, boundary toggle, proxy via, interface filter,
+                unannotated fallback, domain empty, true empty, 900px = PASS
+worktree = clean
+```
+
+环境限制（不是代码回归）：
+
+```text
+frontend/dist 由 root 拥有，npm run build 无法清空；使用 /tmp 输出验证
+deployment-boundary 与 topology-foundation 需要本机 Mongo/Nginx；当前会话未执行
+gofmt -l 的 4 个基线文件不在本轮范围
+```
 
 已知既有失败（不要在本轮顺手修，除非用户明确要求）：
 
@@ -504,7 +525,7 @@ go build ./...
 
 基线 commit：d2e0dbf。工作区可能还有未提交的文档和 frontend/package-lock.json；不要提交 package-lock.json。
 
-任务：按计划第 4 节从阶段 5 开始：验证、文档与提交。
+任务：计划阶段 1–5 已完成。新会话先读 AGENTS.md / CLAUDE.md、本文件与 git log，核对当前状态后再开始新需求。
 约束：
 - NF 默认视图只按 kind；network_element 不计入 NF；role 不参与可见性；
 - 接口名只能来自服务端词表，参考点和 SBI 都收录并分类；v1 46 条 nf_nf，external 不进入表单；
