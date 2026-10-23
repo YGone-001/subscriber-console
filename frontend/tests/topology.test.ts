@@ -45,7 +45,9 @@ import {
 import { en } from '../src/lib/locales/en';
 import { zh } from '../src/lib/locales/zh';
 import {
+  ACTUAL_CANVAS_PADDING,
   ACTUAL_DOMAIN_MODE_OPTIONS,
+  ACTUAL_GROUP_WIDTH,
   buildActualTopology,
   groupForResource,
   nodeMatches,
@@ -742,6 +744,119 @@ test('unknown domains are unclassified and never counted as cross-domain', () =>
   assert.equal(fiveGc.crossDomainLinkCount, 0);
 });
 
+test('the all-domain graph stacks vertical lanes with per-lane counts', () => {
+  const amf = domainProjection('c1000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc');
+  const smf = domainProjection('c1000002-1111-4111-8111-000000000002', 'smf-01', 'smf', '5gc');
+  const mme = domainProjection('c1000003-1111-4111-8111-000000000003', 'mme-01', 'mme', 'epc');
+  const hss = domainProjection('c1000004-1111-4111-8111-000000000004', 'hss-01', 'hss', 'epc');
+  const directory: Record<string, ResourceProjection> = {
+    [amf.resourceId]: amf,
+    [smf.resourceId]: smf,
+    [mme.resourceId]: mme,
+    [hss.resourceId]: hss,
+  };
+  const edges = [
+    edge({ edgeId: 'lane-1', fromResourceId: amf.resourceId, toResourceId: smf.resourceId }),
+    edge({ edgeId: 'lane-2', fromResourceId: mme.resourceId, toResourceId: hss.resourceId }),
+    edge({ edgeId: 'lane-3', fromResourceId: smf.resourceId, toResourceId: mme.resourceId }),
+  ];
+
+  const all = buildActualTopology(edges, directory);
+  const lanes = all.bands.filter((band) => band.kind === 'domain');
+  assert.equal(lanes.length, 2, '5GC and EPC each become one lane');
+  assert.equal(lanes[0].x, lanes[1].x, 'lanes share the left edge');
+  assert.ok(lanes[1].y >= lanes[0].y + lanes[0].height, 'lanes stack vertically instead of concatenating right');
+  assert.equal(lanes[0].nodeCount, 2);
+  assert.equal(lanes[1].nodeCount, 2);
+  assert.ok(
+    all.width <= ACTUAL_CANVAS_PADDING * 2 + ACTUAL_GROUP_WIDTH * 2,
+    'the canvas width is bounded by the widest lane, not the domain count',
+  );
+  assert.ok(all.height >= lanes[0].height + lanes[1].height, 'the canvas height accumulates the lanes');
+
+  const single = buildActualTopology(edges, directory, { domainMode: '5gc' });
+  assert.ok(single.bands.length >= 2, 'a focused domain keeps its boundary/support bands');
+  assert.equal(new Set(single.bands.map((band) => band.y)).size, 1, 'a focused domain keeps one horizontal row');
+  assert.equal(new Set(single.bands.map((band) => band.x)).size, single.bands.length, 'focused bands sit side by side');
+});
+
+test('lane abnormal counts reflect runtime problem states only', () => {
+  const running = { ...domainProjection('c2000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc'), runtimeStatus: 'running' };
+  const stopped = { ...domainProjection('c2000002-1111-4111-8111-000000000002', 'smf-01', 'smf', '5gc'), runtimeStatus: 'stopped' };
+  const unknown = { ...domainProjection('c2000003-1111-4111-8111-000000000003', 'mme-01', 'mme', 'epc'), runtimeStatus: 'unknown' };
+  const directory: Record<string, ResourceProjection> = {
+    [running.resourceId]: running,
+    [stopped.resourceId]: stopped,
+    [unknown.resourceId]: unknown,
+  };
+  const layout = buildActualTopology([], directory, { resources: Object.values(directory) });
+  const fiveGc = layout.bands.find((band) => band.domain === '5gc');
+  const epc = layout.bands.find((band) => band.domain === 'epc');
+  assert.equal(fiveGc?.nodeCount, 2);
+  assert.equal(fiveGc?.abnormalCount, 1, 'a stopped runtime counts as abnormal');
+  assert.equal(epc?.abnormalCount, 0, 'an unobserved runtime is not abnormal');
+});
+
+test('an empty domain view reports an empty layout without negative geometry', () => {
+  const amf = domainProjection('c3000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc');
+  const smf = domainProjection('c3000002-1111-4111-8111-000000000002', 'smf-01', 'smf', '5gc');
+  const directory: Record<string, ResourceProjection> = { [amf.resourceId]: amf, [smf.resourceId]: smf };
+  const edges = [edge({ edgeId: 'empty-1', fromResourceId: amf.resourceId, toResourceId: smf.resourceId })];
+
+  const ims = buildActualTopology(edges, directory, { domainMode: 'ims' });
+  assert.equal(ims.nodes.length, 0, 'no IMS resource means no IMS lane');
+  assert.equal(ims.bands.length, 0);
+  assert.ok(ims.width > 0 && ims.height > 0, 'an empty layout still has usable geometry');
+});
+
+test('a large multi-domain set stays deterministic and width-bounded', () => {
+  const directory: Record<string, ResourceProjection> = {};
+  const domains = ['5gc', 'epc', 'ims', 'charging'];
+  for (let index = 0; index < 40; index += 1) {
+    const resourceId = `c4000000-1111-4111-8111-${String(index).padStart(12, '0')}`;
+    directory[resourceId] = {
+      resourceId,
+      kind: 'network_function',
+      name: `nf-${index}`,
+      displayName: `NF-${index}`,
+      domain: domains[index % domains.length],
+      role: 'amf',
+      lifecycleState: 'active',
+    };
+  }
+  const resources = Object.values(directory);
+  const first = buildActualTopology([], directory, { resources });
+  const second = buildActualTopology([], directory, { resources });
+  assert.deepEqual(
+    first.nodes.map((node) => [node.resourceId, node.x, node.y]),
+    second.nodes.map((node) => [node.resourceId, node.x, node.y]),
+    'the same dataset must always produce the same coordinates',
+  );
+  assert.equal(first.bands.length, 4, 'every populated domain becomes a lane');
+  assert.ok(
+    first.width <= ACTUAL_CANVAS_PADDING * 2 + ACTUAL_GROUP_WIDTH,
+    'forty nodes across four domains must not widen the canvas',
+  );
+  assert.ok(first.height > first.bands.reduce((total, band) => total + band.height, 0), 'lanes stack with gaps');
+});
+
+test('lane headers expose counts and an optional focus control', () => {
+  const amf = domainProjection('c5000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc');
+  const mme = domainProjection('c5000002-1111-4111-8111-000000000002', 'mme-01', 'mme', 'epc');
+  const directory: Record<string, ResourceProjection> = { [amf.resourceId]: amf, [mme.resourceId]: mme };
+  const edges = [edge({ edgeId: 'lane-focus', fromResourceId: amf.resourceId, toResourceId: mme.resourceId })];
+  const layout = buildActualTopology(edges, directory);
+  const props = { layout, search: '', onSelectResource: () => {}, onHoverEdge: () => {} };
+
+  const focusable = render(createElement(ActualTopologyCanvas, { ...props, onFocusDomain: () => {} }));
+  assert.ok(focusable.includes('data-lane-focus="5gc"'), 'a domain lane offers a focus entry');
+  assert.ok(focusable.includes('1 nodes') || focusable.includes('1 个节点'), 'the lane states its node count');
+
+  const staticMarkup = render(createElement(ActualTopologyCanvas, props));
+  assert.ok(!staticMarkup.includes('data-lane-focus'), 'without a handler the lane header stays decorative');
+  assert.ok(staticMarkup.includes('data-band="domain"'), 'the lane label keeps its band marker');
+});
+
 test('proxy nodes keep both declared edges and never create a stitched direct link', () => {
   const amf = domainProjection('c0000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc');
   const scp = domainProjection('c0000002-1111-4111-8111-000000000002', 'scp-01', 'scp', '5gc');
@@ -1368,6 +1483,7 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_domain_all', 'topology_domain_epc', 'topology_domain_5gc', 'topology_domain_ims',
     'topology_domain_charging', 'topology_domain_cross', 'topology_domain_unclassified',
     'topology_domain_boundary',
+    'topology_lane_count', 'topology_lane_abnormal', 'topology_lane_focus',
   ]) {
     assert.ok(typeof en[key] === 'string' && en[key].length > 0, `en must define ${key}`);
     assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh must define ${key}`);

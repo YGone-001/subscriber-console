@@ -48,7 +48,11 @@ export type ActualTopologyBand = {
   domain?: TopologyDomain;
   labelKey: string;
   x: number;
+  y: number;
   width: number;
+  height: number;
+  nodeCount: number;
+  abnormalCount: number;
   columns: ActualTopologyColumn[];
 };
 
@@ -110,8 +114,20 @@ export const ACTUAL_BAND_GAP = 20;
 export const ACTUAL_BAND_HEADER_HEIGHT = 30;
 export const ACTUAL_GROUP_HEADER_HEIGHT = 26;
 export const ACTUAL_ROW_HEIGHT = 78;
+/* Vertical domain lanes: the gap between lanes and the breathing room under
+ * the last node row of a lane. */
+export const ACTUAL_LANE_GAP = 24;
+export const ACTUAL_LANE_FOOT = 12;
 
 const NODE_TOP_OFFSET = ACTUAL_BAND_HEADER_HEIGHT + ACTUAL_GROUP_HEADER_HEIGHT + 12;
+
+/* Runtime states that represent a real problem rather than a missing
+ * observation. They drive the per-lane abnormal count. */
+const ABNORMAL_RUNTIME_STATES = new Set(['stopped', 'unverified', 'permission_denied', 'stale']);
+
+export function isAbnormalRuntimeStatus(status: string | undefined): boolean {
+  return Boolean(status) && ABNORMAL_RUNTIME_STATES.has(status as string);
+}
 
 export const ACTUAL_DOMAIN_MODE_OPTIONS: ReadonlyArray<{ value: TopologyDomainMode; labelKey: string }> = [
   { value: 'all', labelKey: 'topology_domain_all' },
@@ -384,8 +400,32 @@ export function buildActualTopology(
     };
   });
 
+  /* Multi-domain modes stack domains as vertical lanes so a wide deployment
+   * never pushes nodes past the viewport; a focused single domain keeps the
+   * compact horizontal band row. */
+  const verticalLanes = selectedDomain === null;
+  const draftById = new Map(drafts.map((draft) => [draft.resourceId, draft]));
+  const laneKeyOf = (node: ActualTopologyNode) => (
+    node.band === 'domain' ? `domain:${node.domainBand}` : node.band
+  );
+  const crossLaneIds = new Set<string>();
+  for (const edge of visibleEdges) {
+    const from = draftById.get(edge.fromResourceId);
+    const to = draftById.get(edge.toResourceId);
+    if (!from || !to) continue;
+    if (laneKeyOf(from) !== laneKeyOf(to)) {
+      crossLaneIds.add(from.resourceId);
+      crossLaneIds.add(to.resourceId);
+    }
+  }
+  const crossLaneFirst = (left: ActualTopologyNode, right: ActualTopologyNode) => (
+    Number(crossLaneIds.has(right.resourceId)) - Number(crossLaneIds.has(left.resourceId))
+  );
+
   const bands: ActualTopologyBand[] = [];
-  let nextBandX = ACTUAL_CANVAS_PADDING;
+  let cursorX = ACTUAL_CANVAS_PADDING;
+  let cursorY = ACTUAL_CANVAS_PADDING;
+  let widestLane = 0;
   let maxRows = 1;
   for (const spec of bandSpecs) {
     const bandRecords = drafts.filter((node) => (
@@ -394,38 +434,61 @@ export function buildActualTopology(
     ));
     if (bandRecords.length === 0) continue;
     const presentGroups = GROUPS.filter((group) => bandRecords.some((node) => node.group === group));
-    const columns: ActualTopologyColumn[] = [];
-    let bandWidth = 0;
-    for (const group of presentGroups) {
-      columns.push({ group, x: nextBandX + bandWidth, width: ACTUAL_GROUP_WIDTH });
-      bandWidth += ACTUAL_GROUP_WIDTH;
-    }
+    const columnLists = presentGroups.map((group) => {
+      const nodesInGroup = bandRecords.filter((node) => node.group === group);
+      /* Nodes reaching into another lane sit at the lane edge so cross-lane
+       * relationships leave the lane without crossing unrelated cards. */
+      if (verticalLanes) nodesInGroup.sort(crossLaneFirst);
+      return { group, nodes: nodesInGroup };
+    });
+    const laneRows = columnLists.reduce((max, entry) => Math.max(max, entry.nodes.length), 0);
     const band: ActualTopologyBand = {
       kind: spec.kind,
       domain: spec.domain,
       labelKey: spec.labelKey,
-      x: nextBandX,
-      width: bandWidth,
-      columns,
+      x: verticalLanes ? ACTUAL_CANVAS_PADDING : cursorX,
+      y: verticalLanes ? cursorY : ACTUAL_CANVAS_PADDING,
+      width: presentGroups.length * ACTUAL_GROUP_WIDTH,
+      height: NODE_TOP_OFFSET
+        + Math.max(0, laneRows - 1) * ACTUAL_ROW_HEIGHT
+        + ACTUAL_NODE_HEIGHT
+        + ACTUAL_LANE_FOOT,
+      nodeCount: bandRecords.length,
+      abnormalCount: bandRecords.filter((node) => isAbnormalRuntimeStatus(node.runtimeStatus)).length,
+      columns: [],
     };
-    bands.push(band);
-    for (const column of columns) {
-      const columnNodes = bandRecords.filter((node) => node.group === column.group);
-      columnNodes.forEach((node, rowIndex) => {
+    let columnX = band.x;
+    for (const entry of columnLists) {
+      const column: ActualTopologyColumn = { group: entry.group, x: columnX, width: ACTUAL_GROUP_WIDTH };
+      columnX += ACTUAL_GROUP_WIDTH;
+      band.columns.push(column);
+      entry.nodes.forEach((node, rowIndex) => {
         node.x = column.x + (ACTUAL_GROUP_WIDTH - ACTUAL_NODE_WIDTH) / 2;
-        node.y = ACTUAL_CANVAS_PADDING + NODE_TOP_OFFSET + rowIndex * ACTUAL_ROW_HEIGHT;
+        node.y = band.y + NODE_TOP_OFFSET + rowIndex * ACTUAL_ROW_HEIGHT;
       });
-      maxRows = Math.max(maxRows, columnNodes.length);
+      maxRows = Math.max(maxRows, entry.nodes.length);
     }
-    nextBandX += bandWidth + ACTUAL_BAND_GAP;
+    bands.push(band);
+    if (verticalLanes) {
+      cursorY += band.height + ACTUAL_LANE_GAP;
+      widestLane = Math.max(widestLane, band.width);
+    } else {
+      cursorX += band.width + ACTUAL_BAND_GAP;
+    }
   }
 
   const nodes = drafts.filter((node) => node.x > 0 && node.y > 0);
   const groups = GROUPS.filter((group) => nodes.some((node) => node.group === group));
-  const width = bands.length > 0
-    ? nextBandX - ACTUAL_BAND_GAP + ACTUAL_CANVAS_PADDING
-    : ACTUAL_CANVAS_PADDING * 2 + ACTUAL_GROUP_WIDTH;
-  const height = ACTUAL_CANVAS_PADDING * 2 + NODE_TOP_OFFSET + (maxRows - 1) * ACTUAL_ROW_HEIGHT + ACTUAL_NODE_HEIGHT;
+  const width = bands.length === 0
+    ? ACTUAL_CANVAS_PADDING * 2 + ACTUAL_GROUP_WIDTH
+    : verticalLanes
+      ? ACTUAL_CANVAS_PADDING * 2 + widestLane
+      : cursorX - ACTUAL_BAND_GAP + ACTUAL_CANVAS_PADDING;
+  const height = verticalLanes
+    ? (bands.length === 0
+      ? ACTUAL_CANVAS_PADDING * 2 + NODE_TOP_OFFSET + ACTUAL_NODE_HEIGHT
+      : cursorY - ACTUAL_LANE_GAP + ACTUAL_CANVAS_PADDING)
+    : ACTUAL_CANVAS_PADDING * 2 + NODE_TOP_OFFSET + (maxRows - 1) * ACTUAL_ROW_HEIGHT + ACTUAL_NODE_HEIGHT;
 
   const byId = new Map(nodes.map((node) => [node.resourceId, node]));
   const pairCounts = new Map<string, number>();

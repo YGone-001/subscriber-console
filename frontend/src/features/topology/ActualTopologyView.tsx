@@ -577,6 +577,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
                 showAllInterfaceNames={showAllInterfaceNames}
                 onSelectResource={(resourceId) => setSelectedResourceId((current) => current === resourceId ? undefined : resourceId)}
                 onHoverEdge={setHoveredEdgeId}
+                onFocusDomain={(domain) => setDomainMode(domain as TopologyDomainMode)}
               />
             </div>
           </div>

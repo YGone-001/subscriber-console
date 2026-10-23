@@ -20,7 +20,8 @@ import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
 import { TopologyGraphShell } from './components/TopologyGraphShell';
 import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
-import { buildActualTopology } from './actual-topology-model';
+import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology } from './actual-topology-model';
+import type { TopologyDomainMode } from './nf-classification';
 import {
   liveConfigCompleteness,
   liveDirectory,
@@ -53,6 +54,7 @@ export function LiveTopologyView() {
   const live = useRead<LiveTopologyResponse>('/api/topology/live');
   const [selectedComponentId, setSelectedComponentId] = useState<string | undefined>();
   const [search, setSearch] = useState('');
+  const [domainMode, setDomainMode] = useState<TopologyDomainMode>('all');
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -67,8 +69,8 @@ export function LiveTopologyView() {
   const liveLinks = useMemo(() => liveEdges(data), [data]);
   const runtimeResources = useMemo(() => Object.values(directory), [directory]);
   const layout = useMemo(
-    () => buildActualTopology(liveLinks, directory, { domainMode: 'all', resources: runtimeResources }),
-    [liveLinks, directory, runtimeResources],
+    () => buildActualTopology(liveLinks, directory, { domainMode, resources: runtimeResources }),
+    [liveLinks, directory, runtimeResources, domainMode],
   );
   const selected = data?.nodes.find((node) => node.componentId === selectedComponentId);
   const unresolved = data?.unresolvedPeers ?? [];
@@ -124,6 +126,7 @@ export function LiveTopologyView() {
   const resetView = () => {
     setSelectedComponentId(undefined);
     setSearch('');
+    setDomainMode('all');
     fitView();
   };
   const toggleFullscreen = useCallback(() => {
@@ -243,6 +246,21 @@ export function LiveTopologyView() {
               label: t('topology_live_search_placeholder'),
               placeholder: t('topology_live_search_placeholder'),
             }}
+            filters={(
+              <label className={styles.liveDomainFilter}>
+                <span className="sr-only">{t('topology_domain_filter')}</span>
+                <select
+                  value={domainMode}
+                  onChange={(event) => setDomainMode(event.target.value as TopologyDomainMode)}
+                  aria-label={t('topology_domain_filter')}
+                  data-domain-mode={domainMode}
+                >
+                  {ACTUAL_DOMAIN_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             actions={(
               <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
                 {t('topology_live_open_architecture')}
@@ -361,6 +379,7 @@ export function LiveTopologyView() {
                   setSelectedComponentId((current) => current === resourceId ? undefined : resourceId);
                 }}
                 onHoverEdge={() => {}}
+                onFocusDomain={(domain) => setDomainMode(domain as TopologyDomainMode)}
               />
             </div>
           </div>

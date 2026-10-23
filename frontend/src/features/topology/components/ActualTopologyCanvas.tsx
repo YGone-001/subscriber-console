@@ -8,7 +8,6 @@ import { useI18n } from '../../../providers/I18nProvider';
 import { RELATIONSHIP_PRESENTATION } from '../topology-types';
 import {
   ACTUAL_BAND_HEADER_HEIGHT,
-  ACTUAL_CANVAS_PADDING,
   ACTUAL_GROUP_LABEL_KEYS,
   ACTUAL_NODE_HEIGHT,
   ACTUAL_NODE_WIDTH,
@@ -75,6 +74,7 @@ export function ActualTopologyCanvas({
   showAllInterfaceNames = false,
   onSelectResource,
   onHoverEdge,
+  onFocusDomain,
 }: {
   layout: ActualTopologyLayout;
   selectedResourceId?: string;
@@ -84,6 +84,9 @@ export function ActualTopologyCanvas({
   showAllInterfaceNames?: boolean;
   onSelectResource: (resourceId: string) => void;
   onHoverEdge: (edgeId?: string) => void;
+  /* Focus a domain lane into the single-domain view. Omitted when the owning
+   * view has no domain control. */
+  onFocusDomain?: (domain: string) => void;
 }) {
   const { t } = useI18n();
   const relatedIds = useMemo(() => {
@@ -136,45 +139,102 @@ export function ActualTopologyCanvas({
         </marker>
       </defs>
 
-      {layout.bands.map((band) => (
-        <g key={`${band.kind}-${band.domain ?? 'none'}`} aria-hidden="true">
-          <text
-            x={band.x + 16}
-            y={ACTUAL_CANVAS_PADDING + 16}
-            className={styles.actualBandLabel}
-            data-band={band.kind}
-            data-band-domain={band.domain}
-          >
-            {t(band.labelKey)}
-          </text>
-          <line
-            x1={band.x + 16}
-            x2={band.x + band.width - 16}
-            y1={ACTUAL_CANVAS_PADDING + 24}
-            y2={ACTUAL_CANVAS_PADDING + 24}
-            className={styles.actualBandRule}
-          />
-          {band.kind === 'support' ? null : band.columns.map((column) => (
-            <g key={`${band.kind}-${band.domain ?? 'none'}-${column.group}`}>
-              <text
-                x={column.x + 16}
-                y={ACTUAL_CANVAS_PADDING + ACTUAL_BAND_HEADER_HEIGHT + 16}
-                className={styles.actualGroupLabel}
-                data-group-label={column.group}
+      {layout.bands.map((band) => {
+        const bandKey = `${band.kind}-${band.domain ?? 'none'}`;
+        const laneLabel = `${t(band.labelKey)} · ${t('topology_lane_count', { count: band.nodeCount })}${
+          band.abnormalCount > 0
+            ? ` · ${t('topology_lane_abnormal', { count: band.abnormalCount })}`
+            : ''
+        }`;
+        const focusable = Boolean(band.domain) && Boolean(onFocusDomain);
+        const focusDomain = () => {
+          if (band.domain) onFocusDomain?.(band.domain);
+        };
+        return (
+          <g key={bandKey}>
+            <rect
+              x={band.x}
+              y={band.y}
+              width={band.width}
+              height={band.height}
+              rx={8}
+              className={styles.actualLane}
+              aria-hidden="true"
+            />
+            {focusable ? (
+              <g
+                role="button"
+                tabIndex={0}
+                data-lane-focus={band.domain}
+                aria-label={t('topology_lane_focus', { domain: t(band.labelKey) })}
+                className={styles.actualLaneFocus}
+                onClick={focusDomain}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    focusDomain();
+                  }
+                }}
               >
-                {t(ACTUAL_GROUP_LABEL_KEYS[column.group])}
+                <rect
+                  x={band.x}
+                  y={band.y}
+                  width={Math.min(band.width, 260)}
+                  height={ACTUAL_BAND_HEADER_HEIGHT}
+                  fill="transparent"
+                />
+                <text
+                  x={band.x + 16}
+                  y={band.y + 20}
+                  className={styles.actualBandLabel}
+                  data-band={band.kind}
+                  data-band-domain={band.domain}
+                >
+                  {laneLabel}
+                </text>
+              </g>
+            ) : (
+              <text
+                x={band.x + 16}
+                y={band.y + 20}
+                className={styles.actualBandLabel}
+                data-band={band.kind}
+                data-band-domain={band.domain}
+                aria-hidden="true"
+              >
+                {laneLabel}
               </text>
-              <line
-                x1={column.x + 16}
-                x2={column.x + column.width - 16}
-                y1={ACTUAL_CANVAS_PADDING + ACTUAL_BAND_HEADER_HEIGHT + 24}
-                y2={ACTUAL_CANVAS_PADDING + ACTUAL_BAND_HEADER_HEIGHT + 24}
-                className={styles.actualGroupRule}
-              />
-            </g>
-          ))}
-        </g>
-      ))}
+            )}
+            <line
+              x1={band.x + 16}
+              x2={band.x + band.width - 16}
+              y1={band.y + 24}
+              y2={band.y + 24}
+              className={styles.actualBandRule}
+              aria-hidden="true"
+            />
+            {band.kind === 'support' ? null : band.columns.map((column) => (
+              <g key={`${bandKey}-${column.group}`} aria-hidden="true">
+                <text
+                  x={column.x + 16}
+                  y={band.y + ACTUAL_BAND_HEADER_HEIGHT + 16}
+                  className={styles.actualGroupLabel}
+                  data-group-label={column.group}
+                >
+                  {t(ACTUAL_GROUP_LABEL_KEYS[column.group])}
+                </text>
+                <line
+                  x1={column.x + 16}
+                  x2={column.x + column.width - 16}
+                  y1={band.y + ACTUAL_BAND_HEADER_HEIGHT + 24}
+                  y2={band.y + ACTUAL_BAND_HEADER_HEIGHT + 24}
+                  className={styles.actualGroupRule}
+                />
+              </g>
+            ))}
+          </g>
+        );
+      })}
 
       <g aria-hidden="true">
         {layout.links.map((link) => {
