@@ -32,6 +32,7 @@ import {
   center,
   clipToNode,
   placeLinkLabel,
+  placeReferenceLabels,
   type ArchitectureExpandedLink,
 } from '../architecture-link-layout';
 import styles from '../../../styles/modules/architecture.module.css';
@@ -119,6 +120,10 @@ export function ArchitectureCanvas({
   );
   const busKeys = new Set(busLayout.aggregatedKeys);
   const pointLinks = links.filter((link) => !busKeys.has(link.key));
+  const pointLinkLabels = useMemo(
+    () => placeReferenceLabels(pointLinks, nodes),
+    [pointLinks, nodes],
+  );
 
   return (
     <svg
@@ -186,9 +191,10 @@ export function ArchitectureCanvas({
           const from = clipToNode(center(source), center(target));
           const to = clipToNode(center(target), center(source));
           const anchor = placeLinkLabel(from, to, nodes);
-          const labelX = anchor.x;
-          const labelY = anchor.y - 5;
-          const width = link.interfaceLabel.length * 5.6 + 8;
+          const placement = pointLinkLabels.get(link.key);
+          const labelX = placement?.x ?? anchor.x;
+          const labelY = placement?.y ?? anchor.y - 5;
+          const width = placement?.width ?? (link.interfaceLabel.length * 5.6 + 8);
           const focusedLink = link.key === focusedLinkKey
             || (Boolean(focusedRole) && (link.source === focusedRole || link.target === focusedRole));
           return (

@@ -53,7 +53,7 @@ const VIEWPORT = { width: 1440, height: 900 };
 const ROUTES = (flag('routes', 'UI_A11Y_ROUTES', [
   'dashboard:/', 'subscribers:/subscribers', 'profile:/profile', 'ocs-tariffs:/ocs/tariffs',
   'ocs-contracts:/ocs/contracts', 'ocs-balances:/ocs/balances', 'users:/users',
-  'system-health:/system-health', 'inventory:/inventory',
+  'system-health:/system-health', 'inventory:/inventory', 'topology:/topology',
 ].join(','))).split(',').map((entry) => {
   const index = entry.indexOf(':');
   return { name: entry.slice(0, index), route: entry.slice(index + 1) };
@@ -188,6 +188,46 @@ async function main() {
     id: 'app-css-imports',
     ok: appCss.includes('@import'),
     detail: 'the stylesheet entry layer is wired',
+  });
+
+  const topologyRoot = path.join(PROJECT, 'frontend', 'src', 'features', 'topology');
+  const topologyActual = fs.readFileSync(path.join(topologyRoot, 'ActualTopologyView.tsx'), 'utf8');
+  const topologyLive = fs.readFileSync(path.join(topologyRoot, 'LiveTopologyView.tsx'), 'utf8');
+  const topologyArchitecture = fs.readFileSync(path.join(topologyRoot, 'ArchitectureView.tsx'), 'utf8');
+  const topologyCanvas = fs.readFileSync(path.join(topologyRoot, 'components', 'ActualTopologyCanvas.tsx'), 'utf8');
+  const topologyArchCanvas = fs.readFileSync(path.join(topologyRoot, 'components', 'ArchitectureCanvas.tsx'), 'utf8');
+  const topologyCss = fs.readFileSync(path.join(PROJECT, 'frontend', 'src', 'styles', 'modules', 'topology.module.css'), 'utf8');
+  const architectureCss = fs.readFileSync(path.join(PROJECT, 'frontend', 'src', 'styles', 'modules', 'architecture.module.css'), 'utf8');
+  sourceChecks.push({
+    id: 'topology-equivalent-lists',
+    ok: /data-list-node=/.test(topologyActual) && /data-list-edge=/.test(topologyActual)
+      && /data-list-node=/.test(topologyLive) && /data-list-edge=/.test(topologyLive)
+      && /data-architecture-relationship-list/.test(topologyArchitecture),
+    detail: 'every topology canvas has node and relationship lists',
+  });
+  sourceChecks.push({
+    id: 'topology-control-size',
+    ok: /\.graphControls button[\s\S]*?width:\s*32px[\s\S]*?height:\s*32px/.test(topologyCss)
+      && /\.inspectorClose[\s\S]*?width:\s*32px/.test(topologyCss),
+    detail: 'canvas and inspector controls meet the 32px target',
+  });
+  sourceChecks.push({
+    id: 'topology-focus-highlight',
+    ok: /actualLinkFocused/.test(topologyCanvas) && /actualNodeFocusRelated/.test(topologyCanvas)
+      && /linkFocused/.test(topologyArchCanvas) && /nodeFocusRelated/.test(topologyArchCanvas),
+    detail: 'focus highlights one-hop edges and both endpoints',
+  });
+  sourceChecks.push({
+    id: 'topology-high-contrast-reduced-motion',
+    ok: /forced-colors/.test(architectureCss) && /prefers-reduced-motion/.test(architectureCss),
+    detail: 'high contrast and reduced motion preferences are handled',
+  });
+  sourceChecks.push({
+    id: 'topology-live-region',
+    ok: /TopologyAnnouncer/.test(topologyActual)
+      && /TopologyAnnouncer/.test(topologyLive)
+      && /TopologyAnnouncer/.test(topologyArchitecture),
+    detail: 'every topology source announces selection, filters and results',
   });
 
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ui-a11y-'));

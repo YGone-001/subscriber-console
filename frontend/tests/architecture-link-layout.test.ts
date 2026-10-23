@@ -7,12 +7,13 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveArchitecture, type ArchitectureNodeView } from '../src/features/topology/architecture-model';
+import { filterArchitecture, resolveArchitecture, type ArchitectureNodeView } from '../src/features/topology/architecture-model';
 import {
   SBI_TRUNK_LEFT_X,
   SBI_TRUNK_RIGHT_X,
   SBI_TRUNK_TOP_Y,
   buildArchitectureBusLayout,
+  placeReferenceLabels,
   segmentIntersectsNode,
 } from '../src/features/topology/architecture-link-layout';
 import { NODE_HEIGHT, NODE_WIDTH } from '../src/features/topology/reference-architecture';
@@ -113,6 +114,32 @@ test('selecting a node expands only its own Nnrf relationships', () => {
         false,
         `${link.key} label must not sit on ${node.role}`,
       );
+    }
+  }
+});
+
+test('reference labels avoid other labels and node cards', () => {
+  const projectionModel = resolveArchitecture({ resources: [] });
+  const nsa = filterArchitecture(projectionModel, '5gc-nsa');
+  const labels = [...placeReferenceLabels(nsa.links, nsa.nodes).values()];
+  assert.ok(labels.length > 0, 'NSA has point-to-point labels');
+
+  for (let left = 0; left < labels.length; left += 1) {
+    for (let right = left + 1; right < labels.length; right += 1) {
+      const a = labels[left];
+      const b = labels[right];
+      const overlap = a.x - a.width / 2 < b.x + b.width / 2 + 2
+        && a.x + a.width / 2 + 2 > b.x - b.width / 2
+        && a.y - a.height / 2 < b.y + b.height / 2 + 2
+        && a.y + a.height / 2 + 2 > b.y - b.height / 2;
+      assert.equal(overlap, false, `${a.key} must not overlap ${b.key}`);
+    }
+    for (const node of nsa.nodes) {
+      const overlapsNode = labels[left].x - labels[left].width / 2 < node.x + NODE_WIDTH + 4
+        && labels[left].x + labels[left].width / 2 + 4 > node.x
+        && labels[left].y - labels[left].height / 2 < node.y + NODE_HEIGHT + 4
+        && labels[left].y + labels[left].height / 2 + 4 > node.y;
+      assert.equal(overlapsNode, false, `${labels[left].key} must not sit on ${node.role}`);
     }
   }
 });

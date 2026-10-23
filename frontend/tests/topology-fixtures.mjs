@@ -111,7 +111,94 @@ export const EDGES = [
   topologyEdge(EDGE_IDS.exposes, 'exposes', RESOURCE_IDS.pcf, RESOURCE_IDS.nrf, 'retired', 3, 'PCF exposes NRF (retired)', TS.t1),
 ];
 
-/* Live topology: runtime identities plus one NF_ETC configured PFCP link. */
+/* Large deterministic graph: used by the visual regression matrix only. */
+const largeResourceId = (index) => `aaaa0000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+const largeEdgeId = (index) => `bbbb0000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+
+export const LARGE_EDGES = Array.from({ length: 48 }, (_, index) => {
+  const from = index;
+  const to = index % 8 === 7 ? index - 6 : index + 1;
+  return topologyEdge(
+    largeEdgeId(index),
+    index % 3 === 0 ? 'depends_on' : index % 3 === 1 ? 'connects_to' : 'uses',
+    largeResourceId(from),
+    largeResourceId(to),
+    'active',
+    1,
+    `Large fixture relationship ${index}`,
+    TS.t5,
+    [index % 2 === 0 ? 'N4' : 'N7'],
+  );
+});
+
+const LARGE_DOMAINS = ['5gc', 'epc', 'ims', 'charging'];
+const LARGE_ROLES = ['amf', 'smf', 'upf', 'pcf', 'nrf', 'mme', 'sgwc', 'pgwc', 'hss', 'icscf', 'pcscf', 'scscf', 'ocs'];
+
+export const LARGE_RESOURCES = Array.from({ length: 48 }, (_, index) => ({
+  ...inventoryResource(
+    largeResourceId(index),
+    `nf-${String(index).padStart(2, '0')}`,
+    LARGE_DOMAINS[index % LARGE_DOMAINS.length],
+    'network_function',
+    'active',
+  ),
+  role: LARGE_ROLES[index % LARGE_ROLES.length],
+}));
+
+/* Reference architecture resources that exercise stale, degraded and ambiguous
+ * bindings while leaving AMF unbound so the runtime fixture contributes an
+ * observed-unmanaged role. */
+const stateMonitoring = (targetId, nfType, state) => ({
+  targetId,
+  enabled: true,
+  nfType,
+  overallState: state,
+  statusComplete: true,
+  coverage: { l1Measured: true, l2Measured: true, l3Measured: false, l3Available: true },
+  freshness: {
+    state: state === 'stale' ? 'stale' : 'fresh',
+    ageSeconds: state === 'stale' ? 900 : 20,
+    policySeconds: 300,
+    reason: 'fixture',
+  },
+  resourceMetrics: [],
+});
+
+const stateResource = (resourceId, name, role, overrides = {}) => ({
+  resourceId,
+  name,
+  displayName: name.toUpperCase(),
+  domain: '5gc',
+  kind: 'network_function',
+  role,
+  lifecycleState: 'active',
+  isNetworkFunction: true,
+  association: 'absent',
+  ...overrides,
+});
+
+export const ARCHITECTURE_STATE_RESOURCES = {
+  generatedAt: TS.t5,
+  completeness: {
+    inventory: 'complete',
+    monitoring: 'complete',
+    telemetry: 'complete',
+    overall: 'complete',
+  },
+  page: { limit: 200, hasMore: false, nextCursor: null },
+  resources: [
+    stateResource(RESOURCE_IDS.smf, 'smf-01', 'smf', { association: 'confirmed' }),
+    stateResource('6f1c1a10-0002-4a02-8b02-000000000022', 'smf-02', 'smf', { association: 'confirmed' }),
+    stateResource(RESOURCE_IDS.nrf, 'nrf-01', 'nrf', {
+      association: 'confirmed',
+      monitoring: stateMonitoring('target-nrf', 'NRF', 'stale'),
+    }),
+    stateResource(RESOURCE_IDS.pcf, 'pcf-01', 'pcf', {
+      association: 'confirmed',
+      monitoring: stateMonitoring('target-pcf', 'PCF', 'degraded'),
+    }),
+  ],
+};
 export const LIVE_TOPOLOGY = {
   generatedAt: TS.t5,
   host: { hostId: 'fixture-host', hostName: 'agent-fixture' },
@@ -353,7 +440,13 @@ function sendJson(res, status, payload) {
  * @param {string} options.sessionKey key of SESSIONS to authenticate as
  * @returns {Promise<{origin: string, unexpected: string[], close: () => Promise<void>, requestLog: string[]}>}
  */
-export async function startFixtureServer({ distDir, sessionKey = 'operator', edges = EDGES, live = LIVE_TOPOLOGY }) {
+export async function startFixtureServer({
+  distDir,
+  sessionKey = 'operator',
+  edges = EDGES,
+  live = LIVE_TOPOLOGY,
+  operationsResources = null,
+}) {
   const unexpected = [];
   const requestLog = [];
   const openStreams = new Set();
@@ -364,7 +457,7 @@ export async function startFixtureServer({ distDir, sessionKey = 'operator', edg
 
     if (pathname.startsWith('/api/')) {
       requestLog.push(`${req.method} ${pathname}`);
-      return handleApi(req, res, url, { sessionKey, unexpected, openStreams, edges, live });
+      return handleApi(req, res, url, { sessionKey, unexpected, openStreams, edges, live, operationsResources });
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -549,6 +642,7 @@ function handleApi(req, res, url, context) {
   }
 
   if (pathname === '/api/operations/resources') {
+    if (context.operationsResources) return sendJson(res, 200, context.operationsResources);
     return sendJson(res, 200, {
       generatedAt: TS.t5,
       completeness: {

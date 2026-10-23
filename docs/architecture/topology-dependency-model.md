@@ -778,8 +778,10 @@ indicator remains authoritative.
 
 ### 9.9 Live topology surface
 
-The live surface is shown when the declared relationship read is genuinely empty,
-and it reads `GET /api/topology/live` independently:
+The live surface is an explicit source selection (`source=runtime`). An empty
+declared read never switches to it silently; the empty declared state offers
+`View runtime and configured` instead. The surface reads `GET /api/topology/live`
+independently:
 
 ```text
 runtime chips        running / stopped / attention / not detected
@@ -804,6 +806,46 @@ Unknown or unreadable config sources are listed under `Sources`; the view never
 falls back to a reference config copy. An API failure renders an explicit
 unavailable state with retry and a link to the 3GPP reference architecture. The
 surface contains no mutation control.
+
+### 9.10 Graph workbench UI
+
+`/topology` keeps one graph workbench with two primary views (graph and
+relationship ledger) and three graph sources (declared, runtime/configured,
+reference). Source evidence is part of the page header: a declared edge means a
+persisted Topology relationship, a configured edge means explicit NF config
+evidence, and a reference interface means standard knowledge only. None of them
+claims connectivity, traffic or service health.
+
+Canvas behavior:
+
+- zoom, fit, reset, full screen and drag-pan; pointer drags that begin on a node,
+  lane header or control keep their selection behaviour;
+- interface labels are hidden by default and appear on hover, focus or selection;
+  below 80% zoom only labels on the focused path remain visible;
+- selecting a node emphasises its one-hop relationships and dims unrelated
+  elements; focusing a node highlights its incident edges; focusing a relationship
+  highlights both endpoints;
+- every canvas has equivalent node and relationship lists with source, interface,
+  target, evidence and state columns; list focus drives the same canvas emphasis;
+- the inspector is a right rail on desktop and a body-portaled overlay below
+  1100px; Escape closes it and focus returns to the triggering node, role, edge or
+  list item;
+- loading, empty, partial and unavailable states are distinct. Partial reads keep
+  the loaded relationships and name the missing scope (page cap or read failure);
+  unavailable reads name the source and never render as zero nodes.
+
+The reference architecture adds deterministic per-template coordinates for EPC,
+5G SA and 5G NSA, explicit EPC/NSA lanes, and an all-domain overview that opens a
+single template instead of rendering one merged graph. `Nnrf` relationships are
+aggregated onto a shared SBI bus; selecting a role expands only its own Nnrf
+links. Reference-point labels use deterministic collision avoidance. The dynamic
+summary and legend are generated from visible states (including `stale`,
+`unknown`, `ambiguous` and `observed`), and state marks use shape/border plus
+colour. Relationship evidence uses distinct line patterns for declared, bound,
+observed, unresolved and reference-only links.
+
+All of the above remains read-only and introduces no new API route, Mongo
+collection, permission or schema change.
 
 ## 10. Explicit Exclusions
 
@@ -849,13 +891,18 @@ The built production SPA (`frontend/dist`) is served to real Chromium together
 with the deterministic, test-only API fixture adapter
 (`frontend/tests/topology-fixtures.mjs`). The harness:
 
-- captures the mandated 24-PNG matrix (Topology list and one-hop graph at
-  desktop / tablet / mobile in light and dark, the create and retire dialogs, and
-  the Inventory and System Health comparison pages);
+- captures the 41-PNG matrix: topology list and one-hop graph at desktop /
+  tablet / mobile in light and dark, the create and retire dialogs, the
+  Inventory and System Health comparison pages, the reference architecture at
+  1280x720 / 1440x900 / 1920x1080, EPC / 5G NSA / overview in light and dark, a
+  stale/ambiguous architecture projection in both themes, dark 5G SA, 200% zoom,
+  and declared empty / partial / unavailable / large graphs;
 - asserts operator-observable behaviour (authenticated shell, fixture
   relationships, direction representation, dialog geometry, theme application,
   Chinese labels, read-only controls for a viewer session, completed create
-  workflow, no raw translation keys, no horizontal page overflow);
+  workflow, no raw translation keys, no horizontal page overflow, architecture
+  canvas and controls in the first screen, all roles inside the fitted viewport,
+  visible stale/ambiguous states, and lane counts);
 - verifies PNG signature, dimensions and size, and records a SHA-256 checksum per
   screenshot in `manifest.json`;
 - fails closed on browser console errors, page errors, unexpected API requests,
@@ -878,5 +925,13 @@ Topology-specific frontend implementation only:
    Topology dialogs now clear the fixed shell chrome and bound their height with
    an internally scrolling body, and the table columns are proportional so the
    full table fits the content column without a page-level scrollbar.
+3. **The narrow-screen inspector close control sat under the shell tab bar.**
+   The inspector now renders through a body portal below 1100px, above the shell
+   stacking context, with a backdrop; mouse close, Escape and focus return were
+   verified at 1000px.
+4. **Reference-point labels could overlap each other in the NSA template.**
+   Reference labels now use deterministic collision avoidance along their own
+   segment, preferring an anchor that avoids node cards and previously placed
+   labels.
 
 No global design token, shared shell rule or existing module was modified.

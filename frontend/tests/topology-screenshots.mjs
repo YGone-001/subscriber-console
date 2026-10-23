@@ -18,7 +18,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { RESOURCE_IDS, startFixtureServer } from './topology-fixtures.mjs';
+import {
+  ARCHITECTURE_STATE_RESOURCES,
+  EDGES,
+  LARGE_EDGES,
+  LARGE_RESOURCES,
+  RESOURCE_IDS,
+  startFixtureServer,
+} from './topology-fixtures.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const frontendRoot = resolve(here, '..');
@@ -26,7 +33,7 @@ const repoRoot = resolve(frontendRoot, '..');
 const distDir = resolve(frontendRoot, 'dist');
 const outDir = resolve(repoRoot, 'reports', 'ops', 'topology-ui-screenshots');
 
-const EXPECTED_SCREENSHOT_COUNT = 27;
+const EXPECTED_SCREENSHOT_COUNT = 41;
 const MIN_PNG_BYTES = 8192;
 
 const VIEWPORTS = {
@@ -81,7 +88,14 @@ const COMMIT = sourceCommit();
 
 /* ---------------------------------------------------------------- helpers -- */
 
-async function newSession(browser, { width, height, theme, locale, session }) {
+async function newSession(browser, {
+  width,
+  height,
+  theme,
+  locale,
+  session,
+  allowedConsoleErrors = [],
+}) {
   const context = await browser.newContext({
     viewport: { width, height },
     deviceScaleFactor: 1,
@@ -104,6 +118,7 @@ async function newSession(browser, { width, height, theme, locale, session }) {
     if (message.type() !== 'error') return;
     const text = message.text();
     if (BENIGN_CONSOLE.some((pattern) => pattern.test(text))) return;
+    if (allowedConsoleErrors.some((pattern) => pattern.test(text))) return;
     consoleErrors.push(`[${session}] ${text}`);
   });
   page.on('pageerror', (error) => {
@@ -318,6 +333,235 @@ async function main() {
         theme: 'light',
         locale: 'en',
         fixtureScenario: 'reference-architecture-5gc-sa',
+        session: 'operator',
+      });
+      await context.close();
+    }
+
+    /* ================= A3. declared workbench states ======================= */
+    const edgePage = (edges, hasMore) => ({
+      edges,
+      page: { limit: 200, hasMore, nextCursor: hasMore ? 'next-page' : null },
+    });
+    const stateCases = [
+      {
+        name: 'empty',
+        scenario: 'declared-empty',
+        selector: '[data-state-panel="empty-declared"]',
+        prepare: (page) => page.route('**/api/topology/edges**', (route) => route.fulfill({ json: edgePage([], false) })),
+      },
+      {
+        name: 'partial',
+        scenario: 'declared-partial-page-limit',
+        selector: '[data-state-panel="partial"]',
+        prepare: (page) => page.route('**/api/topology/edges**', (route) => route.fulfill({ json: edgePage([EDGES[0]], true) })),
+      },
+      {
+        name: 'unavailable',
+        scenario: 'declared-unavailable',
+        selector: '[data-state-panel="unavailable"]',
+        allowedConsoleErrors: [/500 \(Internal Server Error\)/],
+        prepare: (page) => page.route('**/api/topology/edges**', (route) => route.fulfill({ status: 500, json: { error: 'fixture failure' } })),
+      },
+      {
+        name: 'large',
+        scenario: 'declared-large',
+        selector: '[data-actual-canvas]',
+        waitForText: 'NF-47',
+        prepare: async (page) => {
+          await page.route('**/api/topology/edges**', (route) => route.fulfill({ json: edgePage(LARGE_EDGES, false) }));
+          await page.route('**/api/inventory/resources**', (route) => {
+            const url = new URL(route.request().url());
+            const query = (url.searchParams.get('q') ?? '').toLowerCase();
+            const items = query
+              ? LARGE_RESOURCES.filter((resource) => (
+                resource.resourceId.toLowerCase() === query
+                || resource.name.toLowerCase().startsWith(query)
+              ))
+              : [];
+            return route.fulfill({
+              json: {
+                resources: items,
+                page: { limit: 1, nextCursor: null, hasMore: false },
+              },
+            });
+          });
+        },
+      },
+    ];
+
+    for (const stateCase of stateCases) {
+      const { context, page } = await newSession(browser, {
+        ...VIEWPORTS.desktop,
+        theme: 'light',
+        locale: 'en',
+        session: 'operator',
+        allowedConsoleErrors: stateCase.allowedConsoleErrors ?? [],
+      });
+      await stateCase.prepare(page);
+      await page.goto(`${origin}/topology?view=actual&source=declared`, { waitUntil: 'domcontentloaded' });
+      await page.locator(stateCase.selector).waitFor({ state: 'visible', timeout: 30000 });
+      await settle(page);
+      if (stateCase.waitForText) {
+        await page.locator('svg text', { hasText: stateCase.waitForText }).first().waitFor({ state: 'visible', timeout: 30000 });
+      }
+      await assertNoRawKeys(page, `state-${stateCase.name}`);
+      await assertNoHorizontalOverflow(page, `state-${stateCase.name}`);
+      await capture(page, `topology-${stateCase.name}-desktop-light.png`, {
+        route: '/topology?view=actual&source=declared',
+        viewportWidth: VIEWPORTS.desktop.width,
+        viewportHeight: VIEWPORTS.desktop.height,
+        theme: 'light',
+        locale: 'en',
+        fixtureScenario: stateCase.scenario,
+        session: 'operator',
+      });
+      await context.close();
+    }
+
+    /* ================= A4. overview and template matrix ==================== */
+    const viewButton = (page, label) => page
+      .locator('[data-topology-toolbar] button')
+      .filter({ hasText: new RegExp(`^${label}$`) })
+      .first();
+
+    for (const theme of ['light', 'dark']) {
+      const { context, page } = await newSession(browser, {
+        ...VIEWPORTS.desktop,
+        theme,
+        locale: 'en',
+        session: 'operator',
+      });
+      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
+      await settle(page);
+
+      await viewButton(page, 'Overview').click();
+      await page.locator('[data-architecture-overview]').waitFor({ state: 'visible', timeout: 15000 });
+      check(`architecture_overview_cards:${theme}`, (await page.locator('[data-overview-view]').count()) === 3, 'cards');
+      await assertNoRawKeys(page, `overview-${theme}`);
+      await capture(page, `topology-overview-desktop-${theme}.png`, {
+        route: '/topology?view=actual&source=reference',
+        viewportWidth: VIEWPORTS.desktop.width,
+        viewportHeight: VIEWPORTS.desktop.height,
+        theme,
+        locale: 'en',
+        fixtureScenario: 'architecture-overview',
+        session: 'operator',
+      });
+
+      await page.locator('[data-overview-view="epc"]').click();
+      await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 15000 });
+      check(`architecture_epc_lanes:${theme}`, (await page.locator('[data-architecture-lane]').count()) === 5, '5 lanes');
+      await capture(page, `topology-epc-desktop-${theme}.png`, {
+        route: '/topology?view=actual&source=reference',
+        viewportWidth: VIEWPORTS.desktop.width,
+        viewportHeight: VIEWPORTS.desktop.height,
+        theme,
+        locale: 'en',
+        fixtureScenario: 'architecture-4g-epc',
+        session: 'operator',
+      });
+
+      await viewButton(page, 'Overview').click();
+      await page.locator('[data-overview-view="5gc-nsa"]').click();
+      await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 15000 });
+      check(`architecture_nsa_lanes:${theme}`, (await page.locator('[data-architecture-lane]').count()) === 3, '3 lanes');
+      await capture(page, `topology-nsa-desktop-${theme}.png`, {
+        route: '/topology?view=actual&source=reference',
+        viewportWidth: VIEWPORTS.desktop.width,
+        viewportHeight: VIEWPORTS.desktop.height,
+        theme,
+        locale: 'en',
+        fixtureScenario: 'architecture-5g-nsa',
+        session: 'operator',
+      });
+      await context.close();
+    }
+
+    /* ========= A5. stateful reference, dark theme and 200% zoom =========== */
+    for (const theme of ['light', 'dark']) {
+      const { context, page } = await newSession(browser, {
+        ...VIEWPORTS.desktop,
+        theme,
+        locale: 'en',
+        session: 'operator',
+      });
+      await page.route('**/api/operations/resources**', (route) => route.fulfill({ json: ARCHITECTURE_STATE_RESOURCES }));
+      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
+      await settle(page);
+      check(
+        `architecture_state_stale_visible:${theme}`,
+        await page.locator('[data-summary-tone="stale"]').isVisible(),
+        'stale summary',
+      );
+      check(
+        `architecture_state_ambiguous_visible:${theme}`,
+        await page.locator('[data-legend-tone="ambiguous"]').isVisible(),
+        'ambiguous legend',
+      );
+      await capture(page, `topology-architecture-state-desktop-${theme}.png`, {
+        route: '/topology?view=actual&source=reference',
+        viewportWidth: VIEWPORTS.desktop.width,
+        viewportHeight: VIEWPORTS.desktop.height,
+        theme,
+        locale: 'en',
+        fixtureScenario: 'architecture-stale-ambiguous-observed',
+        session: 'operator',
+      });
+      await context.close();
+    }
+
+    {
+      const { context, page } = await newSession(browser, {
+        ...VIEWPORTS.desktop,
+        theme: 'dark',
+        locale: 'en',
+        session: 'operator',
+      });
+      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
+      await settle(page);
+      await capture(page, 'topology-architecture-desktop-dark.png', {
+        route: '/topology?view=actual&source=reference',
+        viewportWidth: VIEWPORTS.desktop.width,
+        viewportHeight: VIEWPORTS.desktop.height,
+        theme: 'dark',
+        locale: 'en',
+        fixtureScenario: 'reference-architecture-5gc-sa',
+        session: 'operator',
+      });
+      await context.close();
+    }
+
+    {
+      /* Browser zoom 200% is a 720x450 CSS viewport on a 1440x900 display. */
+      const zoomViewport = { width: 720, height: 450 };
+      const { context, page } = await newSession(browser, {
+        ...zoomViewport,
+        theme: 'light',
+        locale: 'en',
+        session: 'operator',
+      });
+      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
+      await settle(page);
+      await page.locator('[data-architecture-viewport]').scrollIntoViewIfNeeded();
+      await page.waitForTimeout(150);
+      check(
+        'architecture_zoom_controls_at_200_percent',
+        await page.locator('[data-action="fit"]').isVisible(),
+        'canvas control remains reachable',
+      );
+      await assertNoHorizontalOverflow(page, 'architecture-zoom200');
+      await capture(page, 'topology-architecture-zoom200-desktop-light.png', {
+        route: '/topology?view=actual&source=reference',
+        viewportWidth: zoomViewport.width,
+        viewportHeight: zoomViewport.height,
+        theme: 'light',
+        locale: 'en',
+        fixtureScenario: 'reference-architecture-200-percent-zoom',
         session: 'operator',
       });
       await context.close();

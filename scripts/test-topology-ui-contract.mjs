@@ -217,6 +217,71 @@ check('TOP-UI-48', missingEn.length === 0, `missing_en_keys=[${missingEn.join(',
 check('TOP-UI-49', missingZh.length === 0, `missing_zh_keys=[${missingZh.join(',')}]`);
 check('TOP-UI-50', /[\u4e00-\u9fff]/.test(zhSource.slice(zhSource.indexOf('nav_topology'))), 'topology_zh_localization=chinese_characters_present');
 
+// 12. Workbench delivery invariants (T06-T13)
+const liveSource = read('features/topology/LiveTopologyView.tsx');
+const actualSource = read('features/topology/ActualTopologyView.tsx');
+const architectureSource = read('features/topology/ArchitectureView.tsx');
+const actualCanvasSource = read('features/topology/components/ActualTopologyCanvas.tsx');
+const archCanvasSource = read('features/topology/components/ArchitectureCanvas.tsx');
+const archLayoutSource = read('features/topology/architecture-link-layout.ts');
+const frameSource = read('features/operations/OperationsPageFrame.tsx');
+const screenshotSource = readFileSync(resolve(frontend, 'tests/topology-screenshots.mjs'), 'utf8');
+const fixtureSource = readFileSync(resolve(frontend, 'tests/topology-fixtures.mjs'), 'utf8');
+
+check(
+  'TOP-UI-51',
+  (frameSource.match(/data-operations-refresh="page"/g) ?? []).length === 1
+    && !pageSource.includes('data-operations-refresh')
+    && !liveSource.includes('data-operations-refresh'),
+  'single_refresh=page_frame_only',
+);
+check(
+  'TOP-UI-52',
+  pageSource.includes('topology_source_evidence_declared')
+    && pageSource.includes('topology_source_evidence_runtime')
+    && pageSource.includes('topology_source_evidence_reference'),
+  'evidence_badges=all_three_sources',
+);
+check('TOP-UI-53', actualCanvasSource.includes('actualLinkFocused') && actualCanvasSource.includes('actualNodeFocusRelated'), 'focus_highlight=one_hop');
+check('TOP-UI-54', liveSource.includes('LABEL_DETAIL_MIN_ZOOM') && liveSource.includes('beginPan'), 'canvas_controls=labels_and_pan');
+check('TOP-UI-55', architectureSource.includes('archCanvasViewport') || read('styles/modules/architecture.module.css').includes('.archCanvasViewport'), 'architecture_viewport=responsive');
+check('TOP-UI-56', archLayoutSource.includes("new Set(['Nnrf'])") && archCanvasSource.includes('data-sbi-bus'), 'nnrf=aggregated_sbi_bus');
+check('TOP-UI-57', architectureSource.includes('data-architecture-overview') && architectureSource.includes('architectureNodesForView'), 'templates=overview_and_per_domain');
+const graphShellSource = read('features/topology/components/TopologyGraphShell.tsx');
+check(
+  'TOP-UI-58',
+  architectureSource.includes('TopologyInspector')
+    && actualSource.includes('TopologyInspector')
+    && (liveSource.includes('TopologyInspector')
+      || (liveSource.includes('TopologyGraphShell') && graphShellSource.includes('TopologyInspector'))),
+  'inspector=shared_all_sources',
+);
+check('TOP-UI-59', liveSource.includes('TopologyAnnouncer') && actualSource.includes('TopologyAnnouncer') && architectureSource.includes('TopologyAnnouncer'), 'live_region=all_sources');
+check('TOP-UI-60', actualSource.includes('data-state-panel="partial"') && liveSource.includes('data-state-panel="empty"'), 'states=empty_partial_unavailable_distinct');
+check(
+  'TOP-UI-61',
+  screenshotSource.includes('EXPECTED_SCREENSHOT_COUNT = 41')
+    && screenshotSource.includes('topology-architecture-zoom200')
+    && screenshotSource.includes('topology-overview')
+    && screenshotSource.includes('topology-epc')
+    && screenshotSource.includes('topology-nsa')
+    && screenshotSource.includes("name: 'empty'")
+    && screenshotSource.includes("name: 'partial'")
+    && screenshotSource.includes("name: 'unavailable'")
+    && screenshotSource.includes("name: 'large'")
+    && screenshotSource.includes('topology-${stateCase.name}-desktop-')
+    && screenshotSource.includes('topology-architecture-desktop-')
+    && /for \(const theme of \['light', 'dark'\]\)/.test(screenshotSource),
+  'visual_matrix=desktop_zoom_themes_states',
+);
+check(
+  'TOP-UI-62',
+  fixtureSource.includes('LARGE_EDGES')
+    && fixtureSource.includes('ARCHITECTURE_STATE_RESOURCES')
+    && fixtureSource.includes('operationsResources'),
+  'fixtures=large_and_stateful_architecture',
+);
+
 const failed = invariants.filter((invariant) => !invariant.ok);
 
 console.log('-- Topology UI/UX acceptance contract --\n');

@@ -127,7 +127,7 @@ test('PageHeader consumers resolve through the module in either export form', ()
   // The dashboard uses the reference default export; the named adapter stays
   // available for any earlier caller.
   assert.match(
-    read('features/read/ReadPages.tsx'),
+    read('features/operations/OperationsOverviewPage.tsx'),
     /import PageHeader from '\.\.\/\.\.\/components\/ui\/PageHeader'/,
   );
   assert.match(

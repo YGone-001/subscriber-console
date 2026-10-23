@@ -79,6 +79,10 @@ const LABEL_STOPS = [0.45, 0.55, 0.35, 0.65, 0.25, 0.75, 0.15, 0.85];
  * across different points of the curve instead of stacking at the midpoint. */
 const EXPANDED_LABEL_STOPS = [0.6, 0.45, 0.7, 0.38, 0.76, 0.32];
 
+const POINT_LABEL_STOPS = [0.45, 0.55, 0.35, 0.65, 0.25, 0.75, 0.15, 0.85, 0.5];
+const POINT_LABEL_HEIGHT = 13;
+const POINT_LABEL_GAP = 2;
+
 function pointOnQuadratic(start: Point, control: Point, end: Point, t: number): Point {
   const mt = 1 - t;
   return {
@@ -143,6 +147,83 @@ export function placeLinkLabel(
 
 function rangesOverlap(start: number, end: number, min: number, max: number): boolean {
   return Math.max(start, end) > min && Math.min(start, end) < max;
+}
+
+export type ReferenceLabelPlacement = {
+  key: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type LabelRect = { left: number; right: number; top: number; bottom: number };
+
+function labelRect(x: number, y: number, width: number, height: number): LabelRect {
+  return { left: x - width / 2, right: x + width / 2, top: y - height / 2, bottom: y + height / 2 };
+}
+
+function rectanglesOverlap(left: LabelRect, right: LabelRect, gap = 0): boolean {
+  return left.left < right.right + gap
+    && left.right + gap > right.left
+    && left.top < right.bottom + gap
+    && left.bottom + gap > right.top;
+}
+
+/**
+ * Places reference-point labels with deterministic collision avoidance.
+ *
+ * Each label is anchored to its own straight segment and slides along it until
+ * it stops overlapping other labels or node cards. This keeps the NSA template
+ * readable when several interfaces share the same neighbourhood.
+ */
+export function placeReferenceLabels(
+  links: ArchitectureLinkView[],
+  nodes: ArchitectureNodeView[],
+): Map<string, ReferenceLabelPlacement> {
+  const nodeRects = nodes.map((node) => ({
+    left: node.x,
+    right: node.x + NODE_WIDTH,
+    top: node.y,
+    bottom: node.y + NODE_HEIGHT,
+  }));
+  const byRole = new Map(nodes.map((node) => [node.role, node]));
+  const placed: LabelRect[] = [];
+  const placements = new Map<string, ReferenceLabelPlacement>();
+
+  for (const link of links) {
+    const source = byRole.get(link.source);
+    const target = byRole.get(link.target);
+    if (!source || !target) continue;
+    const from = clipToNode(center(source), center(target));
+    const to = clipToNode(center(target), center(source));
+    const width = link.interfaceLabel.length * 5.6 + 8;
+    const height = POINT_LABEL_HEIGHT;
+    let best: { x: number; y: number; rect: LabelRect; score: number } | undefined;
+
+    for (const stop of POINT_LABEL_STOPS) {
+      const x = from.x + (to.x - from.x) * stop;
+      const y = from.y + (to.y - from.y) * stop - 5;
+      const rect = labelRect(x, y, width, height);
+      const nodeOverlaps = nodeRects.filter((node) => rectanglesOverlap(rect, node, 4)).length;
+      const labelOverlaps = placed.filter((other) => rectanglesOverlap(rect, other, POINT_LABEL_GAP)).length;
+      const score = nodeOverlaps * 12 + labelOverlaps * 120 + Math.abs(stop - 0.5) * 2;
+      if (!best || score < best.score) best = { x, y, rect, score };
+      if (score === 0) break;
+    }
+
+    if (!best) continue;
+    placed.push(best.rect);
+    placements.set(link.key, {
+      key: link.key,
+      x: best.x,
+      y: best.y,
+      width,
+      height,
+    });
+  }
+
+  return placements;
 }
 
 /**

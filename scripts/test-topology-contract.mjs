@@ -300,7 +300,7 @@ const businessReqContract = JSON.parse(readFileSync(resolve(frontend, 'mutation-
 const operationalContract = JSON.parse(readFileSync(resolve(frontend, 'operational-contract.json'), 'utf8'));
 
 const businessUniqueEndpoints = new Set(businessContract.flatMap((entry) => entry.operations).map((op) => op.request));
-assert.equal(businessUniqueEndpoints.size, 29, `business mutation endpoints must remain 29, got ${businessUniqueEndpoints.size}`);
+assert.equal(businessUniqueEndpoints.size, 33, `business mutation endpoints must remain 33, got ${businessUniqueEndpoints.size}`);
 assert.equal(businessReqContract.length, 31, `business request contracts must remain 31, got ${businessReqContract.length}`);
 const operationalUniqueEndpoints = new Set(operationalContract.flatMap((entry) => entry.operations).map((op) => op.request));
 assert.equal(operationalUniqueEndpoints.size, 9, `operational endpoints must remain 9, got ${operationalUniqueEndpoints.size}`);
