@@ -470,6 +470,63 @@ test('the dynamic state count includes every visible tone and scopes to the view
   assert.ok(!epcCounts.some((entry) => entry.tone === 'stale'), 'a scoped view must not summarize hidden roles');
 });
 
+test('reference links carry an explicit evidence class', () => {
+  const both = items([
+    resource({ _id: AMF, name: 'amf-01', role: 'amf' }),
+    resource({ _id: SMF, name: 'nrf-01', role: 'nrf' }),
+  ]);
+  const bound = resolveArchitecture({ resources: both });
+  assert.equal(
+    bound.links.find((link) => link.key === 'amf->nrf')?.evidence,
+    'bound',
+    'two bound endpoints without a declared edge are bound evidence',
+  );
+
+  const declared = resolveArchitecture({
+    resources: both,
+    edges: [{ fromResourceId: AMF, toResourceId: SMF, relationshipType: 'connects_to', lifecycleState: 'active' }],
+  });
+  assert.equal(
+    declared.links.find((link) => link.key === 'amf->nrf')?.evidence,
+    'declared',
+    'a declared Topology edge outranks endpoint binding',
+  );
+
+  const observed = resolveArchitecture({
+    resources: [],
+    runtimeComponents: [{
+      processName: 'amfd',
+      nfType: 'AMF',
+      role: 'amf',
+      runtimeStatus: 'running',
+      verified: true,
+    }],
+  });
+  assert.equal(
+    observed.links.find((link) => link.key === 'amf->nrf')?.evidence,
+    'observed',
+    'a verified runtime process is observed evidence, not a binding',
+  );
+
+  const ambiguous = resolveArchitecture({
+    resources: items([
+      resource({ _id: AMF, name: 'amf-01', role: 'amf' }),
+      resource({ _id: '99999999-9999-4999-8999-999999999999', name: 'amf-02', role: 'amf' }),
+    ]),
+  });
+  assert.equal(
+    ambiguous.links.find((link) => link.key === 'amf->nrf')?.evidence,
+    'unresolved',
+    'an ambiguous identity must not be presented as reference only',
+  );
+
+  const reference = resolveArchitecture({ resources: [] });
+  assert.ok(
+    reference.links.every((link) => link.evidence === 'reference'),
+    'an unbound projection is reference-only evidence',
+  );
+});
+
 test('token normalization folds punctuation and case', () => {
   assert.equal(normalizeToken('SGW-C'), 'sgwc');
   assert.equal(normalizeToken('sgw_c'), 'sgwc');

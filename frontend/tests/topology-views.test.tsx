@@ -299,7 +299,27 @@ test('the legend is generated from visible states and keeps evidence persistent'
   assert.ok(css.includes('.evidenceLineDeclared') && css.includes('.evidenceLineReference'));
 });
 
-/* -------------------------------------------------------------- viewport -- */
+/* ---------------------------------------------------------- service bus -- */
+
+test('the reference canvas aggregates Nnrf relationships and keeps evidence line styles', () => {
+  const source = read('../src/features/topology/components/ArchitectureCanvas.tsx');
+  assert.ok(source.includes('buildArchitectureBusLayout'), 'the canvas must use the pure bus layout');
+  assert.ok(source.includes('data-sbi-bus'), 'the aggregated bus must be observable');
+  assert.ok(source.includes('data-sbi-stub'), 'each bus participant must expose its stub');
+  assert.ok(source.includes('data-sbi-expanded'), 'selection must expand the focused relationships');
+  assert.ok(source.includes('LINK_EVIDENCE_CLASS'), 'link evidence must select a line style');
+
+  const layout = read('../src/features/topology/architecture-link-layout.ts');
+  assert.ok(layout.includes("new Set(['Nnrf'])"), 'Nnrf is the aggregated service interface');
+  assert.ok(layout.includes('segmentIntersectsNode'), 'bus geometry must be overlap-checkable');
+  assert.ok(layout.includes('clipToNode'), 'point-to-point geometry stays clipped to nodes');
+
+  const css = read('../src/styles/modules/architecture.module.css');
+  for (const evidence of ['Declared', 'Bound', 'Observed', 'Unresolved', 'Reference']) {
+    assert.ok(css.includes(`.link${evidence}`), `${evidence} evidence needs its own line style`);
+  }
+  assert.ok(css.includes('.sbiTrunk') && css.includes('.sbiStub'), 'the bus needs its own geometry style');
+});
 
 test('the reference canvas owns a sized viewport with the shared controls', () => {
   const source = read('../src/features/topology/ArchitectureView.tsx');

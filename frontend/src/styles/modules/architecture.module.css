@@ -271,6 +271,18 @@
   border-top: 2px solid var(--sys-color-action-primary);
 }
 
+.evidenceLineBound {
+  border-top: 2px dashed var(--sys-color-status-info);
+}
+
+.evidenceLineObserved {
+  border-top: 2px dotted var(--sys-color-status-warning);
+}
+
+.evidenceLineUnresolved {
+  border-top: 2px dashed var(--sys-color-text-muted);
+}
+
 .evidenceLineReference {
   border-top: 2px dashed var(--sys-color-border-default);
 }
@@ -411,12 +423,87 @@
   opacity: 0.7;
 }
 
+.linkBound {
+  fill: none;
+  stroke: var(--sys-color-status-info);
+  stroke-width: 1.2;
+  stroke-dasharray: 5 3;
+  opacity: 0.8;
+}
+
+.linkObserved {
+  fill: none;
+  stroke: var(--sys-color-status-warning);
+  stroke-width: 1.2;
+  stroke-dasharray: 1 3;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+.linkUnresolved {
+  fill: none;
+  stroke: var(--sys-color-text-muted);
+  stroke-width: 1.1;
+  stroke-dasharray: 6 2 2 2;
+  opacity: 0.8;
+}
+
 .linkReference {
   fill: none;
   stroke: var(--sys-color-border-default);
   stroke-width: 1;
   stroke-dasharray: 4 4;
   opacity: 0.9;
+}
+
+.sbiBus {
+  pointer-events: none;
+}
+
+.sbiTrunk {
+  fill: none;
+  stroke: var(--sys-color-border-default);
+  stroke-width: 1.25;
+  stroke-dasharray: 2 4;
+  opacity: 0.75;
+}
+
+.sbiStub {
+  fill: none;
+  stroke: var(--sys-color-border-default);
+  stroke-width: 1;
+  opacity: 0.9;
+}
+
+.sbiStub[data-evidence='declared'] {
+  stroke: var(--sys-color-action-primary);
+}
+
+.sbiStub[data-evidence='bound'] {
+  stroke: var(--sys-color-status-info);
+  stroke-dasharray: 4 3;
+}
+
+.sbiStub[data-evidence='observed'] {
+  stroke: var(--sys-color-status-warning);
+  stroke-dasharray: 1 2;
+}
+
+.sbiStub[data-evidence='unresolved'] {
+  stroke: var(--sys-color-text-muted);
+  stroke-dasharray: 5 2 1 2;
+}
+
+.sbiStub[data-evidence='reference'] {
+  stroke: var(--sys-color-border-default);
+  stroke-dasharray: 3 3;
+}
+
+.sbiLabel {
+  fill: var(--sys-color-text-muted);
+  font-family: var(--font-data);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
 }
 
 .linkLabel {

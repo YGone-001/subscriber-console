@@ -10,6 +10,7 @@
  * The canvas is never the only representation: the detail panel beside it
  * carries the same facts as text, and every node is keyboard reachable.
  */
+import { useMemo } from 'react';
 import { useI18n } from '../../../providers/I18nProvider';
 import {
   CANVAS_HEIGHT,
@@ -20,11 +21,21 @@ import {
 import {
   domainLabelKey,
   stateLabelKey,
+  type ArchitectureLinkEvidence,
   type ArchitectureLinkView,
   type ArchitectureNodeView,
   type NodeTone,
 } from '../architecture-model';
+import {
+  buildArchitectureBusLayout,
+  center,
+  clipToNode,
+  placeLinkLabel,
+  type ArchitectureExpandedLink,
+} from '../architecture-link-layout';
 import styles from '../../../styles/modules/architecture.module.css';
+
+export { placeLinkLabel } from '../architecture-link-layout';
 
 const TONE_CLASS: Record<NodeTone, string> = {
   unregistered: styles.toneUnregistered,
@@ -47,55 +58,32 @@ const DOMAIN_CLASS: Record<string, string> = {
   legacy: styles.domainLegacy,
 };
 
-type Point = { x: number; y: number };
+const LINK_EVIDENCE_CLASS: Record<ArchitectureLinkEvidence, string> = {
+  declared: styles.linkDeclared,
+  bound: styles.linkBound,
+  observed: styles.linkObserved,
+  unresolved: styles.linkUnresolved,
+  reference: styles.linkReference,
+};
 
-function center(node: ArchitectureNodeView): Point {
-  return { x: node.x + NODE_WIDTH / 2, y: node.y + NODE_HEIGHT / 2 };
-}
-
-/** Clips a segment to the rectangle boundary so links never run under a node. */
-function clipToNode(from: Point, to: Point): Point {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  if (dx === 0 && dy === 0) return from;
-  const halfWidth = NODE_WIDTH / 2;
-  const halfHeight = NODE_HEIGHT / 2;
-  const tx = dx === 0 ? Number.POSITIVE_INFINITY : halfWidth / Math.abs(dx);
-  const ty = dy === 0 ? Number.POSITIVE_INFINITY : halfHeight / Math.abs(dy);
-  const t = Math.min(tx, ty);
-  return { x: from.x + dx * t, y: from.y + dy * t };
-}
-
-const LABEL_STOPS = [0.45, 0.55, 0.35, 0.65, 0.25, 0.75, 0.15, 0.85];
-
-function insideNode(point: Point, nodes: ArchitectureNodeView[], padding: number): boolean {
-  return nodes.some((node) => (
-    point.x >= node.x - padding
-    && point.x <= node.x + NODE_WIDTH + padding
-    && point.y >= node.y - padding
-    && point.y <= node.y + NODE_HEIGHT + padding
-  ));
-}
-
-/**
- * Chooses a label anchor along the segment that does not sit on top of a node.
- *
- * The candidates are deterministic, so the same layout always produces the same
- * label positions and the placement can be asserted in tests.
- */
-export function placeLinkLabel(
-  from: Point,
-  to: Point,
-  nodes: ArchitectureNodeView[],
-): Point {
-  for (const stop of LABEL_STOPS) {
-    const point = {
-      x: from.x + (to.x - from.x) * stop,
-      y: from.y + (to.y - from.y) * stop,
-    };
-    if (!insideNode(point, nodes, 6)) return point;
-  }
-  return { x: from.x + (to.x - from.x) * 0.45, y: from.y + (to.y - from.y) * 0.45 };
+function ExpandedBusLink({ link }: { link: ArchitectureExpandedLink }) {
+  const width = link.label.length * 5.6 + 8;
+  return (
+    <g key={link.key} data-sbi-expanded={link.key} data-evidence={link.evidence}>
+      <path d={link.path} className={LINK_EVIDENCE_CLASS[link.evidence]} />
+      <rect
+        x={link.labelX - width / 2}
+        y={link.labelY - 9}
+        width={width}
+        height={13}
+        rx={3}
+        className={styles.linkLabelBackdrop}
+      />
+      <text x={link.labelX} y={link.labelY} textAnchor="middle" className={styles.linkLabel}>
+        {link.label}
+      </text>
+    </g>
+  );
 }
 
 export function ArchitectureCanvas({
@@ -111,6 +99,12 @@ export function ArchitectureCanvas({
 }) {
   const { t } = useI18n();
   const byRole = new Map(nodes.map((node) => [node.role, node]));
+  const busLayout = useMemo(
+    () => buildArchitectureBusLayout(nodes, links, selectedRole),
+    [nodes, links, selectedRole],
+  );
+  const busKeys = new Set(busLayout.aggregatedKeys);
+  const pointLinks = links.filter((link) => !busKeys.has(link.key));
 
   return (
     <svg
@@ -125,7 +119,33 @@ export function ArchitectureCanvas({
       <desc>{t('arch_canvas_desc')}</desc>
 
       <g aria-hidden="true">
-        {links.map((link) => {
+        <g className={styles.sbiBus} data-sbi-bus={busLayout.aggregatedLinkCount}>
+          {busLayout.trunkSegments.map((segment) => (
+            <path key={segment.key} d={segment.path} className={styles.sbiTrunk} data-sbi-trunk={segment.key} />
+          ))}
+          {busLayout.stubs.map((stub) => (
+            <path
+              key={stub.role}
+              d={stub.path}
+              className={styles.sbiStub}
+              data-sbi-stub={stub.role}
+              data-evidence={stub.evidence}
+            />
+          ))}
+          {busLayout.aggregatedLinkCount > 0 ? (
+            <text
+              x={busLayout.label.x}
+              y={busLayout.label.y}
+              textAnchor="end"
+              className={styles.sbiLabel}
+              data-sbi-label="true"
+            >
+              {busLayout.label.text} · {busLayout.label.count}
+            </text>
+          ) : null}
+        </g>
+
+        {pointLinks.map((link) => {
           const source = byRole.get(link.source);
           const target = byRole.get(link.target);
           if (!source || !target) return null;
@@ -136,13 +156,13 @@ export function ArchitectureCanvas({
           const labelY = anchor.y - 5;
           const width = link.interfaceLabel.length * 5.6 + 8;
           return (
-            <g key={link.key}>
+            <g key={link.key} data-link-key={link.key} data-evidence={link.evidence}>
               <line
                 x1={from.x}
                 y1={from.y}
                 x2={to.x}
                 y2={to.y}
-                className={link.declared ? styles.linkDeclared : styles.linkReference}
+                className={LINK_EVIDENCE_CLASS[link.evidence]}
               />
               <rect
                 x={labelX - width / 2}
@@ -158,6 +178,10 @@ export function ArchitectureCanvas({
             </g>
           );
         })}
+
+        {busLayout.expanded.map((link) => (
+          <ExpandedBusLink key={link.key} link={link} />
+        ))}
       </g>
 
       {nodes.map((node) => {

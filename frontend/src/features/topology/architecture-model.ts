@@ -118,6 +118,13 @@ export type ArchitectureNodeView = {
   overallState: string;
 };
 
+export type ArchitectureLinkEvidence =
+  | 'declared'
+  | 'bound'
+  | 'observed'
+  | 'unresolved'
+  | 'reference';
+
 export type ArchitectureLinkView = {
   key: string;
   source: string;
@@ -127,6 +134,8 @@ export type ArchitectureLinkView = {
   declared: boolean;
   /** Both endpoints resolve to an Inventory resource. */
   endpointsBound: boolean;
+  /** Strongest evidence available for this reference point. */
+  evidence: ArchitectureLinkEvidence;
 };
 
 export type ArchitectureSummary = {
@@ -409,14 +418,32 @@ function viewForLink(
   const sourceId = source?.resourceId ?? '';
   const targetId = target?.resourceId ?? '';
   const endpointsBound = Boolean(sourceId && targetId);
+  const declared = endpointsBound && pairs.has(`${sourceId}|${targetId}`);
   return {
     key: `${link.source}->${link.target}`,
     source: link.source,
     target: link.target,
     interfaceLabel: link.interfaceLabel,
     endpointsBound,
-    declared: endpointsBound && pairs.has(`${sourceId}|${targetId}`),
+    declared,
+    evidence: linkEvidence(source, target, endpointsBound, declared),
   };
+}
+
+function linkEvidence(
+  source: ArchitectureNodeView | undefined,
+  target: ArchitectureNodeView | undefined,
+  endpointsBound: boolean,
+  declared: boolean,
+): ArchitectureLinkEvidence {
+  if (declared) return 'declared';
+  const unresolved = (node: ArchitectureNodeView | undefined) => (
+    node !== undefined && (node.tone === 'unresolved' || node.binding === 'ambiguous')
+  );
+  if (unresolved(source) || unresolved(target)) return 'unresolved';
+  if (source?.tone === 'observed' || target?.tone === 'observed') return 'observed';
+  if (endpointsBound) return 'bound';
+  return 'reference';
 }
 
 /** Projects the whole reference architecture for the loaded data page. */
@@ -495,6 +522,28 @@ export function countArchitectureTones(nodes: ArchitectureNodeView[]): Architect
   return ARCHITECTURE_TONES.flatMap((tone) => {
     const count = counts.get(tone) ?? 0;
     return count > 0 ? [{ tone, count }] : [];
+  });
+}
+
+export const LINK_EVIDENCE_ORDER: readonly ArchitectureLinkEvidence[] = [
+  'declared',
+  'bound',
+  'observed',
+  'unresolved',
+  'reference',
+];
+
+export type ArchitectureEvidenceCount = { evidence: ArchitectureLinkEvidence; count: number };
+
+/** Counts only the evidence classes present in the supplied link set. */
+export function countLinkEvidence(links: ArchitectureLinkView[]): ArchitectureEvidenceCount[] {
+  const counts = new Map<ArchitectureLinkEvidence, number>();
+  for (const link of links) {
+    counts.set(link.evidence, (counts.get(link.evidence) ?? 0) + 1);
+  }
+  return LINK_EVIDENCE_ORDER.flatMap((evidence) => {
+    const count = counts.get(evidence) ?? 0;
+    return count > 0 ? [{ evidence, count }] : [];
   });
 }
 

@@ -35,13 +35,16 @@ import {
 } from '../operations/operations-resources';
 import {
   ARCHITECTURE_TONES,
+  LINK_EVIDENCE_ORDER,
   bindingLabelKey,
   countArchitectureTones,
+  countLinkEvidence,
   domainLabelKey,
   filterArchitecture,
   resolveArchitecture,
   stateLabelKey,
   summarizeArchitecture,
+  type ArchitectureLinkEvidence,
   type ArchitectureNodeView,
   type NodeTone,
 } from './architecture-model';
@@ -133,6 +136,21 @@ function summaryToneClass(tone: NodeTone): string | undefined {
     return styles.summaryWarn;
   }
   return undefined;
+}
+
+function evidenceLabelKey(evidence: ArchitectureLinkEvidence): string {
+  return `arch_evidence_${evidence}`;
+}
+
+function evidenceLineClass(evidence: ArchitectureLinkEvidence): string {
+  const map: Record<ArchitectureLinkEvidence, string> = {
+    declared: styles.evidenceLineDeclared,
+    bound: styles.evidenceLineBound,
+    observed: styles.evidenceLineObserved,
+    unresolved: styles.evidenceLineUnresolved,
+    reference: styles.evidenceLineReference,
+  };
+  return map[evidence];
 }
 
 function domainClass(domain: string): string {
@@ -232,6 +250,7 @@ export function ArchitectureView({
     () => toneCounts.filter(({ tone }) => !LEGEND_ONLY_TONES.has(tone)),
     [toneCounts],
   );
+  const evidenceCounts = useMemo(() => countLinkEvidence(visible.links), [visible.links]);
   const incompleteSources = INCOMPLETE_DIMENSIONS.filter(
     (dimension) => completeness[dimension] !== 'complete',
   );
@@ -448,14 +467,12 @@ export function ArchitectureView({
               aria-label={t('arch_evidence_label')}
               data-evidence-legend="true"
             >
-              <span className={styles.legendItem}>
-                <i className={`${styles.evidenceLine} ${styles.evidenceLineDeclared}`} aria-hidden="true" />
-                {t('arch_evidence_declared')}
-              </span>
-              <span className={styles.legendItem}>
-                <i className={`${styles.evidenceLine} ${styles.evidenceLineReference}`} aria-hidden="true" />
-                {t('arch_evidence_reference')}
-              </span>
+              {evidenceCounts.map(({ evidence, count }) => (
+                <span key={evidence} className={styles.legendItem} data-evidence={evidence}>
+                  <i className={`${styles.evidenceLine} ${evidenceLineClass(evidence)}`} aria-hidden="true" />
+                  {t(evidenceLabelKey(evidence))} <span className={styles.legendCount}>{count}</span>
+                </span>
+              ))}
             </span>
             <button type="button" className={styles.legendToggle} onClick={() => setLegendOpen(true)}>
               {t('arch_legend_toggle')}
@@ -614,14 +631,12 @@ export function ArchitectureView({
           <section className={styles.drawerSection}>
             <h3 className={styles.drawerSectionTitle}>{t('arch_evidence_label')}</h3>
             <div className={styles.legendDialogGroup}>
-              <span className={styles.legendItem}>
-                <i className={`${styles.evidenceLine} ${styles.evidenceLineDeclared}`} aria-hidden="true" />
-                {t('arch_evidence_declared')}
-              </span>
-              <span className={styles.legendItem}>
-                <i className={`${styles.evidenceLine} ${styles.evidenceLineReference}`} aria-hidden="true" />
-                {t('arch_evidence_reference')}
-              </span>
+              {LINK_EVIDENCE_ORDER.map((evidence) => (
+                <span key={evidence} className={styles.legendItem}>
+                  <i className={`${styles.evidenceLine} ${evidenceLineClass(evidence)}`} aria-hidden="true" />
+                  {t(evidenceLabelKey(evidence))}
+                </span>
+              ))}
             </div>
           </section>
           <p className={styles.viewNote}>{t('arch_note')}</p>
