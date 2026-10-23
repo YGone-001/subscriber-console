@@ -167,11 +167,11 @@ const EPC_LAYOUT: Record<string, NodePosition> = {
   sgwc: { x: 244, y: 100 },
   pgwc: { x: 424, y: 100 },
   pcrf: { x: 244, y: 220 },
-  dra: { x: 424, y: 220 },
-  sgwu: { x: 244, y: 420 },
+  dra: { x: 604, y: 220 },
+  sgwu: { x: 604, y: 420 },
   pgwu: { x: 424, y: 420 },
-  hss: { x: 784, y: 240 },
-  ocs: { x: 784, y: 480 },
+  hss: { x: 784, y: 420 },
+  ocs: { x: 784, y: 110 },
 };
 
 const NSA_LAYOUT: Record<string, NodePosition> = {
@@ -195,8 +195,8 @@ const EPC_LANES: ArchitectureLane[] = [
   { key: 'epc-access', labelKey: 'arch_lane_access', x: 24, y: 60, width: 180, height: 560 },
   { key: 'epc-control', labelKey: 'arch_lane_control', x: 224, y: 60, width: 520, height: 260 },
   { key: 'epc-user', labelKey: 'arch_lane_user', x: 224, y: 340, width: 520, height: 280 },
-  { key: 'epc-data', labelKey: 'arch_lane_data', x: 764, y: 60, width: 172, height: 260 },
-  { key: 'epc-external', labelKey: 'arch_lane_external', x: 764, y: 340, width: 172, height: 280 },
+  { key: 'epc-data', labelKey: 'arch_lane_data', x: 764, y: 340, width: 172, height: 280 },
+  { key: 'epc-external', labelKey: 'arch_lane_external', x: 764, y: 60, width: 172, height: 260 },
 ];
 
 const NSA_LANES: ArchitectureLane[] = [

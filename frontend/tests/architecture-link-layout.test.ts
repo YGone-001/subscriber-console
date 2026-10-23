@@ -13,10 +13,16 @@ import {
   SBI_TRUNK_RIGHT_X,
   SBI_TRUNK_TOP_Y,
   buildArchitectureBusLayout,
+  center,
+  clipToNode,
   placeReferenceLabels,
   segmentIntersectsNode,
 } from '../src/features/topology/architecture-link-layout';
-import { NODE_HEIGHT, NODE_WIDTH } from '../src/features/topology/reference-architecture';
+import {
+  architectureNodesForView,
+  NODE_HEIGHT,
+  NODE_WIDTH,
+} from '../src/features/topology/reference-architecture';
 
 function projection() {
   return resolveArchitecture({ resources: [] });
@@ -140,6 +146,32 @@ test('reference labels avoid other labels and node cards', () => {
         && labels[left].y - labels[left].height / 2 < node.y + NODE_HEIGHT + 4
         && labels[left].y + labels[left].height / 2 + 4 > node.y;
       assert.equal(overlapsNode, false, `${labels[left].key} must not sit on ${node.role}`);
+    }
+  }
+});
+
+test('EPC point-to-point links never pass through unrelated node cards', () => {
+  const projectionModel = resolveArchitecture({
+    nodes: architectureNodesForView('epc'),
+    resources: [],
+  });
+  const epc = filterArchitecture(projectionModel, 'epc');
+  const byRole = new Map(epc.nodes.map((node) => [node.role, node]));
+  assert.ok(epc.links.length > 0, 'EPC has reference links');
+
+  for (const link of epc.links) {
+    const source = byRole.get(link.source);
+    const target = byRole.get(link.target);
+    assert.ok(source && target, `${link.key} endpoints must be visible`);
+    const from = clipToNode(center(source), center(target));
+    const to = clipToNode(center(target), center(source));
+    for (const node of epc.nodes) {
+      if (node.role === source.role || node.role === target.role) continue;
+      assert.equal(
+        segmentIntersectsNode(from.x, from.y, to.x, to.y, node),
+        false,
+        `${link.key} must not cross ${node.role}`,
+      );
     }
   }
 });
