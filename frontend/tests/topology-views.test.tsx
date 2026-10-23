@@ -299,6 +299,21 @@ test('the legend is generated from visible states and keeps evidence persistent'
   assert.ok(css.includes('.evidenceLineDeclared') && css.includes('.evidenceLineReference'));
 });
 
+/* --------------------------------------------------------------- overview -- */
+
+test('the all-domains view is an overview that opens a single template', () => {
+  const source = read('../src/features/topology/ArchitectureView.tsx');
+  assert.ok(source.includes('data-architecture-overview="true"'), 'the all view must render an overview');
+  assert.ok(source.includes('data-overview-view={card.view}'), 'each template must be an explicit entry');
+  assert.ok(source.includes('overviewCards'), 'the overview must summarize the real projections');
+  assert.ok(source.includes('architectureNodesForView'), 'each template must use its own coordinates');
+  assert.ok(source.includes('architectureLanesForView'), 'each template must render its own lanes');
+
+  const canvas = read('../src/features/topology/components/ArchitectureCanvas.tsx');
+  assert.ok(canvas.includes('data-architecture-lanes'), 'lanes must be observable');
+  assert.ok(canvas.includes("t(lane.labelKey)"), 'lane labels must be localized');
+});
+
 /* ---------------------------------------------------------- service bus -- */
 
 test('the reference canvas aggregates Nnrf relationships and keeps evidence line styles', () => {

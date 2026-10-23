@@ -48,6 +48,15 @@ export type ArchitectureLink = {
 
 export type ArchitectureViewMode = 'all' | 'epc' | '5gc-sa' | '5gc-nsa';
 
+export type ArchitectureLane = {
+  key: string;
+  labelKey: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export const ARCHITECTURE_VIEW_MODES: ArchitectureViewMode[] = ['all', 'epc', '5gc-sa', '5gc-nsa'];
 
 export const NODE_WIDTH = 140;
@@ -149,6 +158,71 @@ export function rolesForView(view: ArchitectureViewMode): Set<string> | null {
   if (view === '5gc-sa') return SA_ROLES;
   if (view === '5gc-nsa') return NSA_ROLES;
   return null;
+}
+
+type NodePosition = { x: number; y: number };
+
+const EPC_LAYOUT: Record<string, NodePosition> = {
+  mme: { x: 44, y: 110 },
+  sgwc: { x: 244, y: 100 },
+  pgwc: { x: 424, y: 100 },
+  pcrf: { x: 244, y: 220 },
+  dra: { x: 424, y: 220 },
+  sgwu: { x: 244, y: 420 },
+  pgwu: { x: 424, y: 420 },
+  hss: { x: 784, y: 240 },
+  ocs: { x: 784, y: 480 },
+};
+
+const NSA_LAYOUT: Record<string, NodePosition> = {
+  mme: { x: 44, y: 120 },
+  pgwc: { x: 244, y: 120 },
+  pgwu: { x: 44, y: 300 },
+  hss: { x: 244, y: 300 },
+  amf: { x: 500, y: 120 },
+  smf: { x: 700, y: 120 },
+  upf: { x: 500, y: 300 },
+  udm: { x: 700, y: 300 },
+};
+
+const SA_LAYOUT: Record<string, NodePosition> = Object.fromEntries(
+  ARCHITECTURE_NODES
+    .filter((node) => SA_ROLES.has(node.role))
+    .map((node) => [node.role, { x: node.x, y: node.y }]),
+);
+
+const EPC_LANES: ArchitectureLane[] = [
+  { key: 'epc-access', labelKey: 'arch_lane_access', x: 24, y: 60, width: 180, height: 560 },
+  { key: 'epc-control', labelKey: 'arch_lane_control', x: 224, y: 60, width: 520, height: 260 },
+  { key: 'epc-user', labelKey: 'arch_lane_user', x: 224, y: 340, width: 520, height: 280 },
+  { key: 'epc-data', labelKey: 'arch_lane_data', x: 764, y: 60, width: 172, height: 260 },
+  { key: 'epc-external', labelKey: 'arch_lane_external', x: 764, y: 340, width: 172, height: 280 },
+];
+
+const NSA_LANES: ArchitectureLane[] = [
+  { key: 'nsa-interworking', labelKey: 'arch_lane_interworking', x: 24, y: 24, width: 912, height: 30 },
+  { key: 'nsa-lte', labelKey: 'arch_lane_lte_anchor', x: 24, y: 64, width: 440, height: 556 },
+  { key: 'nsa-nr', labelKey: 'arch_lane_nr_access', x: 480, y: 64, width: 456, height: 556 },
+];
+
+/**
+ * Returns the canonical nodes with the deterministic coordinates of one view.
+ *
+ * `all` has no merged canvas; it is rendered as an overview of the three
+ * single-domain templates.
+ */
+export function architectureNodesForView(view: Exclude<ArchitectureViewMode, 'all'>): ArchitectureNode[] {
+  const layout = view === 'epc' ? EPC_LAYOUT : view === '5gc-nsa' ? NSA_LAYOUT : SA_LAYOUT;
+  return ARCHITECTURE_NODES.map((node) => {
+    const position = layout[node.role];
+    return position ? { ...node, ...position } : node;
+  });
+}
+
+export function architectureLanesForView(view: Exclude<ArchitectureViewMode, 'all'>): ArchitectureLane[] {
+  if (view === 'epc') return EPC_LANES;
+  if (view === '5gc-nsa') return NSA_LANES;
+  return [];
 }
 
 export function nodeByRole(role: string): ArchitectureNode | undefined {

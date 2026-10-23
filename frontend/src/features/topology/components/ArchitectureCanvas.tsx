@@ -17,6 +17,7 @@ import {
   CANVAS_WIDTH,
   NODE_HEIGHT,
   NODE_WIDTH,
+  type ArchitectureLane,
 } from '../reference-architecture';
 import {
   domainLabelKey,
@@ -89,11 +90,13 @@ function ExpandedBusLink({ link }: { link: ArchitectureExpandedLink }) {
 export function ArchitectureCanvas({
   nodes,
   links,
+  lanes = [],
   selectedRole,
   onSelect,
 }: {
   nodes: ArchitectureNodeView[];
   links: ArchitectureLinkView[];
+  lanes?: ArchitectureLane[];
   selectedRole?: string;
   onSelect?: (role: string) => void;
 }) {
@@ -117,6 +120,26 @@ export function ArchitectureCanvas({
     >
       <title>{t('arch_canvas_aria')}</title>
       <desc>{t('arch_canvas_desc')}</desc>
+
+      {lanes.length > 0 ? (
+        <g aria-hidden="true" data-architecture-lanes={lanes.length}>
+          {lanes.map((lane) => (
+            <g key={lane.key} data-architecture-lane={lane.key}>
+              <rect
+                x={lane.x}
+                y={lane.y}
+                width={lane.width}
+                height={lane.height}
+                rx={10}
+                className={styles.archLane}
+              />
+              <text x={lane.x + 12} y={lane.y + 19} className={styles.archLaneLabel}>
+                {t(lane.labelKey)}
+              </text>
+            </g>
+          ))}
+        </g>
+      ) : null}
 
       <g aria-hidden="true">
         <g className={styles.sbiBus} data-sbi-bus={busLayout.aggregatedLinkCount}>

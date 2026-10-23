@@ -53,6 +53,8 @@ import {
   ARCHITECTURE_VIEW_MODES,
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
+  architectureLanesForView,
+  architectureNodesForView,
   type ArchitectureViewMode,
 } from './reference-architecture';
 import { ArchitectureCanvas } from './components/ArchitectureCanvas';
@@ -74,6 +76,16 @@ const VIEW_LABEL_KEY: Record<ArchitectureViewMode, string> = {
   '5gc-sa': 'arch_view_5gc_sa',
   '5gc-nsa': 'arch_view_5gc_nsa',
 };
+
+const OVERVIEW_VIEWS = ['epc', '5gc-sa', '5gc-nsa'] as const;
+
+const OVERVIEW_DESC_KEY: Record<typeof OVERVIEW_VIEWS[number], string> = {
+  epc: 'arch_overview_epc_desc',
+  '5gc-sa': 'arch_overview_5gc_sa_desc',
+  '5gc-nsa': 'arch_overview_5gc_nsa_desc',
+};
+
+const ATTENTION_TONES = new Set<NodeTone>(['degraded', 'unhealthy', 'stale', 'unknown', 'unresolved']);
 
 /* The compact legend renders only tones that occur in the visible projection;
  * the full vocabulary stays behind the "legend" dialog. */
@@ -230,8 +242,9 @@ export function ArchitectureView({
       resources: items,
       runtimeComponents: runtimeData?.snapshot?.components,
       edges: edges.edges,
+      nodes: architectureNodesForView(view === 'all' ? '5gc-sa' : view),
     }),
-    [items, runtimeData, edges.edges],
+    [items, runtimeData, edges.edges, view],
   );
 
   const visible = useMemo(() => filterArchitecture(projection, view), [projection, view]);
@@ -251,6 +264,25 @@ export function ArchitectureView({
     [toneCounts],
   );
   const evidenceCounts = useMemo(() => countLinkEvidence(visible.links), [visible.links]);
+  const overviewCards = useMemo(() => OVERVIEW_VIEWS.map((candidate) => {
+    const scoped = filterArchitecture(projection, candidate);
+    const scopedSummary = summarizeArchitecture(scoped.nodes);
+    const attention = countArchitectureTones(scoped.nodes)
+      .filter(({ tone }) => ATTENTION_TONES.has(tone))
+      .reduce((total, entry) => total + entry.count, 0);
+    return {
+      view: candidate,
+      roles: scoped.nodes.length,
+      bound: scopedSummary.bound,
+      observed: scopedSummary.observedUnmanaged,
+      monitored: scopedSummary.monitored,
+      attention,
+    };
+  }), [projection]);
+  const lanes = useMemo(
+    () => (view === 'all' ? [] : architectureLanesForView(view)),
+    [view],
+  );
   const incompleteSources = INCOMPLETE_DIMENSIONS.filter(
     (dimension) => completeness[dimension] !== 'complete',
   );
@@ -395,7 +427,7 @@ export function ArchitectureView({
                 ))}
               </div>
             )}
-            zoom={{
+            zoom={view === 'all' ? undefined : {
               value: zoom,
               min: MIN_ZOOM,
               max: MAX_ZOOM,
@@ -404,7 +436,7 @@ export function ArchitectureView({
               onFit: fitView,
               onReset: resetView,
             }}
-            fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
+            fullscreen={view === 'all' ? undefined : { active: fullscreen, onToggle: toggleFullscreen }}
           />
 
           <div className={styles.toolbar}>
@@ -447,45 +479,47 @@ export function ArchitectureView({
             </span>
           </div>
 
-          <div className={styles.legendCompact}>
-            <span
-              className={styles.legendCompactGroup}
-              role="group"
-              aria-label={t('arch_legend_states')}
-              data-state-legend="true"
-            >
-              {toneCounts.map(({ tone, count }) => (
-                <span key={tone} className={styles.legendItem} data-legend-tone={tone}>
-                  <ToneMark tone={tone} />
-                  {t(stateLabelKey(tone))} <span className={styles.legendCount}>{count}</span>
-                </span>
-              ))}
-            </span>
-            <span
-              className={styles.legendCompactGroup}
-              role="group"
-              aria-label={t('arch_evidence_label')}
-              data-evidence-legend="true"
-            >
-              {evidenceCounts.map(({ evidence, count }) => (
-                <span key={evidence} className={styles.legendItem} data-evidence={evidence}>
-                  <i className={`${styles.evidenceLine} ${evidenceLineClass(evidence)}`} aria-hidden="true" />
-                  {t(evidenceLabelKey(evidence))} <span className={styles.legendCount}>{count}</span>
-                </span>
-              ))}
-            </span>
-            <button type="button" className={styles.legendToggle} onClick={() => setLegendOpen(true)}>
-              {t('arch_legend_toggle')}
-            </button>
-            <button
-              type="button"
-              className={styles.legendToggle}
-              aria-expanded={listOpen}
-              onClick={() => setListOpen((open) => !open)}
-            >
-              {t('arch_list_toggle')}
-            </button>
-          </div>
+          {view !== 'all' ? (
+            <div className={styles.legendCompact}>
+              <span
+                className={styles.legendCompactGroup}
+                role="group"
+                aria-label={t('arch_legend_states')}
+                data-state-legend="true"
+              >
+                {toneCounts.map(({ tone, count }) => (
+                  <span key={tone} className={styles.legendItem} data-legend-tone={tone}>
+                    <ToneMark tone={tone} />
+                    {t(stateLabelKey(tone))} <span className={styles.legendCount}>{count}</span>
+                  </span>
+                ))}
+              </span>
+              <span
+                className={styles.legendCompactGroup}
+                role="group"
+                aria-label={t('arch_evidence_label')}
+                data-evidence-legend="true"
+              >
+                {evidenceCounts.map(({ evidence, count }) => (
+                  <span key={evidence} className={styles.legendItem} data-evidence={evidence}>
+                    <i className={`${styles.evidenceLine} ${evidenceLineClass(evidence)}`} aria-hidden="true" />
+                    {t(evidenceLabelKey(evidence))} <span className={styles.legendCount}>{count}</span>
+                  </span>
+                ))}
+              </span>
+              <button type="button" className={styles.legendToggle} onClick={() => setLegendOpen(true)}>
+                {t('arch_legend_toggle')}
+              </button>
+              <button
+                type="button"
+                className={styles.legendToggle}
+                aria-expanded={listOpen}
+                onClick={() => setListOpen((open) => !open)}
+              >
+                {t('arch_list_toggle')}
+              </button>
+            </div>
+          ) : null}
 
           {completeness.overall !== 'complete' ? (
             <p
@@ -501,7 +535,7 @@ export function ArchitectureView({
             </p>
           ) : null}
 
-          {visible.hiddenCount > 0 ? (
+          {view !== 'all' && visible.hiddenCount > 0 ? (
             <div className={styles.hiddenNote} data-hidden-roles={visible.hiddenCount}>
               <span>{t('arch_hidden_note', { count: visible.hiddenCount })}</span>
               <button
@@ -526,32 +560,68 @@ export function ArchitectureView({
             </div>
           ) : null}
 
-          <div
-            ref={canvasRef}
-            className={styles.archCanvasViewport}
-            data-architecture-viewport="true"
-            data-panning={panning ? 'true' : undefined}
-            onPointerDown={beginPan}
-            onPointerMove={movePan}
-            onPointerUp={endPan}
-            onPointerCancel={endPan}
-          >
-            <div
-              className={styles.archCanvasScale}
-              style={{ width: `${CANVAS_WIDTH * zoom}px`, height: `${CANVAS_HEIGHT * zoom}px` }}
-            >
-              <ArchitectureCanvas
-                nodes={visible.nodes}
-                links={visible.links}
-                selectedRole={selectedRole}
-                onSelect={(role) => setSelectedRole((current) => (current === role ? undefined : role))}
-              />
+          {view === 'all' ? (
+            <div className={styles.overviewGrid} data-architecture-overview="true">
+              {overviewCards.map((card) => (
+                <button
+                  key={card.view}
+                  type="button"
+                  className={styles.overviewCard}
+                  data-overview-view={card.view}
+                  onClick={() => {
+                    setView(card.view);
+                    setSelectedRole(undefined);
+                    scrollToOrigin();
+                  }}
+                >
+                  <span className={styles.overviewTitle}>{t(VIEW_LABEL_KEY[card.view])}</span>
+                  <span className={styles.overviewDesc}>{t(OVERVIEW_DESC_KEY[card.view])}</span>
+                  <span className={styles.overviewStats}>
+                    <span><strong>{card.roles}</strong> {t('arch_overview_roles')}</span>
+                    <span><strong>{card.bound}</strong> {t('arch_summary_bound')}</span>
+                    <span><strong>{card.observed}</strong> {t('arch_summary_observed')}</span>
+                    {card.monitored > 0 ? (
+                      <span><strong>{card.monitored}</strong> {t('arch_summary_monitored')}</span>
+                    ) : null}
+                    {card.attention > 0 ? (
+                      <span className={styles.summaryWarn}>
+                        <strong>{card.attention}</strong> {t('arch_overview_attention')}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className={styles.overviewEnter}>{t('arch_overview_open')}</span>
+                </button>
+              ))}
             </div>
-          </div>
+          ) : (
+            <div
+              ref={canvasRef}
+              className={styles.archCanvasViewport}
+              data-architecture-viewport="true"
+              data-panning={panning ? 'true' : undefined}
+              onPointerDown={beginPan}
+              onPointerMove={movePan}
+              onPointerUp={endPan}
+              onPointerCancel={endPan}
+            >
+              <div
+                className={styles.archCanvasScale}
+                style={{ width: `${CANVAS_WIDTH * zoom}px`, height: `${CANVAS_HEIGHT * zoom}px` }}
+              >
+                <ArchitectureCanvas
+                  nodes={visible.nodes}
+                  links={visible.links}
+                  lanes={lanes}
+                  selectedRole={selectedRole}
+                  onSelect={(role) => setSelectedRole((current) => (current === role ? undefined : role))}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Equivalent list representation: the same state as the canvas, in
               text, for keyboard and assistive-technology users. */}
-          {listOpen ? (
+          {view !== 'all' && listOpen ? (
             <table className={styles.nodeTable}>
               <caption className={styles.nodeTableCaption}>{t('arch_canvas_aria')}</caption>
               <thead>

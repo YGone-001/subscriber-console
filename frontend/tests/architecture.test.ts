@@ -32,6 +32,9 @@ import {
   CANVAS_WIDTH,
   NODE_HEIGHT,
   NODE_WIDTH,
+  architectureLanesForView,
+  architectureNodesForView,
+  rolesForView,
 } from '../src/features/topology/reference-architecture';
 import {
   buildOperationalResources,
@@ -98,6 +101,42 @@ function items(resources: RawResource[], targets: RawResource[] = []): Operation
 }
 
 /* ------------------------------------------------------------- reference -- */
+
+test('every template has deterministic, non-overlapping coordinates and lanes', () => {
+  for (const view of ['epc', '5gc-sa', '5gc-nsa'] as const) {
+    const roles = rolesForView(view);
+    assert.ok(roles, `${view} must define its role set`);
+    const nodes = architectureNodesForView(view).filter((node) => roles.has(node.role));
+    assert.ok(nodes.length > 0, `${view} must place its roles`);
+
+    for (const node of nodes) {
+      assert.ok(node.x >= 0 && node.x + NODE_WIDTH <= CANVAS_WIDTH, `${view}:${node.role} must fit horizontally`);
+      assert.ok(node.y >= 0 && node.y + NODE_HEIGHT <= CANVAS_HEIGHT, `${view}:${node.role} must fit vertically`);
+    }
+    for (let left = 0; left < nodes.length; left += 1) {
+      for (let right = left + 1; right < nodes.length; right += 1) {
+        const a = nodes[left];
+        const b = nodes[right];
+        const overlap = a.x < b.x + NODE_WIDTH && a.x + NODE_WIDTH > b.x
+          && a.y < b.y + NODE_HEIGHT && a.y + NODE_HEIGHT > b.y;
+        assert.equal(overlap, false, `${view}: ${a.role} must not overlap ${b.role}`);
+      }
+    }
+    assert.deepEqual(architectureNodesForView(view), architectureNodesForView(view), `${view} must be deterministic`);
+  }
+
+  assert.deepEqual(
+    architectureLanesForView('epc').map((lane) => lane.labelKey),
+    ['arch_lane_access', 'arch_lane_control', 'arch_lane_user', 'arch_lane_data', 'arch_lane_external'],
+    'EPC makes access, control, user, data and external systems explicit',
+  );
+  assert.deepEqual(
+    architectureLanesForView('5gc-nsa').map((lane) => lane.labelKey),
+    ['arch_lane_interworking', 'arch_lane_lte_anchor', 'arch_lane_nr_access'],
+    'NSA makes the LTE anchor, NR access and N26 interworking explicit',
+  );
+  assert.deepEqual(architectureLanesForView('5gc-sa'), [], 'SA relies on the SBI bus instead of lanes');
+});
 
 test('the reference skeleton is internally consistent', () => {
   assert.equal(ARCHITECTURE_NODES.length, 20, 'the reference architecture defines twenty roles');
