@@ -308,7 +308,7 @@ func (s *Scanner) verifyExact(component Component, candidates []candidate) *comp
 			}
 			continue
 		}
-		if exeName != component.ProcessName {
+		if !component.MatchesExecutable(exeName) {
 			// An unrelated executable masquerading under the approved name is
 			// never classified as the component.
 			result.unverified++
@@ -345,7 +345,7 @@ func (s *Scanner) verifyCommandLine(component Component, candidates []candidate)
 			}
 			continue
 		}
-		if exeName != component.ProcessName {
+		if !component.MatchesExecutable(exeName) {
 			// Not the approved executable: not a candidate for this component.
 			continue
 		}

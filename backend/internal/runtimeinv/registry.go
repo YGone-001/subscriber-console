@@ -69,6 +69,12 @@ type Component struct {
 	// ProcessName is the exact Linux process name, or the executable name for
 	// command-line matched components.
 	ProcessName string
+	// ExeAliases lists additional executable basenames this component may run
+	// under. Some SIP stacks set a per-role process title while sharing one
+	// binary, so the exact-name rule alone can never verify them. An alias only
+	// widens the executable check for a component that already matched by
+	// process name; it never identifies a process on its own.
+	ExeAliases []string
 	// MatchMethod selects the identity verification strategy.
 	MatchMethod string
 	// Category groups the component for presentation and templates.
@@ -129,16 +135,67 @@ func NewRegistry(components []Component) (*Registry, error) {
 		registry.byID[component.ID] = component
 		registry.components = append(registry.components, component)
 	}
+	for _, component := range registry.components {
+		for _, alias := range component.ExeAliases {
+			if owner, exists := registry.byProcess[alias]; exists && owner.ID != component.ID {
+				return nil, fmt.Errorf("runtimeinv: alias %q of %s collides with the exact process name of %s", alias, component.ID, owner.ID)
+			}
+		}
+	}
 	sort.SliceStable(registry.components, func(i, j int) bool {
 		return registry.components[i].ID < registry.components[j].ID
 	})
 	return registry, nil
 }
 
+// normalizeAliases trims an alias list and drops blanks plus anything that would
+// repeat the component's own exact process name.
+func normalizeAliases(aliases []string, processName string) []string {
+	if len(aliases) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(aliases))
+	seen := map[string]struct{}{}
+	for _, alias := range aliases {
+		alias = strings.TrimSpace(alias)
+		if alias == "" || alias == processName {
+			continue
+		}
+		if _, ok := seen[alias]; ok {
+			continue
+		}
+		seen[alias] = struct{}{}
+		out = append(out, alias)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// MatchesExecutable reports whether an executable basename identifies the
+// component, either as its own process name or as one of its approved aliases.
+func (c Component) MatchesExecutable(exeName string) bool {
+	exeName = strings.TrimSpace(exeName)
+	if exeName == "" {
+		return false
+	}
+	if exeName == c.ProcessName {
+		return true
+	}
+	for _, alias := range c.ExeAliases {
+		if alias == exeName {
+			return true
+		}
+	}
+	return false
+}
+
 func normalizeComponent(component Component) Component {
 	component.ID = strings.TrimSpace(component.ID)
 	component.DisplayName = strings.TrimSpace(component.DisplayName)
 	component.ProcessName = strings.TrimSpace(component.ProcessName)
+	component.ExeAliases = normalizeAliases(component.ExeAliases, component.ProcessName)
 	component.MatchMethod = strings.TrimSpace(component.MatchMethod)
 	component.Category = strings.TrimSpace(component.Category)
 	component.Domain = strings.TrimSpace(component.Domain)
@@ -360,8 +417,8 @@ func DefaultComponents() []Component {
 		{ID: "pcrf", DisplayName: "PCRF", ProcessName: "pcrfd", Category: CategoryEPC, Domain: "epc", Role: "pcrf", NFTType: "PCRF", Templates: []string{TemplateAuto, Template4G}, CNMSCompatible: true, Monitoring: MonitoringSupported},
 
 		// -- IMS (4) --
-		{ID: "pcscf", DisplayName: "P-CSCF", ProcessName: "pcscfd", Category: CategoryIMS, Domain: "ims", Role: "pcscf", NFTType: "P-CSCF", Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true, Monitoring: MonitoringSupported},
-		{ID: "icscf", DisplayName: "I-CSCF", ProcessName: "icscfd", Category: CategoryIMS, Domain: "ims", Role: "icscf", NFTType: "I-CSCF", Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true, Monitoring: MonitoringSupported},
+		{ID: "pcscf", DisplayName: "P-CSCF", ProcessName: "pcscfd", ExeAliases: []string{"kamailio"}, Category: CategoryIMS, Domain: "ims", Role: "pcscf", NFTType: "P-CSCF", Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true, Monitoring: MonitoringSupported},
+		{ID: "icscf", DisplayName: "I-CSCF", ProcessName: "icscfd", ExeAliases: []string{"kamailio"}, Category: CategoryIMS, Domain: "ims", Role: "icscf", NFTType: "I-CSCF", Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true, Monitoring: MonitoringSupported},
 		{ID: "scscf", DisplayName: "S-CSCF", ProcessName: "scscfd", Category: CategoryIMS, Domain: "ims", Role: "scscf", NFTType: "S-CSCF", Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true, Monitoring: MonitoringSupported},
 		{
 			ID: "imsHss", DisplayName: "IMS HSS", ProcessName: "java",

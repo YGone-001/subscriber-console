@@ -277,6 +277,27 @@ func TestScannerRejectsMasqueradingExecutable(t *testing.T) {
 	}
 }
 
+func TestScannerAcceptsApprovedExecutableAlias(t *testing.T) {
+	f := newFixture(t)
+	clock := &fakeClock{now: time.Now().UTC()}
+	// Kamailio sets a per-role process title, so comm reads "pcscfd" while the
+	// executable behind it is the shared SIP binary.
+	f.process(311, "pcscfd", "/usr/local/sbin/kamailio", 1, 0, 10, 10, nil)
+	// The same shared binary must not identify a role without an approved alias.
+	f.process(312, "scscfd", "/usr/local/sbin/kamailio", 2, 0, 10, 10, nil)
+	scanner := newTestScanner(f, clock)
+	snapshot, _ := scanner.Scan(t.Context(), TriggerManual, nil)
+
+	pcscf := observationFor(t, snapshot, "pcscf")
+	if pcscf.RuntimeStatus != StatusRunning || !pcscf.Verified {
+		t.Fatalf("an approved alias must verify the component, got %s verified=%v", pcscf.RuntimeStatus, pcscf.Verified)
+	}
+	scscf := observationFor(t, snapshot, "scscf")
+	if scscf.RuntimeStatus != StatusUnverified {
+		t.Fatalf("scscf has no approved alias and must stay unverified, got %s", scscf.RuntimeStatus)
+	}
+}
+
 func TestScannerReportsPermissionDeniedExecutable(t *testing.T) {
 	f := newFixture(t)
 	clock := &fakeClock{now: time.Now().UTC()}
