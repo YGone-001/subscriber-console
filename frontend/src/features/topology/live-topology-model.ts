@@ -46,6 +46,37 @@ export function liveConfigCompleteness(
   return config.complete ? 'complete' : 'partial';
 }
 
+export type ReconciliationSummary = {
+  /* False when the ledger read was truncated: the diff is then a floor, not a total. */
+  complete: boolean;
+  matched: number;
+  undeclared: number;
+  unevidenced: number;
+  retired: number;
+  differing: number;
+};
+
+/**
+ * Advisory diff between the persisted ledger and the configured evidence.
+ *
+ * Returns null when the server sent no reconciliation block or the ledger could
+ * not be read: an unread ledger must never render as "nothing to reconcile".
+ */
+export function reconciliationSummary(
+  data: LiveTopologyResponse | undefined,
+): ReconciliationSummary | null {
+  const block = data?.reconciliation;
+  if (!block || !block.available) return null;
+  return {
+    complete: block.complete,
+    matched: block.matchedCount,
+    undeclared: block.undeclaredEvidence.length,
+    unevidenced: block.unevidencedDeclarations.length,
+    retired: block.undeclaredEvidence.filter((item) => item.retired).length,
+    differing: block.matched.filter((item) => item.interfaceMatch === 'differs').length,
+  };
+}
+
 export function liveDirectory(data: LiveTopologyResponse | undefined): Record<string, ResourceProjection> {
   const directory: Record<string, ResourceProjection> = {};
   for (const node of data?.nodes ?? []) {

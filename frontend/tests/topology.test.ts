@@ -58,8 +58,13 @@ import {
   liveDirectory,
   liveEdges,
   presentRuntimeStates,
+  reconciliationSummary,
 } from '../src/features/topology/live-topology-model';
-import type { LiveTopologyResponse } from '../src/features/topology/live-topology-types';
+import type {
+  LiveReconciliation,
+  LiveReconciliationItem,
+  LiveTopologyResponse,
+} from '../src/features/topology/live-topology-types';
 import {
   classifyResource,
   nfRoleLabel,
@@ -1627,4 +1632,88 @@ test('the resource topology page renders a loading state for a resource, never f
   );
   assert.ok(markup.includes('Loading'), 'the initial state must be a loading state');
   assert.ok(!markup.includes('Declared'), 'no relationship may be fabricated before the API responds');
+});
+
+function liveResponse(reconciliation?: LiveReconciliation): LiveTopologyResponse {
+  return {
+    generatedAt: '2026-10-26T00:00:00Z',
+    host: { hostId: 'host-1' },
+    runtime: {
+      total: 0, running: 0, stopped: 0, unverified: 0,
+      permissionDenied: 0, unknown: 0, stale: 0, notDetected: 0, expected: 0,
+    },
+    config: { manifestConfigured: true, sourceCount: 0, availableSources: 0, complete: true },
+    nodes: [],
+    edges: [],
+    summary: { nodeCount: 0, edgeCount: 0, configuredEdgeCount: 0, unresolvedPeerCount: 0 },
+    ...(reconciliation ? { reconciliation } : {}),
+  };
+}
+
+function reconcileItem(over: Partial<LiveReconciliationItem>): LiveReconciliationItem {
+  return { fromResourceId: 'r-a', toResourceId: 'r-b', ...over };
+}
+
+test('reconciliation is absent rather than zero when the server sends no block', () => {
+  assert.equal(reconciliationSummary(liveResponse()), null);
+  assert.equal(reconciliationSummary(undefined), null);
+});
+
+test('an unreadable ledger never renders as nothing to reconcile', () => {
+  const block: LiveReconciliation = {
+    available: false,
+    reason: 'ledger_unavailable',
+    complete: false,
+    configuredLinks: 0,
+    declaredEdges: 0,
+    matchedCount: 0,
+    matched: [],
+    undeclaredEvidence: [],
+    unevidencedDeclarations: [],
+  };
+  assert.equal(reconciliationSummary(liveResponse(block)), null);
+});
+
+test('reconciliation counts the diff and keeps retired links out of the undeclared total', () => {
+  const block: LiveReconciliation = {
+    available: true,
+    complete: true,
+    configuredLinks: 4,
+    declaredEdges: 3,
+    matchedCount: 2,
+    matched: [
+      reconcileItem({ interfaceMatch: 'agrees' }),
+      reconcileItem({ fromResourceId: 'r-c', toResourceId: 'r-d', interfaceMatch: 'differs' }),
+    ],
+    undeclaredEvidence: [
+      reconcileItem({ fromResourceId: 'r-e', toResourceId: 'r-f', configuredEdgeId: 'configured:e:f' }),
+      reconcileItem({ fromResourceId: 'r-g', toResourceId: 'r-h', retired: true }),
+    ],
+    unevidencedDeclarations: [reconcileItem({ fromResourceId: 'r-i', toResourceId: 'r-j', edgeId: 'edge-i-j' })],
+  };
+  const summary = reconciliationSummary(liveResponse(block));
+  assert.ok(summary, 'an available ledger must produce a summary');
+  assert.equal(summary.matched, 2);
+  assert.equal(summary.undeclared, 2);
+  assert.equal(summary.unevidenced, 1);
+  assert.equal(summary.retired, 1, 'a retired decision must be distinguishable from never declared');
+  assert.equal(summary.differing, 1, 'an interface annotation mismatch must be counted, not hidden');
+  assert.equal(summary.complete, true);
+});
+
+test('a truncated ledger read is reported as partial instead of a clean diff', () => {
+  const block: LiveReconciliation = {
+    available: true,
+    complete: false,
+    configuredLinks: 1,
+    declaredEdges: 1,
+    matchedCount: 1,
+    matched: [reconcileItem({ interfaceMatch: 'agrees' })],
+    undeclaredEvidence: [],
+    unevidencedDeclarations: [],
+  };
+  const summary = reconciliationSummary(liveResponse(block));
+  assert.ok(summary);
+  assert.equal(summary.complete, false);
+  assert.equal(summary.undeclared, 0);
 });

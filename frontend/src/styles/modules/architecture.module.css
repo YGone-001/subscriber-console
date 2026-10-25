@@ -1922,6 +1922,36 @@
   overflow-wrap: anywhere;
 }
 
+.liveReconcile {
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--sys-color-surface-panel);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.liveReconcile h3 {
+  color: var(--text-primary, inherit);
+  font-size: 0.78rem;
+}
+
+.liveReconcileList {
+  display: grid;
+  gap: var(--space-4);
+  margin: var(--space-8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.liveReconcileList li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-8);
+  overflow-wrap: anywhere;
+}
+
 .liveDomainFilter select {
   min-height: calc(var(--control-height) - 4px);
   padding: 0 var(--space-8);

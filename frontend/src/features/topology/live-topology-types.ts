@@ -72,6 +72,40 @@ export type LiveUnresolvedPeer = {
   reason: string;
 };
 
+/*
+ * Advisory diff between the persisted relationship ledger and the configured
+ * evidence in this projection. An entry never claims a relationship is wrong:
+ * a declaration may cover a link this manifest does not describe, and a
+ * configured link may be deliberately undeclared or retired.
+ */
+export type LiveReconciliationItem = {
+  fromResourceId: string;
+  toResourceId: string;
+  fromComponentId?: string;
+  toComponentId?: string;
+  configuredEdgeId?: string;
+  edgeId?: string;
+  relationshipType?: string;
+  interfaceNames?: string[];
+  declaredInterfaceNames?: string[];
+  interfaceMatch?: 'agrees' | 'differs' | 'unannotated' | string;
+  protocol?: string;
+  sourceFiles?: string[];
+  retired?: boolean;
+};
+
+export type LiveReconciliation = {
+  available: boolean;
+  reason?: string;
+  complete: boolean;
+  configuredLinks: number;
+  declaredEdges: number;
+  matchedCount: number;
+  matched: LiveReconciliationItem[];
+  undeclaredEvidence: LiveReconciliationItem[];
+  unevidencedDeclarations: LiveReconciliationItem[];
+};
+
 export type LiveTopologyResponse = {
   generatedAt: string;
   host: { hostId: string; hostName?: string };
@@ -80,6 +114,7 @@ export type LiveTopologyResponse = {
   nodes: LiveNode[];
   edges: LiveEdge[];
   unresolvedPeers?: LiveUnresolvedPeer[];
+  reconciliation?: LiveReconciliation;
   summary: {
     nodeCount: number;
     edgeCount: number;

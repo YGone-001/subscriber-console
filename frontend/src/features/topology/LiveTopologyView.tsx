@@ -30,13 +30,17 @@ import {
   liveDirectory,
   liveEdges,
   presentRuntimeStates,
+  reconciliationSummary,
 } from './live-topology-model';
 import type {
   LiveEdge,
   LiveEndpoint,
   LiveNode,
+  LiveReconciliation,
+  LiveReconciliationItem,
   LiveTopologyResponse,
 } from './live-topology-types';
+import type { ReconciliationSummary } from './live-topology-model';
 import type { RegisterRelationshipDraft } from './topology-types';
 import { buildDeclaredDraftFromLink } from './topology-builders';
 import styles from '../../styles/modules/architecture.module.css';
@@ -118,6 +122,9 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
   const selected = data?.nodes.find((node) => node.componentId === selectedComponentId);
   const selectedEdge = data?.edges.find((edge) => edge.edgeId === selectedEdgeId);
   const unresolved = data?.unresolvedPeers ?? [];
+  const reconciliation = reconciliationSummary(data);
+  const reconciliationUnavailable = Boolean(data?.reconciliation && !data.reconciliation.available);
+  const reconciliationBlock = data?.reconciliation;
 
   const announcement = useMemo(() => {
     if (live.isLoading && !data) return t('topology_announce_loading');
@@ -669,6 +676,22 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
                 </ul>
               </details>
             ) : null}
+
+            {reconciliation && reconciliationBlock ? (
+              <LiveReconciliationPanel
+                summary={reconciliation}
+                block={reconciliationBlock}
+                nodes={data.nodes}
+                onSelectEdge={selectEdge}
+              />
+            ) : reconciliationUnavailable ? (
+              <section className={styles.liveReconcile} aria-labelledby="live-reconcile-title" data-live-reconciliation="unavailable">
+                <h3 id="live-reconcile-title">{t('topology_live_reconcile_title')}</h3>
+                <p className={styles.liveMuted} data-reconcile-unavailable="true">
+                  {t('topology_live_reconcile_unavailable')}
+                </p>
+              </section>
+            ) : null}
           </>
         )}
       >
@@ -942,6 +965,92 @@ function LiveEdgeDetail({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/*
+ * Advisory diff between the persisted ledger and the configured evidence of this
+ * projection. It never claims a relationship is wrong and never writes: the only
+ * control offered selects the configured link so its existing controls,
+ * including registration, become reachable.
+ */
+function LiveReconciliationPanel({
+  summary,
+  block,
+  nodes,
+  onSelectEdge,
+}: {
+  summary: ReconciliationSummary;
+  block: LiveReconciliation;
+  nodes: LiveNode[];
+  onSelectEdge: (edgeId: string) => void;
+}) {
+  const { t } = useI18n();
+  const label = (item: LiveReconciliationItem) => {
+    const named = (componentId?: string) => {
+      if (!componentId) return '';
+      return nodes.find((node) => node.componentId === componentId)?.displayName || componentId;
+    };
+    return `${named(item.fromComponentId) || item.fromResourceId} -> ${named(item.toComponentId) || item.toResourceId}`;
+  };
+  const clear = summary.undeclared === 0 && summary.unevidenced === 0;
+
+  return (
+    <section className={styles.liveReconcile} aria-labelledby="live-reconcile-title" data-live-reconciliation="available">
+      <h3 id="live-reconcile-title">{t('topology_live_reconcile_title')}</h3>
+      <p className={styles.liveMuted} data-reconcile-summary="true">
+        {t('topology_live_reconcile_summary', {
+          matched: summary.matched,
+          undeclared: summary.undeclared,
+          unevidenced: summary.unevidenced,
+        })}
+        {summary.differing > 0 ? (
+          <span data-reconcile-differs="true">{` · ${t('topology_live_reconcile_differs', { count: summary.differing })}`}</span>
+        ) : null}
+        {!summary.complete ? (
+          <span data-reconcile-partial="true">{` · ${t('topology_live_reconcile_partial')}`}</span>
+        ) : null}
+      </p>
+      {clear ? (
+        <p className={styles.liveMuted} data-reconcile-clear="true">{t('topology_live_reconcile_clear')}</p>
+      ) : (
+        <ul className={styles.liveReconcileList}>
+          {block.undeclaredEvidence.map((item) => {
+            const configuredEdgeId = item.configuredEdgeId;
+            const key = `undeclared-${configuredEdgeId || `${item.fromResourceId}-${item.toResourceId}`}`;
+            return (
+              <li key={key} data-reconcile-kind="undeclared-evidence">
+                {configuredEdgeId ? (
+                  <button
+                    type="button"
+                    className={styles.linkBtn}
+                    data-reconcile-link={configuredEdgeId}
+                    onClick={() => onSelectEdge(configuredEdgeId)}
+                  >
+                    {label(item)}
+                  </button>
+                ) : (
+                  <span>{label(item)}</span>
+                )}
+                {item.interfaceNames && item.interfaceNames.length > 0 ? <code>{item.interfaceNames.join(' / ')}</code> : null}
+                <span className={styles.liveMuted}>
+                  {item.retired ? t('topology_live_reconcile_retired') : t('topology_live_reconcile_undeclared')}
+                </span>
+              </li>
+            );
+          })}
+          {block.unevidencedDeclarations.map((item) => (
+            <li key={`unevidenced-${item.edgeId || `${item.fromResourceId}-${item.toResourceId}`}`} data-reconcile-kind="unevidenced-declaration">
+              <span>{label(item)}</span>
+              {item.declaredInterfaceNames && item.declaredInterfaceNames.length > 0 ? (
+                <code>{item.declaredInterfaceNames.join(' / ')}</code>
+              ) : null}
+              <span className={styles.liveMuted}>{t('topology_live_reconcile_unevidenced')}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
