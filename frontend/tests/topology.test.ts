@@ -47,6 +47,7 @@ import { en } from '../src/lib/locales/en';
 import { zh } from '../src/lib/locales/zh';
 import {
   ACTUAL_CANVAS_PADDING,
+  ACTUAL_BAND_ROW_MAX_WIDTH,
   ACTUAL_DOMAIN_MODE_OPTIONS,
   ACTUAL_GROUP_WIDTH,
   buildActualTopology,
@@ -756,7 +757,7 @@ test('unknown domains are unclassified and never counted as cross-domain', () =>
   assert.equal(fiveGc.crossDomainLinkCount, 0);
 });
 
-test('the all-domain graph stacks vertical lanes with per-lane counts', () => {
+test('the all-domain graph flows bands into wrapped rows with per-band counts', () => {
   const amf = domainProjection('c1000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc');
   const smf = domainProjection('c1000002-1111-4111-8111-000000000002', 'smf-01', 'smf', '5gc');
   const mme = domainProjection('c1000003-1111-4111-8111-000000000003', 'mme-01', 'mme', 'epc');
@@ -775,16 +776,23 @@ test('the all-domain graph stacks vertical lanes with per-lane counts', () => {
 
   const all = buildActualTopology(edges, directory);
   const lanes = all.bands.filter((band) => band.kind === 'domain');
-  assert.equal(lanes.length, 2, '5GC and EPC each become one lane');
-  assert.equal(lanes[0].x, lanes[1].x, 'lanes share the left edge');
-  assert.ok(lanes[1].y >= lanes[0].y + lanes[0].height, 'lanes stack vertically instead of concatenating right');
+  assert.equal(lanes.length, 2, '5GC and EPC each become one band');
+  assert.ok(lanes[1].x > lanes[0].x, 'bands flow to the right instead of stacking one per row');
+  assert.equal(lanes[1].y, lanes[0].y, 'bands that fit the row budget share one row');
+  assert.ok(
+    lanes[1].x >= lanes[0].x + lanes[0].width,
+    'a flowed band never overlaps the band before it',
+  );
   assert.equal(lanes[0].nodeCount, 2);
   assert.equal(lanes[1].nodeCount, 2);
   assert.ok(
-    all.width <= ACTUAL_CANVAS_PADDING * 2 + ACTUAL_GROUP_WIDTH * 2,
-    'the canvas width is bounded by the widest lane, not the domain count',
+    all.width <= ACTUAL_CANVAS_PADDING * 2 + ACTUAL_BAND_ROW_MAX_WIDTH,
+    'a row that fits the budget must not exceed it',
   );
-  assert.ok(all.height >= lanes[0].height + lanes[1].height, 'the canvas height accumulates the lanes');
+  assert.ok(
+    all.height < lanes[0].height + lanes[1].height + ACTUAL_CANVAS_PADDING * 2 + 40,
+    'sharing a row must not accumulate both band heights',
+  );
 
   const single = buildActualTopology(edges, directory, { domainMode: '5gc' });
   assert.ok(single.bands.length >= 2, 'a focused domain keeps its boundary/support bands');
@@ -844,12 +852,17 @@ test('a large multi-domain set stays deterministic and width-bounded', () => {
     second.nodes.map((node) => [node.resourceId, node.x, node.y]),
     'the same dataset must always produce the same coordinates',
   );
-  assert.equal(first.bands.length, 4, 'every populated domain becomes a lane');
+  assert.equal(first.bands.length, 4, 'every populated domain becomes a band');
   assert.ok(
-    first.width <= ACTUAL_CANVAS_PADDING * 2 + ACTUAL_GROUP_WIDTH,
-    'forty nodes across four domains must not widen the canvas',
+    first.width <= ACTUAL_CANVAS_PADDING * 2 + ACTUAL_BAND_ROW_MAX_WIDTH + ACTUAL_GROUP_WIDTH,
+    'a row is bounded by the wrap budget plus at most one oversized band',
   );
-  assert.ok(first.height > first.bands.reduce((total, band) => total + band.height, 0), 'lanes stack with gaps');
+  assert.ok(
+    first.height < first.bands.reduce((total, band) => total + band.height, 0),
+    'bands that share a row must not accumulate their heights',
+  );
+  const boxes = first.nodes.map((node) => ({ x: node.x, y: node.y }));
+  assert.equal(new Set(boxes.map((box) => `${box.x}:${box.y}`)).size, boxes.length, 'no two node cards share a slot');
 });
 
 test('lane headers expose counts and an optional focus control', () => {

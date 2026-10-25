@@ -783,6 +783,14 @@ are placed in an `unclassified` band; support resources, when shown, occupy a
 separate support band. Role columns are presentation only and never change
 domain membership.
 
+Bands **flow into rows that wrap at a bounded content width**
+(`ACTUAL_BAND_ROW_MAX_WIDTH`) rather than stacking one band per row. Stacking
+made a whole-fleet graph several times taller than the canvas, so the readable
+default fit could only ever show the first band; flowing keeps the graph close
+to the aspect ratio the canvas actually has. A band is never split across rows,
+so one oversized band (5GC with eight role columns) occupies a row of its own and
+the row width is bounded by the budget plus at most that one band.
+
 In a single-domain mode, the selected domain is scoped to its own network
 functions. An NF in another domain becomes a **boundary node** only when it has
 a direct declared relationship with an NF in the selected domain:

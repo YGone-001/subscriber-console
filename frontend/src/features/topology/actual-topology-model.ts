@@ -111,12 +111,14 @@ export const ACTUAL_NODE_HEIGHT = 60;
 export const ACTUAL_GROUP_WIDTH = 196;
 export const ACTUAL_CANVAS_PADDING = 28;
 export const ACTUAL_BAND_GAP = 20;
+/* Content width a band row may occupy before the next band wraps to a new row.
+ * Sized so a whole IMS-plus-EPC row fits without splitting a band, while keeping
+ * the graph close to the aspect ratio of the canvas. */
+export const ACTUAL_BAND_ROW_MAX_WIDTH = 1900;
 export const ACTUAL_BAND_HEADER_HEIGHT = 30;
 export const ACTUAL_GROUP_HEADER_HEIGHT = 26;
 export const ACTUAL_ROW_HEIGHT = 78;
-/* Vertical domain lanes: the gap between lanes and the breathing room under
- * the last node row of a lane. */
-export const ACTUAL_LANE_GAP = 24;
+/* Breathing room under the last node row of a band. */
 export const ACTUAL_LANE_FOOT = 12;
 
 const NODE_TOP_OFFSET = ACTUAL_BAND_HEADER_HEIGHT + ACTUAL_GROUP_HEADER_HEIGHT + 12;
@@ -400,9 +402,12 @@ export function buildActualTopology(
     };
   });
 
-  /* Multi-domain modes stack domains as vertical lanes so a wide deployment
-   * never pushes nodes past the viewport; a focused single domain keeps the
-   * compact horizontal band row. */
+  /* Multi-domain modes flow domain bands into horizontal rows that wrap at a
+   * bounded content width. Stacking one band per row made a whole-fleet graph
+   * several times taller than the canvas, so the readable default fit could only
+   * ever show the first band; flowing them keeps the graph roughly as wide as it
+   * is tall, which is the shape the canvas actually has. A focused single domain
+   * has one band and never wraps. */
   const verticalLanes = selectedDomain === null;
   const draftById = new Map(drafts.map((draft) => [draft.resourceId, draft]));
   const laneKeyOf = (node: ActualTopologyNode) => (
@@ -425,8 +430,8 @@ export function buildActualTopology(
   const bands: ActualTopologyBand[] = [];
   let cursorX = ACTUAL_CANVAS_PADDING;
   let cursorY = ACTUAL_CANVAS_PADDING;
-  let widestLane = 0;
-  let maxRows = 1;
+  let rowHeight = 0;
+  let widestRow = 0;
   for (const spec of bandSpecs) {
     const bandRecords = drafts.filter((node) => (
       node.band === spec.kind
@@ -442,17 +447,26 @@ export function buildActualTopology(
       return { group, nodes: nodesInGroup };
     });
     const laneRows = columnLists.reduce((max, entry) => Math.max(max, entry.nodes.length), 0);
+    const bandWidth = presentGroups.length * ACTUAL_GROUP_WIDTH;
+    const bandHeight = NODE_TOP_OFFSET
+      + Math.max(0, laneRows - 1) * ACTUAL_ROW_HEIGHT
+      + ACTUAL_NODE_HEIGHT
+      + ACTUAL_LANE_FOOT;
+    if (cursorX > ACTUAL_CANVAS_PADDING
+      && cursorX + bandWidth > ACTUAL_CANVAS_PADDING + ACTUAL_BAND_ROW_MAX_WIDTH) {
+      widestRow = Math.max(widestRow, cursorX - ACTUAL_BAND_GAP - ACTUAL_CANVAS_PADDING);
+      cursorY += rowHeight + ACTUAL_BAND_GAP;
+      cursorX = ACTUAL_CANVAS_PADDING;
+      rowHeight = 0;
+    }
     const band: ActualTopologyBand = {
       kind: spec.kind,
       domain: spec.domain,
       labelKey: spec.labelKey,
-      x: verticalLanes ? ACTUAL_CANVAS_PADDING : cursorX,
-      y: verticalLanes ? cursorY : ACTUAL_CANVAS_PADDING,
-      width: presentGroups.length * ACTUAL_GROUP_WIDTH,
-      height: NODE_TOP_OFFSET
-        + Math.max(0, laneRows - 1) * ACTUAL_ROW_HEIGHT
-        + ACTUAL_NODE_HEIGHT
-        + ACTUAL_LANE_FOOT,
+      x: cursorX,
+      y: cursorY,
+      width: bandWidth,
+      height: bandHeight,
       nodeCount: bandRecords.length,
       abnormalCount: bandRecords.filter((node) => isAbnormalRuntimeStatus(node.runtimeStatus)).length,
       columns: [],
@@ -466,29 +480,21 @@ export function buildActualTopology(
         node.x = column.x + (ACTUAL_GROUP_WIDTH - ACTUAL_NODE_WIDTH) / 2;
         node.y = band.y + NODE_TOP_OFFSET + rowIndex * ACTUAL_ROW_HEIGHT;
       });
-      maxRows = Math.max(maxRows, entry.nodes.length);
     }
     bands.push(band);
-    if (verticalLanes) {
-      cursorY += band.height + ACTUAL_LANE_GAP;
-      widestLane = Math.max(widestLane, band.width);
-    } else {
-      cursorX += band.width + ACTUAL_BAND_GAP;
-    }
+    rowHeight = Math.max(rowHeight, bandHeight);
+    cursorX += bandWidth + ACTUAL_BAND_GAP;
   }
+  widestRow = Math.max(widestRow, cursorX - ACTUAL_BAND_GAP - ACTUAL_CANVAS_PADDING);
 
   const nodes = drafts.filter((node) => node.x > 0 && node.y > 0);
   const groups = GROUPS.filter((group) => nodes.some((node) => node.group === group));
   const width = bands.length === 0
     ? ACTUAL_CANVAS_PADDING * 2 + ACTUAL_GROUP_WIDTH
-    : verticalLanes
-      ? ACTUAL_CANVAS_PADDING * 2 + widestLane
-      : cursorX - ACTUAL_BAND_GAP + ACTUAL_CANVAS_PADDING;
-  const height = verticalLanes
-    ? (bands.length === 0
-      ? ACTUAL_CANVAS_PADDING * 2 + NODE_TOP_OFFSET + ACTUAL_NODE_HEIGHT
-      : cursorY - ACTUAL_LANE_GAP + ACTUAL_CANVAS_PADDING)
-    : ACTUAL_CANVAS_PADDING * 2 + NODE_TOP_OFFSET + (maxRows - 1) * ACTUAL_ROW_HEIGHT + ACTUAL_NODE_HEIGHT;
+    : ACTUAL_CANVAS_PADDING * 2 + widestRow;
+  const height = bands.length === 0
+    ? ACTUAL_CANVAS_PADDING * 2 + NODE_TOP_OFFSET + ACTUAL_NODE_HEIGHT
+    : cursorY + rowHeight + ACTUAL_CANVAS_PADDING;
 
   const byId = new Map(nodes.map((node) => [node.resourceId, node]));
   const pairCounts = new Map<string, number>();
