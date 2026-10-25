@@ -506,26 +506,6 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
             </>
           ) : null}
         </div>
-        {supportToggle || hiddenSupportNotice || boundaryToggle || hiddenBoundaryNotice ? (
-          <div className={styles.actualSupportBar}>
-            {supportToggle}
-            {hiddenSupportNotice}
-            {boundaryToggle}
-            {hiddenBoundaryNotice}
-          </div>
-        ) : null}
-        <label className={styles.actualSearch}>
-          <Search size={15} aria-hidden="true" />
-          <span className="sr-only">{t('topology_picker_search_placeholder')}</span>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t('topology_picker_search_placeholder')}
-          />
-        </label>
-      </div>
-      <div className={styles.actualSecondaryToolbar}>
         <label className={styles.actualInterfaceFilter}>
           <span>{t('topology_interface_filter')}</span>
           <select
@@ -548,31 +528,25 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
             total: coverageCounts.total,
           })}
         </span>
-        {coverageCounts.annotated > 0 && interfaceFilter !== UNANNOTATED_INTERFACE_FILTER ? (
-          <button
-            type="button"
-            className={styles.actualSupportToggle}
-            data-action="toggle-interface-labels"
-            aria-pressed={showAllInterfaceNames}
-            onClick={() => setShowAllInterfaceNames((current) => !current)}
-          >
-            {showAllInterfaceNames
-              ? t('topology_interface_hide_all')
-              : t('topology_interface_show_all')}
-          </button>
+        {supportToggle || hiddenSupportNotice || boundaryToggle || hiddenBoundaryNotice ? (
+          <div className={styles.actualSupportBar}>
+            {supportToggle}
+            {hiddenSupportNotice}
+            {boundaryToggle}
+            {hiddenBoundaryNotice}
+          </div>
         ) : null}
-        <button
-          type="button"
-          className={styles.actualSupportToggle}
-          data-action="toggle-lists"
-          aria-expanded={listOpen}
-          aria-pressed={listOpen}
-          onClick={() => setListOpen((open) => !open)}
-        >
-          {listOpen ? t('topology_hide_lists') : t('topology_show_lists')}
-        </button>
+        <label className={styles.actualSearch}>
+          <Search size={15} aria-hidden="true" />
+          <span className="sr-only">{t('topology_picker_search_placeholder')}</span>
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t('topology_picker_search_placeholder')}
+          />
+        </label>
       </div>
-      <p className={styles.actualNote}>{t('topology_declared_notice')}</p>
       {coverage === 'partial' ? (
         <div
           className={styles.actualCoverageNote}
@@ -657,6 +631,34 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
               ) : null}
             </>
           )}
+          {/*
+            * Display toggles ride the legend row: they change what the canvas
+            * draws, not which relationships are in scope, so they do not cost a
+            * toolbar row above the graph.
+           */}
+          {coverageCounts.annotated > 0 && interfaceFilter !== UNANNOTATED_INTERFACE_FILTER ? (
+            <button
+              type="button"
+              className={styles.actualSupportToggle}
+              data-action="toggle-interface-labels"
+              aria-pressed={showAllInterfaceNames}
+              onClick={() => setShowAllInterfaceNames((current) => !current)}
+            >
+              {showAllInterfaceNames
+                ? t('topology_interface_hide_all')
+                : t('topology_interface_show_all')}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={styles.actualSupportToggle}
+            data-action="toggle-lists"
+            aria-expanded={listOpen}
+            aria-pressed={listOpen}
+            onClick={() => setListOpen((open) => !open)}
+          >
+            {listOpen ? t('topology_hide_lists') : t('topology_show_lists')}
+          </button>
         </div>
       ) : null}
       {layout.nodes.length === 0 ? (

@@ -1323,15 +1323,6 @@
 }
 
 
-.actualSecondaryToolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
-  flex-wrap: wrap;
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
 .actualInterfaceFilter {
   display: inline-flex;
   align-items: center;
@@ -1362,12 +1353,6 @@
 }
 
 .actualInterfaceCoverage {
-  color: var(--text-muted);
-}
-
-.actualNote {
-  margin: 0;
-  font-size: 0.75rem;
   color: var(--text-muted);
 }
 

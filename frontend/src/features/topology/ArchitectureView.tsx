@@ -59,7 +59,7 @@ import {
 } from './reference-architecture';
 import { ArchitectureCanvas } from './components/ArchitectureCanvas';
 import { ArchitectureRoleDetail } from './components/ArchitectureDetailDrawer';
-import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
+import { TopologyCanvasControls, TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import { TopologyInspector } from './components/TopologyInspector';
 import { TopologyAnnouncer } from './components/TopologyAnnouncer';
 import type { RuntimeObservations } from '../runtime/runtime-types';
@@ -502,16 +502,6 @@ export function ArchitectureView({
                 ))}
               </div>
             )}
-            zoom={view === 'all' ? undefined : {
-              value: zoom,
-              min: MIN_ZOOM,
-              max: MAX_ZOOM,
-              onIn: () => updateZoom(ZOOM_STEP),
-              onOut: () => updateZoom(-ZOOM_STEP),
-              onFit: fitView,
-              onReset: resetView,
-            }}
-            fullscreen={view === 'all' ? undefined : { active: fullscreen, onToggle: toggleFullscreen }}
           />
 
           <div className={styles.toolbar}>
@@ -559,6 +549,25 @@ export function ArchitectureView({
             data-inspector-open={selected ? 'true' : undefined}
           >
             <div className={styles.archWorkspaceMain}>
+              {/*
+                * Same placement as the other graph sources: navigation belongs to
+                * the surface it acts on and must not spend a toolbar row.
+               */}
+              {view !== 'all' ? (
+                <TopologyCanvasControls
+                  className={styles.actualCanvasControls}
+                  zoom={{
+                    value: zoom,
+                    min: MIN_ZOOM,
+                    max: MAX_ZOOM,
+                    onIn: () => updateZoom(ZOOM_STEP),
+                    onOut: () => updateZoom(-ZOOM_STEP),
+                    onFit: fitView,
+                    onReset: resetView,
+                  }}
+                  fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
+                />
+              ) : null}
           {view !== 'all' ? (
             <div className={styles.legendCompact}>
               <span
