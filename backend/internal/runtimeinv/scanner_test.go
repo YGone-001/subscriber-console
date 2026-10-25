@@ -283,18 +283,22 @@ func TestScannerAcceptsApprovedExecutableAlias(t *testing.T) {
 	// Kamailio sets a per-role process title, so comm reads "pcscfd" while the
 	// executable behind it is the shared SIP binary.
 	f.process(311, "pcscfd", "/usr/local/sbin/kamailio", 1, 0, 10, 10, nil)
-	// The same shared binary must not identify a role without an approved alias.
 	f.process(312, "scscfd", "/usr/local/sbin/kamailio", 2, 0, 10, 10, nil)
+	// An alias belongs to the components that carry it: it must not vouch for a
+	// role that never declared it.
+	f.process(313, "hssd", "/usr/local/sbin/kamailio", 3, 0, 10, 10, nil)
 	scanner := newTestScanner(f, clock)
 	snapshot, _ := scanner.Scan(t.Context(), TriggerManual, nil)
 
-	pcscf := observationFor(t, snapshot, "pcscf")
-	if pcscf.RuntimeStatus != StatusRunning || !pcscf.Verified {
-		t.Fatalf("an approved alias must verify the component, got %s verified=%v", pcscf.RuntimeStatus, pcscf.Verified)
+	for _, id := range []string{"pcscf", "scscf"} {
+		observation := observationFor(t, snapshot, id)
+		if observation.RuntimeStatus != StatusRunning || !observation.Verified {
+			t.Fatalf("%s must verify through the approved alias, got %s verified=%v", id, observation.RuntimeStatus, observation.Verified)
+		}
 	}
-	scscf := observationFor(t, snapshot, "scscf")
-	if scscf.RuntimeStatus != StatusUnverified {
-		t.Fatalf("scscf has no approved alias and must stay unverified, got %s", scscf.RuntimeStatus)
+	hss := observationFor(t, snapshot, "hss")
+	if hss.RuntimeStatus != StatusUnverified {
+		t.Fatalf("hss has no approved alias and must stay unverified, got %s", hss.RuntimeStatus)
 	}
 }
 

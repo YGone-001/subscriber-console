@@ -419,7 +419,7 @@ func DefaultComponents() []Component {
 		// -- IMS (4) --
 		{ID: "pcscf", DisplayName: "P-CSCF", ProcessName: "pcscfd", ExeAliases: []string{"kamailio"}, Category: CategoryIMS, Domain: "ims", Role: "pcscf", NFTType: "P-CSCF", Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true, Monitoring: MonitoringSupported},
 		{ID: "icscf", DisplayName: "I-CSCF", ProcessName: "icscfd", ExeAliases: []string{"kamailio"}, Category: CategoryIMS, Domain: "ims", Role: "icscf", NFTType: "I-CSCF", Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true, Monitoring: MonitoringSupported},
-		{ID: "scscf", DisplayName: "S-CSCF", ProcessName: "scscfd", Category: CategoryIMS, Domain: "ims", Role: "scscf", NFTType: "S-CSCF", Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true, Monitoring: MonitoringSupported},
+		{ID: "scscf", DisplayName: "S-CSCF", ProcessName: "scscfd", ExeAliases: []string{"kamailio"}, Category: CategoryIMS, Domain: "ims", Role: "scscf", NFTType: "S-CSCF", Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true, Monitoring: MonitoringSupported},
 		{
 			ID: "imsHss", DisplayName: "IMS HSS", ProcessName: "java",
 			MatchMethod: MatchJavaCommandLine, Category: CategoryIMS, Domain: "ims", Role: "hss", NFTType: "HSS",
@@ -441,7 +441,7 @@ func DefaultComponents() []Component {
 
 		// -- xCloud-only identities preserved from the existing registry (2) --
 		{ID: "sepp", DisplayName: "SEPP", ProcessName: "seppd", Category: Category5GC, Domain: "5gc", Role: "sepp", NFTType: "SEPP", Templates: []string{TemplateAuto, Template5G}, CNMSCompatible: false, Monitoring: MonitoringSupported},
-		{ID: "smsc", DisplayName: "SMSC", ProcessName: "smscd", Category: CategoryIMS, Domain: "ims", Role: "smsc", NFTType: "SMSC", Templates: []string{TemplateAuto, Template4G, TemplateIMS}, CNMSCompatible: false, Monitoring: MonitoringSupported},
+		{ID: "smsc", DisplayName: "SMSC", ProcessName: "smscd", ExeAliases: []string{"kamailio"}, Category: CategoryIMS, Domain: "ims", Role: "smsc", NFTType: "SMSC", Templates: []string{TemplateAuto, Template4G, TemplateIMS}, CNMSCompatible: false, Monitoring: MonitoringSupported},
 	}
 }
 
