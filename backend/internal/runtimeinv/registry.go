@@ -94,6 +94,12 @@ type Component struct {
 	Monitoring string
 	// MonitoringReason explains a not_supported decision.
 	MonitoringReason string
+	// Adoptable marks a component that may enter Inventory as a network function
+	// resource. Every NF Health eligible component is adoptable; a component
+	// without that eligibility is adoptable only when the registry declares it,
+	// because "we cannot measure it" and "it is not a resource" are two different
+	// claims.
+	Adoptable bool
 }
 
 // Registry is the immutable, server-owned recognition authority. Every scanner,
@@ -208,6 +214,9 @@ func normalizeComponent(component Component) Component {
 	}
 	if component.Monitoring == "" {
 		component.Monitoring = MonitoringNotSupported
+	}
+	if component.Monitoring == MonitoringSupported {
+		component.Adoptable = true
 	}
 	templates := make([]string, 0, len(component.Templates))
 	seen := map[string]struct{}{}
@@ -425,7 +434,8 @@ func DefaultComponents() []Component {
 			MatchMethod: MatchJavaCommandLine, Category: CategoryIMS, Domain: "ims", Role: "hss", NFTType: "HSS",
 			Templates: []string{TemplateAuto, Template5G, Template4G, TemplateIMS}, CNMSCompatible: true,
 			Monitoring:       MonitoringNotSupported,
-			MonitoringReason: "ambiguous_java_identity_and_domain_role_contract",
+			MonitoringReason: "java_launcher_identity_cannot_scope_a_process_binding",
+			Adoptable:        true,
 		},
 
 		// -- Charging (1) --

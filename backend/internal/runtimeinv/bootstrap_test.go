@@ -288,6 +288,48 @@ func TestBootstrapPlanSkipsUnsupportedAndAbsentComponents(t *testing.T) {
 	}
 }
 
+func TestBootstrapAdoptsUnmeasurableButAdoptableComponent(t *testing.T) {
+	f := newFixture(t)
+	clock := &fakeClock{now: fixedTime()}
+	// xHSS runs on the shared java launcher. The command-line strategy verifies that
+	// identity, but a process binding could never scope to one JVM among many, so NF
+	// Health stays withheld while Inventory adoption must still happen.
+	f.process(1810, "java", "/usr/lib/jvm/jdk1.7/bin/java", 1, 0, 10, 10,
+		[]string{"java", "-Xms128m", "-cp", "/opt/xHSS/deploy/lib/*", "de.fhg.fokus.hss.main.HSSContainer"})
+	service := newTestService(t, f, clock)
+	targets := newFakeTargets()
+	bootstrapper := NewBootstrapper(service, newFakeInventory(), targets, newFakeBindings())
+
+	plan, err := bootstrapper.Plan(context.Background(), TemplateAuto, []string{"imsHss"})
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	entry := planEntry(t, plan, "imsHss")
+	if entry.Action != ActionCreateResource {
+		t.Fatalf("a verified running component must be adopted even when unmeasurable, got %s (%s)", entry.Action, entry.Reason)
+	}
+	if entry.ProposedTarget != nil || entry.Binding != nil || entry.TargetAction != "" {
+		t.Fatalf("adoption must propose no target and no binding, got %+v", entry)
+	}
+	if plan.Counts.TargetCreate != 0 {
+		t.Fatalf("the plan must not count a target, got %d", plan.Counts.TargetCreate)
+	}
+
+	applied, err := bootstrapper.Apply(context.Background(), plan.PlanID, TemplateAuto, []string{"imsHss"}, "operator")
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(applied.Entries) != 1 || applied.Entries[0].Action != "created" {
+		t.Fatalf("apply must create exactly the resource, got %+v", applied.Entries)
+	}
+	if applied.Entries[0].TargetID != "" || applied.Entries[0].BindingInstalled {
+		t.Fatalf("apply must not install a target or binding, got %+v", applied.Entries[0])
+	}
+	if len(targets.created) != 0 {
+		t.Fatalf("no NF Health target may be ensured for an unmeasurable component, got %d", len(targets.created))
+	}
+}
+
 func TestBootstrapPlanReportsStaticBindingConflict(t *testing.T) {
 	f := newFixture(t)
 	clock := &fakeClock{now: fixedTime()}

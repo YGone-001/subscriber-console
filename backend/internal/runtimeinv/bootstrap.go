@@ -339,7 +339,7 @@ func (b *Bootstrapper) selectComponents(template string, componentIDs []string) 
 }
 
 func (b *Bootstrapper) decide(ctx context.Context, snapshot *Snapshot, component Component, entry *PlanEntry) error {
-	if component.Monitoring != MonitoringSupported {
+	if !component.Adoptable {
 		entry.Action = ActionSkipNotMonitored
 		entry.Reason = component.MonitoringReason
 		return nil
@@ -389,6 +389,13 @@ func (b *Bootstrapper) decide(ctx context.Context, snapshot *Snapshot, component
 			entry.Conflicts = append(entry.Conflicts, ConflictResourceAmbiguous)
 			return nil
 		}
+	}
+
+	if component.Monitoring != MonitoringSupported {
+		// Adopted as an Inventory resource only. No NF Health target and no
+		// process binding: the registry withholds measurement for a reason, so
+		// adoption must never fabricate a collector to fill the gap.
+		return nil
 	}
 
 	if entry.ResourceID != "" {
@@ -510,6 +517,13 @@ func (b *Bootstrapper) Apply(ctx context.Context, planID, template string, compo
 			}
 		} else {
 			applied.Action = "reused"
+		}
+
+		if entry.ProposedTarget == nil {
+			// The plan withheld measurement on purpose, so adoption stops at the
+			// resource: no target row, no process binding.
+			result.Entries = append(result.Entries, applied)
+			continue
 		}
 
 		if entry.Binding != nil {

@@ -67,9 +67,31 @@ prevents `HSSContainerManagerHelper` or `FHoSS-test-notes.jar` from being
 accepted. The raw command line is never persisted, returned or audited; only the
 approved token name and the reason code are retained.
 
-IMS HSS is never classified as an EPC HSS instance, and it is never adopted as
-an NF Health target: the existing NF Health identity contract resolves `HSS`
-only in the `epc` domain, and this phase does not widen that contract.
+IMS HSS is never classified as an EPC HSS instance. It is adopted into Inventory as
+an `ims` / `hss` resource, but it is never given an NF Health target or a process
+binding: its process identity is the shared `java` launcher, so a binding keyed on
+that name would match every JVM on the host. The resource therefore carries no
+measurement at all - it shows as unmonitored, never as healthy and never as a
+fabricated target.
+
+### 2.3 Approved executable aliases
+
+The exact-name strategy compares the verified `/proc/<pid>/exe` **basename** with
+the component's `processName`, so install paths never matter while the file name
+always does. Some SIP stacks (Kamailio) rewrite their process title per role, which
+makes `comm` report `pcscfd` while the executable behind it is `kamailio`; the exact
+rule alone could never verify them.
+
+A component may therefore declare `exeAliases`:
+
+- an alias only widens the executable check for a component whose `comm` already
+  matched exactly - it never identifies a process on its own;
+- aliases are server-owned registry data, never client input;
+- an alias that equals another component's exact `processName` makes the registry
+  fail to load, so no role can vouch for another;
+- the approved set is currently `kamailio` for `pcscf`, `icscf`, `scscf` and `smsc`,
+  evidenced by the shared Kamailio command-line signature (`-f <cfg> -P /<role>.pid
+  -DD -E -e`) across those roles.
 
 ## 3. Scanning
 
@@ -168,14 +190,28 @@ the original CNMS classification.
 `POST /api/runtime/bootstrap/preview` produces a bounded plan; `apply` executes
 an approved plan.
 
+Adoptability and measurement eligibility are two separate registry decisions.
+Adoptability answers "may this verified component become an Inventory resource";
+measurement eligibility answers "may it own an NF Health target and a process
+binding". Every NF-Health-eligible component is adoptable, but the registry can
+withhold measurement alone: the Java IMS HSS has a launch-identifier identity that
+cannot scope a process binding, so it is adopted as an `ims/hss` resource while
+staying unmeasured.
+
 Decision order per component:
 
-1. monitoring not supported (DRA, ambiguous IMS HSS) -> `skip_monitoring_unsupported`;
+1. not adoptable (DRA) -> `skip_monitoring_unsupported`;
 2. not verified running -> `skip_not_running`;
 3. a discovered resource exists for the stable key -> `reuse_resource`;
 4. exactly one compatible resource (same kind, domain, role) -> `reuse_resource`;
 5. more than one -> `skip_ambiguous`;
-6. none -> `create_resource`.
+6. none -> `create_resource`;
+7. adoptable, resource decided, but not NF-Health-eligible (IMS HSS) -> no target
+   and no binding are proposed; the entry keeps an empty `targetAction`.
+
+An unmeasurable adoption never fabricates a collector: the resource is created
+without an NF Health target, so it is reported as unmonitored rather than shown as
+a healthy or unknown process target.
 
 Stable key: `xrt:<hostId>:<componentId>:<processName>`. A PID is never part of
 it.
