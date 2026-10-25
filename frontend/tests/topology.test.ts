@@ -1013,11 +1013,18 @@ test('search dims non-matching resources without hiding them', () => {
   assert.ok(markup.includes('actualDimmed'), 'non-matching nodes lose visual weight instead of disappearing');
 });
 
-test('the actual view sizes from the layout and exposes fit, zoom, reset and fullscreen', () => {
-  const source = read('../src/features/topology/ActualTopologyView.tsx');
+test('the canvas navigation cluster stays explicit and is consumed by the graph views', () => {
+  // The cluster lives in the shared component so a view can dock it in the
+  // toolbar or float it over the canvas corner without dropping a control.
+  const controls = read('../src/features/topology/components/TopologyGraphToolbar.tsx');
   for (const action of ['zoom-out', 'zoom-in', 'fit', 'reset', 'fullscreen']) {
-    assert.ok(source.includes(`data-action="${action}"`), `${action} must be an explicit control`);
+    assert.ok(controls.includes(`data-action="${action}"`), `${action} must be an explicit control`);
   }
+  assert.ok(controls.includes('topology_canvas_controls'), 'the cluster must be a labelled group');
+
+  const source = read('../src/features/topology/ActualTopologyView.tsx');
+  assert.ok(source.includes('<TopologyCanvasControls'), 'the declared view must wire the canvas cluster');
+  assert.ok(source.includes('onFit: () => fitView(\'all\')'), 'fit must stay the explicit fit-all pass');
   assert.ok(source.includes('layout.width * zoom'), 'the canvas must use an explicit scale, not fill any width');
   assert.ok(!source.includes('`${zoom * 100}%`'), 'percentage width stretching would resize the nodes with the viewport');
 });

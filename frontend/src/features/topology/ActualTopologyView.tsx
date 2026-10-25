@@ -9,18 +9,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
-  Expand,
   GitBranch,
   Layers,
-  Minimize,
-  Minus,
   RefreshCw,
-  RotateCcw,
-  Scan,
   Search,
-  ZoomIn,
 } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
+import { TopologyCanvasControls } from './components/TopologyGraphToolbar';
 import { Link } from 'react-router-dom';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useBoundedEdges } from '../operations/use-bounded-edges';
@@ -529,44 +524,6 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
             placeholder={t('topology_picker_search_placeholder')}
           />
         </label>
-        <div className={styles.actualControls} role="group" aria-label={t('topology_canvas_controls')}>
-          <button
-            type="button"
-            data-action="zoom-out"
-            onClick={() => updateZoom(-ZOOM_STEP)}
-            disabled={zoom <= MIN_ZOOM}
-            aria-label={t('topology_zoom_out')}
-            title={t('topology_zoom_out')}
-          >
-            <Minus size={15} />
-          </button>
-          <span aria-live="polite">{Math.round(zoom * 100)}%</span>
-          <button
-            type="button"
-            data-action="zoom-in"
-            onClick={() => updateZoom(ZOOM_STEP)}
-            disabled={zoom >= MAX_ZOOM}
-            aria-label={t('topology_zoom_in')}
-            title={t('topology_zoom_in')}
-          >
-            <ZoomIn size={15} />
-          </button>
-          <button type="button" data-action="fit" onClick={() => fitView('all')} aria-label={t('topology_fit_view')} title={t('topology_fit_view')}>
-            <Scan size={15} />
-          </button>
-          <button type="button" data-action="reset" onClick={resetView} aria-label={t('topology_reset_view')} title={t('topology_reset_view')}>
-            <RotateCcw size={15} />
-          </button>
-          <button
-            type="button"
-            data-action="fullscreen"
-            onClick={toggleFullscreen}
-            aria-label={t(fullscreen ? 'topology_exit_fullscreen' : 'topology_fullscreen')}
-            title={t(fullscreen ? 'topology_exit_fullscreen' : 'topology_fullscreen')}
-          >
-            {fullscreen ? <Minimize size={15} /> : <Expand size={15} />}
-          </button>
-        </div>
       </div>
       <div className={styles.actualSecondaryToolbar}>
         <label className={styles.actualInterfaceFilter}>
@@ -726,6 +683,24 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
           data-inspector-open={selected || selectedEdge ? 'true' : undefined}
         >
           <div className={styles.archWorkspaceMain}>
+            {/*
+              * Navigation floats over the canvas corner: it belongs to the
+              * surface it acts on, and keeping it out of the toolbar rows leaves
+              * more of the first screen for the graph itself.
+             */}
+            <TopologyCanvasControls
+              className={styles.actualCanvasControls}
+              zoom={{
+                value: zoom,
+                min: MIN_ZOOM,
+                max: MAX_ZOOM,
+                onIn: () => updateZoom(ZOOM_STEP),
+                onOut: () => updateZoom(-ZOOM_STEP),
+                onFit: () => fitView('all'),
+                onReset: resetView,
+              }}
+              fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
+            />
             <div ref={canvasRef} className={styles.actualCanvasViewport}>
               <div
                 className={styles.actualCanvasScale}

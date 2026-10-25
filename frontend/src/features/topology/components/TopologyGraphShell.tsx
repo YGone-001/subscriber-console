@@ -37,6 +37,9 @@ export type TopologyGraphShellProps = {
   /* Bottom bar: legend on the left, status facts on the right. */
   legend?: ReactNode;
   status?: ReactNode;
+  /* Navigation cluster floated over the canvas corner instead of owning a
+   * toolbar row above it. */
+  canvasControls?: ReactNode;
   /* Equivalent list / table below the workspace. */
   footer?: ReactNode;
   busy?: boolean;
@@ -57,6 +60,7 @@ export function TopologyGraphShell({
   onCloseInspector,
   legend,
   status,
+  canvasControls,
   footer,
   busy = false,
   children,
@@ -96,7 +100,14 @@ export function TopologyGraphShell({
       {notice ? <div className={styles.shellNotice}>{notice}</div> : null}
 
       <div className={styles.shellBody} data-inspector-open={inspector ? 'true' : undefined}>
-        <div className={styles.shellCanvas}>{children}</div>
+        <div className={styles.shellCanvas}>
+          {children}
+          {canvasControls ? (
+            <div className={styles.shellCanvasControls} data-canvas-controls="floating">
+              {canvasControls}
+            </div>
+          ) : null}
+        </div>
         {inspector ? (
           <TopologyInspector
             label={inspectorLabel ?? t('topology_inspector_label')}

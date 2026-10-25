@@ -821,9 +821,25 @@
 }
 
 .archWorkspaceMain {
+  position: relative;
   display: grid;
   gap: var(--space-12);
   min-width: 0;
+}
+
+/*
+ * Canvas navigation floated over the top-right corner of the graph. It carries
+ * its own surface so it never reads as part of a node card it overlaps, and it
+ * stays put while the canvas scrolls underneath.
+ */
+.actualCanvasControls {
+  position: absolute;
+  top: var(--space-8);
+  right: var(--space-8);
+  z-index: 3;
+  padding: 2px;
+  border-radius: var(--ref-radius-control);
+  background: var(--sys-color-surface-panel);
 }
 
 .topologyLists {
@@ -1182,13 +1198,15 @@
 }
 
 .actualSummary,
-.actualControls {
+/*
+ * Status facts row. JSX collapses the whitespace between sibling spans, so the
+ * separation has to come from layout rather than the markup.
+ */
+.actualSummary {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-12);
   flex-wrap: wrap;
-  font-size: 0.76rem;
-  color: var(--text-muted);
+  gap: var(--space-4) var(--space-12);
 }
 
 .actualSummary strong {
@@ -1304,46 +1322,6 @@
   font: inherit;
 }
 
-.actualControls {
-  gap: var(--space-4);
-}
-
-.actualControls button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-small);
-  background: var(--surface-field);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.actualControls button:hover:not(:disabled) {
-  color: var(--text-primary, inherit);
-  background: var(--surface-hover);
-}
-
-.actualControls button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-.actualControls button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.actualControls span {
-  min-width: 34px;
-  color: var(--text-muted);
-  font-family: var(--font-data);
-  font-size: 0.7rem;
-  text-align: center;
-}
 
 .actualSecondaryToolbar {
   display: flex;

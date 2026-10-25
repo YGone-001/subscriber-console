@@ -40,6 +40,90 @@ export type TopologyGraphToolbarProps = {
   fullscreen?: TopologyGraphFullscreen;
 };
 
+/**
+ * Canvas navigation cluster: zoom, fit, reset and full screen.
+ *
+ * It is its own component because a view may dock it inside the toolbar or float
+ * it over the canvas corner. Floating keeps the cluster within reach of the
+ * surface it acts on and frees a toolbar row above the graph.
+ */
+export function TopologyCanvasControls({
+  zoom,
+  fullscreen,
+  className,
+}: {
+  zoom?: TopologyGraphZoom;
+  fullscreen?: TopologyGraphFullscreen;
+  className?: string;
+}) {
+  const { t } = useI18n();
+  if (!zoom && !fullscreen) return null;
+  return (
+    <div
+      className={[styles.graphControls, className].filter(Boolean).join(' ')}
+      role="group"
+      aria-label={t('topology_canvas_controls')}
+    >
+      {zoom ? (
+        <>
+          <button
+            type="button"
+            data-action="zoom-out"
+            onClick={zoom.onOut}
+            disabled={zoom.value <= zoom.min}
+            aria-label={t('topology_zoom_out')}
+            title={t('topology_zoom_out')}
+          >
+            <Minus size={15} aria-hidden="true" />
+          </button>
+          <span aria-live="polite">{Math.round(zoom.value * 100)}%</span>
+          <button
+            type="button"
+            data-action="zoom-in"
+            onClick={zoom.onIn}
+            disabled={zoom.value >= zoom.max}
+            aria-label={t('topology_zoom_in')}
+            title={t('topology_zoom_in')}
+          >
+            <ZoomIn size={15} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            data-action="fit"
+            onClick={zoom.onFit}
+            aria-label={t('topology_fit_view')}
+            title={t('topology_fit_view')}
+          >
+            <Scan size={15} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            data-action="reset"
+            onClick={zoom.onReset}
+            aria-label={t('topology_reset_view')}
+            title={t('topology_reset_view')}
+          >
+            <RotateCcw size={15} aria-hidden="true" />
+          </button>
+        </>
+      ) : null}
+      {fullscreen ? (
+        <button
+          type="button"
+          data-action="fullscreen"
+          onClick={fullscreen.onToggle}
+          aria-label={t(fullscreen.active ? 'topology_exit_fullscreen' : 'topology_fullscreen')}
+          title={t(fullscreen.active ? 'topology_exit_fullscreen' : 'topology_fullscreen')}
+        >
+          {fullscreen.active
+            ? <Minimize size={15} aria-hidden="true" />
+            : <Expand size={15} aria-hidden="true" />}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function TopologyGraphToolbar({
   search,
   filters,
@@ -47,7 +131,6 @@ export function TopologyGraphToolbar({
   zoom,
   fullscreen,
 }: TopologyGraphToolbarProps) {
-  const { t } = useI18n();
   return (
     <div className={styles.graphToolbar} data-topology-toolbar="true">
       {search ? (
@@ -65,66 +148,7 @@ export function TopologyGraphToolbar({
       {filters ? <div className={styles.graphFilters}>{filters}</div> : null}
       <div className={styles.graphToolbarSpacer} />
       {actions}
-      {zoom || fullscreen ? (
-        <div className={styles.graphControls} role="group" aria-label={t('topology_canvas_controls')}>
-          {zoom ? (
-            <>
-              <button
-                type="button"
-                data-action="zoom-out"
-                onClick={zoom.onOut}
-                disabled={zoom.value <= zoom.min}
-                aria-label={t('topology_zoom_out')}
-                title={t('topology_zoom_out')}
-              >
-                <Minus size={15} aria-hidden="true" />
-              </button>
-              <span aria-live="polite">{Math.round(zoom.value * 100)}%</span>
-              <button
-                type="button"
-                data-action="zoom-in"
-                onClick={zoom.onIn}
-                disabled={zoom.value >= zoom.max}
-                aria-label={t('topology_zoom_in')}
-                title={t('topology_zoom_in')}
-              >
-                <ZoomIn size={15} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                data-action="fit"
-                onClick={zoom.onFit}
-                aria-label={t('topology_fit_view')}
-                title={t('topology_fit_view')}
-              >
-                <Scan size={15} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                data-action="reset"
-                onClick={zoom.onReset}
-                aria-label={t('topology_reset_view')}
-                title={t('topology_reset_view')}
-              >
-                <RotateCcw size={15} aria-hidden="true" />
-              </button>
-            </>
-          ) : null}
-          {fullscreen ? (
-            <button
-              type="button"
-              data-action="fullscreen"
-              onClick={fullscreen.onToggle}
-              aria-label={t(fullscreen.active ? 'topology_exit_fullscreen' : 'topology_fullscreen')}
-              title={t(fullscreen.active ? 'topology_exit_fullscreen' : 'topology_fullscreen')}
-            >
-              {fullscreen.active
-                ? <Minimize size={15} aria-hidden="true" />
-                : <Expand size={15} aria-hidden="true" />}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      <TopologyCanvasControls zoom={zoom} fullscreen={fullscreen} />
     </div>
   );
 }

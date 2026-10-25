@@ -19,7 +19,7 @@ import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
 import { TopologyGraphShell } from './components/TopologyGraphShell';
-import { TopologyGraphToolbar } from './components/TopologyGraphToolbar';
+import { TopologyCanvasControls, TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import { TopologyAnnouncer } from './components/TopologyAnnouncer';
 import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology } from './actual-topology-model';
 import { LABEL_DETAIL_MIN_ZOOM, resolveLabelVisibility } from './actual-topology-labels';
@@ -501,6 +501,10 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
                 ) : null}
               </>
             )}
+          />
+        )}
+        canvasControls={layout.nodes.length > 0 ? (
+          <TopologyCanvasControls
             zoom={{
               value: zoom,
               min: MIN_ZOOM,
@@ -512,7 +516,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
             }}
             fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
           />
-        )}
+        ) : undefined}
         inspector={selectedEdge ? (
           <LiveEdgeDetail
             edge={selectedEdge}
