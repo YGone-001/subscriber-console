@@ -277,28 +277,26 @@ func TestScannerRejectsMasqueradingExecutable(t *testing.T) {
 	}
 }
 
-func TestScannerAcceptsApprovedExecutableAlias(t *testing.T) {
+func TestScannerRejectsSharedExecutableUnderRoleTitle(t *testing.T) {
 	f := newFixture(t)
 	clock := &fakeClock{now: time.Now().UTC()}
-	// Kamailio sets a per-role process title, so comm reads "pcscfd" while the
-	// executable behind it is the shared SIP binary.
+	// A SIP stack that ships one shared binary and rewrites its process title per
+	// role must not be recognized: comm says "pcscfd" while the executable behind
+	// it is "kamailio". Invisibility is the intended signal that the installed
+	// image does not match the declared per-role process names.
 	f.process(311, "pcscfd", "/usr/local/sbin/kamailio", 1, 0, 10, 10, nil)
-	f.process(312, "scscfd", "/usr/local/sbin/kamailio", 2, 0, 10, 10, nil)
-	// An alias belongs to the components that carry it: it must not vouch for a
-	// role that never declared it.
-	f.process(313, "hssd", "/usr/local/sbin/kamailio", 3, 0, 10, 10, nil)
+	// The same role launched from its own per-role executable does verify.
+	f.process(312, "scscfd", "/usr/local/sbin/scscfd", 2, 0, 10, 10, nil)
 	scanner := newTestScanner(f, clock)
 	snapshot, _ := scanner.Scan(t.Context(), TriggerManual, nil)
 
-	for _, id := range []string{"pcscf", "scscf"} {
-		observation := observationFor(t, snapshot, id)
-		if observation.RuntimeStatus != StatusRunning || !observation.Verified {
-			t.Fatalf("%s must verify through the approved alias, got %s verified=%v", id, observation.RuntimeStatus, observation.Verified)
-		}
+	pcscf := observationFor(t, snapshot, "pcscf")
+	if pcscf.RuntimeStatus != StatusUnverified || pcscf.StatusReason != ReasonExeUnverified {
+		t.Fatalf("a shared binary must stay unverified with the executable identity reason, got %s/%s", pcscf.RuntimeStatus, pcscf.StatusReason)
 	}
-	hss := observationFor(t, snapshot, "hss")
-	if hss.RuntimeStatus != StatusUnverified {
-		t.Fatalf("hss has no approved alias and must stay unverified, got %s", hss.RuntimeStatus)
+	scscf := observationFor(t, snapshot, "scscf")
+	if scscf.RuntimeStatus != StatusRunning || !scscf.Verified {
+		t.Fatalf("the per-role executable must verify by exact name, got %s verified=%v", scscf.RuntimeStatus, scscf.Verified)
 	}
 }
 

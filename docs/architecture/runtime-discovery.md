@@ -74,24 +74,33 @@ that name would match every JVM on the host. The resource therefore carries no
 measurement at all - it shows as unmonitored, never as healthy and never as a
 fabricated target.
 
-### 2.3 Approved executable aliases
+### 2.3 Executable identity is exact, and stays that way
 
 The exact-name strategy compares the verified `/proc/<pid>/exe` **basename** with
 the component's `processName`, so install paths never matter while the file name
-always does. Some SIP stacks (Kamailio) rewrite their process title per role, which
-makes `comm` report `pcscfd` while the executable behind it is `kamailio`; the exact
-rule alone could never verify them.
+always does.
 
-A component may therefore declare `exeAliases`:
+There is deliberately **no alias or synonym table**. A component is recognized by
+one executable basename and nothing else. The alternative was tested and
+withdrawn: an earlier revision carried approved aliases (`kamailio` for `pcscf`,
+`icscf`, `scscf` and `smsc`) so a single shared SIP binary launched with a
+per-role process title would still verify. That widening was removed by operator
+decision, for two reasons:
 
-- an alias only widens the executable check for a component whose `comm` already
-  matched exactly - it never identifies a process on its own;
-- aliases are server-owned registry data, never client input;
-- an alias that equals another component's exact `processName` makes the registry
-  fail to load, so no role can vouch for another;
-- the approved set is currently `kamailio` for `pcscf`, `icscf`, `scscf` and `smsc`,
-  evidenced by the shared Kamailio command-line signature (`-f <cfg> -P /<role>.pid
-  -DD -E -e`) across those roles.
+- a package that ships one shared image instead of per-role executables is a
+  packaging defect against the declared NF process names, and the correct
+  operator-visible signal is that the role simply does not appear. Mapping it
+  through an alias turns a real mistake into a silent pass;
+- the alias only widened the discovery scanner. The NF Health L1 inspector still
+  compares the executable basename strictly, so an aliased role would be
+  reported as running by one authority and as `not_running` by the other. Two
+  identity authorities must not disagree about the same PID.
+
+So the requirement placed on deployment is: the installed image name must equal
+the declared process name (`pcscfd`, `icscfd`, `scscfd`, `smscd`, …). Install
+location is free; the basename is not. `TestScannerRejectsSharedExecutableUnderRoleTitle`
+guards this: `comm=scscfd` with `exe=scscfd` verifies, `comm=pcscfd` with
+`exe=kamailio` stays `unverified` with the executable-identity reason.
 
 ## 3. Scanning
 
