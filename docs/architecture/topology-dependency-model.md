@@ -193,6 +193,31 @@ Service --uses--> DNN
 No automatically generated reverse edge is persisted. Vendor-specific
 relationship types are not part of this model.
 
+### 3.1 Containment and placement are declared, never derived
+
+`contains` describes a composition the operator asserts (a logical network
+function containing an instance, a service containing an endpoint). Host
+placement is a different claim and has its own type: `runs_on`.
+
+Neither is generated from runtime discovery, and the current deployment
+deliberately persists **zero** containment or placement edges:
+
+- which host a process runs on is an observed fact of the local `/proc`
+  snapshot. It is already authoritative in the runtime surface and does not need
+  a second, manually maintained copy in the ledger that can silently go stale
+  after a reinstall, a repackaging or a move between hosts;
+- a placement or containment edge has no configuration evidence behind it, so
+  every one of them would show up in reconciliation as "declared without
+  configured evidence" — noise that drowns the diffs the panel exists to
+  surface;
+- the resource tree therefore groups virtually by domain and says so out loud
+  (`No declared containment exists; grouping virtually by domain`). That wording
+  is a design outcome, not a missing-data defect to be filled in.
+
+If host-level grouping later becomes a real requirement, the correct homes are
+an Inventory attribute on the resource or an explicit `runs_on` declaration by an
+operator — not an automatic write from the bootstrap path.
+
 ## 4. Lifecycle, Uniqueness and Concurrency
 
 ```text
