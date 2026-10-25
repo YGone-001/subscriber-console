@@ -69,38 +69,30 @@ export function TopologyGraphShell({
       aria-busy={busy || undefined}
       data-topology-shell="true"
     >
-      <header className={styles.shellHeader}>
-        <div className={styles.shellHeading}>
-          <h2 id={titleId} className={styles.shellTitle}>{title}</h2>
-          {subtitle ? <p className={styles.shellSubtitle}>{subtitle}</p> : null}
-        </div>
-        {evidence || completeness ? (
-          <div className={styles.shellMeta}>
-            {evidence ? <span className={styles.shellEvidence} data-graph-evidence="true">{evidence}</span> : null}
-            {completeness ? (
-              <span
-                className={styles.shellCompleteness}
-                data-completeness={completeness}
-              >
-                {t(`ops_completeness_${completeness}`)}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-      </header>
-
       {/*
-        * Status facts and graph controls share one row: the canvas is the
-        * primary surface, so every stacked row above it is height taken away
-        * from the graph. They wrap onto a second line only when the viewport
-        * cannot hold both groups.
+        * Identity, status facts and graph controls share one wrapping row. The
+        * canvas is the primary surface, so every stacked row above it is height
+        * taken away from the graph; a view that has no subtitle no longer spends
+        * a row on its own title either, because the source tab and the page-level
+        * data notes already state what the graph is allowed to claim.
        */}
-      {summary || toolbar ? (
-        <div className={styles.shellControls}>
-          {summary ? <div className={styles.shellSummary} role="status">{summary}</div> : null}
-          {toolbar ? <div className={styles.shellToolbar}>{toolbar}</div> : null}
+      <div className={styles.shellControls}>
+        <div className={styles.shellIdentity}>
+          <h2 id={titleId} className={styles.shellTitle}>{title}</h2>
+          {evidence ? <span className={styles.shellEvidence} data-graph-evidence="true">{evidence}</span> : null}
+          {completeness ? (
+            <span
+              className={styles.shellCompleteness}
+              data-completeness={completeness}
+            >
+              {t(`ops_completeness_${completeness}`)}
+            </span>
+          ) : null}
         </div>
-      ) : null}
+        {summary ? <div className={styles.shellSummary} role="status">{summary}</div> : null}
+        {toolbar ? <div className={styles.shellToolbar}>{toolbar}</div> : null}
+      </div>
+      {subtitle ? <p className={styles.shellSubtitle}>{subtitle}</p> : null}
       {notice ? <div className={styles.shellNotice}>{notice}</div> : null}
 
       <div className={styles.shellBody} data-inspector-open={inspector ? 'true' : undefined}>

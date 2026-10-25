@@ -1199,8 +1199,10 @@ test('a node whose role equals its name renders one identity line', () => {
 test('the runtime view copy does not claim connectivity, traffic or health', () => {
   assert.equal(en.topology_live_title, 'Runtime and configured topology');
   assert.equal(zh.topology_live_title, '运行与配置拓扑');
-  assert.match(en.topology_live_subtitle, /does not prove real connectivity, observed traffic or service health/);
-  assert.match(zh.topology_live_subtitle, /不证明真实连通、实测流量或服务健康/);
+  // The runtime disclaimer must survive somewhere the operator can read it. It
+  // lives in the per-source data notes, not in a duplicated graph subtitle.
+  assert.match(en.topology_source_note_runtime, /not observed traffic, declared topology or a health claim/);
+  assert.match(zh.topology_source_note_runtime, /不是实测流量、已声明拓扑/);
   assert.match(en.topology_live_config_complete, /read completely/);
   assert.match(zh.topology_live_config_complete, /已完整读取/);
 });
@@ -1529,7 +1531,7 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_runtime_scope_config', 'topology_runtime_scope_hierarchy',
     'topology_inspector_label', 'topology_close_inspector',
     'topology_runtime_label',
-    'topology_live_title', 'topology_live_subtitle', 'topology_live_runtime_total',
+    'topology_live_title', 'topology_live_runtime_total',
     'topology_live_search_placeholder',
     'topology_live_configured_edges', 'topology_live_config_complete',
     'topology_live_config_incomplete', 'topology_live_config_unconfigured',

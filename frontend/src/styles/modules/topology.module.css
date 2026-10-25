@@ -1061,21 +1061,18 @@
   background: var(--sys-color-surface-panel);
 }
 
-.shellHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-12);
+/*
+ * Graph identity block: the view title plus what the source is allowed to claim
+ * and how complete the read was. It rides the controls row instead of owning a
+ * header row of its own.
+ */
+.shellIdentity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
   flex-wrap: wrap;
-}
-
-.shellHeading {
-  display: flex;
-  flex: 1;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px var(--space-12);
-  min-width: 240px;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .shellTitle {
@@ -1085,19 +1082,13 @@
   font-weight: 650;
 }
 
+/* Optional explanatory line, rendered below the controls row. */
 .shellSubtitle {
   margin: 0;
-  max-width: 76ch;
+  max-width: 96ch;
   color: var(--text-muted);
   font-size: 0.74rem;
-  line-height: 1.55;
-}
-
-.shellMeta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-8);
-  flex-wrap: wrap;
+  line-height: 1.5;
 }
 
 .shellEvidence {

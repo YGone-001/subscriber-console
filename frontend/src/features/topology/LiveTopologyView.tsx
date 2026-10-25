@@ -352,7 +352,6 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
         <TopologyGraphShell
           titleId="live-topology-title"
           title={t('topology_live_title')}
-          subtitle={t('topology_live_subtitle')}
           evidence={t('topology_source_evidence_runtime')}
         >
           <div className={styles.statePanel} data-state-panel="loading">
@@ -370,7 +369,6 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
         <TopologyGraphShell
           titleId="live-topology-title"
           title={t('topology_live_title')}
-          subtitle={t('topology_live_subtitle')}
           evidence={t('topology_source_evidence_runtime')}
         >
           <div className={styles.statePanel} data-state-panel="unavailable" data-state-source="topology-live">
@@ -412,7 +410,6 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
       <TopologyGraphShell
         titleId="live-topology-title"
         title={t('topology_live_title')}
-        subtitle={t('topology_live_subtitle')}
         completeness={completeness}
         summary={runtimeStates.length > 0 || data.edges.length > 0 || unresolved.length > 0 ? (
           <div className={styles.liveChips}>
