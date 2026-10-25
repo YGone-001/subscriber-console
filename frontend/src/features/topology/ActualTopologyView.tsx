@@ -15,7 +15,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
-import { TopologyCanvasControls } from './components/TopologyGraphToolbar';
+import { TopologyCanvasControls, TopologyCanvasSearch } from './components/TopologyGraphToolbar';
 import { Link } from 'react-router-dom';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useBoundedEdges } from '../operations/use-bounded-edges';
@@ -528,6 +528,14 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
             total: coverageCounts.total,
           })}
         </span>
+        <TopologyCanvasSearch
+          search={{
+            value: search,
+            onChange: setSearch,
+            label: t('topology_picker_search_placeholder'),
+            placeholder: t('topology_picker_search_placeholder'),
+          }}
+        />
         {supportToggle || hiddenSupportNotice || boundaryToggle || hiddenBoundaryNotice ? (
           <div className={styles.actualSupportBar}>
             {supportToggle}
@@ -536,16 +544,6 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
             {hiddenBoundaryNotice}
           </div>
         ) : null}
-        <label className={styles.actualSearch}>
-          <Search size={15} aria-hidden="true" />
-          <span className="sr-only">{t('topology_picker_search_placeholder')}</span>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t('topology_picker_search_placeholder')}
-          />
-        </label>
       </div>
       {coverage === 'partial' ? (
         <div
@@ -686,23 +684,24 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
         >
           <div className={styles.archWorkspaceMain}>
             {/*
-              * Navigation floats over the canvas corner: it belongs to the
-              * surface it acts on, and keeping it out of the toolbar rows leaves
+              * Search and navigation float over the canvas corner: they act on the
+              * surface directly, and keeping them out of the toolbar rows leaves
               * more of the first screen for the graph itself.
              */}
-            <TopologyCanvasControls
-              className={styles.actualCanvasControls}
-              zoom={{
-                value: zoom,
-                min: MIN_ZOOM,
-                max: MAX_ZOOM,
-                onIn: () => updateZoom(ZOOM_STEP),
-                onOut: () => updateZoom(-ZOOM_STEP),
-                onFit: () => fitView('all'),
-                onReset: resetView,
-              }}
-              fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
-            />
+            <div className={styles.actualCanvasOverlay}>
+              <TopologyCanvasControls
+                zoom={{
+                  value: zoom,
+                  min: MIN_ZOOM,
+                  max: MAX_ZOOM,
+                  onIn: () => updateZoom(ZOOM_STEP),
+                  onOut: () => updateZoom(-ZOOM_STEP),
+                  onFit: () => fitView('all'),
+                  onReset: resetView,
+                }}
+                fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
+              />
+            </div>
             <div ref={canvasRef} className={styles.actualCanvasViewport}>
               <div
                 className={styles.actualCanvasScale}

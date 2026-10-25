@@ -1168,15 +1168,21 @@
 }
 
 /*
- * Navigation cluster floated over the canvas corner. It stays put while the
- * canvas scrolls underneath it, and carries its own surface so it never reads as
- * part of a node card it happens to overlap.
+ * Canvas navigation floated over the top-right corner of the graph: the search
+ * field plus zoom, fit, reset and full screen. They stay put while the canvas
+ * scrolls underneath, and carry their own surface so they never read as part of
+ * a node card they overlap.
  */
 .shellCanvasControls {
   position: absolute;
   top: var(--space-8);
   right: var(--space-8);
   z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
   padding: 2px;
   border-radius: var(--ref-radius-control);
   background: var(--sys-color-surface-panel);

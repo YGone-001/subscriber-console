@@ -828,15 +828,21 @@
 }
 
 /*
- * Canvas navigation floated over the top-right corner of the graph. It carries
- * its own surface so it never reads as part of a node card it overlaps, and it
- * stays put while the canvas scrolls underneath.
+ * Canvas navigation floated over the top-right corner of the graph: the search
+ * field plus zoom, fit, reset and full screen. It stays put while the canvas
+ * scrolls underneath and carries its own surface so it never reads as part of a
+ * node card it overlaps.
  */
-.actualCanvasControls {
+.actualCanvasOverlay {
   position: absolute;
   top: var(--space-8);
   right: var(--space-8);
   z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
   padding: 2px;
   border-radius: var(--ref-radius-control);
   background: var(--sys-color-surface-panel);
@@ -1295,33 +1301,6 @@
   font-size: 0.72rem;
   color: var(--text-muted);
 }
-
-.actualSearch {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: min(100%, 220px);
-  padding: 0 var(--space-8);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-control);
-  color: var(--text-muted);
-  background: var(--surface-field);
-}
-
-.actualSearch:focus-within {
-  box-shadow: var(--focus-ring);
-}
-
-.actualSearch input {
-  width: 100%;
-  min-height: calc(var(--control-height) - 4px);
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-
 
 .actualInterfaceFilter {
   display: inline-flex;

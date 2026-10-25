@@ -50,17 +50,15 @@ export type TopologyGraphToolbarProps = {
 export function TopologyCanvasControls({
   zoom,
   fullscreen,
-  className,
 }: {
   zoom?: TopologyGraphZoom;
   fullscreen?: TopologyGraphFullscreen;
-  className?: string;
 }) {
   const { t } = useI18n();
   if (!zoom && !fullscreen) return null;
   return (
     <div
-      className={[styles.graphControls, className].filter(Boolean).join(' ')}
+      className={styles.graphControls}
       role="group"
       aria-label={t('topology_canvas_controls')}
     >
@@ -124,6 +122,28 @@ export function TopologyCanvasControls({
   );
 }
 
+/**
+ * Canvas search field.
+ *
+ * Extracted so a view can keep the field next to the surface it filters. A
+ * search box in the toolbar row competes for width with the status facts and
+ * costs the graph a wrapped line.
+ */
+export function TopologyCanvasSearch({ search }: { search: TopologyGraphSearch }) {
+  return (
+    <label className={styles.graphSearch}>
+      <Search size={15} aria-hidden="true" />
+      <span className="sr-only">{search.label}</span>
+      <input
+        type="search"
+        value={search.value}
+        onChange={(event) => search.onChange(event.target.value)}
+        placeholder={search.placeholder}
+      />
+    </label>
+  );
+}
+
 export function TopologyGraphToolbar({
   search,
   filters,
@@ -133,18 +153,7 @@ export function TopologyGraphToolbar({
 }: TopologyGraphToolbarProps) {
   return (
     <div className={styles.graphToolbar} data-topology-toolbar="true">
-      {search ? (
-        <label className={styles.graphSearch}>
-          <Search size={15} aria-hidden="true" />
-          <span className="sr-only">{search.label}</span>
-          <input
-            type="search"
-            value={search.value}
-            onChange={(event) => search.onChange(event.target.value)}
-            placeholder={search.placeholder}
-          />
-        </label>
-      ) : null}
+      {search ? <TopologyCanvasSearch search={search} /> : null}
       {filters ? <div className={styles.graphFilters}>{filters}</div> : null}
       <div className={styles.graphToolbarSpacer} />
       {actions}

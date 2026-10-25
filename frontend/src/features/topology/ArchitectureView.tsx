@@ -554,19 +554,20 @@ export function ArchitectureView({
                 * the surface it acts on and must not spend a toolbar row.
                */}
               {view !== 'all' ? (
-                <TopologyCanvasControls
-                  className={styles.actualCanvasControls}
-                  zoom={{
-                    value: zoom,
-                    min: MIN_ZOOM,
-                    max: MAX_ZOOM,
-                    onIn: () => updateZoom(ZOOM_STEP),
-                    onOut: () => updateZoom(-ZOOM_STEP),
-                    onFit: fitView,
-                    onReset: resetView,
-                  }}
-                  fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
-                />
+                <div className={styles.actualCanvasOverlay}>
+                  <TopologyCanvasControls
+                    zoom={{
+                      value: zoom,
+                      min: MIN_ZOOM,
+                      max: MAX_ZOOM,
+                      onIn: () => updateZoom(ZOOM_STEP),
+                      onOut: () => updateZoom(-ZOOM_STEP),
+                      onFit: fitView,
+                      onReset: resetView,
+                    }}
+                    fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
+                  />
+                </div>
               ) : null}
           {view !== 'all' ? (
             <div className={styles.legendCompact}>
