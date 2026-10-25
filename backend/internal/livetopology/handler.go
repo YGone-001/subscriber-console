@@ -29,6 +29,7 @@ type Handler struct {
 	loader    *Loader
 	limiter   RateLimiter
 	associate Associator
+	ledger    DeclaredLedger
 }
 
 func NewHandler(provider SnapshotProvider, manifestPath string, limiter RateLimiter) *Handler {
@@ -42,6 +43,12 @@ func NewHandler(provider SnapshotProvider, manifestPath string, limiter RateLimi
 // SetAssociator installs the association authority. Intended for startup wiring;
 // without it the projection still serves nodes, just without Inventory links.
 func (h *Handler) SetAssociator(associate Associator) { h.associate = associate }
+
+// SetDeclaredLedger installs the read-only ledger reader used for reconciliation.
+// Without it the projection omits the reconciliation block; it never writes to
+// the ledger, and a ledger read failure degrades the block instead of the
+// projection.
+func (h *Handler) SetDeclaredLedger(ledger DeclaredLedger) { h.ledger = ledger }
 
 // Live handles GET /api/topology/live.
 //
@@ -82,5 +89,10 @@ func (h *Handler) Live(w http.ResponseWriter, r *http.Request) {
 		runtimeIDs[component.ComponentID] = true
 	}
 	parsed, status := h.loader.Load(runtimeIDs)
-	response.JSON(w, http.StatusOK, Build(snapshot, parsed, status))
+	result := Build(snapshot, parsed, status)
+	if h.ledger != nil {
+		declared, complete, err := h.ledger.ListDeclared(r.Context())
+		result.Reconciliation = Reconcile(result.Nodes, result.Edges, declared, complete, err)
+	}
+	response.JSON(w, http.StatusOK, result)
 }

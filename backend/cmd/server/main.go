@@ -428,6 +428,7 @@ func main() {
 		Inventory: runtimeInventoryGateway,
 		Health:    runtimeTargetGateway,
 	})
+	liveTopologyHandler.SetDeclaredLedger(topology.NewDeclaredLedger(topologyRepo))
 
 	// Knowledge base: fault/root-cause/resolution entries with secure attachment
 	// storage on the local filesystem (uploads + trash); metadata in xcloud_ops.

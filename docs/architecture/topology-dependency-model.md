@@ -452,6 +452,48 @@ to `120/60s` per user, and returns `HTTP 503 TOPOLOGY_LIVE_UNAVAILABLE` when the
 runtime snapshot is unavailable. It never writes Inventory, Topology, NF Health
 or Discovery state.
 
+### 6.7 Declared versus configured reconciliation
+
+The same projection additionally reports `reconciliation`: an advisory diff
+between the persisted ledger and the configured evidence it just derived. It adds
+no route, and it never writes either side.
+
+```text
+matched                 declared edge covers this configured resource pair
+undeclaredEvidence      configured link with no active declaration
+unevidencedDeclarations active declaration with no configured link
+```
+
+Matching is by **unordered Inventory resource pair**. A config file names a peer
+without stating which side of the reference point documented it, so a declared
+`pcscf -> pcrf` and a configured `pcscf -> pcrf` (or the reverse) are the same
+pair. Each matched item carries an `interfaceMatch` grade of `agrees`, `differs`
+or `unannotated`; a differing grade is metadata on a matched pair and never moves
+it into a diff bucket.
+
+Honesty rules:
+
+- Neither bucket claims a relationship is wrong. A declaration without configured
+  evidence may cover a link this manifest does not describe; a configured link
+  may be deliberately undeclared.
+- Evidence whose endpoint has no Inventory identity is excluded from the counts
+  rather than guessed in, so `configuredLinks` only ever counts reconcilable
+  links.
+- A configured link whose pair was declared and then retired is flagged
+  `retired` and names the retired edge, so an operator decision is never
+  presented as forgotten work.
+- The ledger is read as one bounded page (`200`). A truncated read sets
+  `complete: false`, which caps the diff at a floor rather than a total.
+- A ledger read failure sets `available: false` with
+  `reason: ledger_unavailable` and leaves the projection itself intact; the UI
+  renders "no reconciliation available" and never renders zeros as "nothing to
+  reconcile".
+
+The UI surfaces this as one read-only panel in the live view. Its only control
+selects the configured link so its existing controls, including the explicit
+register action, become reachable. Reconciliation never registers, updates or
+retires an edge by itself.
+
 ## 7. Metadata Validation and Security
 
 Labels:
@@ -790,6 +832,7 @@ config status        complete / incomplete / manifest unconfigured
 unresolved peers     configured peers that match no recognized component
 canvas               every runtime component, even when it has no link
 relationships table  from / to / interface / state / evidence / endpoints
+reconciliation       advisory diff against the persisted ledger
 ```
 
 Runtime status is rendered as text and as a dot; stopped and not-detected
@@ -801,6 +844,14 @@ its process identity, runtime status, type and domain, configured listeners and
 Inventory link. Configured links use a dashed edge and an explicit `configured`
 evidence marker so they cannot be mistaken for declared edges. Interface names
 are the preferred edge label, followed by protocol.
+
+The reconciliation panel names the difference between the ledger and this
+evidence: matched count, configured links with no active declaration, and active
+declarations with no configured link. A retired decision is labelled as such
+instead of being re-offered as work, a partial ledger read is labelled partial,
+and an unreadable ledger states that no reconciliation is available rather than
+showing zeros. Its only control selects the configured link; registering stays an
+explicit operator action in the link inspector.
 
 Unknown or unreadable config sources are listed under `Sources`; the view never
 falls back to a reference config copy. An API failure renders an explicit

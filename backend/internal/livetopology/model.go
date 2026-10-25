@@ -97,14 +97,15 @@ type Host struct {
 }
 
 type Response struct {
-	GeneratedAt string           `json:"generatedAt"`
-	Host        Host             `json:"host"`
-	Runtime     RuntimeSummary   `json:"runtime"`
-	Config      ConfigStatus     `json:"config"`
-	Nodes       []Node           `json:"nodes"`
-	Edges       []Edge           `json:"edges"`
-	Unresolved  []UnresolvedPeer `json:"unresolvedPeers,omitempty"`
-	Summary     Summary          `json:"summary"`
+	GeneratedAt    string           `json:"generatedAt"`
+	Host           Host             `json:"host"`
+	Runtime        RuntimeSummary   `json:"runtime"`
+	Config         ConfigStatus     `json:"config"`
+	Nodes          []Node           `json:"nodes"`
+	Edges          []Edge           `json:"edges"`
+	Unresolved     []UnresolvedPeer `json:"unresolvedPeers,omitempty"`
+	Summary        Summary          `json:"summary"`
+	Reconciliation *Reconciliation  `json:"reconciliation,omitempty"`
 }
 
 func runtimeSummary(snapshot *runtimeinv.Snapshot) RuntimeSummary {
