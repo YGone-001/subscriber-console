@@ -1,6 +1,7 @@
 import type {
   CreateEdgeRequest,
   MutableEdge,
+  RegisterRelationshipDraft,
   RetireEdgeRequest,
   UpdateEdgeRequest,
 } from './topology-types';
@@ -36,6 +37,29 @@ function validateMetadata(
     const error = validateAttributes(attributes);
     if (error) throw new Error(error);
   }
+}
+
+/*
+ * Translate one configured runtime link into a declared-ledger draft.
+ *
+ * A link whose endpoint has no Inventory association returns null instead of
+ * guessing an identity: the ledger only accepts resource identifiers.
+ */
+export function buildDeclaredDraftFromLink(input: {
+  relationshipType: string;
+  interfaceNames: string[];
+  fromResourceId?: string;
+  toResourceId?: string;
+  description: string;
+}): RegisterRelationshipDraft | null {
+  if (!input.relationshipType || !input.fromResourceId || !input.toResourceId) return null;
+  return {
+    relationshipType: input.relationshipType,
+    fromResourceId: input.fromResourceId,
+    toResourceId: input.toResourceId,
+    interfaceNames: [...input.interfaceNames],
+    description: input.description,
+  };
 }
 
 export function buildCreateEdgeRequest(input: Partial<CreateEdgeRequest>): CreateEdgeRequest {

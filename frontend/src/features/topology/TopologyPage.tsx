@@ -32,6 +32,7 @@ import {
 } from './topology-api';
 import type {
   CreateEdgeRequest,
+  RegisterRelationshipDraft,
   TopologyEdge,
   TopologyMetaResponse,
   UpdateEdgeRequest,
@@ -41,6 +42,7 @@ import { useResourceDirectory } from './use-resource-directory';
 import { TopologyEdgeTable } from './components/TopologyEdgeTable';
 import { TopologyEdgeForm } from './components/TopologyEdgeForm';
 import { TopologyResourcePicker } from './components/TopologyResourcePicker';
+import { buildCreateEdgeRequest } from './topology-builders';
 import styles from '../../styles/modules/topology.module.css';
 import { RuntimeHierarchy } from '../runtime/RuntimeHierarchy';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
@@ -290,6 +292,19 @@ export function TopologyPage() {
     }
   };
 
+  /* Registers one configured link in the declared ledger. The operator already
+   * confirmed the specific link in the inspector, so this path opens no dialog;
+   * a duplicate or a retired endpoint comes back as an inline error. */
+  const registerFromEvidence = async (draft: RegisterRelationshipDraft): Promise<string | null> => {
+    try {
+      await createTopologyEdge(buildCreateEdgeRequest(draft));
+      await loadEdges(url.cursor);
+      return null;
+    } catch (err) {
+      return describeMutationError(err, t);
+    }
+  };
+
   const handleRetire = async () => {
     if (!retireTarget) return;
     setSubmitting(true);
@@ -419,7 +434,9 @@ export function TopologyPage() {
                 <RuntimeHierarchy />
               </section>
             ) : (
-              <LiveTopologyView />
+              <LiveTopologyView
+                onRegisterRelationship={canConfigure ? registerFromEvidence : undefined}
+              />
             )
           ) : null}
 

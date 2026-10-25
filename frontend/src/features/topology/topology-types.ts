@@ -84,6 +84,21 @@ export interface CreateEdgeRequest {
   interfaceNames?: string[];
 }
 
+/*
+ * One configured runtime link translated for the declared ledger.
+ *
+ * Runtime evidence speaks in component identities while the ledger only accepts
+ * Inventory resource identifiers, so a draft exists only once both endpoints
+ * resolve to an Inventory resource.
+ */
+export interface RegisterRelationshipDraft {
+  relationshipType: string;
+  fromResourceId: string;
+  toResourceId: string;
+  interfaceNames: string[];
+  description: string;
+}
+
 export interface MutableEdge {
   description?: string;
   labels?: Record<string, string>;

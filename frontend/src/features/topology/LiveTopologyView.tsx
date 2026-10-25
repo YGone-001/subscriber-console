@@ -37,6 +37,8 @@ import type {
   LiveNode,
   LiveTopologyResponse,
 } from './live-topology-types';
+import type { RegisterRelationshipDraft } from './topology-types';
+import { buildDeclaredDraftFromLink } from './topology-builders';
 import styles from '../../styles/modules/architecture.module.css';
 
 const MIN_ZOOM = 0.5;
@@ -53,7 +55,17 @@ function runtimeLabelKey(status: string): string {
   return `runtime_status_${status}`;
 }
 
-export function LiveTopologyView() {
+/*
+ * Runtime evidence never writes the ledger by itself: the operator selects one
+ * link and confirms it, so a declared edge stays an intent the operator owns.
+ */
+export type LiveTopologyViewProps = {
+  /* Registers one configured link. Resolves to an error message, or null when
+   * the ledger accepted the edge. */
+  onRegisterRelationship?: (draft: RegisterRelationshipDraft) => Promise<string | null>;
+};
+
+export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewProps) {
   const { t } = useI18n();
   const live = useRead<LiveTopologyResponse>('/api/topology/live');
   const [selectedComponentId, setSelectedComponentId] = useState<string | undefined>();
@@ -496,7 +508,12 @@ export function LiveTopologyView() {
           />
         )}
         inspector={selectedEdge ? (
-          <LiveEdgeDetail edge={selectedEdge} nodes={data.nodes} onSelectNode={selectNode} />
+          <LiveEdgeDetail
+            edge={selectedEdge}
+            nodes={data.nodes}
+            onSelectNode={selectNode}
+            onRegister={onRegisterRelationship}
+          />
         ) : selected ? (
           <LiveNodeDetail
             node={selected}
@@ -815,16 +832,46 @@ function LiveEdgeDetail({
   edge,
   nodes,
   onSelectNode,
+  onRegister,
 }: {
   edge: LiveEdge;
   nodes: LiveNode[];
   onSelectNode: (componentId: string) => void;
+  onRegister?: (draft: RegisterRelationshipDraft) => Promise<string | null>;
 }) {
   const { t } = useI18n();
   const from = nodes.find((node) => node.componentId === edge.fromComponentId);
   const to = nodes.find((node) => node.componentId === edge.toComponentId);
   const stateKey = `topology_live_state_${edge.state}`;
   const translated = t(stateKey);
+  const fromResourceId = from?.inventoryResourceId;
+  const toResourceId = to?.inventoryResourceId;
+  const [registerState, setRegisterState] = useState<'idle' | 'busy' | 'done'>('idle');
+  const [registerError, setRegisterError] = useState<string | null>(null);
+
+  const register = async () => {
+    if (!onRegister) return;
+    const draft = buildDeclaredDraftFromLink({
+      relationshipType: edge.relationshipType,
+      interfaceNames: edge.interfaceNames,
+      fromResourceId,
+      toResourceId,
+      description: t('topology_live_register_description', {
+        reference: edge.interfaceNames.length > 0 ? edge.interfaceNames.join(' / ') : edge.protocol,
+        source: edge.sourceFiles && edge.sourceFiles.length > 0 ? edge.sourceFiles[0] : edge.protocol,
+      }),
+    });
+    if (!draft) return;
+    setRegisterState('busy');
+    setRegisterError(null);
+    const failure = await onRegister(draft);
+    if (failure) {
+      setRegisterError(failure);
+      setRegisterState('idle');
+      return;
+    }
+    setRegisterState('done');
+  };
   return (
     <div className={styles.liveDetailBody}>
       <strong>
@@ -874,6 +921,26 @@ function LiveEdgeDetail({
           </div>
         ) : null}
       </dl>
+      {onRegister && fromResourceId && toResourceId ? (
+        <div className={styles.liveDetailAction} data-register-edge={edge.edgeId}>
+          {registerState === 'done' ? (
+            <span data-registered-edge="true">{t('topology_live_registered')}</span>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              data-action="register-declared-relationship"
+              disabled={registerState === 'busy'}
+              onClick={() => { void register(); }}
+            >
+              {registerState === 'busy' ? t('topology_live_registering') : t('topology_live_register')}
+            </button>
+          )}
+          {registerError ? (
+            <p className={styles.liveDetailError} role="alert" data-register-error="true">{registerError}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

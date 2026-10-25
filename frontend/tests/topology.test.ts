@@ -23,6 +23,7 @@ import { TopologyPage } from '../src/features/topology/TopologyPage';
 import { ResourceTopologyPage } from '../src/features/topology/ResourceTopologyPage';
 import {
   buildCreateEdgeRequest,
+  buildDeclaredDraftFromLink,
   buildRetireEdgeRequest,
   buildUpdateEdgeRequest,
 } from '../src/features/topology/topology-builders';
@@ -1440,6 +1441,32 @@ test('a stale-revision server error is surfaced to the operator', () => {
 });
 
 /* --------------------------------------------------------------- builders -- */
+
+test('a configured link only becomes a declared draft when both endpoints resolve', () => {
+  const draft = buildDeclaredDraftFromLink({
+    relationshipType: 'connects_to',
+    interfaceNames: ['N4'],
+    fromResourceId: SMF,
+    toResourceId: PCF,
+    description: 'Declared from configured NF evidence',
+  });
+  assert.deepEqual(draft, {
+    relationshipType: 'connects_to',
+    fromResourceId: SMF,
+    toResourceId: PCF,
+    interfaceNames: ['N4'],
+    description: 'Declared from configured NF evidence',
+  });
+  assert.equal(
+    buildDeclaredDraftFromLink({ relationshipType: 'connects_to', interfaceNames: [], fromResourceId: SMF, description: 'x' }),
+    null,
+    'a link without an Inventory association must not invent an endpoint',
+  );
+  assert.equal(
+    buildDeclaredDraftFromLink({ relationshipType: '', interfaceNames: [], fromResourceId: SMF, toResourceId: PCF, description: 'x' }),
+    null,
+  );
+});
 
 test('the create builder rejects self edges, unknown identifiers and server-owned fields', () => {
   assert.throws(() => buildCreateEdgeRequest({ relationshipType: 'depends_on', fromResourceId: SMF, toResourceId: SMF }), /itself/);
