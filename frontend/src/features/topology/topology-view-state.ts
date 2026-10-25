@@ -5,6 +5,9 @@
  * evidence sources (declared / runtime / reference). All of that lives in the
  * query string so a copied link restores the same evidence context.
  *
+ * An absent `view` selects the graph with runtime evidence, because that is the
+ * only source that is populated without operator data entry.
+ *
  * The legacy `view` values remain valid entry points:
  *
  *   actual       -> graph + declared
@@ -12,8 +15,9 @@
  *   relationships-> ledger
  *   runtime      -> graph + runtime + runtime hierarchy
  *
- * The resolver never throws and never leaves an unknown value in the state:
- * an unrecognised view falls back to the graph with the declared source, and an
+ * The resolver never throws and never leaves an unknown value in the state: an
+ * unrecognised view falls back to the graph with the declared source, so an
+ * explicit but invalid `view` never silently changes evidence, and an
  * unrecognised source falls back to the legacy-derived source.
  */
 import { useCallback, useEffect, useMemo } from 'react';
@@ -49,7 +53,7 @@ export type TopologyViewState = {
 
 export const DEFAULT_TOPOLOGY_VIEW_STATE: TopologyViewState = {
   primary: 'actual',
-  source: 'declared',
+  source: 'runtime',
   runtimeScope: 'config',
 };
 
@@ -73,9 +77,13 @@ export function resolveTopologyViewState(search: string | URLSearchParams): Topo
   const view = sanitizeOperationsValue(params.get(TOPOLOGY_VIEW_PARAM));
   const requestedSource = sanitizeOperationsValue(params.get(TOPOLOGY_SOURCE_PARAM));
   const requestedScope = sanitizeOperationsValue(params.get(TOPOLOGY_SCOPE_PARAM));
+  /* An omitted `view` is the operator entry point and lands on runtime evidence;
+   * a present but unrecognised `view` is a hand-edited link and keeps the
+   * historical declared fallback. */
+  const hasViewParam = (params.get(TOPOLOGY_VIEW_PARAM) ?? '').trim() !== '';
 
   let primary: TopologyPrimaryView = 'actual';
-  let source: TopologyGraphSource = 'declared';
+  let source: TopologyGraphSource = hasViewParam ? 'declared' : 'runtime';
   let runtimeScope: TopologyRuntimeScope = 'config';
 
   switch (view) {

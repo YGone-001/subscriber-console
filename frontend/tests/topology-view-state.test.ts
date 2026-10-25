@@ -23,11 +23,11 @@ const state = (
 
 /* --------------------------------------------------------------- resolve -- */
 
-test('an empty query resolves to the declared graph', () => {
-  assert.deepEqual(resolveTopologyViewState(''), state('actual', 'declared', 'config'));
+test('an empty query resolves to the runtime graph, the only populated default', () => {
+  assert.deepEqual(resolveTopologyViewState(''), state('actual', 'runtime', 'config'));
 });
 
-test('the legacy view values keep their original destinations', () => {
+test('an explicit legacy view keeps its original destination', () => {
   assert.deepEqual(resolveTopologyViewState('?view=actual'), state('actual', 'declared', 'config'));
   assert.deepEqual(resolveTopologyViewState('?view=architecture'), state('actual', 'reference', 'config'));
   assert.deepEqual(resolveTopologyViewState('?view=relationships'), state('ledger', 'declared', 'config'));

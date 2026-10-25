@@ -58,14 +58,15 @@ function renderTopology(path: string): string {
 
 /* --------------------------------------------------------------- views -- */
 
-test('the topology page defaults to the declared graph', () => {
+test('the topology page defaults to the runtime graph because it is the populated source', () => {
   const markup = renderTopology('/topology');
   assert.ok(markup.includes('data-topology-view="actual"'), 'the graph view must be present in the switch');
   assert.ok(markup.includes('data-topology-view="ledger"'), 'the ledger view must be present in the switch');
-  assert.ok(markup.includes('data-topology-source-bar="declared"'), 'the declared source must be selected by default');
-  assert.ok(markup.includes('data-topology-source="declared"'), 'the source switch must render');
+  assert.ok(markup.includes('data-topology-source-bar="runtime"'), 'the runtime source must be selected by default');
+  assert.ok(markup.includes('data-topology-source="runtime"'), 'the source switch must render');
   assert.ok(markup.includes('aria-pressed="true"'), 'the default view must be pressed');
-  assert.ok(markup.includes('id="actual-topology-title"'), 'the graph section must render');
+  assert.ok(markup.includes('data-runtime-scope="config"'), 'the configured runtime projection must render by default');
+  assert.ok(!markup.includes('id="actual-topology-title"'), 'the declared canvas must not render by default');
   assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render by default');
 });
 
