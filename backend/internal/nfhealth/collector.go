@@ -30,7 +30,7 @@ type Collector struct {
 // NewCollector constructs the collection orchestrator.
 //
 // The gate is shared with the scheduler and the manual collection endpoint so
-// MaxGlobalConcurrent applies to manual and scheduled collections combined.
+// the class bounds apply to manual and scheduled collections combined.
 func NewCollector(prober *HTTPProber, inspector *UnitInspector, dest *DestinationAllowlist, units *ServiceUnitAllowlist) *Collector {
 	return &Collector{
 		prober:    prober,
@@ -84,8 +84,9 @@ type CollectionResult struct {
 // never overwrites a previous valid measurement on failure.
 //
 // Admission is shared across manual and scheduled collection: the per-target
-// slot rejects overlapping work on the same target, and the global gate bounds
-// total concurrent collections to MaxGlobalConcurrent.
+// slot rejects overlapping work on the same target, and the gate bounds
+// concurrent collections to MaxGlobalConcurrent for work that may reach the
+// network and to MaxLocalConcurrent for process_only work that cannot.
 func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiatedBy string, scheduled bool) (*CollectionResult, error) {
 	if target == nil {
 		return nil, ErrNotFound
@@ -119,10 +120,13 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 	c.active[target.TargetID] = struct{}{}
 	c.mu.Unlock()
 
-	// Shared global admission for manual and scheduled collections combined.
-	// Both paths fail fast when the global bound is saturated so a manual
-	// collection can never bypass the shared limit by blocking past it.
-	if !c.gate.TryAcquire() {
+	// Shared admission for manual and scheduled collections combined. Both
+	// paths fail fast when their bound is saturated so a manual collection can
+	// never bypass the limit by blocking past it. The bound is chosen by work
+	// class: only process_only, which provably issues no HTTP request, draws
+	// from the local slots.
+	localClass := target.CollectorProfile == CollectorProcessOnly
+	if !c.gate.TryAcquireClass(localClass) {
 		c.mu.Lock()
 		delete(c.active, target.TargetID)
 		c.mu.Unlock()
@@ -130,7 +134,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 	}
 
 	defer func() {
-		c.gate.Release()
+		c.gate.ReleaseClass(localClass)
 		c.mu.Lock()
 		delete(c.active, target.TargetID)
 		c.mu.Unlock()

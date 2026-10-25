@@ -225,3 +225,105 @@ func TestSchedulerShutdownCancelsInFlightWork(t *testing.T) {
 	// Stop returns only after in-flight work finishes; reaching this point
 	// without a hang is the assertion.
 }
+
+func scheduledProcessTarget(id string, interval int, lastAttempt string) HealthTarget {
+	target := scheduledTarget(id, interval, lastAttempt)
+	target.CollectorProfile = CollectorProcessOnly
+	return target
+}
+
+func TestSchedulerTickServesEveryDueProcessOnlyTarget(t *testing.T) {
+	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	clock := &FixedClock{T: now}
+	stale := now.Add(-2 * time.Minute).Format(time.RFC3339)
+
+	// A local fleet larger than the network bound must not queue behind it:
+	// process_only collection reads local evidence only, so one tick has to
+	// serve every due target up to the local bound.
+	localCount := MaxGlobalConcurrent*4 + 5
+	targets := make([]HealthTarget, 0, localCount+4)
+	localIDs := make([]string, 0, localCount)
+	for i := 0; i < localCount; i++ {
+		id := newUUID()
+		localIDs = append(localIDs, id)
+		targets = append(targets, scheduledProcessTarget(id, 60, stale))
+	}
+	networkIDs := make([]string, 0, 4)
+	for i := 0; i < 4; i++ {
+		id := newUUID()
+		networkIDs = append(networkIDs, id)
+		targets = append(targets, scheduledTarget(id, 60, stale))
+	}
+
+	repo := &fakeSchedulerRepo{targets: targets}
+	c := NewCollectorWithGate(NewHTTPProber(time.Second), nil, NewDestinationAllowlist(""), NewServiceUnitAllowlist(""), NewCollectionGate(), clock)
+	s := NewSchedulerWithClock(repo, c, clock)
+	s.Tick(context.Background())
+
+	recorded := map[string]bool{}
+	for _, id := range repo.recordedIDs() {
+		recorded[id] = true
+	}
+	for _, id := range localIDs {
+		if !recorded[id] {
+			t.Fatalf("every due process_only target must be collected in one tick, %s was skipped", id)
+		}
+	}
+	networkServed := 0
+	for _, id := range networkIDs {
+		if recorded[id] {
+			networkServed++
+		}
+	}
+	if networkServed != MaxGlobalConcurrent {
+		t.Fatalf("network-capable collections must stay bounded to %d per tick, got %d", MaxGlobalConcurrent, networkServed)
+	}
+}
+
+func TestCollectionGateBoundsLocalClassSeparately(t *testing.T) {
+	gate := NewCollectionGate()
+	if gate.LocalLimit() != MaxLocalConcurrent {
+		t.Fatalf("local bound must equal MaxLocalConcurrent %d, got %d", MaxLocalConcurrent, gate.LocalLimit())
+	}
+	if gate.Limit() != MaxGlobalConcurrent {
+		t.Fatalf("network bound must stay %d, got %d", MaxGlobalConcurrent, gate.Limit())
+	}
+	for i := 0; i < MaxLocalConcurrent; i++ {
+		if !gate.TryAcquireClass(true) {
+			t.Fatalf("failed to occupy local slot %d", i)
+		}
+	}
+	if gate.TryAcquireClass(true) {
+		t.Fatal("the local bound must reject beyond MaxLocalConcurrent")
+	}
+	if !gate.TryAcquireClass(false) {
+		t.Fatal("a saturated local bound must not consume the network bound")
+	}
+}
+
+func TestProcessOnlyCollectionDoesNotConsumeNetworkSlot(t *testing.T) {
+	clock := &FixedClock{T: time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)}
+	gate := NewCollectionGate()
+	for i := 0; i < MaxGlobalConcurrent; i++ {
+		if !gate.TryAcquire() {
+			t.Fatalf("failed to occupy network slot %d", i)
+		}
+	}
+	c := NewCollectorWithGate(NewHTTPProber(time.Second), nil, NewDestinationAllowlist(""), NewServiceUnitAllowlist(""), gate, clock)
+
+	local := newTestTarget(t, "", "", "none")
+	local.CollectorProfile = CollectorProcessOnly
+	if _, err := c.Collect(context.Background(), local, "operator", false); err != nil {
+		t.Fatalf("a local collection must proceed while the network bound is saturated: %v", err)
+	}
+	network := newTestTarget(t, "", "", "none")
+	if _, err := c.Collect(context.Background(), network, "operator", false); err == nil {
+		t.Fatal("a network-capable collection must still be rejected while the network bound is saturated")
+	}
+	if gate.InUse() != MaxGlobalConcurrent {
+		t.Fatalf("a local collection must not change network occupancy, got %d", gate.InUse())
+	}
+	if gate.LocalInUse() != 0 {
+		t.Fatalf("local slots must be released when the collection returns, got %d", gate.LocalInUse())
+	}
+}

@@ -245,6 +245,7 @@ type MetaResponse struct {
 	RequestTimeoutSeconds    int                `json:"requestTimeoutSeconds"`
 	TotalDeadlineSeconds     int                `json:"totalDeadlineSeconds"`
 	MaxGlobalConcurrent      int                `json:"maxGlobalConcurrent"`
+	MaxLocalConcurrent       int                `json:"maxLocalConcurrent"`
 	StalenessGraceSeconds    int                `json:"stalenessGraceSeconds"`
 	ManualFreshnessSeconds   int                `json:"manualFreshnessWindowSeconds"`
 	RetentionDays            int                `json:"retentionDays"`
@@ -287,6 +288,7 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		RequestTimeoutSeconds:    RequestTimeoutSeconds,
 		TotalDeadlineSeconds:     TotalDeadlineSeconds,
 		MaxGlobalConcurrent:      MaxGlobalConcurrent,
+		MaxLocalConcurrent:       MaxLocalConcurrent,
 		StalenessGraceSeconds:    StalenessGraceSeconds,
 		ManualFreshnessSeconds:   ManualFreshnessWindowSeconds,
 		RetentionDays:            DefaultRetentionDays,

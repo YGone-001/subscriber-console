@@ -150,7 +150,13 @@ const (
 	MinIntervalSeconds     = 60
 	MaxIntervalSeconds     = 3600
 	DefaultIntervalSeconds = 120
-	MaxGlobalConcurrent    = 2
+	// MaxGlobalConcurrent bounds collections that may reach the network.
+	MaxGlobalConcurrent = 2
+	// MaxLocalConcurrent bounds process_only collections, which read only local
+	// /proc entries and never initiate an HTTP request. Sharing the network
+	// budget with them would starve the cadence they advertise: a fleet of
+	// local targets could only be served once per (count / budget) ticks.
+	MaxLocalConcurrent     = 32
 	MaxPerTargetConcurrent = 1
 	RequestTimeoutSeconds  = 5
 	TotalDeadlineSeconds   = 15

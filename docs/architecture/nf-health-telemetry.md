@@ -405,7 +405,7 @@ explicit local process bindings (NF_HEALTH_LOCAL_PROCESS_BINDINGS)
 bounded timeout (per-request 5s, total collection 15s)
 bounded response size (1 MiB)
 bounded parsing and sample count
-bounded concurrency (global 2, per-target 1)
+bounded concurrency (network class 2, local process-only class 32, per-target 1)
 bounded collection frequency (minimum 60s)
 ```
 
@@ -647,19 +647,36 @@ The scheduler lives inside the existing Go process. There is no second daemon
 and no new Linux service.
 
 ```text
-default interval       120 seconds
-minimum interval        60 seconds
-global concurrency       2
-per-target concurrency   1
-request timeout          5 seconds
-total deadline          15 seconds
+default interval             120 seconds
+minimum interval              60 seconds
+network concurrency bound        2   (MaxGlobalConcurrent)
+local concurrency bound         32   (MaxLocalConcurrent)
+per-target concurrency           1
+request timeout             5 seconds
+total deadline             15 seconds
 ```
+
+Admission is bounded by the cost of the work, not by who requested it. A
+collection whose profile may issue an HTTP request draws from the network bound
+of 2, which is what protects NF metric exporters from being probed in bulk. A
+`process_only` collection reads local `/proc` evidence only and provably issues no
+HTTP request, so it draws from a separate bound of 32. The two bounds are
+independent: a saturated network bound never blocks local L1 work, and local work
+can never consume a network slot.
+
+Without the split the advertised cadence is not achievable. 23 scheduled targets
+at 120 seconds demand roughly 11.5 collections per minute, while a 2-slot budget
+serves about 1 per minute, so each target was in practice sampled every ~25-35
+minutes and spent nearly all of its life `stale` against a 210 second freshness
+policy. The split makes `intervalSeconds` and the freshness projection agree
+again; it does not weaken either bound for network work.
 
 The scheduler:
 
 - starts only when configured and cancels on application shutdown
 - never overlaps collections for the same target
 - respects disabled targets
+- selects due targets per admission class, least-recently-attempted first
 - avoids burst collection on startup
 - records failures without discarding last good samples
 - identifies itself as `scheduler` rather than impersonating a human user

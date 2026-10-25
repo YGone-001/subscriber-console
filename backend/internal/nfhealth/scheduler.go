@@ -12,7 +12,8 @@ import (
 // Cadence is per target: a target is collected when
 // now >= lastAttemptAt + intervalSeconds. Overlapping collections are rejected,
 // disabled and manual targets are never auto-scheduled, and the shared
-// CollectionGate bounds global concurrency across manual and scheduled work.
+// CollectionGate bounds concurrency for manual and scheduled work combined,
+// separately for network-capable and local-only collections.
 type Scheduler struct {
 	repo      SchedulerRepository
 	collector *Collector
@@ -28,7 +29,7 @@ type Scheduler struct {
 	wg       sync.WaitGroup
 	interval time.Duration
 	// cursor rotates the fetch window so targets beyond one batch limit are
-	// not starved when the due set is larger than the batch.
+	// not starved when the due set is larger than the combined class bounds.
 	cursor int
 }
 
@@ -142,9 +143,9 @@ func (s *Scheduler) tick(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	// Over-fetch so targets beyond one batch limit are still considered.
-	batch := MaxGlobalConcurrent
-	window := batch * 4
+	// Over-fetch so targets beyond one batch limit are still considered. The
+	// window covers both admission classes.
+	window := (MaxGlobalConcurrent + MaxLocalConcurrent) * 4
 	if window < 8 {
 		window = 8
 	}
@@ -155,7 +156,21 @@ func (s *Scheduler) tick(ctx context.Context) {
 	}
 
 	now := s.now()
-	due := selectDueTargets(targets, now, batch, s.advanceCursor(len(targets)))
+	// Admission classes: process_only work reads local /proc evidence only, so
+	// it is selected against its own bound instead of queueing behind network
+	// probes that share the stricter global bound.
+	var local, network []HealthTarget
+	for _, target := range targets {
+		if target.CollectorProfile == CollectorProcessOnly {
+			local = append(local, target)
+		} else {
+			network = append(network, target)
+		}
+	}
+
+	offset := s.advanceCursor(len(targets))
+	due := selectDueTargets(local, now, MaxLocalConcurrent, offset)
+	due = append(due, selectDueTargets(network, now, MaxGlobalConcurrent, offset)...)
 	if len(due) == 0 {
 		return
 	}
@@ -296,7 +311,7 @@ func (s *Scheduler) advanceCursor(n int) int {
 		return s.cursor
 	}
 	offset := s.cursor % n
-	s.cursor = (s.cursor + MaxGlobalConcurrent) % n
+	s.cursor = (s.cursor + MaxGlobalConcurrent + MaxLocalConcurrent) % n
 	return offset
 }
 

@@ -196,6 +196,7 @@ export interface NfHealthMeta {
   requestTimeoutSeconds: number;
   totalDeadlineSeconds: number;
   maxGlobalConcurrent: number;
+  maxLocalConcurrent?: number;
   stalenessGraceSeconds?: number;
   manualFreshnessWindowSeconds?: number;
   retentionDays: number;
