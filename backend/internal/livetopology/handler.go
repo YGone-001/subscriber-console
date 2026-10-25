@@ -1,6 +1,7 @@
 package livetopology
 
 import (
+	"context"
 	"net/http"
 
 	"subscriber/internal/auth"
@@ -12,14 +13,22 @@ type SnapshotProvider interface {
 	Snapshot() *runtimeinv.Snapshot
 }
 
+// Associator resolves Inventory and NF Health links onto a snapshot. The live
+// projection shares this authority with the runtime observations so a node never
+// advertises an association the runtime surface denies.
+type Associator interface {
+	Attach(ctx context.Context, snapshot *runtimeinv.Snapshot) bool
+}
+
 type RateLimiter interface {
 	Enforce(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool
 }
 
 type Handler struct {
-	provider SnapshotProvider
-	loader   *Loader
-	limiter  RateLimiter
+	provider  SnapshotProvider
+	loader    *Loader
+	limiter   RateLimiter
+	associate Associator
 }
 
 func NewHandler(provider SnapshotProvider, manifestPath string, limiter RateLimiter) *Handler {
@@ -29,6 +38,10 @@ func NewHandler(provider SnapshotProvider, manifestPath string, limiter RateLimi
 		limiter:  limiter,
 	}
 }
+
+// SetAssociator installs the association authority. Intended for startup wiring;
+// without it the projection still serves nodes, just without Inventory links.
+func (h *Handler) SetAssociator(associate Associator) { h.associate = associate }
 
 // Live handles GET /api/topology/live.
 //
@@ -60,6 +73,9 @@ func (h *Handler) Live(w http.ResponseWriter, r *http.Request) {
 	if snapshot == nil {
 		response.Error(w, http.StatusServiceUnavailable, "Runtime snapshot unavailable", "TOPOLOGY_LIVE_UNAVAILABLE")
 		return
+	}
+	if h.associate != nil {
+		h.associate.Attach(r.Context(), snapshot)
 	}
 	runtimeIDs := make(map[string]bool, len(snapshot.Components))
 	for _, component := range snapshot.Components {

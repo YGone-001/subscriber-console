@@ -1,6 +1,7 @@
 package livetopology
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -283,6 +284,53 @@ func TestLiveHandlerAuthAndShape(t *testing.T) {
 	}
 	if len(body.Nodes) != 6 || body.Runtime.Running != 5 {
 		t.Fatalf("unexpected live payload: %+v", body)
+	}
+}
+
+// recordingAssociator stands in for the shared runtime association authority.
+type recordingAssociator struct{ calls int }
+
+func (a *recordingAssociator) Attach(_ context.Context, snapshot *runtimeinv.Snapshot) bool {
+	a.calls++
+	for index := range snapshot.Components {
+		if snapshot.Components[index].ComponentID == "smf" {
+			snapshot.Components[index].InventoryAssociation = runtimeinv.AssociationProjection{
+				State: runtimeinv.AssociationAssociated,
+				ID:    "11111111-2222-3333-4444-555555555555",
+			}
+		}
+	}
+	return true
+}
+
+func TestLiveHandlerAttachesInventoryAssociations(t *testing.T) {
+	handler := NewHandler(snapshotProviderFunc(testSnapshot), "", nil)
+	associator := &recordingAssociator{}
+	handler.SetAssociator(associator)
+
+	w := httptest.NewRecorder()
+	handler.Live(w, withPrincipal(httptest.NewRequest(http.MethodGet, "/api/topology/live", nil), "viewer"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("viewer live: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if associator.calls != 1 {
+		t.Fatalf("the live projection must resolve associations once per read, got %d", associator.calls)
+	}
+	var body Response
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("live body must be JSON: %v", err)
+	}
+	for _, node := range body.Nodes {
+		switch node.ComponentID {
+		case "smf":
+			if node.InventoryResourceID != "11111111-2222-3333-4444-555555555555" {
+				t.Fatalf("an associated node must carry its Inventory resource, got %q", node.InventoryResourceID)
+			}
+		case "upf":
+			if node.InventoryResourceID != "" {
+				t.Fatalf("an unassociated node must not invent a resource, got %q", node.InventoryResourceID)
+			}
+		}
 	}
 }
 

@@ -268,17 +268,19 @@ func filterSnapshot(snapshot *Snapshot, template string) *Snapshot {
 	return &out
 }
 
-// attachAssociations fills Inventory and NF Health associations with two
-// bounded batch lookups. A failed lookup marks every association unresolved.
-func (h *Handler) attachAssociations(ctx context.Context, snapshot *Snapshot) bool {
-	if h.inventory == nil || h.targets == nil {
+// AttachAssociations fills Inventory and NF Health associations with two bounded
+// batch lookups. A failed lookup marks every association unresolved. The runtime
+// observations and the live topology projection share it so both report the same
+// association authority rather than resolving identities twice by different rules.
+func AttachAssociations(ctx context.Context, snapshot *Snapshot, inventory InventoryGateway, health TargetGateway) bool {
+	if inventory == nil || health == nil {
 		return false
 	}
 	keys := make([]string, 0, len(snapshot.Components))
 	for _, observation := range snapshot.Components {
 		keys = append(keys, RuntimeKey(snapshot.Host.HostID, observation.ComponentID, observation.ProcessName))
 	}
-	discovered, err := h.inventory.FindDiscovered(ctx, SourceSystem, keys)
+	discovered, err := inventory.FindDiscovered(ctx, SourceSystem, keys)
 	if err != nil {
 		markUnresolved(snapshot)
 		return false
@@ -287,21 +289,21 @@ func (h *Handler) attachAssociations(ctx context.Context, snapshot *Snapshot) bo
 	for _, resource := range discovered {
 		resourceIDs = append(resourceIDs, resource.ResourceID)
 	}
-	targets := map[string]string{}
+	targetIDs := map[string]string{}
 	if len(resourceIDs) > 0 {
-		found, terr := h.targets.FindByResources(ctx, resourceIDs)
+		found, terr := health.FindByResources(ctx, resourceIDs)
 		if terr != nil {
 			markUnresolved(snapshot)
 			return false
 		}
-		targets = found
+		targetIDs = found
 	}
 	for index := range snapshot.Components {
 		observation := &snapshot.Components[index]
 		key := RuntimeKey(snapshot.Host.HostID, observation.ComponentID, observation.ProcessName)
 		if resource, ok := discovered[key]; ok {
 			observation.InventoryAssociation = AssociationProjection{State: AssociationAssociated, ID: resource.ResourceID}
-			if targetID, ok := targets[resource.ResourceID]; ok {
+			if targetID, ok := targetIDs[resource.ResourceID]; ok {
 				observation.NFHealthAssociation = AssociationProjection{State: AssociationAssociated, ID: targetID}
 			} else {
 				observation.NFHealthAssociation = AssociationProjection{State: AssociationAbsent}
@@ -312,6 +314,23 @@ func (h *Handler) attachAssociations(ctx context.Context, snapshot *Snapshot) bo
 		observation.NFHealthAssociation = AssociationProjection{State: AssociationAbsent}
 	}
 	return true
+}
+
+// attachAssociations resolves the associations through the handler's gateways.
+func (h *Handler) attachAssociations(ctx context.Context, snapshot *Snapshot) bool {
+	return AttachAssociations(ctx, snapshot, h.inventory, h.targets)
+}
+
+// AssociationResolver exposes AttachAssociations as a dependency other read
+// projections can hold without importing the Inventory and NF Health gateways.
+type AssociationResolver struct {
+	Inventory InventoryGateway
+	Health    TargetGateway
+}
+
+// Attach resolves Inventory and NF Health links onto the given snapshot.
+func (a AssociationResolver) Attach(ctx context.Context, snapshot *Snapshot) bool {
+	return AttachAssociations(ctx, snapshot, a.Inventory, a.Health)
 }
 
 func markUnresolved(snapshot *Snapshot) {

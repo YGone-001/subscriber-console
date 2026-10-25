@@ -424,6 +424,10 @@ func main() {
 	// Live topology is a read-only composition of the runtime snapshot and the
 	// operator-owned per-NF config manifest. It never writes any domain state.
 	liveTopologyHandler := livetopology.NewHandler(runtimeService, os.Getenv("NF_ETC_MANIFEST"), limiter)
+	liveTopologyHandler.SetAssociator(runtimeinv.AssociationResolver{
+		Inventory: runtimeInventoryGateway,
+		Health:    runtimeTargetGateway,
+	})
 
 	// Knowledge base: fault/root-cause/resolution entries with secure attachment
 	// storage on the local filesystem (uploads + trash); metadata in xcloud_ops.
