@@ -35,6 +35,12 @@ import {
   interfaceUsageCounts,
   UNANNOTATED_INTERFACE_FILTER,
 } from './interface-catalog';
+import {
+  READABLE_MIN_ZOOM,
+  measureCanvasBox,
+  resolveFitZoom,
+  type TopologyFitMode,
+} from './topology-zoom';
 import { nodeHealthLabelKey, summarizeNodeHealth, type NodeHealth, type NodeHealthState } from './actual-topology-health';
 import { useResourceDirectory } from './use-resource-directory';
 import { useTopologyHealth } from './use-topology-health';
@@ -82,6 +88,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
   const canvasRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<{ kind: 'node' | 'edge'; id: string; element?: Element | null } | undefined>(undefined);
   const autoFitRef = useRef(true);
+  const fitModeRef = useRef<TopologyFitMode>('readable');
   const endpointIds = useMemo(
     () => edges.flatMap((edge) => {
       if (!edge || typeof edge !== 'object') return [];
@@ -231,21 +238,21 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
 
   useRegisterOperationsRefresh('topology:actual', refreshAll);
 
-  const fitView = useCallback(() => {
+  const fitView = useCallback((mode: TopologyFitMode = fitModeRef.current) => {
     const viewport = canvasRef.current;
-    if (!viewport) {
+    fitModeRef.current = mode;
+    const box = measureCanvasBox(viewport);
+    if (!box) {
       setZoom(1);
       return;
     }
-    const computed = window.getComputedStyle(viewport);
-    const paddingX = (Number.parseFloat(computed.paddingLeft) || 0) + (Number.parseFloat(computed.paddingRight) || 0);
-    const paddingY = (Number.parseFloat(computed.paddingTop) || 0) + (Number.parseFloat(computed.paddingBottom) || 0);
-    const maxHeight = Number.parseFloat(computed.maxHeight);
-    const availableWidth = viewport.clientWidth - paddingX - 2;
-    const availableHeight = (Number.isFinite(maxHeight) ? maxHeight : viewport.clientHeight) - paddingY - 2;
-    const scale = Math.min(1, availableWidth / layout.width, availableHeight / layout.height);
-    const next = Math.max(MIN_ZOOM, Math.min(1, Number(scale.toFixed(2))));
+    const floor = mode === 'readable' ? Math.max(MIN_ZOOM, READABLE_MIN_ZOOM) : MIN_ZOOM;
+    const next = resolveFitZoom(box, { width: layout.width, height: layout.height }, mode, floor);
     autoFitRef.current = true;
+    if (viewport) {
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+    }
     setZoom(next);
   }, [layout.width, layout.height]);
 
@@ -259,7 +266,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     };
     const onFullscreenChange = () => {
       setFullscreen(document.fullscreenElement === canvasRef.current);
-      if (autoFitRef.current) window.requestAnimationFrame(fitView);
+      if (autoFitRef.current) window.requestAnimationFrame(() => fitView());
     };
     window.addEventListener('resize', onResize);
     document.addEventListener('fullscreenchange', onFullscreenChange);
@@ -367,7 +374,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     setDomainMode('all');
     setInterfaceFilter('');
     setShowAllInterfaceNames(false);
-    fitView();
+    fitView('readable');
   };
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
@@ -544,7 +551,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
           >
             <ZoomIn size={15} />
           </button>
-          <button type="button" data-action="fit" onClick={fitView} aria-label={t('topology_fit_view')} title={t('topology_fit_view')}>
+          <button type="button" data-action="fit" onClick={() => fitView('all')} aria-label={t('topology_fit_view')} title={t('topology_fit_view')}>
             <Scan size={15} />
           </button>
           <button type="button" data-action="reset" onClick={resetView} aria-label={t('topology_reset_view')} title={t('topology_reset_view')}>

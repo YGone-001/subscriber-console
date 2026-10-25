@@ -896,6 +896,12 @@ Canvas behavior:
 
 - zoom, fit, reset, full screen and drag-pan; pointer drags that begin on a node,
   lane header or control keep their selection behaviour;
+- the opening view is a **readable** fit: it fills the canvas width and never drops
+  below the legibility floor (80%), so whatever does not fit is reached by scrolling
+  or panning inside the canvas instead of by shrinking the graph into unreadability;
+  the fit control performs the explicit **fit-all** pass (whole graph, down to the
+  manual zoom floor), and the two modes are shared by every graph source through
+  `topology-zoom.ts` so the sources cannot drift into different magnifications;
 - interface labels are hidden by default and appear on hover, focus or selection;
   below 80% zoom only labels on the focused path remain visible;
 - selecting a node emphasises its one-hop relationships and dims unrelated

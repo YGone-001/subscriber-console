@@ -89,9 +89,19 @@ export function TopologyGraphShell({
         ) : null}
       </header>
 
-      {summary ? <div className={styles.shellSummary} role="status">{summary}</div> : null}
+      {/*
+        * Status facts and graph controls share one row: the canvas is the
+        * primary surface, so every stacked row above it is height taken away
+        * from the graph. They wrap onto a second line only when the viewport
+        * cannot hold both groups.
+       */}
+      {summary || toolbar ? (
+        <div className={styles.shellControls}>
+          {summary ? <div className={styles.shellSummary} role="status">{summary}</div> : null}
+          {toolbar ? <div className={styles.shellToolbar}>{toolbar}</div> : null}
+        </div>
+      ) : null}
       {notice ? <div className={styles.shellNotice}>{notice}</div> : null}
-      {toolbar ? <div className={styles.shellToolbar}>{toolbar}</div> : null}
 
       <div className={styles.shellBody} data-inspector-open={inspector ? 'true' : undefined}>
         <div className={styles.shellCanvas}>{children}</div>

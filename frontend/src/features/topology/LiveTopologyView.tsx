@@ -24,6 +24,12 @@ import { TopologyAnnouncer } from './components/TopologyAnnouncer';
 import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology } from './actual-topology-model';
 import { LABEL_DETAIL_MIN_ZOOM, resolveLabelVisibility } from './actual-topology-labels';
 import { interfaceCoverage } from './interface-catalog';
+import {
+  READABLE_MIN_ZOOM,
+  measureCanvasBox,
+  resolveFitZoom,
+  type TopologyFitMode,
+} from './topology-zoom';
 import type { TopologyDomainMode } from './nf-classification';
 import {
   liveConfigCompleteness,
@@ -87,6 +93,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
   const canvasRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<{ kind: 'node' | 'edge'; id: string; element?: Element | null } | undefined>(undefined);
   const autoFitRef = useRef(true);
+  const fitModeRef = useRef<TopologyFitMode>('readable');
   const panRef = useRef<{
     pointerId: number;
     startX: number;
@@ -174,23 +181,21 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
     }
   }, [data, selectedComponentId, selectedEdgeId, layout.links, layout.nodes, hoveredEdgeId, focusedEdgeId, hoveredResourceId, focusedResourceId]);
 
-  const fitView = useCallback(() => {
+  const fitView = useCallback((mode: TopologyFitMode = fitModeRef.current) => {
     const viewport = canvasRef.current;
-    if (!viewport) {
+    fitModeRef.current = mode;
+    const box = measureCanvasBox(viewport);
+    if (!box) {
       setZoom(1);
       return;
     }
-    const computed = window.getComputedStyle(viewport);
-    const paddingX = (Number.parseFloat(computed.paddingLeft) || 0) + (Number.parseFloat(computed.paddingRight) || 0);
-    const paddingY = (Number.parseFloat(computed.paddingTop) || 0) + (Number.parseFloat(computed.paddingBottom) || 0);
-    const maxHeight = Number.parseFloat(computed.maxHeight);
-    const availableWidth = viewport.clientWidth - paddingX - 2;
-    const availableHeight = (Number.isFinite(maxHeight) ? maxHeight : viewport.clientHeight) - paddingY - 2;
-    const scale = Math.min(1, availableWidth / layout.width, availableHeight / layout.height);
-    const next = Math.max(MIN_ZOOM, Math.min(1, Number(scale.toFixed(2))));
+    const floor = mode === 'readable' ? Math.max(MIN_ZOOM, READABLE_MIN_ZOOM) : MIN_ZOOM;
+    const next = resolveFitZoom(box, { width: layout.width, height: layout.height }, mode, floor);
     autoFitRef.current = true;
-    viewport.scrollLeft = 0;
-    viewport.scrollTop = 0;
+    if (viewport) {
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+    }
     setZoom(next);
   }, [layout.width, layout.height]);
 
@@ -204,7 +209,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
     };
     const onFullscreenChange = () => {
       setFullscreen(document.fullscreenElement === canvasRef.current);
-      if (autoFitRef.current) window.requestAnimationFrame(fitView);
+      if (autoFitRef.current) window.requestAnimationFrame(() => fitView());
     };
     window.addEventListener('resize', onResize);
     document.addEventListener('fullscreenchange', onFullscreenChange);
@@ -239,7 +244,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
     setSearch('');
     setDomainMode('all');
     setShowAllInterfaceNames(false);
-    fitView();
+    fitView('readable');
   };
   const selectNode = (componentId: string) => {
     if (componentId === selectedComponentId) {
@@ -497,9 +502,6 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
                       : t('topology_interface_show_all')}
                   </button>
                 ) : null}
-                <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
-                  {t('topology_live_open_architecture')}
-                </Link>
               </>
             )}
             zoom={{
@@ -508,7 +510,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
               max: MAX_ZOOM,
               onIn: () => updateZoom(ZOOM_STEP),
               onOut: () => updateZoom(-ZOOM_STEP),
-              onFit: fitView,
+              onFit: () => fitView('all'),
               onReset: resetView,
             }}
             fullscreen={{ active: fullscreen, onToggle: toggleFullscreen }}
@@ -534,10 +536,20 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
         inspectorLabel={selectedEdge ? t('topology_inspector_edge') : t('topology_live_selected')}
         onCloseInspector={closeInspector}
         legend={(
-          <span className={styles.liveLegendItem}>
-            <i className={styles.liveLegendLine} aria-hidden="true" />
-            {t('topology_live_evidence_configured')}
-          </span>
+          <>
+            <span className={styles.liveLegendItem}>
+              <i className={styles.liveLegendLine} aria-hidden="true" />
+              {t('topology_live_evidence_configured')}
+            </span>
+            {/*
+              * The reference source is a sibling view, not a graph control, so it
+              * sits in the status rail instead of costing the toolbar a wrapped
+              * line above the canvas.
+             */}
+            <Link className={styles.liveLegendLink} to="/topology?view=actual&source=reference">
+              {t('topology_live_open_architecture')}
+            </Link>
+          </>
         )}
         status={(
           <span className={styles.liveStatusFacts}>

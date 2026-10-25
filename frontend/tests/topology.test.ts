@@ -66,6 +66,10 @@ import type {
   LiveTopologyResponse,
 } from '../src/features/topology/live-topology-types';
 import {
+  READABLE_MIN_ZOOM,
+  resolveFitZoom,
+} from '../src/features/topology/topology-zoom';
+import {
   classifyResource,
   nfRoleLabel,
   normalizeRoleToken,
@@ -1716,4 +1720,33 @@ test('a truncated ledger read is reported as partial instead of a clean diff', (
   assert.ok(summary);
   assert.equal(summary.complete, false);
   assert.equal(summary.undeclared, 0);
+});
+
+test('the readable fit fills the width and never drops below the legibility floor', () => {
+  const box = { availableWidth: 1180, availableHeight: 200 };
+  assert.equal(
+    resolveFitZoom(box, { width: 1180, height: 900 }, 'readable', READABLE_MIN_ZOOM),
+    1,
+    'content that fits the canvas width stays at 100%',
+  );
+  assert.equal(
+    resolveFitZoom(box, { width: 2400, height: 900 }, 'readable', READABLE_MIN_ZOOM),
+    READABLE_MIN_ZOOM,
+    'a wider graph stops shrinking at the legibility floor and scrolls instead',
+  );
+});
+
+test('the explicit fit-all control shrinks past the readable floor to the manual floor', () => {
+  const box = { availableWidth: 1180, availableHeight: 400 };
+  const tall = { width: 1180, height: 1600 };
+  // Height-limited content: fit-all shrinks to fit and stops at the manual zoom
+  // floor, while the readable policy on the same geometry never goes below the
+  // legibility floor and leaves the rest to scrolling.
+  assert.equal(resolveFitZoom(box, tall, 'all', 0.5), 0.5, 'fit-all is limited by height');
+  assert.equal(resolveFitZoom(box, tall, 'readable', READABLE_MIN_ZOOM), 1, 'readable fit keeps full size and scrolls vertically');
+});
+
+test('zoom resolution is safe on empty geometry', () => {
+  const box = { availableWidth: 1000, availableHeight: 400 };
+  assert.equal(resolveFitZoom(box, { width: 0, height: 0 }, 'readable', READABLE_MIN_ZOOM), 1);
 });

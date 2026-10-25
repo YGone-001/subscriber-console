@@ -774,7 +774,7 @@
  * push the architecture below the first screen. */
 
 .archCanvasViewport {
-  height: clamp(320px, calc(100vh - 330px), 720px);
+  height: clamp(320px, calc(100vh - 430px), 760px);
   overflow: auto;
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-panel);
@@ -1516,7 +1516,12 @@
 }
 
 .actualCanvasViewport {
-  max-height: min(68vh, 680px);
+  /*
+   * Sized against the viewport rather than a fixed vh cap: the graph is the
+   * primary surface, so it must own the height the compacted chrome leaves on
+   * the first screen. Overflow scrolls or pans inside the canvas.
+   */
+  height: clamp(320px, calc(100vh - 430px), 760px);
   overflow: auto;
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-panel);
@@ -1968,7 +1973,7 @@
 }
 
 .liveCanvasViewport {
-  max-height: min(62vh, 620px);
+  height: clamp(320px, calc(100vh - 430px), 760px);
   overflow: auto;
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-panel);
@@ -2008,6 +2013,19 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
+}
+
+.liveLegendLink {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+.liveLegendLink:hover {
+  color: var(--primary);
+  text-decoration: underline;
 }
 
 .liveStatusFacts {
