@@ -1070,9 +1070,11 @@
 }
 
 .shellHeading {
-  display: grid;
+  display: flex;
   flex: 1;
-  gap: 2px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px var(--space-12);
   min-width: 240px;
 }
 

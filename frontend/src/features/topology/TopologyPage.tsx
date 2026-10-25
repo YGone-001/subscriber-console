@@ -376,16 +376,6 @@ export function TopologyPage() {
                 </button>
               ))}
             </div>
-            <span className={styles.evidenceBadge} data-evidence-badge={source}>
-              {t(SOURCE_EVIDENCE_KEY[source])}
-            </span>
-            <details className={styles.sourceNotes} data-source-notes={source}>
-              <summary>{t('topology_source_notes')}</summary>
-              <div className={styles.sourceNotesBody}>
-                <p>{t(SOURCE_NOTE_KEY[source])}</p>
-                <p>{t('topology_description')}</p>
-              </div>
-            </details>
             {source === 'runtime' ? (
               <div className={styles.sourceToggle} role="group" aria-label={t('topology_runtime_scope_label')}>
                 {TOPOLOGY_RUNTIME_SCOPES.map((value) => (
@@ -402,6 +392,16 @@ export function TopologyPage() {
                 ))}
               </div>
             ) : null}
+            <span className={styles.evidenceBadge} data-evidence-badge={source}>
+              {t(SOURCE_EVIDENCE_KEY[source])}
+            </span>
+            <details className={styles.sourceNotes} data-source-notes={source}>
+              <summary>{t('topology_source_notes')}</summary>
+              <div className={styles.sourceNotesBody}>
+                <p>{t(SOURCE_NOTE_KEY[source])}</p>
+                <p>{t('topology_description')}</p>
+              </div>
+            </details>
           </section>
 
           {source === 'declared' ? (

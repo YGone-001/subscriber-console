@@ -379,6 +379,7 @@ export function LiveTopologyView() {
   const config = data.config;
   const runtimeStates = presentRuntimeStates(runtime);
   const completeness = liveConfigCompleteness(config);
+  const unavailableSources = config.unavailable ?? [];
   const nodeById = new Map(data.nodes.map((node) => [node.componentId, node]));
 
   return (
@@ -388,7 +389,6 @@ export function LiveTopologyView() {
         titleId="live-topology-title"
         title={t('topology_live_title')}
         subtitle={t('topology_live_subtitle')}
-        evidence={t('topology_source_evidence_runtime')}
         completeness={completeness}
         summary={runtimeStates.length > 0 || data.edges.length > 0 || unresolved.length > 0 ? (
           <div className={styles.liveChips}>
@@ -409,7 +409,7 @@ export function LiveTopologyView() {
             ) : null}
           </div>
         ) : undefined}
-        notice={(
+        notice={(!config.manifestConfigured || !config.complete || unavailableSources.length > 0) ? (
           <>
             {!config.manifestConfigured ? (
               <p className={styles.liveWarning} data-config-warning="unconfigured">
@@ -422,16 +422,12 @@ export function LiveTopologyView() {
                   total: config.sourceCount,
                 })}
               </p>
-            ) : (
-              <p className={styles.liveConfigNote} data-config-complete="true">
-                {t('topology_live_config_complete')}
-              </p>
-            )}
-            {config.unavailable && config.unavailable.length > 0 ? (
+            ) : null}
+            {unavailableSources.length > 0 ? (
               <details className={styles.liveSources}>
                 <summary>{t('topology_live_sources')}</summary>
                 <ul>
-                  {config.unavailable.map((source, index) => (
+                  {unavailableSources.map((source, index) => (
                     <li key={`${source.componentId ?? 'manifest'}-${source.file ?? 'entry'}-${index}`}>
                       {source.componentId || 'manifest'}
                       {source.file ? ` · ${source.file}` : ''}
@@ -443,7 +439,7 @@ export function LiveTopologyView() {
               </details>
             ) : null}
           </>
-        )}
+        ) : undefined}
         toolbar={(
           <TopologyGraphToolbar
             search={{
@@ -521,6 +517,9 @@ export function LiveTopologyView() {
         )}
         status={(
           <span className={styles.liveStatusFacts}>
+            {config.manifestConfigured && config.complete ? (
+              <span data-live-config-read="complete">{t('topology_live_config_complete')}</span>
+            ) : null}
             <span data-live-zoom={Math.round(zoom * 100)}>
               {t('topology_zoom_level', { percent: Math.round(zoom * 100) })}
             </span>

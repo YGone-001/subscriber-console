@@ -1877,8 +1877,7 @@
   flex-wrap: wrap;
 }
 
-.liveWarning,
-.liveConfigNote {
+.liveWarning {
   margin: 0;
   padding: var(--space-8) var(--space-12);
   border: 1px solid var(--surface-border);
