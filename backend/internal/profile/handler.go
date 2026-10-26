@@ -83,27 +83,50 @@ const maskedCredential = "[MASKED]"
 
 var credentialKeys = []string{"k", "op", "opc"}
 
-func maskCredentialMaterial(doc bson.M, canSeeCredentials bool) {
-	if doc == nil || canSeeCredentials {
-		return
-	}
-	authMaterial, ok := doc["auth"].(bson.M)
-	if !ok {
-		return
-	}
-	for _, key := range credentialKeys {
-		if value, ok := authMaterial[key].(string); ok && value != "" {
-			authMaterial[key] = maskedCredential
+// maskCredentialDoc masks the auth child of a decoded profile document.
+// Documents decoded from MongoDB appear as bson.M, bson.D or map[string]any
+// depending on the decode target, so every shape must be handled; a missing
+// or unrecognized auth field leaves the document untouched.
+func maskCredentialDoc(doc any) {
+	switch d := doc.(type) {
+	case bson.M:
+		maskCredentialValue(d["auth"])
+	case map[string]any:
+		maskCredentialValue(d["auth"])
+	case bson.D:
+		for i := range d {
+			if d[i].Key == "auth" {
+				maskCredentialValue(d[i].Value)
+				return
+			}
 		}
 	}
 }
 
-func maskVersionSnapshot(version bson.M, canSeeCredentials bool) {
-	if version == nil || canSeeCredentials {
-		return
-	}
-	if snapshot, ok := version["profile"].(bson.M); ok {
-		maskCredentialMaterial(snapshot, false)
+func maskCredentialValue(value any) {
+	switch material := value.(type) {
+	case bson.M:
+		for _, key := range credentialKeys {
+			if v, ok := material[key].(string); ok && v != "" {
+				material[key] = maskedCredential
+			}
+		}
+	case map[string]any:
+		for _, key := range credentialKeys {
+			if v, ok := material[key].(string); ok && v != "" {
+				material[key] = maskedCredential
+			}
+		}
+	case bson.D:
+		for i := range material {
+			for _, key := range credentialKeys {
+				if material[i].Key == key {
+					if v, ok := material[i].Value.(string); ok && v != "" {
+						material[i].Value = maskedCredential
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -212,7 +235,9 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	// template plaintext is provisioning material, so the subscriber write
 	// permission decides visibility, aligned with the subscriber detail
 	// auth4G redaction.
-	maskCredentialMaterial(profile, auth.HasPermission(p, "subscribers.write"))
+	if !auth.HasPermission(p, "subscribers.write") {
+		maskCredentialDoc(profile)
+	}
 
 	stats, err := h.repo.GetProfileStats(r.Context(), name)
 	if err != nil {
@@ -303,7 +328,9 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 		}
 		delete(version, "_id")
 		// The snapshot embeds the full stored profile, credentials included.
-		maskVersionSnapshot(version, auth.HasPermission(p, "subscribers.write"))
+		if !auth.HasPermission(p, "subscribers.write") {
+			maskCredentialDoc(version["profile"])
+		}
 		response.JSON(w, http.StatusOK, ProfileVersionDetailResponse{Version: version})
 		return
 	}

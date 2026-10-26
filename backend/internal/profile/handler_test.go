@@ -1633,3 +1633,98 @@ func TestVersionsDetailBranchMasksSnapshotCredentials(t *testing.T) {
 		t.Errorf("expected snapshot amf plaintext, got %q", got)
 	}
 }
+
+// Production decodes nested documents as bson.D (ordered), not bson.M; the
+// masking must survive the real decode shape or it silently becomes a no-op.
+func TestProfileGetMasksCredentialsForBsonDDecode(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	repo.profiles["tpl_d"] = bson.M{
+		"name": "tpl_d",
+		"auth": bson.D{
+			{Key: "k", Value: "00112233445566778899aabbccddeeff"},
+			{Key: "opc", Value: "ffeeddccbbaa99887766554433221100"},
+			{Key: "op", Value: ""},
+			{Key: "amf", Value: "8000"},
+		},
+	}
+
+	principal := &auth.Principal{Username: "viewer1", Role: "viewer", NormalizedRole: "viewer"}
+	req := httptest.NewRequest("GET", "/api/profiles/tpl_d", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", "tpl_d")
+
+	w := httptest.NewRecorder()
+	handler.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp ProfileDetailResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	authMaterial, ok := resp.Profile["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected auth object, got %T", resp.Profile["auth"])
+	}
+	if got, _ := authMaterial["k"].(string); got != maskedCredential {
+		t.Errorf("expected k masked for a bson.D decode, got %q", got)
+	}
+	if got, _ := authMaterial["opc"].(string); got != maskedCredential {
+		t.Errorf("expected opc masked for a bson.D decode, got %q", got)
+	}
+	if got, _ := authMaterial["op"].(string); got != "" {
+		t.Errorf("an unconfigured op must stay empty, got %q", got)
+	}
+	if got, _ := authMaterial["amf"].(string); got != "8000" {
+		t.Errorf("amf must stay plaintext, got %q", got)
+	}
+}
+
+func TestVersionsDetailBranchMasksBsonDSnapshotCredentials(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	repo.versions = append(repo.versions, bson.M{
+		"versionId":   "v-002",
+		"profileName": "tpl_d",
+		"action":      "UPDATE",
+		"profile": bson.D{
+			{Key: "name", Value: "tpl_d"},
+			{Key: "auth", Value: bson.D{
+				{Key: "k", Value: "00112233445566778899aabbccddeeff"},
+				{Key: "amf", Value: "8000"},
+			}},
+		},
+	})
+
+	principal := &auth.Principal{Username: "viewer1", Role: "viewer", NormalizedRole: "viewer"}
+	req := httptest.NewRequest("GET", "/api/profiles/tpl_d/versions?versionId=v-002", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", "tpl_d")
+
+	w := httptest.NewRecorder()
+	handler.Versions(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp ProfileVersionDetailResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	snapshot, ok := resp.Version["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested profile snapshot, got %T", resp.Version["profile"])
+	}
+	authMaterial, _ := snapshot["auth"].(map[string]any)
+	if got, _ := authMaterial["k"].(string); got != maskedCredential {
+		t.Errorf("expected snapshot k masked for a bson.D decode, got %q", got)
+	}
+	if got, _ := authMaterial["amf"].(string); got != "8000" {
+		t.Errorf("expected snapshot amf plaintext, got %q", got)
+	}
+}
