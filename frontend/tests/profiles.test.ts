@@ -146,8 +146,27 @@ test('a failed template write surfaces the server message instead of a generic f
   const source = read('../src/features/profiles/ProfileDetailPage.tsx');
   assert.match(source, /putJson\(/);
   assert.match(source, /mutation-client/);
-  assert.match(source, /prof_err_create_partial/);
+  assert.match(source, /setError\(err instanceof Error \? err\.message : t\('prof_err_save'\)\)/);
   assert.doesNotMatch(source, /throw new Error\(t\("prof_err_save"\)\)/);
+});
+
+test('creating a template is one governed write, not a default followed by an update', () => {
+  const source = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(source, /await postJson\('\/api\/profiles', \{ \.\.\.payload, name: targetName \}\)/);
+  assert.ok(!source.includes("postJson('/api/profiles', { name: targetName })"), 'the two-step create is retired');
+  assert.ok(!source.includes('prof_err_create_partial'), 'the partial-create wording is retired');
+});
+
+test('saving a template never claims it changes subscribers already provisioned', () => {
+  const en = read('../src/lib/locales/en.ts');
+  const zh = read('../src/lib/locales/zh.ts');
+  assert.match(en, /prof_detail_subtitle: "[^"]*subscribers already provisioned from this template keep their current values/);
+  assert.match(en, /prof_change_confirm_desc: "\{count\} subscriber\(s\) were provisioned from this template\. Saving changes the template only\."/);
+  assert.ok(!/prof_detail_subtitle: "[^"]*affects subscribers/.test(en), 'the old claim still stands in English');
+  assert.ok(!/prof_change_confirm_desc: "[^"]*This update affects/.test(en), 'the confirm panel still claims impact');
+  /* The mechanics note is now actually rendered instead of sitting unused. */
+  assert.match(read('../src/features/profiles/ProfileDetailPage.tsx'), /t\('prof_change_confirm_note'\)/);
+  assert.ok(zh.includes('prof_change_confirm_desc') && zh.includes('prof_detail_subtitle'));
 });
 
 test('the template list renders a retryable error instead of an empty state', () => {

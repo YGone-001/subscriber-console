@@ -140,7 +140,6 @@ export function ProfileDetailPage() {
     [draftPayload, profile],
   );
   const changedDraftRows = draftChangeRows.filter((row) => row.changed);
-  const changedSectionText = changedDraftRows.map((row) => t(row.labelKey)).join(', ') || t('prof_change_none');
 
   const sectionAnchors: ProfileSectionAnchor[] = (isEditing ? EDIT_SECTIONS : VIEW_SECTIONS)
     .map((section) => ({ id: section.id, label: t(section.labelKey) }));
@@ -204,16 +203,12 @@ export function ProfileDetailPage() {
     setError(null);
     try {
       if (isCreate) {
-        await postJson('/api/profiles', { name: targetName });
-      }
-      try {
+        /* One governed write: the create endpoint accepts the same content
+         * fields as the update endpoint, so a new template no longer lands as
+         * CREATE followed by UPDATE in the history. */
+        await postJson('/api/profiles', { ...payload, name: targetName });
+      } else {
         await putJson(`/api/profiles/${encodeURIComponent(targetName)}`, payload);
-      } catch (err) {
-        if (isCreate) {
-          const detailMessage = err instanceof Error ? err.message : '';
-          throw new Error(t('prof_err_create_partial', { detail: detailMessage }));
-        }
-        throw err;
       }
       setIsSaveConfirmOpen(false);
       setIsEditing(false);
@@ -493,10 +488,7 @@ export function ProfileDetailPage() {
         <ConfirmActionPanel
           tone={impactedSubscribers > 0 ? 'warning' : 'info'}
           title={t('prof_change_confirm_title')}
-          message={t('prof_change_confirm_desc', {
-            count: impactedSubscribers,
-            sections: changedSectionText,
-          })}
+          message={t('prof_change_confirm_desc', { count: impactedSubscribers })}
           confirmLabel={t('prof_change_confirm_btn')}
           cancelLabel={t('cancel')}
           isWorking={isSaving}
@@ -504,6 +496,7 @@ export function ProfileDetailPage() {
           onCancel={() => setIsSaveConfirmOpen(false)}
         >
           <div className="pm-confirm-diff-rows">
+            <p className="pm-confirm-note">{t('prof_change_confirm_note')}</p>
             <div className="pm-confirm-diff-columns" aria-hidden="true">
               <span />
               <span>{t('prof_diff_stored_col')}</span>
