@@ -24,11 +24,13 @@ interface ProfilePccRuleEditorProps {
     [key: string]: unknown;
   };
   ruleIndex: number;
+  /** Stable DOM anchor for the hierarchy rail; optional. */
+  anchorId?: string;
   onChange: (updatedRule: ProfilePccRuleEditorProps["rule"]) => void;
   onDelete: () => void;
 }
 
-export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDelete }: ProfilePccRuleEditorProps) {
+export default function ProfilePccRuleEditor({ rule, ruleIndex, anchorId, onChange, onDelete }: ProfilePccRuleEditorProps) {
   const { t } = useI18n();
 
   // Updates nested fields in a cloned PCC rule object.
@@ -61,7 +63,7 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDele
   };
 
   return (
-    <div className="pcc-rule-box">
+    <div id={anchorId} className="pcc-rule-box">
       <div className="pcc-rule-header">
         <span className="pcc-rule-idx-title">
           {t("slice_rule_idx", { idx: ruleIndex + 1 })}

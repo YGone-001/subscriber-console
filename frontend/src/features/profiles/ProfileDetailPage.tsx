@@ -159,6 +159,23 @@ export function ProfileDetailPage() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  /* Hierarchy jump: a collapsed slice owns its sessions, so the owning card is
+   * expanded first and the scroll waits for that render. */
+  const jumpToAnchor = (id: string) => {
+    const owner = /^slice-card-(\d+)/.exec(id);
+    if (owner) {
+      const index = Number(owner[1]);
+      setExpandedSlices((current) => (current.includes(index) ? current : [...current, index]));
+    }
+    window.setTimeout(() => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.classList.add('profile-anchor-flash');
+      window.setTimeout(() => el.classList.remove('profile-anchor-flash'), 1600);
+    }, owner ? 90 : 0);
+  };
+
   /* The stored document on the left, the pending payload on the right: the same
    * comparison the version history renders, so confirming a save is not a
    * section-level guess while the history panel shows real values. */
@@ -771,6 +788,7 @@ export function ProfileDetailPage() {
                 handleSliceChange,
                 removeSlice,
                 toggleSliceExpanded,
+                jumpToAnchor,
               }}
             />
           ) : (

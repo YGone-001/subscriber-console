@@ -92,7 +92,7 @@ export default function ProfileSliceEditor({
   };
 
   return (
-    <div className={`slice-strip-card ${newlyAdded ? 'flash-animate' : ''}`}>
+    <div id={`slice-card-${sliceIndex}`} className={`slice-strip-card ${newlyAdded ? 'flash-animate' : ''}`}>
       {/* Slice Header: SST, SD, Default */}
       <div
         className={`slice-editor-header ${onToggleExpand ? "slice-card-header" : ""} ${isExpanded ? "slice-editor-header-expanded" : ""}`}
@@ -148,6 +148,7 @@ export default function ProfileSliceEditor({
                 <ProfileSessionEditor
                   key={sessIdx}
                   session={session}
+                  anchorId={`slice-card-${sliceIndex}-session-${sessIdx}`}
                   onChange={(updated) => handleUpdateSession(sessIdx, updated)}
                   onDelete={() => handleDeleteSession(sessIdx)}
                 />

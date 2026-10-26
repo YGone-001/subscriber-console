@@ -297,6 +297,8 @@ export const zh: Record<string, string> = {
     prof_content_slices: "{count} 切片",
     prof_content_sessions: "{count} 会话",
     prof_content_pcc: "{count} PCC 规则",
+    prof_rail_title: "结构导航",
+    prof_rail_unnamed_session: "会话 #{index}",
     prof_billing_configured: "计费默认值已配置",
     prof_billing_missing: "计费默认值未配置",
     prof_access_missing: "接入限制未设置",

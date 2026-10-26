@@ -297,6 +297,8 @@ export const en: Record<string, string> = {
     prof_content_slices: "{count} slices",
     prof_content_sessions: "{count} sessions",
     prof_content_pcc: "{count} PCC rules",
+    prof_rail_title: "Structure",
+    prof_rail_unnamed_session: "Session #{index}",
     prof_billing_configured: "Billing defaults set",
     prof_billing_missing: "Billing defaults missing",
     prof_access_missing: "Access default unset",

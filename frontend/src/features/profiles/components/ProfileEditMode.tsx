@@ -4,6 +4,7 @@
  * Adaptations: "use client" dropped; `@/` aliases and CSS-module imports repointed for the Vite runtime.
  */
 import { Pencil, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
+import ProfileHierarchyRail from './ProfileHierarchyRail';
 import ProfileSliceEditor from './ProfileSliceEditor';
 import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from '../../../lib/unitParser';
 import { AMBR_UNITS } from '../../subscribers/components/subscriber/utils';
@@ -33,7 +34,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
 
   const {
     setInputName, setProfileTitle, setAuthData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
-    setOcsDefaults, addSlice, handleSliceChange, removeSlice, toggleSliceExpanded
+    setOcsDefaults, addSlice, handleSliceChange, removeSlice, toggleSliceExpanded, jumpToAnchor
   } = actions;
   const hasTotalTraffic = String(ocsDefaults.trafficTotal ?? '').trim() !== '';
   const hasBalanceTraffic = String(ocsDefaults.trafficBalance ?? '').trim() !== '';
@@ -309,6 +310,8 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
             <Plus size={18}/> {t("sub_add_slice")}
           </button>
         </div>
+
+        <ProfileHierarchyRail slices={slices} onJump={jumpToAnchor} />
 
         {slices.length > 0 ? slices.map((slice: any, sIdx: number) => (
           <ProfileSliceEditor

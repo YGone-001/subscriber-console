@@ -602,3 +602,40 @@ test('both locales carry the same template keys', () => {
   assert.ok(en.size >= 190, `expected the template vocabulary to be present, got ${en.size} keys`);
 });
 
+test('the shared editors emit the stable anchors the subscriber form already asks for', () => {
+  const sliceEditor = read('../src/features/profiles/components/ProfileSliceEditor.tsx');
+  const sessionEditor = read('../src/features/profiles/components/ProfileSessionEditor.tsx');
+  const pccEditor = read('../src/features/profiles/components/ProfilePccRuleEditor.tsx');
+  const subscriberForm = read('../src/features/subscribers/useSubscriberForm.ts');
+
+  /* useSubscriberForm has always scrolled to `slice-card-N`; the editor never
+   * produced that id, so the affordance was dead for both consumers. */
+  assert.match(subscriberForm, /scrollTo\(`slice-card-\$\{newIdx\}`\)/);
+  assert.match(sliceEditor, /id=\{`slice-card-\$\{sliceIndex\}`\}/);
+  assert.match(sessionEditor, /<div id=\{anchorId\} className="session-editor-card"/);
+  assert.match(pccEditor, /<div id=\{anchorId\} className="pcc-rule-box"/);
+  /* The anchors reach the deeper levels through optional props, so no existing
+   * call site has to pass them. */
+  assert.match(sliceEditor, /anchorId=\{`slice-card-\$\{sliceIndex\}-session-\$\{sessIdx\}`\}/);
+  assert.match(sessionEditor, /anchorId=\{anchorId \? `\$\{anchorId\}-rule-\$\{pccIdx\}` : undefined\}/);
+  assert.match(sessionEditor, /anchorId\?: string/);
+  assert.match(pccEditor, /anchorId\?: string/);
+});
+
+test('the hierarchy rail describes the draft shape and jumps into it', () => {
+  const rail = read('../src/features/profiles/components/ProfileHierarchyRail.tsx');
+  const editMode = read('../src/features/profiles/components/ProfileEditMode.tsx');
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  /* Every visible string comes from a locale key or a 3GPP token. */
+  assert.match(rail, /t\('prof_content_sessions'/);
+  assert.match(rail, /t\('prof_content_pcc'/);
+  assert.match(rail, /t\('slice_rule_idx'/);
+  assert.match(rail, /typeLabel\(/);
+  assert.match(rail, /if \(entries\.length === 0\) return null/);
+  assert.match(editMode, /<ProfileHierarchyRail slices=\{slices\} onJump=\{jumpToAnchor\} \/>/);
+  /* A collapsed slice owns its sessions, so the jump must expand it first. */
+  assert.match(detailPage, /setExpandedSlices\(\(current\) => \(current\.includes\(index\) \? current : \[\.\.\.current, index\]\)\)/);
+  assert.match(detailPage, /el\.classList\.add\('profile-anchor-flash'\)/);
+  assert.match(read('../src/styles/profile.css'), /\.profile-anchor-flash \{/);
+});
+

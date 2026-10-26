@@ -20,6 +20,9 @@ const ARP_PRIORITY_OPTIONS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
 
 interface ProfileSessionEditorProps {
   session: SessionForm;
+  /** Stable DOM anchor for the hierarchy rail; optional so existing call
+   * sites keep rendering unchanged. */
+  anchorId?: string;
   onChange: (updatedSession: SessionForm) => void;
   onDelete: () => void;
 }
@@ -50,7 +53,7 @@ type SessionForm = {
   pcc_rule?: PccRuleForm[];
 };
 
-export default function ProfileSessionEditor({ session, onChange, onDelete }: ProfileSessionEditorProps) {
+export default function ProfileSessionEditor({ session, anchorId, onChange, onDelete }: ProfileSessionEditorProps) {
   const { t } = useI18n();
   const isValidIpv4 = (value: string) => {
     const parts = value.split(".");
@@ -133,7 +136,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
   };
 
   return (
-    <div className="session-editor-card">
+    <div id={anchorId} className="session-editor-card">
       <div className="session-editor-header">
         <div className="session-editor-content">
           <div className="session-grid-4">
@@ -242,6 +245,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
                 key={pccIdx}
                 rule={rule}
                 ruleIndex={pccIdx}
+                anchorId={anchorId ? `${anchorId}-rule-${pccIdx}` : undefined}
                 onChange={(updated) => handleUpdatePccRule(pccIdx, updated)}
                 onDelete={() => handleDeletePccRule(pccIdx)}
               />
