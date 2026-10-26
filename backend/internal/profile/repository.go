@@ -582,6 +582,40 @@ func aggregationInt(v any) int64 {
 	}
 }
 
+// profileRevision reads the monotonic write counter of a stored template. A
+// template created before the counter existed reads as revision 0, so its first
+// write moves it to 1.
+func profileRevision(doc bson.M) int64 {
+	switch value := doc["revision"].(type) {
+	case int64:
+		return value
+	case int32:
+		return int64(value)
+	case float64:
+		return int64(value)
+	default:
+		return 0
+	}
+}
+
+// expectedRevisionFrom reads the optional client precondition. Absent or null
+// means "no precondition", which keeps clients that predate the counter working;
+// a malformed value is reported so the caller can fail closed.
+func expectedRevisionFrom(body map[string]any) (value int64, present bool, valid bool) {
+	raw, present := body["expectedRevision"]
+	if !present || raw == nil {
+		return 0, false, true
+	}
+	switch typed := raw.(type) {
+	case float64:
+		return int64(typed), true, true
+	case int64:
+		return typed, true, true
+	default:
+		return 0, true, false
+	}
+}
+
 func stringify(v any) string {
 	if v == nil {
 		return ""

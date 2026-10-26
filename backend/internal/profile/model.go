@@ -64,11 +64,15 @@ type ProfileSummary struct {
 type ProfileDetailResponse struct {
 	Profile map[string]any `json:"profile"`
 	Stats   *ProfileStats  `json:"stats"`
+	// StatsCompleteness reports whether the subscriber attribution ran. A failed
+	// aggregation must not fail the whole read, and must never read as zeroes.
+	StatsCompleteness string `json:"statsCompleteness"`
 }
 
 // ProfileStatsResponse matches GET /api/profiles/:name/stats response shape.
 type ProfileStatsResponse struct {
-	Stats ProfileStats `json:"stats"`
+	Stats        *ProfileStats `json:"stats"`
+	Completeness string        `json:"completeness"`
 }
 
 // ProfileStats holds subscriber statistics for a profile.
@@ -85,6 +89,10 @@ type ProfileStats struct {
 type ProfileVersionsResponse struct {
 	Versions []ProfileVersionSummary `json:"versions"`
 	Current  *ProfileCurrentSummary  `json:"current"`
+	// ProfileExists reports whether the template is still stored. Deleting a
+	// template keeps its snapshots, so the history can still be read and used to
+	// bring it back; the flag keeps that difference visible.
+	ProfileExists bool `json:"profileExists"`
 }
 
 // ProfileVersionDetailResponse matches the versionId branch of
@@ -137,6 +145,8 @@ type ProfileCurrentSummary struct {
 	UpdatedAt  any    `json:"updatedAt"`
 	UpdatedBy  any    `json:"updatedBy"`
 	SliceCount int    `json:"sliceCount"`
+	// Revision is the write counter a client preconditions its next save on.
+	Revision int64 `json:"revision"`
 }
 
 // ── Write Request/Response Types ────────────────────────────────────────────

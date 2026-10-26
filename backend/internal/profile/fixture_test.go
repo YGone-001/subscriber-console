@@ -426,7 +426,11 @@ func TestRestoreFingerprintParity(t *testing.T) {
 	restored := buildEffectiveRestoredProfile(RestoreCurrentProfile, RestoreVersionDoc, "fixture_restore", "admin", deterministicClock)
 
 	effectiveRestoredHash := fingerprint(restored)
-	assertEqual(t, "effectiveRestoredHash", effectiveRestoredHash, "04d4d79798be9f7adb5242423a63cf4dbb8324a05beeea193e62dec9b87ba2cb")
+	// Re-based when app_profiles gained the monotonic `revision` counter: a
+	// restore advances it (0 -> 1 here), so the stored document — and therefore
+	// its fingerprint — carries one more field. The method is unchanged; the
+	// baseline moved with the deliberate schema addition.
+	assertEqual(t, "effectiveRestoredHash", effectiveRestoredHash, "c175e3f66a7402541234f1b48ed84fe621ba2bf56b5a7146ca9a1f41c190506f")
 
 	// Compute operationFingerprint
 	opFp := fingerprint(map[string]any{
@@ -438,5 +442,5 @@ func TestRestoreFingerprintParity(t *testing.T) {
 		"currentProfileHash":    currentProfileHash,
 		"effectiveRestoredHash": effectiveRestoredHash,
 	})
-	assertEqual(t, "operationFingerprint", opFp, "b02a280c12c5f5e4f89f6199d62aa45f5406d7cd32104075cde61aafac1fd970")
+	assertEqual(t, "operationFingerprint", opFp, "df5df3cec8705b3124cbb1534e940dd880bd418e2c41a3cd24acceb7b214029c")
 }

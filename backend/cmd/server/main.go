@@ -181,6 +181,7 @@ func main() {
 
 	// Profile handler
 	profileHandler := profile.NewHandler(profileRepo, limiter, auditWriter, auditWriter)
+	profileHandler.UseUserRepository(userRepo)
 
 	// Auth handler (login / logout / me)
 	authAuditAdapter := &authAuditRecorder{writer: auditWriter}

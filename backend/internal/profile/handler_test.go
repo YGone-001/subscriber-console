@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/user"
 )
 
 // mockLimiter always allows requests (for testing).
@@ -137,6 +138,38 @@ func (m *mockAuditWriter) WriteStrict(ctx context.Context, input audit.WriteAudi
 	return nil
 }
 
+// mockUserRepo answers the fresh-actor lookup used by the template write paths.
+type mockUserRepo struct {
+	identity *user.UserIdentity
+	err      error
+}
+
+func (m *mockUserRepo) FindByUsernameIdentity(_ context.Context, _ string) (*user.UserIdentity, error) {
+	if m == nil {
+		return nil, nil
+	}
+	return m.identity, m.err
+}
+
+// activeUserRepoFor mirrors a principal into a stored account, so a test that
+// only cares about the template behaviour passes the actor revalidation. The
+// principal's NormalizedRole must be the canonical role a real token carries.
+func activeUserRepoFor(p *auth.Principal) *mockUserRepo {
+	sessionVersion := 0
+	if p.SessionVersion > 0 {
+		sessionVersion = int(p.SessionVersion)
+	}
+	return &mockUserRepo{identity: &user.UserIdentity{
+		MongoID: p.Username,
+		SafeUser: user.SafeUser{
+			Username: p.Username,
+			Role:     p.NormalizedRole,
+			Status:   "active",
+			Security: &user.UserSecurity{SessionVersion: sessionVersion},
+		},
+	}}
+}
+
 func TestCreateProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
@@ -147,8 +180,9 @@ func TestCreateProfile(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Create request
 	body := map[string]any{"name": "test_profile"}
@@ -205,8 +239,9 @@ func TestCreateProfileDuplicate(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Create profile first
 	repo.profiles["existing_profile"] = bson.M{"name": "existing_profile"}
@@ -265,8 +300,9 @@ func TestUpdateProfile(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Create existing profile
 	existingProfile := bson.M{
@@ -310,8 +346,9 @@ func TestDeleteProfile(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Create existing profile
 	existingProfile := bson.M{
@@ -352,8 +389,9 @@ func TestDeleteProfileInUse(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Create existing profile
 	existingProfile := bson.M{
@@ -392,8 +430,9 @@ func TestDeleteProfileForce(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Create existing profile
 	existingProfile := bson.M{
@@ -535,8 +574,9 @@ func TestUpdateMissingProfile(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Update a profile that doesn't exist (should insert, not 404)
 	body := map[string]any{
@@ -577,8 +617,9 @@ func TestDeleteMissingProfile(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Delete a profile that doesn't exist (should return 200, not 404)
 	req := httptest.NewRequest("DELETE", "/api/profiles/missing_profile", nil)
@@ -611,8 +652,9 @@ func TestVersionSchemaParity(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Create a profile
 	body := map[string]any{"name": "test_profile"}
@@ -716,8 +758,9 @@ func TestExistingPUTPreservation(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Create existing profile with non-default values
 	existingProfile := bson.M{
@@ -827,8 +870,9 @@ func TestMissingPUTSparseDocument(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Update a missing profile with only title
 	body := map[string]any{
@@ -886,8 +930,9 @@ func TestUnknownFieldRejection(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	// Try to update with unknown field
 	body := map[string]any{
@@ -958,8 +1003,9 @@ func TestRestoreDirectSuccess(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	req := httptest.NewRequest("POST", "/api/profiles/"+profileName+"/versions/v-001/restore", nil)
 	ctx := auth.ContextWithPrincipal(req.Context(), principal)
@@ -1028,8 +1074,9 @@ func TestRestoreMissingProfileSuccess(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	req := httptest.NewRequest("POST", "/api/profiles/"+profileName+"/versions/v-001/restore", nil)
 	ctx := auth.ContextWithPrincipal(req.Context(), principal)
@@ -1090,6 +1137,7 @@ func TestRestoreOperatorDirect(t *testing.T) {
 		Role:           "operator",
 		NormalizedRole: "operator",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	req := httptest.NewRequest("POST", "/api/profiles/"+profileName+"/versions/v-001/restore", nil)
 	ctx := auth.ContextWithPrincipal(req.Context(), principal)
@@ -1174,8 +1222,9 @@ func TestRestoreMissingVersion(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	req := httptest.NewRequest("POST", "/api/profiles/test/versions/v-nonexistent/restore", nil)
 	ctx := auth.ContextWithPrincipal(req.Context(), principal)
@@ -1200,8 +1249,9 @@ func TestRestoreInvalidProfileName(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	req := httptest.NewRequest("POST", "/api/profiles/invalid@name/versions/v-001/restore", nil)
 	ctx := auth.ContextWithPrincipal(req.Context(), principal)
@@ -1257,8 +1307,9 @@ func TestRestoreCASConflict(t *testing.T) {
 	principal := &auth.Principal{
 		Username:       "testuser",
 		Role:           "super_admin",
-		NormalizedRole: "super_admin",
+		NormalizedRole: "admin",
 	}
+	handler.UseUserRepository(activeUserRepoFor(principal))
 
 	req := httptest.NewRequest("POST", "/api/profiles/"+profileName+"/versions/v-001/restore", nil)
 	ctx := auth.ContextWithPrincipal(req.Context(), principal)
@@ -1847,7 +1898,8 @@ func TestProfileRestoreRequiresTheReadGateFirst(t *testing.T) {
 
 func TestProfileUpdateRejectsMaskedCredentialMaterial(t *testing.T) {
 	handler := NewHandler(newMockRepository(), &mockLimiter{}, &mockAuditWriter{})
-	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	handler.UseUserRepository(activeUserRepoFor(writer))
 
 	for _, key := range credentialKeys {
 		authValue := map[string]any{"k": "465b2ce5b8a37f2e19d4a6c8b0e2f417", "amf": "8000"}
@@ -1935,7 +1987,8 @@ func storedRecord(value any) map[string]any {
 func TestProfileCreateAcceptsContentInOneWrite(t *testing.T) {
 	repo := newMockRepository()
 	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
-	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	handler.UseUserRepository(activeUserRepoFor(writer))
 
 	w := doProfileRequest(t, handler.Create, "POST", "/api/profiles", map[string]any{
 		"name":                    "Gold 5G",
@@ -1989,7 +2042,8 @@ func TestProfileCreateAcceptsContentInOneWrite(t *testing.T) {
 func TestProfileCreateWithoutContentKeepsTheDefaultDocument(t *testing.T) {
 	repo := newMockRepository()
 	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
-	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	handler.UseUserRepository(activeUserRepoFor(writer))
 
 	w := doProfileRequest(t, handler.Create, "POST", "/api/profiles", map[string]any{"name": "plain"}, writer, nil)
 	if w.Code != http.StatusCreated {
@@ -2008,7 +2062,8 @@ func TestProfileCreateWithoutContentKeepsTheDefaultDocument(t *testing.T) {
 
 func TestProfileCreateRejectsUnknownAndMaskedContent(t *testing.T) {
 	handler := NewHandler(newMockRepository(), &mockLimiter{}, &mockAuditWriter{})
-	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	handler.UseUserRepository(activeUserRepoFor(writer))
 
 	w := doProfileRequest(t, handler.Create, "POST", "/api/profiles", map[string]any{
 		"name":     "strict",
@@ -2031,5 +2086,170 @@ func TestProfileCreateRejectsUnknownAndMaskedContent(t *testing.T) {
 	}, writer, nil)
 	if masked.Code != http.StatusBadRequest {
 		t.Fatalf("a masked sentinel must be rejected on create too, got %d: %s", masked.Code, masked.Body.String())
+	}
+}
+
+func TestProfileUpdateHonoursTheRevisionPrecondition(t *testing.T) {
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	repo := newMockRepository()
+	repo.profiles["rev"] = bson.M{"name": "rev", "title": "v3", "revision": int64(3)}
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	handler.UseUserRepository(activeUserRepoFor(writer))
+	pathValues := map[string]string{"name": "rev"}
+
+	stale := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/rev",
+		map[string]any{"title": "mine", "expectedRevision": float64(2)}, writer, pathValues)
+	if stale.Code != http.StatusConflict {
+		t.Fatalf("a stale precondition must conflict, got %d: %s", stale.Code, stale.Body.String())
+	}
+	var conflict struct {
+		Code            string `json:"code"`
+		CurrentRevision int64  `json:"currentRevision"`
+		Committed       bool   `json:"committed"`
+	}
+	_ = json.Unmarshal(stale.Body.Bytes(), &conflict)
+	if conflict.Code != "PROFILE_REVISION_CONFLICT" || conflict.CurrentRevision != 3 || conflict.Committed {
+		t.Errorf("unexpected conflict payload: %+v", conflict)
+	}
+	if repo.profiles["rev"]["title"] != "v3" {
+		t.Error("a rejected precondition must leave the document untouched")
+	}
+
+	fresh := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/rev",
+		map[string]any{"title": "mine", "expectedRevision": float64(3)}, writer, pathValues)
+	if fresh.Code != http.StatusOK {
+		t.Fatalf("the matching revision must save, got %d: %s", fresh.Code, fresh.Body.String())
+	}
+	if got := repo.profiles["rev"]["revision"]; got != int64(4) {
+		t.Errorf("revision after save: got %v", got)
+	}
+	if _, leaked := repo.profiles["rev"]["expectedRevision"]; leaked {
+		t.Error("the precondition must not be stored on the document")
+	}
+
+	legacy := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/rev", map[string]any{"title": "legacy"}, writer, pathValues)
+	if legacy.Code != http.StatusOK || repo.profiles["rev"]["revision"] != int64(5) {
+		t.Errorf("a client without the field keeps working and still advances the counter: status %d revision %v",
+			legacy.Code, repo.profiles["rev"]["revision"])
+	}
+
+	direct := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/rev", map[string]any{"revision": float64(99)}, writer, pathValues)
+	if direct.Code != http.StatusBadRequest {
+		t.Errorf("the counter is not client-writable, got %d", direct.Code)
+	}
+	malformed := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/rev", map[string]any{"title": "x", "expectedRevision": "3"}, writer, pathValues)
+	if malformed.Code != http.StatusBadRequest {
+		t.Errorf("a non-numeric precondition must be refused, got %d", malformed.Code)
+	}
+}
+
+func TestProfileDeleteHonoursTheRevisionPrecondition(t *testing.T) {
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	repo := newMockRepository()
+	repo.profiles["gone"] = bson.M{"name": "gone", "title": "gone", "revision": int64(7)}
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	handler.UseUserRepository(activeUserRepoFor(writer))
+	pathValues := map[string]string{"name": "gone"}
+
+	stale := doProfileRequest(t, handler.Delete, "DELETE", "/api/profiles/gone?expectedRevision=6", nil, writer, pathValues)
+	if stale.Code != http.StatusConflict {
+		t.Fatalf("a stale delete must conflict, got %d: %s", stale.Code, stale.Body.String())
+	}
+	if _, still := repo.profiles["gone"]; !still {
+		t.Error("a conflicted delete must not remove the template")
+	}
+
+	bad := doProfileRequest(t, handler.Delete, "DELETE", "/api/profiles/gone?expectedRevision=soon", nil, writer, pathValues)
+	if bad.Code != http.StatusBadRequest {
+		t.Errorf("a malformed precondition must be refused, got %d", bad.Code)
+	}
+
+	ok := doProfileRequest(t, handler.Delete, "DELETE", "/api/profiles/gone?expectedRevision=7", nil, writer, pathValues)
+	if ok.Code != http.StatusOK {
+		t.Fatalf("the matching revision must delete, got %d: %s", ok.Code, ok.Body.String())
+	}
+}
+
+func TestProfileWritesRevalidateTheActor(t *testing.T) {
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+
+	account := func(mutate func(*user.SafeUser)) *mockUserRepo {
+		mirror := activeUserRepoFor(writer)
+		mutate(&mirror.identity.SafeUser)
+		return mirror
+	}
+
+	cases := []struct {
+		label    string
+		repo     *mockUserRepo
+		wantCode string
+	}{
+		{"disabled", account(func(u *user.SafeUser) { u.Status = "disabled" }), "AUTH_USER_DISABLED"},
+		{"locked", account(func(u *user.SafeUser) { u.Locked = true }), "AUTH_USER_LOCKED"},
+		{"revoked", account(func(u *user.SafeUser) { u.Security.SessionVersion = 8 }), "SESSION_REVOKED"},
+		{"re-roled", account(func(u *user.SafeUser) { u.Role = "viewer" }), "AUTH_ROLE_MISMATCH"},
+		{"gone", &mockUserRepo{}, "AUTH_USER_NOT_FOUND"},
+		{"store down", &mockUserRepo{err: context.DeadlineExceeded}, "AUTH_SERVICE_UNAVAILABLE"},
+	}
+
+	for _, tc := range cases {
+		repo := newMockRepository()
+		repo.profiles["rev"] = bson.M{"name": "rev", "title": "v", "revision": int64(1)}
+		handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+		handler.UseUserRepository(tc.repo)
+
+		w := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/rev", map[string]any{"title": "changed"}, writer,
+			map[string]string{"name": "rev"})
+		var body struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &body)
+		if body.Code != tc.wantCode {
+			t.Errorf("%s: expected %s, got %d %s", tc.label, tc.wantCode, w.Code, w.Body.String())
+		}
+		if repo.profiles["rev"]["title"] != "v" {
+			t.Errorf("%s: a refused actor must not mutate the template", tc.label)
+		}
+	}
+}
+
+func TestProfileWriteFailsClosedWithoutAnAccountStore(t *testing.T) {
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	handler := NewHandler(newMockRepository(), &mockLimiter{}, &mockAuditWriter{})
+
+	w := doProfileRequest(t, handler.Create, "POST", "/api/profiles", map[string]any{"name": "unwired"}, writer, nil)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("an unwired handler must fail closed, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProfileVersionsReportExistenceAndRevision(t *testing.T) {
+	reader := &auth.Principal{Username: "watcher", Role: "viewer", NormalizedRole: "viewer"}
+	repo := newMockRepository()
+	repo.profiles["here"] = bson.M{"name": "here", "title": "Here", "revision": int64(4)}
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	present := doProfileRequest(t, handler.Versions, "GET", "/api/profiles/here/versions", nil, reader,
+		map[string]string{"name": "here"})
+	var presentBody struct {
+		ProfileExists bool `json:"profileExists"`
+		Current       *struct {
+			Revision int64 `json:"revision"`
+		} `json:"current"`
+	}
+	_ = json.Unmarshal(present.Body.Bytes(), &presentBody)
+	if !presentBody.ProfileExists || presentBody.Current == nil || presentBody.Current.Revision != 4 {
+		t.Errorf("a live template must report its existence and counter, got %s", present.Body.String())
+	}
+
+	missing := doProfileRequest(t, handler.Versions, "GET", "/api/profiles/gone/versions", nil, reader,
+		map[string]string{"name": "gone"})
+	var missingBody struct {
+		ProfileExists bool           `json:"profileExists"`
+		Current       map[string]any `json:"current"`
+	}
+	_ = json.Unmarshal(missing.Body.Bytes(), &missingBody)
+	if missing.Code != http.StatusOK || missingBody.ProfileExists || len(missingBody.Current) != 0 {
+		t.Errorf("a deleted template keeps its history but says so: %d %s", missing.Code, missing.Body.String())
 	}
 }

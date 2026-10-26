@@ -78,7 +78,14 @@ type Handler struct {
 	// denials receives authorization-denied evidence for the read permission
 	// gate. It is the concrete audit writer; nil only in unit tests.
 	denials *audit.Writer
+	// userRepo backs the fresh-actor revalidation on every template write. It is
+	// wired after construction; an unwired handler fails closed.
+	userRepo UserRepository
 }
+
+// UseUserRepository wires the account store the write endpoints revalidate the
+// actor against.
+func (h *Handler) UseUserRepository(repo UserRepository) { h.userRepo = repo }
 
 // NewHandler creates a new profile Handler. The optional denial writer records
 // read-permission refusals; unit tests may omit it.
@@ -261,13 +268,19 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	stats, err := h.repo.GetProfileStats(r.Context(), name)
 	if err != nil {
-		response.InternalError(w)
+		// The template itself was read fine; only the attribution failed. Keep
+		// the detail available and mark the statistics unavailable.
+		response.JSON(w, http.StatusOK, ProfileDetailResponse{
+			Profile:           profile,
+			StatsCompleteness: SubscriberStatsUnavailable,
+		})
 		return
 	}
 
 	response.JSON(w, http.StatusOK, ProfileDetailResponse{
-		Profile: profile,
-		Stats:   &stats,
+		Profile:           profile,
+		Stats:             &stats,
+		StatsCompleteness: SubscriberStatsComplete,
 	})
 }
 
@@ -306,11 +319,13 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 
 	stats, err := h.repo.GetProfileStats(r.Context(), name)
 	if err != nil {
-		response.InternalError(w)
+		// The template exists; only the subscriber attribution failed. Report it
+		// as unavailable rather than failing the read or serving zeroes.
+		response.JSON(w, http.StatusOK, ProfileStatsResponse{Completeness: SubscriberStatsUnavailable})
 		return
 	}
 
-	response.JSON(w, http.StatusOK, ProfileStatsResponse{Stats: stats})
+	response.JSON(w, http.StatusOK, ProfileStatsResponse{Stats: &stats, Completeness: SubscriberStatsComplete})
 }
 
 // Versions handles GET /api/profiles/:name/versions
@@ -380,6 +395,7 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 		cs.UpdatedAt = firstNonNullDate(currentProfile, "updatedAt", "createdAt")
 		cs.UpdatedBy = firstStringField(currentProfile, "updatedBy", "createdBy")
 		cs.SliceCount = sliceCount(currentProfile)
+		cs.Revision = profileRevision(currentProfile)
 		currentSummary = &cs
 	}
 
@@ -390,8 +406,9 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, ProfileVersionsResponse{
-		Versions: versions,
-		Current:  currentSummary,
+		Versions:      versions,
+		Current:       currentSummary,
+		ProfileExists: currentProfile != nil,
 	})
 }
 
@@ -410,6 +427,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		// Record the refusal like the read guards do, keeping the existing body.
 		audit.RecordPermissionDenied(h.denials, r, p, audit.DenialMetadata{Permission: "profiles.write"})
 		response.Forbidden(w, "Insufficient permissions")
+		return
+	}
+
+	// The token claim alone is stale: revalidate the account before mutating.
+	if _, actorErr := RevalidateFreshActor(r.Context(), h.userRepo, p); actorErr != nil {
+		response.Error(w, actorErr.Status, actorErr.Message, actorErr.Code)
 		return
 	}
 
@@ -460,6 +483,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		"createdBy": p.Username,
 		"updatedAt": now,
 		"updatedBy": p.Username,
+		// Monotonic write counter; clients may precondition on it.
+		"revision": int64(1),
 		"auth": bson.M{
 			"k":   "00000000000000000000000000000000",
 			"opc": "00000000000000000000000000000000",
@@ -600,6 +625,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The token claim alone is stale: revalidate the account before mutating.
+	if _, actorErr := RevalidateFreshActor(r.Context(), h.userRepo, p); actorErr != nil {
+		response.Error(w, actorErr.Status, actorErr.Message, actorErr.Code)
+		return
+	}
+
 	name := r.PathValue("name")
 	if !validProfileName.MatchString(name) {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
@@ -615,6 +646,20 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		response.BadRequest(w, "Invalid request body", "INVALID_REQUEST")
+		return
+	}
+
+	// The precondition is not a stored field: lift it out before the content
+	// allow-list runs, so a client can never write `expectedRevision` into the
+	// template document.
+	expected, hasExpected, validExpected := expectedRevisionFrom(body)
+	delete(body, "expectedRevision")
+	if !validExpected {
+		response.JSON(w, http.StatusBadRequest, map[string]any{
+			"error":     "expectedRevision must be a number",
+			"code":      "INVALID_PROFILE_UPDATE",
+			"committed": false,
+		})
 		return
 	}
 
@@ -635,6 +680,21 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	currentRevision := profileRevision(existing)
+	// A precondition against a template that is no longer there must not
+	// resurrect it as a sparse shell.
+	if hasExpected && (existing == nil || expected != currentRevision) {
+		h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "REVISION_CONFLICT", false, ErrProfilePreconditionChanged)
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":            "The template changed since it was loaded; reload before saving",
+			"code":             "PROFILE_REVISION_CONFLICT",
+			"expectedRevision": expected,
+			"currentRevision":  currentRevision,
+			"committed":        false,
+		})
+		return
+	}
+
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 
 	var updated bson.M
@@ -651,6 +711,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		updated["name"] = name
 		updated["updatedBy"] = p.Username
 		updated["updatedAt"] = now
+		updated["revision"] = currentRevision + 1
 	} else {
 		// Missing profile: build sparse legacy-compatible document
 		updated = bson.M{
@@ -660,6 +721,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			"createdBy": p.Username,
 			"updatedAt": now,
 			"updatedBy": p.Username,
+			"revision":  int64(1),
 		}
 		// Apply only allowed fields from body
 		for k, v := range body {
@@ -756,6 +818,12 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The token claim alone is stale: revalidate the account before mutating.
+	if _, actorErr := RevalidateFreshActor(r.Context(), h.userRepo, p); actorErr != nil {
+		response.Error(w, actorErr.Status, actorErr.Message, actorErr.Code)
+		return
+	}
+
 	name := r.PathValue("name")
 	if !validProfileName.MatchString(name) {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
@@ -782,6 +850,31 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 			Message: "Profile deleted successfully",
 		})
 		return
+	}
+
+	// An optional precondition stops a delete issued from a stale view from
+	// removing a template someone else has just rewritten.
+	if raw := r.URL.Query().Get("expectedRevision"); raw != "" {
+		expected, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil {
+			response.JSON(w, http.StatusBadRequest, map[string]any{
+				"error":     "expectedRevision must be an integer",
+				"code":      "INVALID_PROFILE_DELETE",
+				"committed": false,
+			})
+			return
+		}
+		if current := profileRevision(existing); expected != current {
+			h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "REVISION_CONFLICT", false, ErrProfilePreconditionChanged)
+			response.JSON(w, http.StatusConflict, map[string]any{
+				"error":            "The template changed since it was loaded; reload before deleting",
+				"code":             "PROFILE_REVISION_CONFLICT",
+				"expectedRevision": expected,
+				"currentRevision":  current,
+				"committed":        false,
+			})
+			return
+		}
 	}
 
 	// Check if profile is in use by subscribers
@@ -890,6 +983,13 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 	_, allowed := auth.CapabilityDecision(p, "profile_rollback")
 	if !allowed {
 		response.Error(w, http.StatusForbidden, "Permission denied", "FORBIDDEN")
+		return
+	}
+
+	// A restore rewrites the live template, so the actor is revalidated like on
+	// any other template write.
+	if _, actorErr := RevalidateFreshActor(r.Context(), h.userRepo, p); actorErr != nil {
+		response.Error(w, actorErr.Status, actorErr.Message, actorErr.Code)
 		return
 	}
 
@@ -1343,6 +1443,9 @@ func buildEffectiveRestoredProfile(current bson.M, versionDoc bson.M, name, acto
 
 	restored["updatedAt"] = nowISO
 	restored["updatedBy"] = actor
+	// A restore is a write like any other, so it advances the counter: a client
+	// holding a pre-restore revision can no longer overwrite blindly.
+	restored["revision"] = profileRevision(current) + 1
 	restored["restoredFromVersionId"] = versionDoc["versionId"]
 	restored["restoredFromSavedAt"] = versionDoc["savedAt"]
 
