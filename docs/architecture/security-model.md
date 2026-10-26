@@ -91,6 +91,27 @@ leading or trailing whitespace or an embedded tab or newline, and the reserved k
 that template unreachable from the UI. The historical read pattern stays permissive so
 an existing odd-named template remains reachable.
 
+## Template Write Concurrency and Actor Revalidation
+
+Every `app_profiles` document carries a monotonic `revision` counter (created at
+1, advanced by each update and restore) and the read endpoints project it
+unchanged. `PUT /api/profiles/{name}` and
+`DELETE /api/profiles/{name}?expectedRevision=` accept an optional precondition:
+a mismatch returns `409 PROFILE_REVISION_CONFLICT` with
+`currentRevision` and `committed: false` and performs no write. An absent
+precondition keeps the previous behaviour, so clients that predate the counter
+are unaffected, and `revision` is outside the write allow-list, so no client can
+set it directly.
+
+All four template write endpoints revalidate the actor against `app_users` after
+their permission or capability gate: a disabled, locked, re-roled or
+session-revoked account is refused with `AUTH_USER_DISABLED`,
+`AUTH_USER_LOCKED`, `AUTH_ROLE_MISMATCH` or `SESSION_REVOKED`, and an
+unreachable account store fails closed with 503 rather than trusting token
+claims. `profile/fresh_actor.go` is the third per-domain copy of this helper
+(alongside `subscriber` and `balance`); consolidating the three is tracked
+separately and was not done as part of this change.
+
 ## Rate Limiting
 
 MongoDB fixed window per endpoint:
