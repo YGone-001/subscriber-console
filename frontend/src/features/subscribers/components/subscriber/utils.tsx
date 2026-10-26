@@ -92,8 +92,9 @@ export const MaskedValue = ({
 
 export const getAmbrString = (ambr: any) => {
   if (!ambr || (!ambr.downlink && !ambr.uplink)) return "-";
-  const dlUnit = AMBR_UNITS.find(u => u.val === (ambr.downlink?.unit || 1))?.label || '';
-  const ulUnit = AMBR_UNITS.find(u => u.val === (ambr.uplink?.unit || 1))?.label || '';
+  /* `??` not `||`: unit 0 is a real 3GPP unit (bps), not an absent value. */
+  const dlUnit = AMBR_UNITS.find(u => u.val === (ambr.downlink?.unit ?? 1))?.label || '';
+  const ulUnit = AMBR_UNITS.find(u => u.val === (ambr.uplink?.unit ?? 1))?.label || '';
   return `${ambr.downlink?.value || 0} ${dlUnit} / ${ambr.uplink?.value || 0} ${ulUnit}`;
 };
 

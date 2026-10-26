@@ -45,7 +45,7 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/ocs/tariffs/:planId', targetRoute: '/ocs/tariffs/:planId', dynamicParameters: ['planId'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/ocs/usage', targetRoute: '/ocs/usage', dynamicParameters: [], labelKey: 'nav_ocs_usage', icon: Gauge },
   { route: '/profile', targetRoute: '/profile', dynamicParameters: [], labelKey: 'nav_profile', icon: FileText, group: 'business', visible: true },
-  { route: '/profile/new', targetRoute: '/profile/new', dynamicParameters: [], labelKey: 'nav_profile', icon: FileText },
+  { route: '/profile/new', targetRoute: '/profile/new', dynamicParameters: [], labelKey: 'nav_profile_new', icon: FileText },
   { route: '/profile/:name', targetRoute: '/profile/:name', dynamicParameters: ['name'], labelKey: 'nav_profile', icon: FileText },
   { route: '/rating', targetRoute: '/rating', dynamicParameters: [], labelKey: 'nav_rating', icon: Radio, visible: true },
   { route: '/rating/plans', targetRoute: '/rating/plans', dynamicParameters: [], labelKey: 'nav_rating_plans', icon: CreditCard },

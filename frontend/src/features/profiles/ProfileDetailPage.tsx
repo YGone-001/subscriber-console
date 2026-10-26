@@ -78,6 +78,7 @@ export function ProfileDetailPage() {
   const [discardTarget, setDiscardTarget] = useState<'leave' | 'cancel' | null>(null);
   const [isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded] = useState(false);
   const [newlyAddedSliceIndex, setNewlyAddedSliceIndex] = useState<number | null>(null);
+  const [expandedSlices, setExpandedSlices] = useState<number[]>([0]);
   const [isApplyOpen, setIsApplyOpen] = useState(false);
   const [applyImsi, setApplyImsi] = useState('');
   const [isApplying, setIsApplying] = useState(false);
@@ -319,8 +320,13 @@ export function ProfileDetailPage() {
       const nextSd = String(Math.max(1, currentMaxSd + 1)).padStart(6, '0');
       const next = [...current.slices, { default_indicator: current.slices.length === 0, sd: nextSd, sst: 1, session_list: [] }];
       setNewlyAddedSliceIndex(next.length - 1);
+      setExpandedSlices((prev) => (prev.includes(next.length - 1) ? prev : [...prev, next.length - 1]));
       return { ...current, slices: next };
     });
+  };
+
+  const toggleSliceExpanded = (index: number) => {
+    setExpandedSlices((current) => (current.includes(index) ? current.filter((entry) => entry !== index) : [...current, index]));
   };
 
   const removeSlice = (index: number) => {
@@ -582,6 +588,7 @@ export function ProfileDetailPage() {
                 accessBits,
                 slices: draft.slices,
                 newlyAddedSliceIndex,
+                expandedSlices,
               }}
               actions={{
                 setInputName: (value: string) => setDraft((current) => ({ ...current, title: value })),
@@ -595,6 +602,7 @@ export function ProfileDetailPage() {
                 addSlice,
                 handleSliceChange,
                 removeSlice,
+                toggleSliceExpanded,
               }}
             />
           ) : (

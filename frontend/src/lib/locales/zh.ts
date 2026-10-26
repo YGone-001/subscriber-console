@@ -865,6 +865,7 @@ export const zh: Record<string, string> = {
     nav_section_observability: "监控与告警",
     nav_subscriber: "订阅用户",
     nav_profile: "用户模板",
+    nav_profile_new: "新建模板",
     nav_rating: "\u8d44\u8d39\u7ba1\u7406",
     nav_rating_plans: "\u8d44\u8d39\u5957\u9910",
     nav_rating_rules: "\u8d44\u8d39\u89c4\u5219",

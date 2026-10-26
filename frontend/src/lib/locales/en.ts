@@ -865,6 +865,7 @@ export const en: Record<string, string> = {
     nav_section_observability: "Monitoring and alerts",
     nav_subscriber: "Subscribers",
     nav_profile: "User templates",
+    nav_profile_new: "New template",
     nav_rating: "Rating",
     nav_rating_plans: "Tariff Plans",
     nav_rating_rules: "Rating Rules",

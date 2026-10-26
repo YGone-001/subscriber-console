@@ -27,12 +27,13 @@ function ratingUnitLabel(t: (key: string) => string, value?: string) {
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
   const {
     profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsDefaults, tariffPlanList, ratingList, tariffPlanStatus, ratingStatus, accessBits, slices, newlyAddedSliceIndex
+    ocsDefaults, tariffPlanList, ratingList, tariffPlanStatus, ratingStatus, accessBits, slices, newlyAddedSliceIndex,
+    expandedSlices
   } = state;
 
   const {
     setInputName, setProfileTitle, setAuthData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
-    setOcsDefaults, addSlice, handleSliceChange, removeSlice
+    setOcsDefaults, addSlice, handleSliceChange, removeSlice, toggleSliceExpanded
   } = actions;
   const hasTotalTraffic = String(ocsDefaults.trafficTotal ?? '').trim() !== '';
   const hasBalanceTraffic = String(ocsDefaults.trafficBalance ?? '').trim() !== '';
@@ -315,6 +316,8 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
             slice={slice}
             sliceIndex={sIdx}
             newlyAdded={newlyAddedSliceIndex === sIdx}
+            isExpanded={(expandedSlices ?? []).includes(sIdx)}
+            onToggleExpand={() => toggleSliceExpanded(sIdx)}
             onChange={(updated: any) => handleSliceChange(sIdx, updated)}
             onDelete={() => removeSlice(sIdx)}
           />

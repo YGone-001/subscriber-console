@@ -427,3 +427,34 @@ test('the empty template list offers one create affordance, not two', () => {
   assert.ok(!page.slice(emptyIndex).includes('/profile/new'), 'the empty state must not repeat the create button');
   assert.match(page, /onClick=\{\(\) => router\.push\('\/profile\/new'\)\}/);
 });
+
+test('an AMBR unit of zero is a real unit, not an absent one', () => {
+  const utils = read('../src/features/subscribers/components/subscriber/utils.tsx');
+  assert.match(utils, /ambr\.downlink\?\.unit \?\? 1/);
+  assert.match(utils, /ambr\.uplink\?\.unit \?\? 1/);
+  assert.doesNotMatch(utils, /ambr\.downlink\?\.unit \|\| 1/);
+});
+
+test('the create route carries its own breadcrumb label in both locales', () => {
+  const navigation = read('../src/lib/navigation.ts');
+  const newRoute = navigation.split('\n').find((line) => line.includes("route: '/profile/new'"));
+  assert.ok(newRoute && newRoute.includes("labelKey: 'nav_profile_new'"), 'the create route must not reuse the list label');
+  for (const file of ['../src/lib/locales/en.ts', '../src/lib/locales/zh.ts']) {
+    assert.match(read(file), /nav_profile_new: /);
+  }
+});
+
+test('the template editor collapses slices like the subscriber form does', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  const editMode = read('../src/features/profiles/components/ProfileEditMode.tsx');
+  assert.match(detailPage, /const \[expandedSlices, setExpandedSlices\] = useState<number\[\]>\(\[0\]\)/);
+  assert.match(editMode, /isExpanded=\{\(expandedSlices \?\? \[\]\)\.includes\(sIdx\)\}/);
+  assert.match(editMode, /onToggleExpand=\{\(\) => toggleSliceExpanded\(sIdx\)\}/);
+  /* The shared editor keeps its expand props optional, so the subscriber call
+   * site that never passed them stays valid. */
+  assert.match(
+    read('../src/features/profiles/components/ProfileSliceEditor.tsx'),
+    /isExpanded\?: boolean;\n\s*onToggleExpand\?: \(\) => void;/,
+  );
+});
+
