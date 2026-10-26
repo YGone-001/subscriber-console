@@ -237,3 +237,70 @@ func TestListProfileVersionsProjectsSliceCountAndProfileName(t *testing.T) {
 		t.Errorf("expected snapshot-derived sliceCount 2, got %d", legacy.SliceCount)
 	}
 }
+
+func TestListProfilesProjectsContentAndCompleteness(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := profileTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, err := repo.profiles.InsertOne(ctx, bson.M{
+		"name":                    "content_profile",
+		"title":                   "Content Profile",
+		"createdAt":               "2026-01-01T00:00:00.000Z",
+		"updatedAt":               "2026-01-02T00:00:00.000Z",
+		"updatedBy":               "admin",
+		"access_restriction_data": int32(255),
+		"ocsDefaults":             bson.M{"planId": "plan_default_10gb"},
+		"ambr": bson.M{
+			"downlink": bson.M{"unit": int32(2), "value": int32(100)},
+			"uplink":   bson.M{"unit": int32(2), "value": int32(50)},
+		},
+		"sliceList": bson.A{
+			bson.M{"session_list": bson.A{
+				bson.M{"pcc_rule": bson.A{bson.M{}, bson.M{}}},
+				bson.M{"pcc_rule": bson.A{bson.M{}}},
+			}},
+			bson.M{"session_list": bson.A{bson.M{}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+
+	profiles, summary, err := repo.ListProfiles(ctx)
+	if err != nil {
+		t.Fatalf("list profiles: %v", err)
+	}
+	if summary.SubscriberStatsCompleteness != SubscriberStatsComplete {
+		t.Errorf("expected completeness %q, got %q", SubscriberStatsComplete, summary.SubscriberStatsCompleteness)
+	}
+
+	var found *ProfileListItem
+	for index := range profiles {
+		if profiles[index].Name == "content_profile" {
+			found = &profiles[index]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("content_profile missing from the list")
+	}
+	if found.SessionCount != 3 {
+		t.Errorf("expected 3 sessions, got %d", found.SessionCount)
+	}
+	if found.PccRuleCount != 3 {
+		t.Errorf("expected 3 PCC rules, got %d", found.PccRuleCount)
+	}
+	if !found.OCSDefaultsConfigured {
+		t.Error("expected ocsDefaultsConfigured true")
+	}
+	if found.AccessRestriction == nil || *found.AccessRestriction != 255 {
+		t.Errorf("expected accessRestriction 255, got %v", found.AccessRestriction)
+	}
+	if found.AMBR == nil || found.AMBR.Downlink == nil || found.AMBR.Downlink.Value != 100 {
+		t.Errorf("expected downlink AMBR 100, got %+v", found.AMBR)
+	}
+}

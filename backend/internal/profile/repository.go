@@ -43,9 +43,11 @@ func (r *Repository) ListProfiles(ctx context.Context) ([]ProfileListItem, Profi
 		return nil, ProfileSummary{}, err
 	}
 
-	statsMap, err := r.profileSubscriberCounts(ctx)
-	if err != nil {
+	statsMap, statsErr := r.profileSubscriberCounts(ctx)
+	completeness := SubscriberStatsComplete
+	if statsErr != nil {
 		statsMap = map[string]profileSubscriberStats{}
+		completeness = SubscriberStatsUnavailable
 	}
 
 	profiles := make([]ProfileListItem, 0, len(rawDocs))
@@ -56,6 +58,7 @@ func (r *Repository) ListProfiles(ctx context.Context) ([]ProfileListItem, Profi
 		if title == "" {
 			title = name
 		}
+		sessionCount, pccRuleCount := profileContentSummary(doc)
 		profiles = append(profiles, ProfileListItem{
 			Name:                  name,
 			Title:                 title,
@@ -68,12 +71,20 @@ func (r *Repository) ListProfiles(ctx context.Context) ([]ProfileListItem, Profi
 			ActiveSubscribers:     stats.active,
 			SuspendedSubscribers:  stats.suspended,
 			RestrictedSubscribers: stats.restricted,
+			SessionCount:          sessionCount,
+			PccRuleCount:          pccRuleCount,
+			OCSDefaultsConfigured: hasOCSDefaults(doc),
+			AccessRestriction:     optionalIntField(doc, "access_restriction_data"),
+			AMBR:                  profileAMBR(doc),
 		})
 	}
 
 	// Summary mirrors Node summarizeProfiles(): derived from the profile list
 	// so both response sections stay consistent.
-	summary := ProfileSummary{TotalProfiles: len(profiles)}
+	summary := ProfileSummary{
+		TotalProfiles:               len(profiles),
+		SubscriberStatsCompleteness: completeness,
+	}
 	for _, p := range profiles {
 		summary.TotalGovernedSubscribers += p.SubscriberCount
 		summary.ActiveSubscribers += p.ActiveSubscribers
@@ -414,13 +425,100 @@ func asDocument(v any) bson.M {
 
 // arrayLen reports the length of a decoded array regardless of element type.
 func arrayLen(v any) int {
+	return len(asArray(v))
+}
+
+// asArray adapts a decoded array to []any regardless of the concrete type.
+func asArray(v any) []any {
 	switch arr := v.(type) {
 	case bson.A:
-		return len(arr)
+		return arr
 	case []any:
-		return len(arr)
+		return arr
 	}
-	return 0
+	return nil
+}
+
+// numericInt64 converts a decoded BSON numeric value.
+func numericInt64(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), true
+	case int32:
+		return int64(n), true
+	case int64:
+		return n, true
+	case float64:
+		return int64(n), true
+	case float32:
+		return int64(n), true
+	}
+	return 0, false
+}
+
+// profileContentSummary counts sessions and PCC rules across a template's
+// slices, so the list can describe what a template actually contains.
+func profileContentSummary(doc bson.M) (sessionCount, pccRuleCount int) {
+	for _, sliceValue := range asArray(doc["sliceList"]) {
+		sliceDoc := asDocument(sliceValue)
+		if sliceDoc == nil {
+			continue
+		}
+		for _, sessionValue := range asArray(sliceDoc["session_list"]) {
+			sessionCount++
+			if sessionDoc := asDocument(sessionValue); sessionDoc != nil {
+				pccRuleCount += arrayLen(sessionDoc["pcc_rule"])
+			}
+		}
+	}
+	return sessionCount, pccRuleCount
+}
+
+// hasOCSDefaults reports whether the template declares billing defaults. An
+// empty object counts as not configured.
+func hasOCSDefaults(doc bson.M) bool {
+	return len(asDocument(doc["ocsDefaults"])) > 0
+}
+
+// optionalIntField returns nil when the field is absent or not numeric, keeping
+// "missing" distinct from an explicit zero.
+func optionalIntField(doc bson.M, key string) *int {
+	value, ok := numericInt64(doc[key])
+	if !ok {
+		return nil
+	}
+	converted := int(value)
+	return &converted
+}
+
+// profileAMBR projects a template's UE-AMBR, or nil when it declares none.
+func profileAMBR(doc bson.M) *ProfileAmbrSummary {
+	ambrDoc := asDocument(doc["ambr"])
+	if ambrDoc == nil {
+		return nil
+	}
+	downlink := profileAMBRSide(ambrDoc["downlink"])
+	uplink := profileAMBRSide(ambrDoc["uplink"])
+	if downlink == nil && uplink == nil {
+		return nil
+	}
+	return &ProfileAmbrSummary{Downlink: downlink, Uplink: uplink}
+}
+
+func profileAMBRSide(v any) *ProfileAmbrSide {
+	side := asDocument(v)
+	if side == nil {
+		return nil
+	}
+	value, ok := numericInt64(side["value"])
+	if !ok {
+		return nil
+	}
+	unit, ok := numericInt64(side["unit"])
+	if !ok {
+		return nil
+	}
+	return &ProfileAmbrSide{Unit: int(unit), Value: value}
 }
 
 // jsonDateOrNull mirrors Node truthy-or-null date handling: Date values become

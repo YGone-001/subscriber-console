@@ -19,7 +19,32 @@ type ProfileListItem struct {
 	ActiveSubscribers     int    `json:"activeSubscribers"`
 	SuspendedSubscribers  int    `json:"suspendedSubscribers"`
 	RestrictedSubscribers int    `json:"restrictedSubscribers"`
+	SessionCount          int    `json:"sessionCount"`
+	PccRuleCount          int    `json:"pccRuleCount"`
+	OCSDefaultsConfigured bool   `json:"ocsDefaultsConfigured"`
+	// AccessRestriction is null when the template carries no
+	// access_restriction_data, which is distinct from an explicit 0.
+	AccessRestriction *int                `json:"accessRestriction"`
+	AMBR              *ProfileAmbrSummary `json:"ambr"`
 }
+
+// ProfileAmbrSummary is the UE-AMBR a template declares, when declared.
+type ProfileAmbrSummary struct {
+	Downlink *ProfileAmbrSide `json:"downlink"`
+	Uplink   *ProfileAmbrSide `json:"uplink"`
+}
+
+// ProfileAmbrSide is one direction of a UE-AMBR.
+type ProfileAmbrSide struct {
+	Unit  int   `json:"unit"`
+	Value int64 `json:"value"`
+}
+
+// Subscriber statistics completeness states for GET /api/profiles.
+const (
+	SubscriberStatsComplete    = "complete"
+	SubscriberStatsUnavailable = "unavailable"
+)
 
 // ProfileSummary matches Node ProfileGlobalSummary from summarizeProfiles().
 type ProfileSummary struct {
@@ -29,6 +54,10 @@ type ProfileSummary struct {
 	SuspendedSubscribers     int `json:"suspendedSubscribers"`
 	RestrictedSubscribers    int `json:"restrictedSubscribers"`
 	UnassignedProfiles       int `json:"unassignedProfiles"`
+	// SubscriberStatsCompleteness reports whether the subscriber counter
+	// aggregation ran. Unavailable counts must be presented as unavailable,
+	// never as zero.
+	SubscriberStatsCompleteness string `json:"subscriberStatsCompleteness"`
 }
 
 // ProfileDetailResponse matches GET /api/profiles/:name response shape.
