@@ -165,6 +165,37 @@
   background: var(--status-warning-soft);
 }
 
+/* Informational state: the wording carries the meaning, not the colour. */
+.profile-chip-neutral {
+  border-color: var(--surface-border);
+  color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
+/* Section jump bar for the template workspace. */
+.profile-section-nav {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0;
+  background: var(--bg);
+}
+
+.profile-section-nav-btn {
+  min-height: 32px;
+  padding: 0.25rem 0.7rem;
+  font-size: var(--ref-font-size-label);
+}
+
+/* Jump targets clear the sticky bar and the shell chrome above the container. */
+[id^="psec-"] {
+  scroll-margin-top: 9rem;
+}
+
 .profile-content-cell {
   display: flex;
   flex-direction: column;

@@ -435,6 +435,58 @@ test('an AMBR unit of zero is a real unit, not an absent one', () => {
   assert.doesNotMatch(utils, /ambr\.downlink\?\.unit \|\| 1/);
 });
 
+test('the version history sits below the workspace and starts collapsed', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  const card = read('../src/features/profiles/components/ProfileVersionsCard.tsx');
+  const contentIndex = detailPage.indexOf('<ProfileViewMode');
+  const historyIndex = detailPage.indexOf('<ProfileVersionsCard');
+  assert.ok(contentIndex > 0 && historyIndex > contentIndex, 'the history card must follow the template content');
+  assert.match(card, /const \[open, setOpen\] = useState\(false\)/);
+  assert.match(card, /aria-controls="psec-versions-body"/);
+  assert.match(card, /\{open && \(\s*<div className="dash-card-body pm-card-body" id="psec-versions-body"/);
+});
+
+test('the template workspace offers a jump target per section', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  const nav = read('../src/features/profiles/components/ProfileSectionNav.tsx');
+  assert.match(detailPage, /const VIEW_SECTIONS/);
+  assert.match(detailPage, /const EDIT_SECTIONS/);
+  assert.match(detailPage, /scrollIntoView\(\{ behavior: .smooth., block: .start. \}\)/);
+  assert.match(nav, /aria-label=\{label\}/);
+  /* The nav must precede the content it points at. */
+  assert.ok(detailPage.indexOf('<ProfileSectionNav') < detailPage.indexOf('{isEditing ? ('));
+});
+
+test('confirming a save shows stored versus pending values, not a section boolean', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(detailPage, /buildProfileVersionDiff\(profile, draftPayload/);
+  assert.match(detailPage, /rows: section\.rows\.filter\(\(row\) => row\.changed\)/);
+  assert.match(detailPage, /prof_diff_stored_col/);
+  assert.match(detailPage, /prof_diff_pending_col/);
+  assert.match(detailPage, /className="pm-confirm-diff-to"/);
+  /* The old section-level boolean list must be gone from the panel. */
+  assert.doesNotMatch(detailPage, /draftChangeRows\.map/);
+});
+
+test('a save with no pending change is not offered', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(detailPage, /\(!isCreate && changedDraftRows\.length === 0\)/);
+});
+
+test('the access restriction column keeps absent, zero and restricted apart', () => {
+  const page = read('../src/features/profiles/ProfilesPage.tsx');
+  assert.match(page, /access === 0\s*\?\s*t\("prof_access_unrestricted"\)\s*:\s*t\("prof_access_limited"\)/);
+  assert.match(page, /profile-chip profile-chip-neutral/);
+  assert.match(read('../src/styles/profile.css'), /\.profile-chip-neutral \{/);
+  /* The two-state wording that read as "restriction present" is retired. */
+  for (const file of ['../src/lib/locales/en.ts', '../src/lib/locales/zh.ts']) {
+    const source = read(file);
+    assert.ok(!source.includes('prof_access_configured'), `${file} still offers the two-state label`);
+    assert.match(source, /prof_access_unrestricted: /);
+    assert.match(source, /prof_access_limited: /);
+  }
+});
+
 test('the create route carries its own breadcrumb label in both locales', () => {
   const navigation = read('../src/lib/navigation.ts');
   const newRoute = navigation.split('\n').find((line) => line.includes("route: '/profile/new'"));

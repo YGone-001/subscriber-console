@@ -106,7 +106,15 @@ export function ProfilesPage() {
   const renderProfileRow = (profile: ProfileListItem) => {
     const linked = linkedSubscriberCount(profile);
     const billingConfigured = profile.ocsDefaultsConfigured === true;
-    const accessConfigured = profile.accessRestriction !== null && profile.accessRestriction !== undefined;
+    /* Three distinct states, one neutral tone: a configured restriction is a
+     * business choice, not a defect, so only the billing gap keeps a signal
+     * colour. Absent and 0 are not the same thing. */
+    const access = profile.accessRestriction;
+    const accessLabel = access === null || access === undefined
+      ? t("prof_access_missing")
+      : access === 0
+        ? t("prof_access_unrestricted")
+        : t("prof_access_limited");
     return (
       <tr key={profile.name}>
         <td data-label={t("prof_table_template")} data-column-priority="essential">
@@ -132,8 +140,8 @@ export function ProfilesPage() {
             <span className={`profile-chip ${billingConfigured ? "profile-chip-ok" : "profile-chip-missing"}`}>
               {billingConfigured ? t("prof_billing_configured") : t("prof_billing_missing")}
             </span>
-            <span className={`profile-chip ${accessConfigured ? "profile-chip-ok" : "profile-chip-missing"}`}>
-              {accessConfigured ? t("prof_access_configured") : t("prof_access_missing")}
+            <span className="profile-chip profile-chip-neutral">
+              {accessLabel}
             </span>
           </span>
         </td>

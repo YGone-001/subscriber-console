@@ -3,7 +3,7 @@
  * affordance. The snapshot is fetched by id from the endpoint that serves it.
  */
 import { useState } from 'react';
-import { GitCompareArrows, History, RotateCcw } from 'lucide-react';
+import { ChevronDown, ChevronUp, GitCompareArrows, History, RotateCcw } from 'lucide-react';
 import { getJson } from '../../../lib/api/read-client';
 import { buildProfileVersionDiff } from '../profile-version-diff';
 import type { ProfileRecord, ProfileVersionDetail, ProfileVersionSummary } from '../profile-types';
@@ -38,6 +38,7 @@ export function ProfileVersionsCard({
   const [selectedVersion, setSelectedVersion] = useState<ProfileVersionDetail | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   const openVersion = async (versionId: string) => {
     setIsDetailLoading(true);
@@ -79,11 +80,29 @@ export function ProfileVersionsCard({
             <p className="pm-card-header-desc">{t('prof_version_desc')}</p>
           </div>
         </div>
-        <button className="btn btn-outline pm-refresh-btn" onClick={onRefresh} disabled={isLoading}>
-          {isLoading ? t('prof_version_loading') : t('audit_refresh')}
-        </button>
+        <div className="pm-card-header-actions">
+          <span className="pm-version-count" aria-label={t('prof_version_entries', { count: versions.length })}>
+            {versions.length}
+          </span>
+          {open && (
+            <button className="btn btn-outline pm-refresh-btn" onClick={onRefresh} disabled={isLoading}>
+              {isLoading ? t('prof_version_loading') : t('audit_refresh')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-outline pm-version-toggle"
+            aria-expanded={open}
+            aria-controls="psec-versions-body"
+            onClick={() => setOpen((prev) => !prev)}
+          >
+            {open ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
+            {t(open ? 'collapse' : 'expand')}
+          </button>
+        </div>
       </div>
-      <div className="dash-card-body pm-card-body">
+      {open && (
+      <div className="dash-card-body pm-card-body" id="psec-versions-body">
         <div className="pm-versions-list">
           {error ? (
             <div className="pm-versions-empty">{t('prof_version_err_load')}</div>
@@ -167,6 +186,7 @@ export function ProfileVersionsCard({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

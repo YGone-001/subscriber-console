@@ -21,6 +21,7 @@ import { ErrorState } from '../../components/ui/StatePanel';
 import { ConfirmActionPanel, LoadingRows, OperationNotice } from '../../components/ui/OperationFeedback';
 import ProfileViewMode from './components/ProfileViewMode';
 import ProfileEditMode from './components/ProfileEditMode';
+import ProfileSectionNav, { type ProfileSectionAnchor } from './components/ProfileSectionNav';
 import { ProfileVersionsCard } from './components/ProfileVersionsCard';
 import {
   buildDraftChangeRows,
@@ -32,6 +33,7 @@ import {
   type ProfileDraft,
 } from './profile-draft';
 import { findProfileDraftIssue, type ProfileDraftIssue } from './profile-validation';
+import { buildProfileVersionDiff } from './profile-version-diff';
 import type {
   ProfileDetailResponse,
   ProfileMetaResponse,
@@ -40,6 +42,24 @@ import type {
   RatingsResponse,
   TariffPlansResponse,
 } from './profile-types';
+
+const VIEW_SECTIONS: Array<{ id: string; labelKey: string }> = [
+  { id: 'psec-stats', labelKey: 'prof_change_impacted' },
+  { id: 'psec-security', labelKey: 'sec_security_auth' },
+  { id: 'psec-ocs-view', labelKey: 'sec_billing_config' },
+  { id: 'psec-network', labelKey: 'sec_global_network' },
+  { id: 'psec-access-restrictions', labelKey: 'sec_access_restrict' },
+  { id: 'psec-slices', labelKey: 'prof_sec_slices' },
+];
+
+const EDIT_SECTIONS: Array<{ id: string; labelKey: string }> = [
+  { id: 'psec-info', labelKey: 'prof_sec_info' },
+  { id: 'psec-security', labelKey: 'sec_security_auth' },
+  { id: 'psec-ocs-edit', labelKey: 'sec_billing_config' },
+  { id: 'psec-network', labelKey: 'sec_global_network' },
+  { id: 'psec-access-restrictions', labelKey: 'sec_access_restrict' },
+  { id: 'psec-slices', labelKey: 'prof_sec_slices' },
+];
 
 export function ProfileDetailPage() {
   const profileName = useAppParam('name');
@@ -121,6 +141,31 @@ export function ProfileDetailPage() {
   );
   const changedDraftRows = draftChangeRows.filter((row) => row.changed);
   const changedSectionText = changedDraftRows.map((row) => t(row.labelKey)).join(', ') || t('prof_change_none');
+
+  const sectionAnchors: ProfileSectionAnchor[] = (isEditing ? EDIT_SECTIONS : VIEW_SECTIONS)
+    .map((section) => ({ id: section.id, label: t(section.labelKey) }));
+
+  const jumpToSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  /* The stored document on the left, the pending payload on the right: the same
+   * comparison the version history renders, so confirming a save is not a
+   * section-level guess while the history panel shows real values. */
+  const saveDiffSections = useMemo(() => {
+    if (!profile) return [];
+    return buildProfileVersionDiff(profile, draftPayload, {
+      notConfigured: t('prof_diff_not_configured'),
+      sliceUnit: t('prof_version_slices'),
+      sessionUnit: t('prof_diff_session_unit'),
+      pccUnit: t('prof_diff_pcc_unit'),
+      accessNone: t('prof_diff_access_none'),
+      accessSuspended: t('prof_diff_access_suspended'),
+      maskedSecret: t('prof_diff_masked'),
+    })
+      .map((section) => ({ ...section, rows: section.rows.filter((row) => row.changed) }))
+      .filter((section) => section.rows.length > 0);
+  }, [draftPayload, profile, t]);
 
   const describeIssue = (issue: ProfileDraftIssue): string => {
     switch (issue.code) {
@@ -363,19 +408,16 @@ export function ProfileDetailPage() {
             <button
               className="btn btn-primary"
               onClick={requestSave}
-              disabled={isSaving || (isCreate && !draft.title.trim())}
+              disabled={isSaving || (isCreate && !draft.title.trim()) || (!isCreate && changedDraftRows.length === 0)}
             >
               <Save size={16} /> {isSaving ? t('sub_btn_saving') : (isCreate ? t('prof_btn_create') : t('prof_btn_save'))}
             </button>
           </div>
         ) : (
           <div className="page-action-buttons">
-            {canApplyTemplates && !isCreate && (
-              <button
-                className="btn btn-outline"
-                onClick={() => { setApplyImsi(''); setIsApplyOpen(true); }}
-              >
-                <UserPlus size={16} /> {t('prof_apply_btn')}
+            {canWrite && (
+              <button className="btn btn-primary" onClick={startEditing}>
+                <Pencil size={16} /> {t('prof_btn_edit')}
               </button>
             )}
             {!isCreate && (
@@ -386,14 +428,17 @@ export function ProfileDetailPage() {
                 <Users size={16} /> {t('prof_view_linked')}
               </button>
             )}
-            {canWrite && (
-              <button className="btn btn-outline" onClick={() => setIsDeleteConfirmOpen(true)} disabled={isDeleting}>
-                <Trash2 size={16} /> {t('delete')}
+            {canApplyTemplates && !isCreate && (
+              <button
+                className="btn btn-outline"
+                onClick={() => { setApplyImsi(''); setIsApplyOpen(true); }}
+              >
+                <UserPlus size={16} /> {t('prof_apply_btn')}
               </button>
             )}
             {canWrite && (
-              <button className="btn btn-primary" onClick={startEditing}>
-                <Pencil size={16} /> {t('prof_btn_edit')}
+              <button className="btn btn-danger" onClick={() => setIsDeleteConfirmOpen(true)} disabled={isDeleting}>
+                <Trash2 size={16} /> {t('delete')}
               </button>
             )}
           </div>
@@ -459,12 +504,26 @@ export function ProfileDetailPage() {
           onCancel={() => setIsSaveConfirmOpen(false)}
         >
           <div className="pm-confirm-diff-rows">
-            {draftChangeRows.map((row) => (
-              <div key={row.key} className="pm-confirm-diff-row">
-                <span className="pm-diff-label">{t(row.labelKey)}</span>
-                <strong className={row.changed ? 'pm-confirm-diff-changed' : 'pm-confirm-diff-unchanged'}>
-                  {row.changed ? t('prof_version_changed') : t('prof_version_unchanged')}
-                </strong>
+            <div className="pm-confirm-diff-columns" aria-hidden="true">
+              <span />
+              <span>{t('prof_diff_stored_col')}</span>
+              <span>{t('prof_diff_pending_col')}</span>
+            </div>
+            {saveDiffSections.map((section) => (
+              <div key={section.key} className="pm-confirm-diff-section">
+                <div className="pm-confirm-diff-section-title">{t(section.labelKey)}</div>
+                {section.rows.map((row) => (
+                  <div key={row.key} className="pm-confirm-diff-row changed">
+                    <span className="pm-diff-label">
+                      {row.labelParams ? t(row.labelKey, row.labelParams) : t(row.labelKey)}
+                    </span>
+                    <span className="pm-confirm-diff-pair">
+                      <span className="pm-confirm-diff-from">{row.versionValue}</span>
+                      <span className="pm-confirm-diff-arrow" aria-hidden="true">→</span>
+                      <span className="pm-confirm-diff-to">{row.currentValue}</span>
+                    </span>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -553,20 +612,11 @@ export function ProfileDetailPage() {
         </div>
       ) : (
         <>
-          {!isCreate && profileName && (
-            <ProfileVersionsCard
-              t={t}
-              formatDateTime={formatDateTime}
-              profileName={profileName}
-              versions={versionsData?.versions ?? []}
-              currentProfile={profile}
-              isLoading={isVersionsLoading}
-              error={versionsError}
-              canRestore={canRestore}
-              onRefresh={() => { void mutateVersions(); }}
-              onRestore={setRestoreTarget}
-            />
-          )}
+          <ProfileSectionNav
+            sections={sectionAnchors}
+            label={t('prof_section_nav_label')}
+            onJump={jumpToSection}
+          />
 
           {isEditing ? (
             <ProfileEditMode
@@ -621,6 +671,23 @@ export function ProfileDetailPage() {
               accessRestriction={draft.accessRestriction}
               slices={draft.slices}
               backendStats={detail?.stats ?? null}
+            />
+          )}
+
+          {/* History is a retrieval tool, not the template's content: it sits
+              below the workspace and starts collapsed. */}
+          {!isCreate && profileName && (
+            <ProfileVersionsCard
+              t={t}
+              formatDateTime={formatDateTime}
+              profileName={profileName}
+              versions={versionsData?.versions ?? []}
+              currentProfile={profile}
+              isLoading={isVersionsLoading}
+              error={versionsError}
+              canRestore={canRestore}
+              onRefresh={() => { void mutateVersions(); }}
+              onRestore={setRestoreTarget}
             />
           )}
         </>

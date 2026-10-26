@@ -14,6 +14,19 @@
 .pm-card-header-left { display: flex; align-items: center; gap: 0.75rem; }
 .pm-card-header-title { margin: 0; font-size: var(--ref-font-size-body); }
 .pm-card-header-desc { margin: 0.25rem 0 0; color: var(--text-muted); font-size: var(--ref-font-size-data-relaxed); }
+.pm-card-header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.pm-version-count {
+  min-width: 28px;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  font-size: var(--ref-font-size-label);
+  font-weight: 750;
+  text-align: center;
+}
+.pm-version-toggle { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.7rem; font-size: var(--ref-font-size-data-relaxed); }
 .pm-refresh-btn { padding: 0.45rem 0.8rem; font-size: var(--ref-font-size-data-relaxed); }
 .pm-card-body { display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr); gap: 1rem; }
 .pm-versions-list { display: flex; flex-direction: column; gap: 0.65rem; max-height: 360px; overflow-y: auto; padding-right: 0.25rem; }
@@ -67,6 +80,20 @@
 .pm-confirm-diff-label { color: var(--text-secondary); }
 .pm-confirm-diff-changed { color: var(--warning); }
 .pm-confirm-diff-unchanged { color: var(--success); }
+.pm-confirm-diff-columns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding-bottom: 0.35rem;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+}
+.pm-confirm-diff-section { padding-top: 0.35rem; }
+.pm-confirm-diff-section-title { color: var(--text-secondary); font-size: var(--ref-font-size-label); font-weight: 750; }
+.pm-confirm-diff-pair { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
+.pm-confirm-diff-from { color: var(--text-muted); overflow-wrap: anywhere; }
+.pm-confirm-diff-arrow { color: var(--text-muted); }
+.pm-confirm-diff-to { color: var(--text-main); font-weight: 750; overflow-wrap: anywhere; }
 .pm-confirm-note { color: var(--text-muted); font-size: var(--ref-font-size-data-relaxed); line-height: 1.5; }
 .pm-toc-title { font-size: var(--ref-font-size-body-compact); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; padding-left: 0.5rem; }
 .pm-wf-footer-text { color: var(--text-muted); font-size: var(--ref-font-size-body-support); }
