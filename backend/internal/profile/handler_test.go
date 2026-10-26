@@ -151,7 +151,7 @@ func TestCreateProfile(t *testing.T) {
 	}
 
 	// Create request
-	body := CreateProfileRequest{Name: "test_profile"}
+	body := map[string]any{"name": "test_profile"}
 	bodyBytes, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/api/profiles", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
@@ -211,7 +211,7 @@ func TestCreateProfileDuplicate(t *testing.T) {
 	// Create profile first
 	repo.profiles["existing_profile"] = bson.M{"name": "existing_profile"}
 
-	body := CreateProfileRequest{Name: "existing_profile"}
+	body := map[string]any{"name": "existing_profile"}
 	bodyBytes, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/api/profiles", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
@@ -240,7 +240,7 @@ func TestCreateProfilePermissionDenied(t *testing.T) {
 		NormalizedRole: "viewer",
 	}
 
-	body := CreateProfileRequest{Name: "test_profile"}
+	body := map[string]any{"name": "test_profile"}
 	bodyBytes, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/api/profiles", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
@@ -615,7 +615,7 @@ func TestVersionSchemaParity(t *testing.T) {
 	}
 
 	// Create a profile
-	body := CreateProfileRequest{Name: "test_profile"}
+	body := map[string]any{"name": "test_profile"}
 	bodyBytes, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/api/profiles", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
@@ -1916,5 +1916,120 @@ func TestGeneratedVersionIDStaysSizedAndDistinct(t *testing.T) {
 			t.Fatalf("duplicate version id %q", id)
 		}
 		seen[id] = true
+	}
+}
+
+// storedRecord reads a nested document whether the handler built it as bson.M or
+// decoded it from the request body as a plain map.
+func storedRecord(value any) map[string]any {
+	switch typed := value.(type) {
+	case bson.M:
+		return typed
+	case map[string]any:
+		return typed
+	default:
+		return nil
+	}
+}
+
+func TestProfileCreateAcceptsContentInOneWrite(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+
+	w := doProfileRequest(t, handler.Create, "POST", "/api/profiles", map[string]any{
+		"name":                    "Gold 5G",
+		"title":                   "Gold 5G Premium",
+		"auth":                    map[string]any{"k": "465b2ce5b8a37f2e19d4a6c8b0e2f417", "opc": "cd6cfa9c8ed9c4c7f5e0d2a9b6c3e4f5", "amf": "8000"},
+		"ambr":                    map[string]any{"downlink": map[string]any{"unit": 3, "value": 1000}, "uplink": map[string]any{"unit": 3, "value": 300}},
+		"access_restriction_data": 0,
+		"sliceList":               []any{map[string]any{"sst": 1, "sd": "000001", "session_list": []any{}}},
+		"ocsDefaults":             map[string]any{"planId": "gold_100gb", "trafficTotal": 107374182400},
+	}, writer, nil)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	stored := repo.profiles["Gold 5G"]
+	if stored == nil {
+		t.Fatal("the template was not stored under the requested key")
+	}
+	if stored["title"] != "Gold 5G Premium" {
+		t.Errorf("title: got %v", stored["title"])
+	}
+	if stored["name"] != "Gold 5G" {
+		t.Errorf("the stored key must follow the requested name: %v", stored["name"])
+	}
+	authDoc := storedRecord(stored["auth"])
+	if authDoc["k"] != "465b2ce5b8a37f2e19d4a6c8b0e2f417" {
+		t.Errorf("auth was not carried into the create: %v", stored["auth"])
+	}
+	// Declared billing content replaces the seeded default rather than merging.
+	ocs := storedRecord(stored["ocsDefaults"])
+	if ocs["planId"] != "gold_100gb" {
+		t.Errorf("ocsDefaults.planId: got %v", ocs["planId"])
+	}
+	if _, stale := ocs["trafficBalance"]; stale {
+		t.Errorf("the seeded default must not survive a declared billing block: %v", ocs)
+	}
+
+	if len(repo.versions) != 1 {
+		t.Fatalf("one create must write one snapshot, got %d", len(repo.versions))
+	}
+	record := repo.versions[0]
+	if record["action"] != "CREATE" {
+		t.Errorf("action: got %v", record["action"])
+	}
+	if record["title"] != "Gold 5G Premium" {
+		t.Errorf("the snapshot must carry the declared title, got %v", record["title"])
+	}
+}
+
+func TestProfileCreateWithoutContentKeepsTheDefaultDocument(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+
+	w := doProfileRequest(t, handler.Create, "POST", "/api/profiles", map[string]any{"name": "plain"}, writer, nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	stored := repo.profiles["plain"]
+	if stored["title"] != "plain" {
+		t.Errorf("title: got %v", stored["title"])
+	}
+	ocs := storedRecord(stored["ocsDefaults"])
+	if ocs["planId"] != "plan_default_10gb" {
+		t.Errorf("a name-only create must keep the historical default: %v", ocs["planId"])
+	}
+}
+
+func TestProfileCreateRejectsUnknownAndMaskedContent(t *testing.T) {
+	handler := NewHandler(newMockRepository(), &mockLimiter{}, &mockAuditWriter{})
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+
+	w := doProfileRequest(t, handler.Create, "POST", "/api/profiles", map[string]any{
+		"name":     "strict",
+		"slice_Ls": []any{},
+	}, writer, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("an unknown field must be rejected, got %d: %s", w.Code, w.Body.String())
+	}
+	var unknown struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &unknown)
+	if unknown.Code != "INVALID_PROFILE_CREATE" {
+		t.Errorf("code: got %q", unknown.Code)
+	}
+
+	masked := doProfileRequest(t, handler.Create, "POST", "/api/profiles", map[string]any{
+		"name": "strict",
+		"auth": map[string]any{"k": maskedCredential, "amf": "8000"},
+	}, writer, nil)
+	if masked.Code != http.StatusBadRequest {
+		t.Fatalf("a masked sentinel must be rejected on create too, got %d: %s", masked.Code, masked.Body.String())
 	}
 }

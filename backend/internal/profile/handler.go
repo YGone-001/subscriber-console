@@ -418,24 +418,44 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse request body
-	var req CreateProfileRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// Parse request body. The create payload is the update allow-list plus the
+	// name, so a template is written once instead of default-then-overwrite.
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		response.BadRequest(w, "Invalid request body", "INVALID_REQUEST")
 		return
 	}
 
+	name, _ := body["name"].(string)
+
 	// Validate profile name
-	if !validNewProfileName(req.Name) {
+	if !validNewProfileName(name) {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
+		return
+	}
+
+	content := make(map[string]any, len(body))
+	for key, value := range body {
+		if key == "name" {
+			continue
+		}
+		content[key] = value
+	}
+	if err := validateProfileUpdateBody(content); err != nil {
+		h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "INVALID_INPUT", false, err)
+		response.JSON(w, http.StatusBadRequest, map[string]any{
+			"error":     err.Error(),
+			"code":      "INVALID_PROFILE_CREATE",
+			"committed": false,
+		})
 		return
 	}
 
 	// Build default profile document (matches Node defaultProfile exactly)
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	doc := bson.M{
-		"name":      req.Name,
-		"title":     req.Name,
+		"name":      name,
+		"title":     name,
 		"createdAt": now,
 		"createdBy": p.Username,
 		"updatedAt": now,
@@ -507,6 +527,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	// Optional content overlays the default, under the same field rules as the
+	// update path; an empty content set leaves the historical default document
+	// byte for byte.
+	for key, value := range content {
+		if isAllowedProfileField(key) {
+			doc[key] = value
+		}
+	}
+	doc["name"] = name
+
 	// Insert profile
 	if err := h.repo.InsertProfileCreateOnly(r.Context(), doc); err != nil {
 		if err == ErrProfileExists {
@@ -514,7 +544,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Storage failure - audit FAILED_NO_MUTATION
-		h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, nil, "failed", "FAILED_NO_MUTATION", false, err)
+		h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "FAILED_NO_MUTATION", false, err)
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile creation failed",
 			"code":      "PROFILE_CREATE_FAILED",
@@ -526,17 +556,17 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// Save version record
 	versionRecord := bson.M{
 		"versionId":   generateVersionID(),
-		"profileName": req.Name,
+		"profileName": name,
 		"profile":     doc,
 		"action":      "CREATE",
 		"savedAt":     now,
 		"savedBy":     p.Username,
-		"title":       req.Name,
+		"title":       firstStringField(doc, "title", "name"),
 		"sliceCount":  countSliceList(doc),
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was created but version save failed - partial write
-		h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, doc, "failed", "PARTIAL_WRITE", true, err)
+		h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", name, p.Username, p.NormalizedRole, nil, doc, "failed", "PARTIAL_WRITE", true, err)
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile created but version save failed",
 			"code":      "PROFILE_CREATE_PARTIAL_WRITE",
@@ -546,11 +576,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write strict audit record (non-gating)
-	h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, doc, "success", "SUCCESS", true, nil)
+	h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", name, p.Username, p.NormalizedRole, nil, doc, "success", "SUCCESS", true, nil)
 
 	response.JSON(w, http.StatusCreated, CreateProfileResponse{
 		Message: "Profile created successfully",
-		Name:    req.Name,
+		Name:    name,
 	})
 }
 

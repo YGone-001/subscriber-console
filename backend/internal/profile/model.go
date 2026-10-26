@@ -141,11 +141,6 @@ type ProfileCurrentSummary struct {
 
 // ── Write Request/Response Types ────────────────────────────────────────────
 
-// CreateProfileRequest is the request body for POST /api/profiles.
-type CreateProfileRequest struct {
-	Name string `json:"name"`
-}
-
 // CreateProfileResponse matches POST /api/profiles response shape.
 type CreateProfileResponse struct {
 	Message string `json:"message"`
