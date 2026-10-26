@@ -1203,6 +1203,35 @@
   background: var(--sys-color-surface-panel);
 }
 
+/*
+ * The graph toolbar groups its controls instead of letting the row stretch the
+ * gaps between them: scoping first, then the facts about the scoped set, then
+ * the picker. `space-between` scattered the same five controls across a wide
+ * viewport, so reading order depended on the window width.
+ */
+.actualToolbar {
+  justify-content: flex-start;
+  gap: var(--space-8) var(--space-24);
+}
+
+.actualToolbarScope,
+.actualToolbarFacts,
+.actualToolbarSearch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.actualToolbarFacts {
+  gap: var(--space-12);
+}
+
+.actualToolbarSearch {
+  margin-left: auto;
+}
+
 .actualSummary,
 /*
  * Status facts row. JSX collapses the whitespace between sibling spans, so the
@@ -2130,9 +2159,10 @@
     align-items: stretch;
   }
 
-  .actualSearch {
+  .actualToolbarSearch {
     order: 3;
     width: 100%;
+    margin-left: 0;
   }
 
   .actualCanvasViewport {

@@ -454,96 +454,108 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
       <h2 id="actual-topology-title" className="sr-only">{t('topology_title')}</h2>
       <TopologyAnnouncer message={announcement} />
       <div className={styles.actualToolbar}>
-        <label className={styles.actualDomainFilter}>
-          <span className="sr-only">{t('topology_domain_filter')}</span>
-          <select
-            value={domainMode}
-            onChange={(event) => setDomainMode(event.target.value as TopologyDomainMode)}
-            aria-label={t('topology_domain_filter')}
-            data-domain-mode={domainMode}
-          >
-            {ACTUAL_DOMAIN_MODE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
-            ))}
-          </select>
-        </label>
-        <div className={styles.actualSummary} role="status">
-          <span>{t('topology_actual_node_count', { count: layout.nodes.length })}</span>
-          <span>{t('topology_showing_edges', { count: layout.links.length })}</span>
-          <span
-            className={coverage === 'complete' ? styles.actualCoverageComplete : styles.actualCoveragePartial}
-            title={t('topology_actual_coverage_hint')}
-          >
-            {t(`ops_completeness_${coverage}`)}
-          </span>
-          {layout.selectedDomain && layout.boundaryNodeCount > 0 ? (
-            <span data-boundary-count="true">
-              {t('topology_actual_boundary_count', { count: layout.boundaryNodeCount })}
-            </span>
-          ) : null}
-          {layout.crossDomainLinkCount > 0 ? (
-            <span data-cross-domain-count="true">
-              {t('topology_actual_cross_domain_count', { count: layout.crossDomainLinkCount })}
-            </span>
-          ) : null}
-          {search.trim() ? (
-            <>
-              <span data-search-status="true">
-                {matchedNodes.length > 0
-                  ? t('topology_search_matches', { count: matchedNodes.length })
-                  : t('topology_search_no_match')}
-              </span>
-              {matchedNodes.length === 0 ? (
-                <button
-                  type="button"
-                  className={styles.actualSupportToggle}
-                  data-action="clear-search"
-                  onClick={() => setSearch('')}
-                >
-                  {t('topology_search_clear')}
-                </button>
-              ) : null}
-            </>
+        {/*
+          * Three groups, one reading order: what the graph is scoped to, what the
+          * scoped set contains, and the picker that narrows it further. The row
+          * distributes its children instead of stretching the gaps between them,
+          * so a wide viewport does not scatter the controls apart.
+         */}
+        <div className={styles.actualToolbarScope}>
+          <label className={styles.actualDomainFilter}>
+            <span className="sr-only">{t('topology_domain_filter')}</span>
+            <select
+              value={domainMode}
+              onChange={(event) => setDomainMode(event.target.value as TopologyDomainMode)}
+              aria-label={t('topology_domain_filter')}
+              data-domain-mode={domainMode}
+            >
+              {ACTUAL_DOMAIN_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+          <label className={styles.actualInterfaceFilter}>
+            <span>{t('topology_interface_filter')}</span>
+            <select
+              value={interfaceFilter}
+              onChange={(event) => setInterfaceFilter(event.target.value)}
+              data-interface-filter
+            >
+              <option value="">{t('topology_interface_filter_all')}</option>
+              {availableInterfaces.map((name) => (
+                <option key={name} value={name}>
+                  {`${name} (${interfaceCounts.get(name) ?? 0})`}
+                </option>
+              ))}
+              <option value={UNANNOTATED_INTERFACE_FILTER}>{t('topology_interface_unannotated')}</option>
+            </select>
+          </label>
+          {supportToggle || hiddenSupportNotice || boundaryToggle || hiddenBoundaryNotice ? (
+            <div className={styles.actualSupportBar}>
+              {supportToggle}
+              {hiddenSupportNotice}
+              {boundaryToggle}
+              {hiddenBoundaryNotice}
+            </div>
           ) : null}
         </div>
-        <label className={styles.actualInterfaceFilter}>
-          <span>{t('topology_interface_filter')}</span>
-          <select
-            value={interfaceFilter}
-            onChange={(event) => setInterfaceFilter(event.target.value)}
-            data-interface-filter
-          >
-            <option value="">{t('topology_interface_filter_all')}</option>
-            {availableInterfaces.map((name) => (
-              <option key={name} value={name}>
-                {`${name} (${interfaceCounts.get(name) ?? 0})`}
-              </option>
-            ))}
-            <option value={UNANNOTATED_INTERFACE_FILTER}>{t('topology_interface_unannotated')}</option>
-          </select>
-        </label>
-        <span className={styles.actualInterfaceCoverage} data-interface-coverage="true">
-          {t('topology_interface_coverage', {
-            annotated: coverageCounts.annotated,
-            total: coverageCounts.total,
-          })}
-        </span>
-        <TopologyCanvasSearch
-          search={{
-            value: search,
-            onChange: setSearch,
-            label: t('topology_picker_search_placeholder'),
-            placeholder: t('topology_picker_search_placeholder'),
-          }}
-        />
-        {supportToggle || hiddenSupportNotice || boundaryToggle || hiddenBoundaryNotice ? (
-          <div className={styles.actualSupportBar}>
-            {supportToggle}
-            {hiddenSupportNotice}
-            {boundaryToggle}
-            {hiddenBoundaryNotice}
+        <div className={styles.actualToolbarFacts}>
+          <div className={styles.actualSummary} role="status">
+            <span>{t('topology_actual_node_count', { count: layout.nodes.length })}</span>
+            <span>{t('topology_showing_edges', { count: layout.links.length })}</span>
+            <span
+              className={coverage === 'complete' ? styles.actualCoverageComplete : styles.actualCoveragePartial}
+              title={t('topology_actual_coverage_hint')}
+            >
+              {t(`ops_completeness_${coverage}`)}
+            </span>
+            {layout.selectedDomain && layout.boundaryNodeCount > 0 ? (
+              <span data-boundary-count="true">
+                {t('topology_actual_boundary_count', { count: layout.boundaryNodeCount })}
+              </span>
+            ) : null}
+            {layout.crossDomainLinkCount > 0 ? (
+              <span data-cross-domain-count="true">
+                {t('topology_actual_cross_domain_count', { count: layout.crossDomainLinkCount })}
+              </span>
+            ) : null}
+            {search.trim() ? (
+              <>
+                <span data-search-status="true">
+                  {matchedNodes.length > 0
+                    ? t('topology_search_matches', { count: matchedNodes.length })
+                    : t('topology_search_no_match')}
+                </span>
+                {matchedNodes.length === 0 ? (
+                  <button
+                    type="button"
+                    className={styles.actualSupportToggle}
+                    data-action="clear-search"
+                    onClick={() => setSearch('')}
+                  >
+                    {t('topology_search_clear')}
+                  </button>
+                ) : null}
+              </>
+            ) : null}
           </div>
-        ) : null}
+          <span className={styles.actualInterfaceCoverage} data-interface-coverage="true">
+            {t('topology_interface_coverage', {
+              annotated: coverageCounts.annotated,
+              total: coverageCounts.total,
+            })}
+          </span>
+        </div>
+        <div className={styles.actualToolbarSearch}>
+          <TopologyCanvasSearch
+            search={{
+              value: search,
+              onChange: setSearch,
+              label: t('topology_picker_search_placeholder'),
+              placeholder: t('topology_picker_search_placeholder'),
+            }}
+          />
+        </div>
       </div>
       {coverage === 'partial' ? (
         <div

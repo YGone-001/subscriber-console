@@ -1125,7 +1125,12 @@
 .shellControls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /*
+   * Grouped rather than stretched: identity and status facts read left to right
+   * and the graph controls are pinned to the end, so a wide viewport does not
+   * scatter the same controls apart.
+   */
+  justify-content: flex-start;
   gap: var(--space-8) var(--space-16);
   flex-wrap: wrap;
 }
@@ -1149,6 +1154,7 @@
 .shellToolbar {
   min-width: 0;
   flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .shellBody {
