@@ -102,8 +102,7 @@
   white-space: nowrap;
 }
 
-.profile-domain-badge,
-.profile-risk-badge {
+.profile-chip {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -115,46 +114,54 @@
   white-space: nowrap;
 }
 
-.profile-domain-badge {
-  border-color: var(--selection-border);
-  color: var(--primary);
-  background: var(--selection-soft);
-}
-
-.profile-domain-network {
-  border-color: var(--status-info-border);
-  color: var(--status-info);
-  background: var(--status-info-soft);
-}
-
-.profile-domain-slice {
-  border-color: var(--status-warning-border);
-  color: var(--status-warning);
-  background: var(--status-warning-soft);
-}
-
-.profile-domain-access {
-  border-color: var(--status-danger-border);
-  color: var(--status-danger);
-  background: var(--status-danger-soft);
-}
-
-.profile-risk-low {
+.profile-chip-ok {
   border-color: var(--status-success-border);
   color: var(--status-success);
   background: var(--status-success-soft);
 }
 
-.profile-risk-medium {
+.profile-chip-missing {
   border-color: var(--status-warning-border);
   color: var(--status-warning);
   background: var(--status-warning-soft);
 }
 
-.profile-risk-high {
-  border-color: var(--status-danger-border);
-  color: var(--status-danger);
-  background: var(--status-danger-soft);
+.profile-content-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-width: 280px;
+}
+
+.profile-content-counts {
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-data);
+  line-height: 1.45;
+}
+
+.profile-content-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.profile-linked-cell,
+.profile-owner-cell {
+  white-space: nowrap;
+}
+
+.profile-impact-breakdown {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+}
+
+.profile-ambr-cell {
+  font-family: var(--font-data);
+  color: var(--text-main);
+  font-size: var(--ref-font-size-data);
+  white-space: nowrap;
 }
 
 .profile-table-number {
@@ -164,12 +171,6 @@
 .profile-table-data {
   font-family: var(--font-data);
   font-weight: 750;
-}
-
-.profile-impact-cell {
-  max-width: 280px;
-  color: var(--text-secondary);
-  line-height: 1.45;
 }
 
 .profile-owner-cell,
@@ -263,7 +264,7 @@
   }
 
   .profile-template-button,
-  .profile-impact-cell {
+  .profile-content-cell {
     max-width: none;
   }
 

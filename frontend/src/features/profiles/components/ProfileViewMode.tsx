@@ -21,11 +21,25 @@ function ratingUnitLabel(t: (key: string) => string, value?: string) {
   return value || "-";
 }
 
-export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, tariffPlanList, ratingList, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats }: any) {
-  const planId = ocsDefaults.planId || ocsDefaults.plan_id || "plan_default_10gb";
+export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats }: any) {
+  const planId = String(ocsDefaults.planId || ocsDefaults.plan_id || '');
   const selectedPlan = Array.isArray(tariffPlanList)
     ? tariffPlanList.find((plan: any) => plan.plan_id === planId)
     : null;
+  const notConfigured = t("prof_diff_not_configured");
+  const ambrSide = (side: any) => {
+    const value = Number(side?.value);
+    if (!Number.isFinite(value)) return { text: notConfigured, unit: '' };
+    const unit = AMBR_UNITS.find(u => u.val === (side?.unit ?? 1))?.label || '';
+    return { text: String(value), unit };
+  };
+  const downlinkAmbr = ambrSide(ueAmbr?.downlink);
+  const uplinkAmbr = ambrSide(ueAmbr?.uplink);
+  const mbrSide = (side: any) => {
+    if (side?.value === undefined || side?.value === null) return t("prof_pcc_not_set");
+    const unit = AMBR_UNITS.find(u => u.val === (side?.unit ?? 1))?.label || '';
+    return `${side.value} ${unit}`.trim();
+  };
 
   return (
     <div className="animate-fade-in profile-container">
@@ -90,17 +104,23 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
            <div className="col-span-all">
              <div className="label-muted">{t("sub_360_tariff_plan")}</div>
              <div className="value-mono">
-               {selectedPlan?.name && selectedPlan.name !== planId ? `${selectedPlan.name} (${planId})` : planId}
+               {planId
+                 ? (selectedPlan?.name && selectedPlan.name !== planId ? `${selectedPlan.name} (${planId})` : planId)
+                 : notConfigured}
              </div>
            </div>
-           <div><div className="label-muted">{t("prof_lbl_quota")}</div><div className="value-mono">{ocsDefaults.trafficTotal}</div></div>
-           <div><div className="label-muted">{t("prof_lbl_balance")}</div><div className="value-mono">{ocsDefaults.trafficBalance}</div></div>
-           <div><div className="label-muted">{t("prof_sms_quota")}</div><div className="value-mono">{ocsDefaults.smsTotal || "0"}</div></div>
-           <div><div className="label-muted">{t("prof_sms_balance")}</div><div className="value-mono">{ocsDefaults.smsBalance || "0"}</div></div>
+           <div><div className="label-muted">{t("prof_lbl_quota")}</div><div className="value-mono">{ocsDefaults.trafficTotal || notConfigured}</div></div>
+           <div><div className="label-muted">{t("prof_lbl_balance")}</div><div className="value-mono">{ocsDefaults.trafficBalance || notConfigured}</div></div>
+           <div><div className="label-muted">{t("prof_sms_quota")}</div><div className="value-mono">{ocsDefaults.smsTotal || notConfigured}</div></div>
+           <div><div className="label-muted">{t("prof_sms_balance")}</div><div className="value-mono">{ocsDefaults.smsBalance || notConfigured}</div></div>
            <div className="col-span-all">
              <div className="label-muted mb-3">{t("prof_tariff_rules")}</div>
              <div className="grid-gap-small">
-               {ratingList.length > 0 ? ratingList.map((rule: any) => (
+               {ratingStatus === 'unavailable' ? (
+                 <span className="warning-text">{t("prof_rules_unavailable")}</span>
+               ) : !planId ? (
+                 <span className="text-muted-label">{t("prof_rules_no_plan")}</span>
+               ) : ratingList.length > 0 ? ratingList.map((rule: any) => (
                  <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} className="tariff-rule-row">
                    <span>{rule.apn}</span>
                    <span>RG {rule.rating_group_id}</span>
@@ -123,14 +143,14 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
         <div className="dash-card-body flex-gap-large">
           <div className="ambr-card">
             <div className="ambr-label">{t("sub_dl")}</div>
-            <div className="ambr-value">
-              {ueAmbr.downlink?.value || 0} <span className="ambr-unit">{AMBR_UNITS.find(u => u.val === (ueAmbr.downlink?.unit || 1))?.label || ''}</span>
+            <div className={downlinkAmbr.unit ? "ambr-value" : "ambr-value text-muted-label"}>
+              {downlinkAmbr.text} {downlinkAmbr.unit && <span className="ambr-unit">{downlinkAmbr.unit}</span>}
             </div>
           </div>
           <div className="ambr-card">
             <div className="ambr-label">{t("sub_ul")}</div>
-            <div className="ambr-value">
-              {ueAmbr.uplink?.value || 0} <span className="ambr-unit">{AMBR_UNITS.find(u => u.val === (ueAmbr.uplink?.unit || 1))?.label || ''}</span>
+            <div className={uplinkAmbr.unit ? "ambr-value" : "ambr-value text-muted-label"}>
+              {uplinkAmbr.text} {uplinkAmbr.unit && <span className="ambr-unit">{uplinkAmbr.unit}</span>}
             </div>
           </div>
         </div>
@@ -154,7 +174,15 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
         </div>
         {isAccessRestrictionsExpanded && (
           <div className="dash-card-body">
-            <div className="value-mono">{accessRestriction}</div>
+            <div className="value-mono">
+              {typeof accessRestriction !== "number"
+                ? notConfigured
+                : accessRestriction === 0
+                  ? t("prof_diff_access_none")
+                  : accessRestriction === 255
+                    ? t("prof_diff_access_suspended")
+                    : accessRestriction}
+            </div>
           </div>
         )}
       </div>
@@ -200,10 +228,10 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
                                 <div key={pccIdx} className="pcc-rule-card">
                                   <div className="pcc-rule-title">{t("slice_rule_idx", { idx: pccIdx + 1 })}</div>
                                   <div className="pcc-rule-grid">
-                                    <div><span className="text-muted-label">5QI:</span> {rule.qos?.index || 1}</div>
-                                    <div><span className="text-muted-label">ARP:</span> {rule.qos?.arp?.priority_level || 2}</div>
+                                    <div><span className="text-muted-label">5QI:</span> {rule.qos?.index ?? t("prof_pcc_not_set")}</div>
+                                    <div><span className="text-muted-label">ARP:</span> {rule.qos?.arp?.priority_level ?? t("prof_pcc_not_set")}</div>
                                     <div className="col-span-2">
-                                      <span className="text-muted-label">MBR:</span> {rule.qos?.mbr?.downlink?.value || 0} {AMBR_UNITS.find(u => u.val === (rule.qos?.mbr?.downlink?.unit || 1))?.label} (DL) / {rule.qos?.mbr?.uplink?.value || 0} {AMBR_UNITS.find(u => u.val === (rule.qos?.mbr?.uplink?.unit || 1))?.label} (UL)
+                                      <span className="text-muted-label">MBR:</span> {mbrSide(rule.qos?.mbr?.downlink)} (DL) / {mbrSide(rule.qos?.mbr?.uplink)} (UL)
                                     </div>
                                   </div>
                                 </div>

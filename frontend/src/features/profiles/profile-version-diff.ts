@@ -4,6 +4,7 @@
  * only values the two documents actually contain.
  */
 import { formatBytes, formatEvents } from '../../lib/unitParser';
+import { formatAmbrSide } from './profile-format';
 
 export type ProfileDiffLabels = {
   notConfigured: string;
@@ -31,8 +32,6 @@ export type ProfileDiffSection = {
   changedRows: number;
   rows: ProfileDiffRow[];
 };
-
-const AMBR_UNIT_LABELS = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps'];
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -70,15 +69,6 @@ function formatByteValue(value: unknown, fallback: string): string {
 function formatEventValue(value: unknown, fallback: string): string {
   const events = toNumber(value);
   return events === null ? fallback : formatEvents(events);
-}
-
-function formatAmbrSide(side: unknown, fallback: string): string {
-  const record = asRecord(side);
-  const value = toNumber(record.value);
-  if (value === null) return fallback;
-  const unitIndex = toNumber(record.unit);
-  const unit = unitIndex === null ? '' : AMBR_UNIT_LABELS[unitIndex] ?? '';
-  return `${value} ${unit}`.trim();
 }
 
 function maskSecret(value: unknown, labels: ProfileDiffLabels): string {

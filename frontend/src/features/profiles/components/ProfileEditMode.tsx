@@ -26,18 +26,27 @@ function ratingUnitLabel(t: (key: string) => string, value?: string) {
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
   const {
     profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsDefaults, tariffPlanList, ratingList, slices, newlyAddedSliceIndex
+    ocsDefaults, tariffPlanList, ratingList, tariffPlanStatus, ratingStatus, slices, newlyAddedSliceIndex
   } = state;
 
   const {
     setInputName, setProfileTitle, setAuthData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
     setOcsDefaults, addSlice, handleSliceChange, removeSlice
   } = actions;
-  const totalTrafficInput = splitByteInput(ocsDefaults.trafficTotal);
-  const balanceTrafficInput = splitByteInput(ocsDefaults.trafficBalance, totalTrafficInput.unit);
-  const tariffPlanOptions = Array.isArray(tariffPlanList) && tariffPlanList.length > 0
+  const hasTotalTraffic = String(ocsDefaults.trafficTotal ?? '').trim() !== '';
+  const hasBalanceTraffic = String(ocsDefaults.trafficBalance ?? '').trim() !== '';
+  const totalTrafficInput = hasTotalTraffic ? splitByteInput(ocsDefaults.trafficTotal) : { value: '', unit: 'GB' };
+  const balanceTrafficInput = hasBalanceTraffic
+    ? splitByteInput(ocsDefaults.trafficBalance, totalTrafficInput.unit)
+    : { value: '', unit: totalTrafficInput.unit };
+  const activePlans = Array.isArray(tariffPlanList)
     ? tariffPlanList.filter((plan: any) => (plan.status || "active") === "active" || plan.plan_id === ocsDefaults.planId)
-    : [{ plan_id: ocsDefaults.planId || "plan_default_10gb", name: ocsDefaults.planId || "plan_default_10gb", status: "active" }];
+    : [];
+  const currentPlanId = String(ocsDefaults.planId || '');
+  const planOptions = activePlans.some((plan: any) => plan.plan_id === currentPlanId)
+    ? activePlans
+    : (currentPlanId ? [{ plan_id: currentPlanId, name: currentPlanId }, ...activePlans] : activePlans);
+  const planSelectDisabled = tariffPlanStatus !== 'ready' || planOptions.length === 0;
   const handleTitleChange = (value: string) => {
     setProfileTitle(value);
     if (!profileName) setInputName(value);
@@ -100,15 +109,23 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
             <label className="form-label">{t("sub_360_tariff_plan")}</label>
             <select
               className="form-input input-mono"
-              value={ocsDefaults.planId || "plan_default_10gb"}
+              value={currentPlanId}
+              disabled={planSelectDisabled}
               onChange={(e) => setOcsDefaults({ ...ocsDefaults, planId: e.target.value })}
             >
-              {tariffPlanOptions.map((plan: any) => (
+              {!currentPlanId && <option value="">{t("prof_diff_not_configured")}</option>}
+              {planOptions.map((plan: any) => (
                 <option key={plan.plan_id} value={plan.plan_id}>
                   {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}{plan.status === "disabled" ? ` - ${t("users_disabled")}` : ""}
                 </option>
               ))}
             </select>
+            {tariffPlanStatus === 'unavailable' && (
+              <p className="warning-text">{t("prof_plan_unavailable")}</p>
+            )}
+            {tariffPlanStatus === 'ready' && planOptions.length === 0 && (
+              <p className="text-muted">{t("prof_plan_none")}</p>
+            )}
           </div>
           <div>
             <label className="form-label">{t("prof_quota_tpl")}</label>
@@ -155,7 +172,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
               className="form-input"
               min="0"
               step="1"
-              value={ocsDefaults.smsTotal || "0"}
+              value={ocsDefaults.smsTotal ?? ""}
               onFocus={(e) => e.target.select()}
               onChange={(e) => setOcsDefaults({ ...ocsDefaults, smsTotal: e.target.value.replace(/\D/g, "") })}
             />
@@ -167,7 +184,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
               className="form-input"
               min="0"
               step="1"
-              value={ocsDefaults.smsBalance || "0"}
+              value={ocsDefaults.smsBalance ?? ""}
               onFocus={(e) => e.target.select()}
               onChange={(e) => setOcsDefaults({ ...ocsDefaults, smsBalance: e.target.value.replace(/\D/g, "") })}
             />
@@ -175,7 +192,11 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
           <div className="col-span-all">
             <label className="form-label">{t("prof_tariff_rules")}</label>
             <div className="grid-gap-small">
-              {ratingList.length > 0 ? ratingList.map((rule: any) => (
+              {ratingStatus === 'unavailable' ? (
+                <span className="warning-text">{t("prof_rules_unavailable")}</span>
+              ) : !currentPlanId ? (
+                <span className="text-muted">{t("prof_rules_no_plan")}</span>
+              ) : ratingList.length > 0 ? ratingList.map((rule: any) => (
                 <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} className="tariff-rule-row bg-hover">
                   <span>{rule.apn}</span>
                   <span>RG {rule.rating_group_id}</span>
@@ -248,8 +269,9 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
                 { val: 8, label: t("sub_acc_ihspa") },
                 { val: 64, label: t("sub_acc_nbiot") }
               ].map(opt => {
-                const isLegacySuspended = accessRestriction === 255;
-                const isChecked = (accessRestriction & opt.val) !== 0 || isLegacySuspended;
+                const restriction = typeof accessRestriction === "number" ? accessRestriction : 0;
+                const isLegacySuspended = restriction === 255;
+                const isChecked = (restriction & opt.val) !== 0 || isLegacySuspended;
                 return (
                   <label key={opt.val} className={`access-restriction-label ${isChecked ? "checked" : "unchecked"}`}>
                     <input
@@ -257,11 +279,11 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
                       className="checkbox-custom"
                       checked={isChecked}
                       onChange={(e) => {
-                        let next = accessRestriction;
+                        let next = restriction;
                         if (e.target.checked) {
                           next = next | opt.val;
                         } else {
-                          if (accessRestriction === 255) next = 255 ^ opt.val;
+                          if (restriction === 255) next = 255 ^ opt.val;
                           else next = next & ~opt.val;
                         }
                         setAccessRestriction(next);

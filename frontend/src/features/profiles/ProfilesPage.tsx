@@ -2,24 +2,45 @@
  * Forward-ported from the historical xCloud UI (reference commit 2c40903):
  * frontend/src/app/(dashboard)/profile/page.tsx
  * Adaptations: `@/` aliases and CSS imports repointed; `useSWR(fetcher)` replaced by the current read client; `useAuth().canEditTemplates` replaced by the shared capability helper.
+ *
+ * The table describes what each template actually contains. Business domain and
+ * risk are not inferred from the template name, and an unavailable subscriber
+ * aggregation is reported as unavailable instead of zero.
  */
 import { useMemo, useState } from "react";
 import { useI18n } from '../../providers/I18nProvider';
-import { AlertTriangle, Boxes, Clock, Pencil, Plus, Users } from "lucide-react";
+import { Boxes, Gauge, Link2Off, Pencil, Plus, Users } from "lucide-react";
 import ProfileModal from '../../components/ProfileModal';
 import { EmptyState, LoadingRows, OperationNotice } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useRead } from '../../lib/api/use-read';
+import { formatAmbrPair } from './profile-format';
+import {
+  countProfilesWithoutBilling,
+  filterProfileList,
+  linkedSubscriberCount,
+  type ProfileListFilter,
+} from './profile-list-model';
 
 import PageHeader from '../../components/ui/PageHeader';
 import MetricStrip from '../../components/ui/MetricStrip';
+
+interface ProfileAmbrSide {
+  unit?: number;
+  value?: number;
+}
 
 interface ProfileSummary {
   name: string;
   title?: string;
   sliceCount?: number;
+  sessionCount?: number;
+  pccRuleCount?: number;
+  ocsDefaultsConfigured?: boolean;
+  accessRestriction?: number | null;
+  ambr?: { downlink?: ProfileAmbrSide | null; uplink?: ProfileAmbrSide | null } | null;
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;
@@ -37,6 +58,7 @@ interface ProfileGlobalSummary {
   suspendedSubscribers: number;
   restrictedSubscribers: number;
   unassignedProfiles: number;
+  subscriberStatsCompleteness?: 'complete' | 'unavailable';
 }
 
 interface ProfilesResponse {
@@ -44,76 +66,57 @@ interface ProfilesResponse {
   summary?: ProfileGlobalSummary;
 }
 
-type GovernanceDomain = "all" | "billing" | "network" | "slice" | "access";
-type ProfileDomain = Exclude<GovernanceDomain, "all">;
-type RiskLevel = "low" | "medium" | "high";
-type ProfileNotice = { type: "success" | "error"; text: string };
+type ProfileNotice = { type: 'success' | 'error'; text: string };
 
-const DOMAIN_OPTIONS: GovernanceDomain[] = ["all", "billing", "network", "slice", "access"];
-
-function inferProfileDomain(profile: ProfileSummary): ProfileDomain {
-  const searchable = `${profile.name} ${profile.title || ""}`.toLowerCase();
-  const sliceCount = profile.sliceCount || 0;
-  if (searchable.includes("slice") || searchable.includes("nssai") || sliceCount >= 3) return "slice";
-  if (searchable.includes("access") || searchable.includes("bar") || searchable.includes("restrict")) return "access";
-  if (searchable.includes("ambr") || searchable.includes("network") || searchable.includes("qos")) return "network";
-  return "billing";
-}
-
-function getRiskLevel(sliceCount: number, impactedSubscribers: number): RiskLevel {
-  if (impactedSubscribers >= 20 || sliceCount >= 4) return "high";
-  if (impactedSubscribers >= 5 || sliceCount >= 2) return "medium";
-  return "low";
-}
+const FILTER_OPTIONS: ProfileListFilter[] = ['all', 'withBilling', 'withoutBilling', 'unassigned'];
+const FILTER_LABEL_KEYS: Record<ProfileListFilter, string> = {
+  all: 'prof_filter_all',
+  withBilling: 'prof_filter_with_billing',
+  withoutBilling: 'prof_filter_without_billing',
+  unassigned: 'prof_filter_unassigned',
+};
 
 export function ProfilesPage() {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const { data, isLoading, error, mutate } = useRead<ProfilesResponse>('/api/profiles');
-  const profileRows = data?.profiles;
-  const backendSummary = data?.summary;
-  const profiles: ProfileSummary[] = useMemo(() => profileRows || [], [profileRows]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [domainFilter, setDomainFilter] = useState<GovernanceDomain>("all");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [listFilter, setListFilter] = useState<ProfileListFilter>('all');
   const [modalProfileName, setModalProfileName] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notice, setNotice] = useState<ProfileNotice | null>(null);
   const { user } = useAuth();
   const canEditTemplates = hasPermission(user, 'profiles.write');
 
-  const now = Date.now();
+  const profiles = useMemo(() => data?.profiles ?? [], [data?.profiles]);
+  const backendSummary = data?.summary;
+  const statsUnavailable = backendSummary?.subscriberStatsCompleteness === 'unavailable';
 
-  const governedProfiles = useMemo(() => profiles.map((profile: ProfileSummary) => {
-    const impactedSubscribers = profile.subscriberCount ?? profile.impactedSubscribers ?? 0;
-    const sliceCount = profile.sliceCount || 0;
+  const filteredProfiles = useMemo(
+    () => filterProfileList(profiles, searchQuery, listFilter),
+    [listFilter, profiles, searchQuery],
+  );
+
+  const metrics = useMemo(() => {
+    const total = backendSummary?.totalProfiles ?? profiles.length;
+    const impacted = backendSummary?.totalGovernedSubscribers
+      ?? profiles.reduce((sum, profile) => sum + linkedSubscriberCount(profile), 0);
+    const unassigned = backendSummary?.unassignedProfiles
+      ?? profiles.filter((profile) => linkedSubscriberCount(profile) === 0).length;
     return {
-      ...profile,
-      domain: inferProfileDomain(profile),
-      impactedSubscribers,
-      risk: getRiskLevel(sliceCount, impactedSubscribers),
+      total,
+      impacted,
+      unassigned,
+      withoutBilling: countProfilesWithoutBilling(profiles),
     };
-  }), [profiles]);
+  }, [backendSummary, profiles]);
 
-  const filteredProfiles = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-    return governedProfiles.filter((profile) => {
-      const matchesSearch = !normalizedQuery ||
-        profile.name.toLowerCase().includes(normalizedQuery) ||
-        String(profile.title || "").toLowerCase().includes(normalizedQuery);
-      const matchesDomain = domainFilter === "all" || profile.domain === domainFilter;
-      return matchesSearch && matchesDomain;
-    });
-  }, [domainFilter, governedProfiles, searchQuery]);
-
-  const governanceSummary = useMemo(() => ({
-    total: backendSummary?.totalProfiles ?? governedProfiles.length,
-    impacted: backendSummary?.totalGovernedSubscribers ?? governedProfiles.reduce((sum: number, profile) => sum + profile.impactedSubscribers, 0),
-    highRisk: governedProfiles.filter((profile) => profile.risk === "high").length,
-    recentlyChanged: governedProfiles.filter((profile) => {
-      const changedAt = profile.updatedAt || profile.createdAt;
-      if (!changedAt) return false;
-      return now - new Date(changedAt).getTime() <= 1000 * 60 * 60 * 24 * 14;
-    }).length,
-  }), [backendSummary, governedProfiles, now]);
+  const impactBreakdown = backendSummary
+    ? t('prof_stat_breakdown', {
+      active: backendSummary.activeSubscribers,
+      suspended: backendSummary.suspendedSubscribers,
+      restricted: backendSummary.restrictedSubscribers,
+    })
+    : undefined;
 
   const handleOpenNew = () => {
     setNotice(null);
@@ -121,16 +124,13 @@ export function ProfilesPage() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (name: string) => {
+  const handleOpenTemplate = (name: string) => {
     setNotice(null);
     setModalProfileName(name);
     setIsModalOpen(true);
   };
 
-  const formatDate = (value?: string) => {
-    if (!value) return t("prof_governance_not_modified");
-    return new Date(value).toLocaleDateString();
-  };
+  const hasActiveFilter = searchQuery.trim() !== '' || listFilter !== 'all';
 
   return (
     <>
@@ -155,10 +155,29 @@ export function ProfilesPage() {
         <MetricStrip
           ariaLabel={t("prof_governance_title")}
           items={[
-            { key: "total", icon: <Boxes size={17} />, label: t("prof_governance_total"), value: governanceSummary.total },
-            { key: "impacted", icon: <Users size={17} />, label: t("prof_governance_impacted"), value: governanceSummary.impacted },
-            { key: "risk", icon: <AlertTriangle size={17} />, label: t("prof_governance_high_risk"), value: governanceSummary.highRisk, tone: "danger" },
-            { key: "recent", icon: <Clock size={17} />, label: t("prof_governance_recent"), value: governanceSummary.recentlyChanged },
+            { key: "total", icon: <Boxes size={17} />, label: t("prof_governance_total"), value: metrics.total },
+            {
+              key: "impacted",
+              icon: <Users size={17} />,
+              label: t("prof_governance_impacted"),
+              value: statsUnavailable ? t("prof_stats_unavailable") : metrics.impacted,
+              tone: statsUnavailable ? "muted" : "primary",
+              detail: statsUnavailable ? undefined : impactBreakdown,
+            },
+            {
+              key: "unassigned",
+              icon: <Link2Off size={17} />,
+              label: t("prof_metric_unassigned"),
+              value: statsUnavailable ? t("prof_stats_unavailable") : metrics.unassigned,
+              tone: "muted",
+            },
+            {
+              key: "withoutBilling",
+              icon: <Gauge size={17} />,
+              label: t("prof_metric_without_billing"),
+              value: metrics.withoutBilling,
+              tone: metrics.withoutBilling > 0 ? "warning" : "success",
+            },
           ]}
         />
 
@@ -171,15 +190,16 @@ export function ProfilesPage() {
             value={searchQuery}
             onChange={event => setSearchQuery(event.target.value)}
           />
-          <div className="profile-domain-filters">
-            {DOMAIN_OPTIONS.map(domain => (
+          <div className="profile-domain-filters" role="group" aria-label={t("prof_filter_group")}>
+            {FILTER_OPTIONS.map(filter => (
               <button
-                key={domain}
+                key={filter}
                 type="button"
-                className={`${domainFilter === domain ? "btn btn-primary" : "btn btn-outline"} profile-domain-btn`}
-                onClick={() => setDomainFilter(domain)}
+                className={`${listFilter === filter ? "btn btn-primary" : "btn btn-outline"} profile-domain-btn`}
+                aria-pressed={listFilter === filter}
+                onClick={() => setListFilter(filter)}
               >
-                {t(`prof_domain_${domain}`)}
+                {t(FILTER_LABEL_KEYS[filter])}
               </button>
             ))}
           </div>
@@ -194,7 +214,7 @@ export function ProfilesPage() {
 
         {isLoading ? (
           <div className="dash-card profile-table-state">
-            <LoadingRows columns={9} rows={4} />
+            <LoadingRows columns={7} rows={4} />
           </div>
         ) : error ? (
           <div className="dash-card profile-table-state">
@@ -209,10 +229,10 @@ export function ProfilesPage() {
           <div className="dash-card profile-table-state">
             <EmptyState
               icon={<Boxes size={48} />}
-              title={searchQuery || domainFilter !== "all" ? t("prof_no_match") : t("prof_empty_list")}
-              description={searchQuery || domainFilter !== "all" ? t("prof_empty_filtered_desc") : t("prof_empty_desc")}
+              title={hasActiveFilter ? t("prof_no_match") : t("prof_empty_list")}
+              description={hasActiveFilter ? t("prof_empty_filtered_desc") : t("prof_empty_desc")}
               action={
-                canEditTemplates && !searchQuery && domainFilter === "all" ? (
+                canEditTemplates && !hasActiveFilter ? (
                   <button type="button" className="btn btn-primary" onClick={handleOpenNew}>
                     <Plus size={16} /> {t("prof_new_profile")}
                   </button>
@@ -228,68 +248,101 @@ export function ProfilesPage() {
                 <thead>
                   <tr>
                     <th data-column-priority="essential">{t("prof_table_template")}</th>
-                    <th data-column-priority="essential">{t("prof_table_domain")}</th>
-                    <th data-column-priority="essential">{t("prof_table_risk")}</th>
-                    <th data-column-priority="important" className="profile-table-number">{t("prof_table_slices")}</th>
+                    <th data-column-priority="essential">{t("prof_table_content")}</th>
                     <th data-column-priority="important" className="profile-table-number">{t("prof_table_linked_users")}</th>
-                    <th data-column-priority="essential">{t("prof_table_main_effect")}</th>
+                    <th data-column-priority="supplementary">{t("prof_table_ambr")}</th>
                     <th data-column-priority="supplementary">{t("prof_table_modified_by")}</th>
                     <th data-column-priority="essential">{t("prof_table_updated")}</th>
                     <th data-column-priority="essential" className="profile-table-actions-heading">{t("actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProfiles.map((profile) => (
-                    <tr key={profile.name}>
-                      <td data-label={t("prof_table_template")} data-column-priority="essential">
-                        <button
-                          type="button"
-                          className="profile-template-button"
-                          onClick={() => handleOpenEdit(profile.name)}
-                          aria-label={`${t("edit")}: ${profile.title || profile.name}`}
-                        >
-                          <span className="profile-template-title">{profile.title || profile.name}</span>
-                          <span className="profile-template-key">{profile.name}</span>
-                        </button>
-                      </td>
-                      <td data-label={t("prof_table_domain")} data-column-priority="essential">
-                        <span className={`profile-domain-badge profile-domain-${profile.domain}`}>
-                          {t(`prof_domain_${profile.domain}`)}
-                        </span>
-                      </td>
-                      <td data-label={t("prof_table_risk")} data-column-priority="essential">
-                        <span className={`profile-risk-badge profile-risk-${profile.risk}`}>
-                          {t(`prof_risk_${profile.risk}`)}
-                        </span>
-                      </td>
-                      <td data-label={t("prof_table_slices")} data-column-priority="important" className="profile-table-number profile-table-data">
-                        {profile.sliceCount || 0}
-                      </td>
-                      <td data-label={t("prof_table_linked_users")} data-column-priority="important" className="profile-table-number profile-table-data">
-                        {profile.impactedSubscribers}
-                      </td>
-                      <td data-label={t("prof_table_main_effect")} data-column-priority="essential" className="profile-impact-cell">
-                        {t(`prof_preview_${profile.domain}`)}
-                      </td>
-                      <td data-label={t("prof_table_modified_by")} data-column-priority="supplementary" className="profile-owner-cell">
-                        {profile.updatedBy || t("prof_governance_no_owner")}
-                      </td>
-                      <td data-label={t("prof_table_updated")} data-column-priority="essential" className="profile-date-cell">
-                        {formatDate(profile.updatedAt || profile.createdAt)}
-                      </td>
-                      <td data-label={t("actions")} data-column-priority="essential" className="profile-table-actions">
-                        <button
-                          type="button"
-                          className="profile-row-action"
-                          onClick={() => handleOpenEdit(profile.name)}
-                          title={t("edit")}
-                          aria-label={`${t("edit")}: ${profile.title || profile.name}`}
-                        >
-                          <Pencil size={17} aria-hidden="true" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredProfiles.map((profile) => {
+                    const linked = linkedSubscriberCount(profile);
+                    const billingConfigured = profile.ocsDefaultsConfigured === true;
+                    const accessConfigured = profile.accessRestriction !== null && profile.accessRestriction !== undefined;
+                    return (
+                      <tr key={profile.name}>
+                        <td data-label={t("prof_table_template")} data-column-priority="essential">
+                          <button
+                            type="button"
+                            className="profile-template-button"
+                            onClick={() => handleOpenTemplate(profile.name)}
+                            aria-label={`${t("prof_view_details")}: ${profile.title || profile.name}`}
+                          >
+                            <span className="profile-template-title">{profile.title || profile.name}</span>
+                            <span className="profile-template-key">{profile.name}</span>
+                          </button>
+                        </td>
+                        <td data-label={t("prof_table_content")} data-column-priority="essential" className="profile-content-cell">
+                          <span className="profile-content-counts">
+                            {t("prof_content_slices", { count: profile.sliceCount || 0 })}
+                            {' · '}
+                            {t("prof_content_sessions", { count: profile.sessionCount || 0 })}
+                            {' · '}
+                            {t("prof_content_pcc", { count: profile.pccRuleCount || 0 })}
+                          </span>
+                          <span className="profile-content-tags">
+                            <span className={`profile-chip ${billingConfigured ? "profile-chip-ok" : "profile-chip-missing"}`}>
+                              {billingConfigured ? t("prof_billing_configured") : t("prof_billing_missing")}
+                            </span>
+                            <span className={`profile-chip ${accessConfigured ? "profile-chip-ok" : "profile-chip-missing"}`}>
+                              {accessConfigured ? t("prof_access_configured") : t("prof_access_missing")}
+                            </span>
+                          </span>
+                        </td>
+                        <td data-label={t("prof_table_linked_users")} data-column-priority="important" className="profile-linked-cell">
+                          {statsUnavailable ? (
+                            <span className="text-muted-label">{t("prof_stats_unavailable")}</span>
+                          ) : linked > 0 ? (
+                            <>
+                              <span className="profile-table-data">{linked}</span>
+                              <span className="profile-impact-breakdown">
+                                {t("prof_stat_breakdown", {
+                                  active: profile.activeSubscribers || 0,
+                                  suspended: profile.suspendedSubscribers || 0,
+                                  restricted: profile.restrictedSubscribers || 0,
+                                })}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-muted-label">{t("prof_unassigned")}</span>
+                          )}
+                        </td>
+                        <td data-label={t("prof_table_ambr")} data-column-priority="supplementary">
+                          {profile.ambr ? (
+                            <span className="profile-ambr-cell">
+                              {formatAmbrPair(profile.ambr, t("prof_diff_not_configured"), {
+                                downlink: t("sub_dl"),
+                                uplink: t("sub_ul"),
+                              })}
+                            </span>
+                          ) : (
+                            <span className="text-muted-label">{t("prof_diff_not_configured")}</span>
+                          )}
+                        </td>
+                        <td data-label={t("prof_table_modified_by")} data-column-priority="supplementary" className="profile-owner-cell">
+                          {profile.updatedBy || t("prof_governance_no_owner")}
+                        </td>
+                        <td data-label={t("prof_table_updated")} data-column-priority="essential" className="profile-date-cell">
+                          {profile.updatedAt || profile.createdAt
+                            ? formatDateTime(profile.updatedAt || profile.createdAt || '')
+                            : t("prof_governance_not_modified")}
+                        </td>
+                        <td data-label={t("actions")} data-column-priority="essential" className="profile-table-actions">
+                          <button
+                            type="button"
+                            className="profile-row-action"
+                            onClick={() => handleOpenTemplate(profile.name)}
+                            title={canEditTemplates ? t("edit") : t("prof_view_details")}
+                            aria-label={`${canEditTemplates ? t("edit") : t("prof_view_details")}: ${profile.title || profile.name}`}
+                          >
+                            <Pencil size={17} aria-hidden="true" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -303,7 +356,7 @@ export function ProfilesPage() {
           onClose={() => setIsModalOpen(false)}
           onRefresh={() => mutate()}
           onOperation={setNotice}
-          impactedSubscribers={modalProfileName ? (governedProfiles.find((p) => p.name === modalProfileName)?.impactedSubscribers || 0) : 0}
+          impactedSubscribers={modalProfileName ? linkedSubscriberCount(profiles.find((p) => p.name === modalProfileName) ?? { name: modalProfileName }) : 0}
         />
       )}
     </>

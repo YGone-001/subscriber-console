@@ -13,6 +13,9 @@ import {
   type ProfileDiffLabels,
   type ProfileDiffSection,
 } from '../src/features/profiles/profile-version-diff';
+import { findProfileDraftIssue } from '../src/features/profiles/profile-validation';
+import { countProfilesWithoutBilling, filterProfileList } from '../src/features/profiles/profile-list-model';
+import { formatAmbrPair } from '../src/features/profiles/profile-format';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -140,4 +143,102 @@ test('the template list renders a retryable error instead of an empty state', ()
   assert.match(source, /const \{ data, isLoading, error, mutate \}/);
   assert.match(source, /<ErrorState/);
   assert.match(source, /onRetry=/);
+});
+
+const VALID_AUTH = { k: 'a'.repeat(32), opValue: 'b'.repeat(32), amf: '8000' };
+const VALID_AMBR = { downlink: { value: 100, unit: 2 }, uplink: { value: 50, unit: 2 } };
+const VALID_DRAFT = {
+  name: 'template',
+  auth: VALID_AUTH,
+  ambr: VALID_AMBR,
+  slices: [{ sst: 1, sd: '000001', session_list: [] }],
+};
+
+test('a complete draft passes validation', () => {
+  assert.equal(findProfileDraftIssue(VALID_DRAFT), null);
+});
+
+test('malformed credentials and slice identifiers are rejected', () => {
+  assert.deepEqual(findProfileDraftIssue({ ...VALID_DRAFT, auth: { ...VALID_AUTH, k: 'xyz' } }), { code: 'kFormat' });
+  assert.deepEqual(findProfileDraftIssue({ ...VALID_DRAFT, auth: { ...VALID_AUTH, opValue: '00' } }), { code: 'opFormat' });
+  assert.deepEqual(findProfileDraftIssue({ ...VALID_DRAFT, auth: { ...VALID_AUTH, amf: '800' } }), { code: 'amfFormat' });
+  assert.deepEqual(
+    findProfileDraftIssue({ ...VALID_DRAFT, slices: [{ sst: 0, sd: '000001', session_list: [] }] }),
+    { code: 'sstRange', index: 1 },
+  );
+  assert.deepEqual(
+    findProfileDraftIssue({ ...VALID_DRAFT, slices: [{ sst: 1, sd: '12345', session_list: [] }] }),
+    { code: 'sdFormat', index: 1 },
+  );
+});
+
+test('an AMBR without a value is rejected instead of defaulting to zero', () => {
+  assert.deepEqual(
+    findProfileDraftIssue({ ...VALID_DRAFT, ambr: { downlink: {}, uplink: VALID_AMBR.uplink } }),
+    { code: 'ambrInvalid', direction: 'downlink' },
+  );
+});
+
+test('an invalid session PGW address reports the session name', () => {
+  assert.deepEqual(
+    findProfileDraftIssue({
+      ...VALID_DRAFT,
+      slices: [{ sst: 1, sd: '000001', session_list: [{ name: 'internet', pgwIpv4: '10.0.0' }] }],
+    }),
+    { code: 'pgwIpv4', sessionName: 'internet' },
+  );
+});
+
+const LIST_ENTRIES = [
+  { name: 'alpha_profile', title: 'Balanced 5G', ocsDefaultsConfigured: true, subscriberCount: 5 },
+  { name: 'beta_profile', title: 'Legacy', ocsDefaultsConfigured: false, subscriberCount: 0 },
+];
+
+test('list filters read backend fields only', () => {
+  assert.deepEqual(filterProfileList(LIST_ENTRIES, '', 'withBilling').map((entry) => entry.name), ['alpha_profile']);
+  assert.deepEqual(filterProfileList(LIST_ENTRIES, '', 'withoutBilling').map((entry) => entry.name), ['beta_profile']);
+  assert.deepEqual(filterProfileList(LIST_ENTRIES, '', 'unassigned').map((entry) => entry.name), ['beta_profile']);
+  assert.equal(filterProfileList(LIST_ENTRIES, '', 'all').length, 2);
+});
+
+test('list search matches the display title as well as the key', () => {
+  assert.deepEqual(filterProfileList(LIST_ENTRIES, 'legacy', 'all').map((entry) => entry.name), ['beta_profile']);
+  assert.deepEqual(filterProfileList(LIST_ENTRIES, 'ALPHA', 'all').map((entry) => entry.name), ['alpha_profile']);
+  assert.equal(countProfilesWithoutBilling(LIST_ENTRIES), 1);
+});
+
+test('an absent AMBR is reported as not configured, never as zero', () => {
+  const labels = { downlink: 'DL', uplink: 'UL' };
+  assert.equal(formatAmbrPair(null, 'N/A', labels), 'N/A');
+  assert.equal(formatAmbrPair({ downlink: { unit: 2, value: 100 } }, 'N/A', labels), 'DL 100 Mbps / UL N/A');
+  assert.equal(
+    formatAmbrPair({ downlink: { unit: 2, value: 100 }, uplink: { unit: 2, value: 50 } }, 'N/A', labels),
+    'DL 100 Mbps / UL 50 Mbps',
+  );
+});
+
+test('the template surface no longer fabricates defaults or classifications', () => {
+  const files = [
+    '../src/components/ProfileModal.tsx',
+    '../src/features/profiles/components/ProfileEditMode.tsx',
+    '../src/features/profiles/components/ProfileViewMode.tsx',
+    '../src/features/profiles/ProfilesPage.tsx',
+  ];
+  for (const file of files) {
+    const source = read(file);
+    assert.ok(!source.includes('plan_default_10gb'), `${file} still hardcodes a plan id`);
+    assert.ok(!source.includes("'10 GB'") && !source.includes('"10 GB"'), `${file} still hardcodes a quota`);
+  }
+  const page = read('../src/features/profiles/ProfilesPage.tsx');
+  assert.ok(!page.includes('inferProfileDomain'), 'the list still infers a business domain');
+  assert.ok(!page.includes('getRiskLevel'), 'the list still scores risk');
+});
+
+test('the fabricated governance vocabulary is gone from both locales', () => {
+  for (const file of ['../src/lib/locales/zh.ts', '../src/lib/locales/en.ts']) {
+    const source = read(file);
+    for (const key of ['prof_domain_', 'prof_risk_', 'prof_preview_', 'prof_governance_high_risk', 'prof_governance_recent']) {
+      assert.ok(!source.includes(key), `${file} still defines ${key}`);
+    }
+  }
 });

@@ -10,9 +10,11 @@ import { parseBytes, formatBytes, parseEvents, formatEvents } from '../lib/unitP
 import ProfileViewMode from '../features/profiles/components/ProfileViewMode';
 import ProfileEditMode from '../features/profiles/components/ProfileEditMode';
 import { buildProfileVersionDiff } from '../features/profiles/profile-version-diff';
+import { findProfileDraftIssue } from '../features/profiles/profile-validation';
 import { useAuth } from '../providers/AuthProvider';
 import { hasPermission } from '../lib/permissions';
 import { ConfirmActionPanel, LoadingRows, OperationNotice } from './ui/OperationFeedback';
+import { ErrorState } from './ui/StatePanel';
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from './ui/UnsavedChangesGuard';
 import { Dialog } from './ui/Dialog';
 
@@ -45,6 +47,8 @@ type DraftDiffRow = {
   changed: boolean;
 };
 
+const OCS_EDITABLE_KEYS = ['planId', 'trafficTotal', 'trafficBalance', 'smsTotal', 'smsBalance'];
+
 function buildProfileKeyFromTitle(title: string) {
   const trimmed = title.trim();
   const asciiKey = trimmed
@@ -62,7 +66,7 @@ function buildProfileKeyFromTitle(title: string) {
 }
 
 export default function ProfileModal({ profileName, onClose, onRefresh, onOperation, impactedSubscribers = 0 }: ProfileModalProps) {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const { user: currentUser } = useAuth();
   /* The historical hook exposed the two governance roles directly; the current
    * session provider exposes the account, so the roles are derived from it. */
@@ -85,6 +89,9 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const [isVersionsLoading, setIsVersionsLoading] = useState(false);
   const [isVersionDetailLoading, setIsVersionDetailLoading] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<ProfileVersionDetail | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [tariffPlanStatus, setTariffPlanStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [ratingStatus, setRatingStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Blinking animation state flag
@@ -95,26 +102,29 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const [profileTitle, setProfileTitle] = useState("");
 
   // Auth template fields
-  const [authData, setAuthData] = useState({ k: "", opValue: "", amf: "8000" });
+  const [authData, setAuthData] = useState({ k: "", opValue: "", amf: "" });
   // USIM type selection: determines opc or op key
   const [usimType, setUsimType] = useState<"opc" | "op">("opc");
 
-  // Global UE-AMBR template
-  const [ueAmbr, setUeAmbr] = useState({ downlink: { unit: 3, value: 1 }, uplink: { unit: 3, value: 1 } });
+  // Global UE-AMBR template. Empty until the template declares one.
+  const [ueAmbr, setUeAmbr] = useState<{ downlink: { unit?: number; value?: number }; uplink: { unit?: number; value?: number } }>({
+    downlink: {},
+    uplink: {},
+  });
 
   // 3-level nesting core: Slice -> Session -> PCC Rule
   const [slices, setSlices] = useState<any[]>([]);
-  const [accessRestriction, setAccessRestriction] = useState<number>(0);
+  const [accessRestriction, setAccessRestriction] = useState<number | null>(null);
 
   // ======== OCS preset parameter template ========
   const [ratingList, setRatingList] = useState<any[]>([]);
   const [tariffPlanList, setTariffPlanList] = useState<Array<{ plan_id: string; name?: string; status?: string }>>([]);
   const [ocsDefaults, setOcsDefaults] = useState<any>({
-    planId: "plan_default_10gb",
-    trafficTotal: "10 GB",
-    trafficBalance: "10 GB",
-    smsTotal: "100",
-    smsBalance: "100",
+    planId: "",
+    trafficTotal: "",
+    trafficBalance: "",
+    smsTotal: "",
+    smsBalance: "",
   });
   const draftSignature = useMemo(() => JSON.stringify({
     inputName,
@@ -143,7 +153,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     if (p.auth) {
       const detected = p.auth.op ? "op" : "opc";
       setUsimType(detected);
-      setAuthData({ k: p.auth.k || "", opValue: p.auth.opc || p.auth.op || "", amf: p.auth.amf || "8000" });
+      setAuthData({ k: p.auth.k || "", opValue: p.auth.opc || p.auth.op || "", amf: p.auth.amf || "" });
     }
     if (p.ambr) setUeAmbr(p.ambr);
     if (Array.isArray(p.sliceList)) setSlices(p.sliceList);
@@ -151,6 +161,9 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       setAccessRestriction(Number(p.access_restriction_data));
     }
 
+    /* Clear first so a template without billing defaults never inherits the
+     * previously displayed values. */
+    setOcsDefaults({ planId: "", trafficTotal: "", trafficBalance: "", smsTotal: "", smsBalance: "" });
     if (p.ocsDefaults) {
       const smsTotalDefault = p.ocsDefaults.smsTotal ?? p.ocsDefaults.sms_total;
       const smsBalanceDefault = p.ocsDefaults.smsBalance ?? p.ocsDefaults.sms_balance;
@@ -158,7 +171,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       setOcsDefaults((prev: any) => ({
         ...prev,
         ...p.ocsDefaults,
-        planId: planDefault !== undefined ? String(planDefault) : (prev.planId || "plan_default_10gb"),
+        planId: planDefault !== undefined ? String(planDefault) : (prev.planId || ""),
         trafficTotal: p.ocsDefaults.trafficTotal !== undefined ? formatBytes(p.ocsDefaults.trafficTotal) : (p.ocsDefaults.trafficBalance !== undefined ? formatBytes(p.ocsDefaults.trafficBalance) : prev.trafficTotal),
         trafficBalance: p.ocsDefaults.trafficBalance !== undefined ? formatBytes(p.ocsDefaults.trafficBalance) : prev.trafficBalance,
         smsTotal: smsTotalDefault !== undefined ? formatEvents(Number(smsTotalDefault)) : (smsBalanceDefault !== undefined ? formatEvents(Number(smsBalanceDefault)) : prev.smsTotal),
@@ -174,34 +187,72 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     return data.error || fallback;
   };
 
+  const buildOcsDefaultsPayload = () => {
+    const payload: Record<string, unknown> = {};
+    /* Keep stored keys this form does not edit (voice, PLMN, ...). */
+    for (const [key, value] of Object.entries(ocsDefaults)) {
+      if (!OCS_EDITABLE_KEYS.includes(key)) payload[key] = value;
+    }
+    delete payload.plan_id;
+    delete payload.planID;
+    delete payload.sms_total;
+    delete payload.sms_balance;
+
+    const planId = String(ocsDefaults.planId ?? "").trim();
+    if (planId) payload.planId = planId;
+    const trafficTotal = String(ocsDefaults.trafficTotal ?? "").trim();
+    if (trafficTotal) payload.trafficTotal = parseBytes(trafficTotal);
+    const trafficBalance = String(ocsDefaults.trafficBalance ?? "").trim();
+    if (trafficBalance) payload.trafficBalance = parseBytes(trafficBalance);
+    const smsTotal = String(ocsDefaults.smsTotal ?? "").trim();
+    if (smsTotal) payload.smsTotal = parseEvents(smsTotal);
+    const smsBalance = String(ocsDefaults.smsBalance ?? "").trim();
+    if (smsBalance) payload.smsBalance = parseEvents(smsBalance);
+    return payload;
+  };
+
   const buildProfilePayload = (targetName: string) => {
     const authPayload: any = { k: authData.k, amf: authData.amf };
     authPayload[usimType] = authData.opValue;
-    return {
+    const body: any = {
       title: profileTitle || targetName,
       auth: authPayload,
       ambr: ueAmbr,
-      access_restriction_data: accessRestriction,
       sliceList: slices,
-      ocsDefaults: {
-        planId: ocsDefaults.planId || "plan_default_10gb",
-        trafficTotal: parseBytes(ocsDefaults.trafficTotal || ocsDefaults.trafficBalance),
-        trafficBalance: parseBytes(ocsDefaults.trafficBalance),
-        smsTotal: parseEvents(ocsDefaults.smsTotal || ocsDefaults.smsBalance),
-        smsBalance: parseEvents(ocsDefaults.smsBalance),
-      }
     };
+    if (typeof accessRestriction === "number") {
+      body.access_restriction_data = accessRestriction;
+    }
+    const ocsPayload = buildOcsDefaultsPayload();
+    if (Object.keys(ocsPayload).length > 0) {
+      body.ocsDefaults = ocsPayload;
+    } else if (profileSnapshot?.ocsDefaults) {
+      /* An explicit clear: the operator removed every billing default. */
+      body.ocsDefaults = {};
+    }
+    return body;
   };
 
   const validateProfileDraft = (targetName: string) => {
-    if (!targetName) throw new Error(t("prof_err_name_req"));
-    for (const slice of slices || []) {
-      for (const session of slice?.session_list || []) {
-        const pgwIpv4 = String(session?.pgwIpv4 || "").trim();
-        if (pgwIpv4 && !/^(\d{1,3}\.){3}\d{1,3}$/.test(pgwIpv4)) {
-          throw new Error(t("prof_err_pgw_ipv4", { name: session?.name || "unknown" }));
-        }
-      }
+    const issue = findProfileDraftIssue({ name: targetName, auth: authData, ambr: ueAmbr, slices });
+    if (!issue) return;
+    switch (issue.code) {
+      case 'nameRequired':
+        throw new Error(t("prof_err_name_req"));
+      case 'kFormat':
+        throw new Error(t("prof_err_k_format"));
+      case 'opFormat':
+        throw new Error(t("prof_err_op_format"));
+      case 'amfFormat':
+        throw new Error(t("prof_err_amf_format"));
+      case 'ambrInvalid':
+        throw new Error(t("prof_err_ambr_invalid", { direction: t(issue.direction === "downlink" ? "sub_dl" : "sub_ul") }));
+      case 'sstRange':
+        throw new Error(t("prof_err_sst_range", { index: issue.index }));
+      case 'sdFormat':
+        throw new Error(t("prof_err_sd_format", { index: issue.index }));
+      case 'pgwIpv4':
+        throw new Error(t("prof_err_pgw_ipv4", { name: issue.sessionName }));
     }
   };
 
@@ -226,20 +277,22 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const loadProfileData = useCallback(async () => {
     if (!profileName) return;
     setIsLoading(true);
+    setLoadFailed(false);
     try {
       const res = await fetch(`/api/profiles/${profileName}?t=${Date.now()}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
-      if (data.profile) applyProfileData(data.profile);
+      if (!data.profile) throw new Error("Missing profile payload");
+      applyProfileData(data.profile);
       if (data.stats && typeof data.stats.totalSubscribers === 'number') {
         setBackendStats(data.stats);
       }
     } catch {
-      setError(t("prof_err_load"));
+      setLoadFailed(true);
     } finally {
       setIsLoading(false);
     }
-  }, [applyProfileData, profileName, t]);
+  }, [applyProfileData, profileName]);
 
   const loadVersions = useCallback(async () => {
     if (!profileName) return;
@@ -256,25 +309,55 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     }
   }, [profileName]);
 
-  // Load available tariff plans
+  // Load available tariff plans. A failed list is reported as unavailable, and
+  // never replaced by a default plan id or an invented fallback option.
   useEffect(() => {
-    fetch('/api/tariff-plans').then(r => r.json()).then(d => {
-      const plans = Array.isArray(d.plans) ? d.plans : [];
-      setTariffPlanList(plans);
-      setOcsDefaults((current: any) => {
-        if (plans.some((plan: any) => plan.plan_id === current.planId)) return current;
-        return {
-          ...current,
-          planId: plans.find((plan: any) => (plan.status || "active") === "active")?.plan_id || plans[0]?.plan_id || current.planId || "plan_default_10gb",
-        };
+    let cancelled = false;
+    setTariffPlanStatus('loading');
+    fetch('/api/tariff-plans')
+      .then(response => {
+        if (!response.ok) throw new Error('tariff plans unavailable');
+        return response.json();
+      })
+      .then(data => {
+        if (cancelled) return;
+        setTariffPlanList(Array.isArray(data.plans) ? data.plans : []);
+        setTariffPlanStatus('ready');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTariffPlanList([]);
+        setTariffPlanStatus('unavailable');
       });
-    }).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
-  // Load Rating Group list for the selected profile default plan
+  // Load the rating rules of the selected plan, if any.
   useEffect(() => {
-    const planId = ocsDefaults.planId || "plan_default_10gb";
-    fetch(`/api/ratings?planId=${encodeURIComponent(planId)}`).then(r => r.json()).then(d => setRatingList(d.ratings || [])).catch(() => {});
+    const planId = String(ocsDefaults.planId || '').trim();
+    if (!planId) {
+      setRatingList([]);
+      setRatingStatus('ready');
+      return;
+    }
+    let cancelled = false;
+    setRatingStatus('loading');
+    fetch(`/api/ratings?planId=${encodeURIComponent(planId)}`)
+      .then(response => {
+        if (!response.ok) throw new Error('rating rules unavailable');
+        return response.json();
+      })
+      .then(data => {
+        if (cancelled) return;
+        setRatingList(Array.isArray(data.ratings) ? data.ratings : []);
+        setRatingStatus('ready');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRatingList([]);
+        setRatingStatus('unavailable');
+      });
+    return () => { cancelled = true; };
   }, [ocsDefaults.planId]);
 
   /**
@@ -369,13 +452,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     }
   };
 
-  const formatVersionTime = (value: string) => {
-    try {
-      return new Date(value).toLocaleString();
-    } catch {
-      return value;
-    }
-  };
+  const formatVersionTime = (value: string) => formatDateTime(value);
 
   /**
    * Save Profile to MongoDB.
@@ -608,6 +685,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       ocsDefaults={ocsDefaults}
       tariffPlanList={tariffPlanList}
       ratingList={ratingList}
+      ratingStatus={ratingStatus}
       ueAmbr={ueAmbr}
       isAccessRestrictionsExpanded={isAccessRestrictionsExpanded}
       setIsAccessRestrictionsExpanded={setIsAccessRestrictionsExpanded}
@@ -624,7 +702,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       profileName={profileName}
       state={{
         inputName, profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-        ocsDefaults, tariffPlanList, ratingList, slices, newlyAddedSliceIndex
+        ocsDefaults, tariffPlanList, ratingList, tariffPlanStatus, ratingStatus, slices, newlyAddedSliceIndex
       }}
       actions={{
         setInputName, setProfileTitle, setAuthData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
@@ -661,10 +739,10 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
             </div>
           </div>
           <div className="workflow-header-actions">
-            {isRoot && !isEditing && (
+            {isRoot && !isEditing && !loadFailed && (
               <button className="btn-icon" onClick={() => { setIsEditing(true); setIsSaveConfirmOpen(false); }} title={t("prof_btn_edit")}><Pencil size={24} color="var(--primary)" /></button>
             )}
-            {isRoot && profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen || forceDeleteCount !== null}><Trash2 size={24} color="var(--danger)" /></button>}
+            {isRoot && profileName && !loadFailed && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen || forceDeleteCount !== null}><Trash2 size={24} color="var(--danger)" /></button>}
             <div className="pm-wf-header-divider" />
             <button ref={closeButtonRef} className="btn-icon" onClick={unsavedGuard.requestClose} title={t("close")} aria-label={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
@@ -769,6 +847,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
 
         {/* Body: Left TOC + Right Content */}
         <div className="workflow-body">
+          {!loadFailed && (
           <div className="workflow-sidebar">
             <h4 className="pm-toc-title">{t("sections")}</h4>
             {isEditing && (
@@ -804,6 +883,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
               <span className="workflow-step-label"><strong>{t("prof_sec_slices")}</strong><span>{t("prof_sec_slices_desc")}</span></span>
             </button>
           </div>
+          )}
 
           <div className="workflow-content">
             {/*
@@ -823,6 +903,13 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
             )}
             {isLoading ? (
               <LoadingRows columns={4} rows={4} />
+            ) : loadFailed ? (
+              <ErrorState
+                title={t("prof_err_load")}
+                message={t("prof_err_load_hint")}
+                retryLabel={t("retry")}
+                onRetry={() => { void loadProfileData(); void loadVersions(); }}
+              />
             ) : (
               <div className="workflow-content-inner">
                 {renderVersionHistory()}
@@ -841,7 +928,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
               <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || (!profileName && !(inputName || profileTitle).trim())}>
                 <Save size={16}/> {isSaving ? t("sub_btn_saving") : (profileName ? t("prof_btn_save") : t("prof_btn_create"))}
               </button>
-            ) : isRoot ? (
+            ) : isRoot && !loadFailed ? (
               <button className="btn btn-primary" onClick={() => { setIsEditing(true); setIsSaveConfirmOpen(false); }}>
                 <Pencil size={16}/> {t("prof_btn_edit")}
               </button>
