@@ -901,6 +901,16 @@ func buildXcloudSubscriberFromLegacy(imsi string, payload UpdatePayload, existin
 // convertSlices converts legacy sliceList format to core slice format
 // with ObjectIds for _id and session._id.
 func convertSlices(slices any) []any {
+	return convertSlicesFrom(slices, nil)
+}
+
+// convertSlicesFrom converts legacy sliceList format to core slice format,
+// reusing the embedded _id that base already carries for each corresponding
+// entry and minting an ObjectId only where base has none. base is the
+// subscriber's currently stored slice array; pass nil when there is none.
+// Without this reuse, re-applying an unchanged profile rewrites every embedded
+// identifier, so the document never reaches a fixed point.
+func convertSlicesFrom(slices any, base any) []any {
 	list, ok := slices.([]any)
 	if !ok {
 		if bsonA, ok := slices.(bson.A); ok {
@@ -909,14 +919,20 @@ func convertSlices(slices any) []any {
 			return []any{}
 		}
 	}
+	baseSlices := anySliceOrEmpty(base)
 	result := make([]any, 0, len(list))
 	for _, item := range list {
 		slice := toMap(item)
 		if slice == nil {
 			continue
 		}
+		// Addressed by emitted position so a skipped entry cannot shift identifiers.
+		var baseSlice any
+		if len(result) < len(baseSlices) {
+			baseSlice = baseSlices[len(result)]
+		}
 		converted := bson.M{
-			"_id":               bson.NewObjectID(),
+			"_id":               embeddedID(baseSlice),
 			"sst":               slice["sst"],
 			"default_indicator": slice["default_indicator"],
 		}
@@ -936,14 +952,19 @@ func convertSlices(slices any) []any {
 			sessions = []any(s)
 		}
 		if sessions != nil {
+			baseSessions := anySliceOrEmpty(storedSessions(baseSlice))
 			convertedSessions := make([]any, 0, len(sessions))
 			for _, sess := range sessions {
 				s := toMap(sess)
 				if s == nil {
 					continue
 				}
+				var baseSession any
+				if len(convertedSessions) < len(baseSessions) {
+					baseSession = baseSessions[len(convertedSessions)]
+				}
 				convertedSess := bson.M{
-					"_id":  bson.NewObjectID(),
+					"_id":  embeddedID(baseSession),
 					"name": s["name"],
 					"type": s["type"],
 					"qos":  normalizeSessionQos(s["qos"], s["name"]),
@@ -981,6 +1002,44 @@ func convertSlices(slices any) []any {
 		result = append(result, converted)
 	}
 	return result
+}
+
+// embeddedID returns the _id stored on a slice or session entry, or a fresh
+// ObjectId when the entry is absent or carries no usable identifier. Only the
+// identifier is ever taken from a stored document; every other field comes
+// from the profile, so a stored document cannot smuggle content through.
+func embeddedID(entry any) bson.ObjectID {
+	if doc := toMap(entry); doc != nil {
+		if id, ok := doc["_id"].(bson.ObjectID); ok && !id.IsZero() {
+			return id
+		}
+	}
+	return bson.NewObjectID()
+}
+
+// storedSessions returns the session array of a stored slice entry. The core
+// schema writes `session`, the legacy writer accepts both keys.
+func storedSessions(entry any) any {
+	doc := toMap(entry)
+	if doc == nil {
+		return nil
+	}
+	if sessions := doc["session"]; sessions != nil {
+		return sessions
+	}
+	return doc["session_list"]
+}
+
+// anySliceOrEmpty normalizes a decoded array into []any.
+func anySliceOrEmpty(v any) []any {
+	switch list := v.(type) {
+	case []any:
+		return list
+	case bson.A:
+		return []any(list)
+	default:
+		return nil
+	}
 }
 
 // convertMsisdnList converts legacy msisdnList format to simple string array.

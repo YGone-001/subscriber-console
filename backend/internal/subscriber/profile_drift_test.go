@@ -19,23 +19,58 @@ func driftTestProfile() bson.M {
 	}
 }
 
-func TestProfileDriftIgnoresMintedEmbeddedIdentifiers(t *testing.T) {
+func TestProfileDriftIgnoresEmbeddedIdentifiers(t *testing.T) {
 	profile := driftTestProfile()
 	applied := BuildSubscriberAfterProfileApply(bson.M{"imsi": "001010000000001"}, profile, "Gold")
 
-	// The slice conversion mints a fresh ObjectId per sub-document on every write,
-	// so a subscriber that already carries the template's content must still read
-	// as matching or the probe would report permanent drift.
+	// A subscriber that already carries the template's content must read as
+	// matching, whatever its embedded identifiers are.
 	state, changed := ProfileDrift(applied, profile, "Gold")
 	if state != DriftInSync {
 		t.Fatalf("a subscriber carrying the template content must read as in sync, got %v", changed)
 	}
 
-	// The churn is real in the stored document: the identifiers differ.
-	again := BuildSubscriberAfterProfileApply(applied, profile, "Gold")
-	if stableJSON(applied["slice"]) == stableJSON(again["slice"]) {
-		t.Fatal("the fixture no longer reproduces the identifier churn the probe must tolerate")
+	// Documents written before identifier reuse, or by the batch-create path,
+	// carry identifiers this conversion would never produce; content still
+	// matches, so the probe must not report drift.
+	if state, changed := ProfileDrift(rotatedSliceIDs(applied), profile, "Gold"); state != DriftInSync {
+		t.Fatalf("an identifier difference must not be reported as drift, got %v", changed)
 	}
+
+	// Conversion reuses the stored identifiers, so the projection is stable.
+	again := BuildSubscriberAfterProfileApply(applied, profile, "Gold")
+	if stableJSON(applied["slice"]) != stableJSON(again["slice"]) {
+		t.Errorf("re-applying must not rewrite embedded identifiers: %s != %s",
+			stableJSON(applied["slice"]), stableJSON(again["slice"]))
+	}
+}
+
+// rotatedSliceIDs replaces every embedded _id in a subscriber's slice array.
+func rotatedSliceIDs(doc bson.M) bson.M {
+	rotated := deepCopyBsonM(doc)
+	rewritten := make(bson.A, 0)
+	for _, entry := range anySliceOrEmpty(rotated["slice"]) {
+		slice := toMap(entry)
+		if slice == nil {
+			continue
+		}
+		slice["_id"] = bson.NewObjectID()
+		if slice["session"] != nil {
+			sessions := make(bson.A, 0)
+			for _, entry := range anySliceOrEmpty(slice["session"]) {
+				session := toMap(entry)
+				if session == nil {
+					continue
+				}
+				session["_id"] = bson.NewObjectID()
+				sessions = append(sessions, session)
+			}
+			slice["session"] = sessions
+		}
+		rewritten = append(rewritten, slice)
+	}
+	rotated["slice"] = rewritten
+	return rotated
 }
 
 func TestProfileDriftReportsRealContentDifferences(t *testing.T) {

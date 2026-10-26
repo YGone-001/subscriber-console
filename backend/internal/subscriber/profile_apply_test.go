@@ -421,6 +421,138 @@ func TestConvertValue(t *testing.T) {
 	})
 }
 
+func TestBuildSubscriberAfterProfileApplyReappliesWithoutEffect(t *testing.T) {
+	profile := bson.M{
+		"name": "gold",
+		"ambr": bson.M{"downlink": bson.M{"value": 100, "unit": 3}, "uplink": bson.M{"value": 50, "unit": 3}},
+		"sliceList": bson.A{
+			bson.M{
+				"sst": int32(1), "sd": "000001", "default_indicator": true,
+				"session_list": bson.A{
+					bson.M{"name": "internet", "type": int32(3)},
+					bson.M{"name": "ims", "type": int32(1)},
+				},
+			},
+			bson.M{"sst": int32(2), "default_indicator": false},
+		},
+		"access_restriction_data": int32(32),
+	}
+	current := bson.M{"imsi": "460001234567890", "security": bson.M{"sqn": "000000001234"}}
+
+	first := BuildSubscriberAfterProfileApply(current, profile, "gold")
+	second := BuildSubscriberAfterProfileApply(first, profile, "gold")
+
+	// The stored document is the identifier base, so a second apply of the same
+	// profile must be a fixed point and the governed path must report no effect.
+	if stableJSON(first["slice"]) != stableJSON(second["slice"]) {
+		t.Errorf("re-applying a profile must not rewrite embedded identifiers:\nfirst:  %s\nsecond: %s",
+			stableJSON(first["slice"]), stableJSON(second["slice"]))
+	}
+	if !IsProfileApplyNoEffect(second, profile, "gold") {
+		t.Error("an already-applied subscriber must read as no effect")
+	}
+	if IsProfileApplyNoEffect(current, profile, "gold") {
+		t.Error("the first apply changes content and must not read as no effect")
+	}
+}
+
+func TestConvertSlicesFromReusesStoredIdentifiersOnly(t *testing.T) {
+	storedSliceID := bson.NewObjectID()
+	storedSessionID := bson.NewObjectID()
+	// Read shape: mongo-driver decodes arrays to bson.A and documents to bson.D.
+	base := bson.A{bson.D{
+		{Key: "_id", Value: storedSliceID},
+		{Key: "sst", Value: int32(9)},
+		{Key: "sd", Value: "deadbeef"},
+		{Key: "default_indicator", Value: false},
+		{Key: "session", Value: bson.A{bson.D{
+			{Key: "_id", Value: storedSessionID},
+			{Key: "name", Value: "stale-apn"},
+		}}},
+	}}
+
+	converted := convertSlicesFrom(bson.A{bson.M{
+		"sst": int32(1), "default_indicator": true,
+		"session_list": bson.A{bson.M{"name": "internet", "type": int32(3)}},
+	}}, base)
+
+	if len(converted) != 1 {
+		t.Fatalf("expected one slice, got %d", len(converted))
+	}
+	sliceDoc := toMap(converted[0])
+	if id, ok := sliceDoc["_id"].(bson.ObjectID); !ok || id != storedSliceID {
+		t.Errorf("expected the stored slice identifier to be reused, got %v", sliceDoc["_id"])
+	}
+	// Only the identifier is taken from the base; content comes from the profile.
+	if sliceDoc["sst"] != int32(1) {
+		t.Errorf("expected sst from the profile, got %v (%T)", sliceDoc["sst"], sliceDoc["sst"])
+	}
+	if _, ok := sliceDoc["sd"]; ok {
+		t.Errorf("the base must not contribute sd, got %v", sliceDoc["sd"])
+	}
+	if sliceDoc["default_indicator"] != true {
+		t.Errorf("expected default_indicator from the profile, got %v", sliceDoc["default_indicator"])
+	}
+
+	sessions := anySliceOrEmpty(sliceDoc["session"])
+	if len(sessions) != 1 {
+		t.Fatalf("expected one session, got %d", len(sessions))
+	}
+	sessionDoc := toMap(sessions[0])
+	if id, ok := sessionDoc["_id"].(bson.ObjectID); !ok || id != storedSessionID {
+		t.Errorf("expected the stored session identifier to be reused, got %v", sessionDoc["_id"])
+	}
+	if sessionDoc["name"] != "internet" {
+		t.Errorf("expected name from the profile, got %v", sessionDoc["name"])
+	}
+}
+
+func TestConvertSlicesFromMintsIdentifiersForNewEntries(t *testing.T) {
+	storedSliceID := bson.NewObjectID()
+	base := bson.A{bson.M{"_id": storedSliceID, "sst": int32(1)}}
+
+	converted := convertSlicesFrom(bson.A{
+		bson.M{"sst": int32(1), "session_list": bson.A{bson.M{"name": "internet"}}},
+		bson.M{"sst": int32(2)},
+	}, base)
+
+	if len(converted) != 2 {
+		t.Fatalf("expected two slices, got %d", len(converted))
+	}
+	first := toMap(converted[0])
+	second := toMap(converted[1])
+	if id, ok := first["_id"].(bson.ObjectID); !ok || id != storedSliceID {
+		t.Errorf("the first slice must keep its identifier, got %v", first["_id"])
+	}
+	newID, ok := second["_id"].(bson.ObjectID)
+	if !ok || newID.IsZero() || newID == storedSliceID {
+		t.Errorf("a slice the base does not carry must get a fresh identifier, got %v", second["_id"])
+	}
+	// A session inside a reused slice is itself new.
+	sessions := anySliceOrEmpty(first["session"])
+	sessionDoc := toMap(sessions[0])
+	if id, ok := sessionDoc["_id"].(bson.ObjectID); !ok || id.IsZero() || id == storedSliceID {
+		t.Errorf("a new session must get a fresh identifier, got %v", sessionDoc["_id"])
+	}
+}
+
+func TestConvertSlicesWithoutBaseAlwaysMints(t *testing.T) {
+	legacyOnly := convertSlices(bson.A{bson.M{"sst": int32(1), "default_indicator": true}})
+	if len(legacyOnly) != 1 {
+		t.Fatalf("expected one slice, got %d", len(legacyOnly))
+	}
+	doc := toMap(legacyOnly[0])
+	if id, ok := doc["_id"].(bson.ObjectID); !ok || id.IsZero() {
+		t.Fatalf("expected a minted ObjectId, got %v (%T)", doc["_id"], doc["_id"])
+	}
+
+	// A base is never consulted by the batch-create path.
+	second := convertSlices(bson.A{bson.M{"sst": int32(1), "default_indicator": true}})
+	if a, b := toMap(legacyOnly[0])["_id"], toMap(second[0])["_id"]; a == b {
+		t.Error("independent conversions must not share an identifier")
+	}
+}
+
 // ─── Cross-Runtime Fixture Parity ───
 // These tests verify that Go produces identical hashes to Node.
 // Expected values are committed in src/server/__tests__/profile-apply-fixtures.json
