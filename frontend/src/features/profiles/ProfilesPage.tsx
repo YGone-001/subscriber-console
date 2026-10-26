@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../providers/I18nProvider';
-import { Boxes, Gauge, Link2Off, Pencil, Plus, Users } from 'lucide-react';
+import { Boxes, Eye, Gauge, Link2Off, Pencil, Plus, Users } from 'lucide-react';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { useAuth } from '../../providers/AuthProvider';
@@ -183,7 +183,7 @@ export function ProfilesPage() {
             title={canEditTemplates ? t("edit") : t("prof_view_details")}
             aria-label={`${canEditTemplates ? t("edit") : t("prof_view_details")}: ${profile.title || profile.name}`}
           >
-            <Pencil size={17} aria-hidden="true" />
+            {canEditTemplates ? <Pencil size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
           </button>
         </td>
       </tr>

@@ -71,9 +71,13 @@ function formatEventValue(value: unknown, fallback: string): string {
   return events === null ? fallback : formatEvents(events);
 }
 
+/* Marker the backend substitutes for credential values a role must not see. */
+const MASKED_CREDENTIAL = '[MASKED]';
+
 function maskSecret(value: unknown, labels: ProfileDiffLabels): string {
   const secret = typeof value === 'string' ? value.trim() : '';
   if (secret === '') return labels.notConfigured;
+  if (secret === MASKED_CREDENTIAL) return labels.maskedSecret;
   if (secret.length <= 8) return `${labels.maskedSecret}${secret.slice(-2)}`;
   return `${secret.slice(0, 4)}…${secret.slice(-4)}`;
 }

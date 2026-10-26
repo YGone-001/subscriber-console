@@ -301,6 +301,7 @@ export const zh: Record<string, string> = {
     prof_stats_unavailable: "不可用",
     prof_unassigned: "未关联",
     prof_view_details: "查看详情",
+    prof_credential_masked: "已配置（凭据已脱敏）",
     prof_apply_btn: "应用到用户",
     prof_view_linked: "查看关联用户",
     prof_apply_title: "将模板 {name} 下发到用户",

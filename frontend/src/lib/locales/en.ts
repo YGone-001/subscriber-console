@@ -301,6 +301,7 @@ export const en: Record<string, string> = {
     prof_stats_unavailable: "Unavailable",
     prof_unassigned: "Unlinked",
     prof_view_details: "View details",
+    prof_credential_masked: "Configured (credentials masked)",
     prof_apply_btn: "Apply to subscriber",
     prof_view_linked: "Linked subscribers",
     prof_apply_title: "Apply template {name} to a subscriber",

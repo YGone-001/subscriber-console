@@ -21,7 +21,11 @@ function ratingUnitLabel(t: (key: string) => string, value?: string) {
   return value || "-";
 }
 
-export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats }: any) {
+export default function ProfileViewMode({ t, authData, credentialsMasked, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats }: any) {
+  /* The server already withheld credential values for masked roles; the page
+   * shows only the configured/unconfigured distinction, never a fake value. */
+  const credentialDisplay = (value: string) =>
+    credentialsMasked ? (value ? t("prof_credential_masked") : "N/A") : (value || "N/A");
   const planId = String(ocsDefaults.planId || ocsDefaults.plan_id || '');
   const selectedPlan = Array.isArray(tariffPlanList)
     ? tariffPlanList.find((plan: any) => plan.plan_id === planId)
@@ -81,11 +85,11 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
         <div className="dash-card-body grid-3-col">
           <div>
             <div className="label-muted">K</div>
-            <div className="value-mono">{authData.k || "N/A"}</div>
+            <div className="value-mono">{credentialDisplay(authData.k)}</div>
           </div>
           <div>
             <div className="label-muted">{usimType === "op" ? "OP" : "OPc"}</div>
-            <div className="value-mono">{authData.opValue || "N/A"}</div>
+            <div className="value-mono">{credentialDisplay(authData.opValue)}</div>
           </div>
           <div>
             <div className="label-muted">AMF</div>

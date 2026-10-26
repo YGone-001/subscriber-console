@@ -157,6 +157,32 @@ test('the template list renders a retryable error instead of an empty state', ()
   assert.match(source, /onRetry=/);
 });
 
+test('the list action renders view or edit by template permission', () => {
+  const source = read('../src/features/profiles/ProfilesPage.tsx');
+  assert.match(source, /canEditTemplates \? <Pencil/);
+  assert.match(source, /: <Eye size=/);
+});
+
+test('credential display follows the meta capability bit, not a client guess', () => {
+  const source = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(source, /capabilities\.credentialVisibility/);
+  assert.match(source, /credentialsMasked/);
+});
+
+test('the view mode never renders withheld credential values', () => {
+  const source = read('../src/features/profiles/components/ProfileViewMode.tsx');
+  assert.match(source, /credentialDisplay\(authData\.k\)/);
+  assert.match(source, /credentialDisplay\(authData\.opValue\)/);
+  assert.match(source, /prof_credential_masked/);
+});
+
+test('server-masked material reads as withheld, not as a value with a fake suffix', () => {
+  const masked = { ...BASE_PROFILE, auth: { k: '[MASKED]', opc: '[MASKED]', amf: '8000' } };
+  const sections = buildProfileVersionDiff(masked, masked, LABELS);
+  assert.equal(row(sections, 'auth', 'k').versionValue, LABELS.maskedSecret);
+  assert.equal(row(sections, 'auth', 'opc').versionValue, LABELS.maskedSecret);
+});
+
 const VALID_AUTH = { k: 'a'.repeat(32), opValue: 'b'.repeat(32), amf: '8000' };
 const VALID_AMBR = { downlink: { value: 100, unit: 2 }, uplink: { value: 50, unit: 2 } };
 const VALID_DRAFT = {

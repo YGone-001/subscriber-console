@@ -96,6 +96,12 @@ export function ProfileDetailPage() {
 
   const canWrite = meta?.capabilities.canWrite ?? hasPermission(user, 'profiles.write');
   const canRestore = meta?.capabilities.canRestore ?? hasPermission(user, 'profiles.write');
+  /* The server masks auth material for roles without the subscriber write
+   * permission; this bit mirrors that server-side decision. */
+  const credentialsMasked = (
+    meta?.capabilities.credentialVisibility
+    ?? (hasPermission(user, 'subscribers.write') ? 'plaintext' : 'masked')
+  ) === 'masked';
   /* Applying a template to a subscriber is the governed subscriber write, so the
    * entry point follows the subscriber capability, not the template one. */
   const canApplyTemplates = hasPermission(user, 'subscribers.write');
@@ -595,6 +601,7 @@ export function ProfileDetailPage() {
             <ProfileViewMode
               t={t}
               authData={draft.auth}
+              credentialsMasked={credentialsMasked}
               usimType={draft.usimType}
               ocsDefaults={draft.ocsDefaults}
               tariffPlanList={plansData?.plans ?? []}
