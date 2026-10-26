@@ -28,6 +28,9 @@
 
 .profile-governance-table {
   width: 100%;
+  /* Column widths come from the table's own colgroup, so a long AMBR string can
+   * no longer starve the template identifier column. */
+  table-layout: fixed;
   border-collapse: collapse;
   color: var(--text-main);
   font-size: var(--ref-font-size-body-support);
@@ -44,7 +47,7 @@
   color: var(--text-secondary);
   font-size: var(--ref-font-size-label-strong);
   font-weight: 750;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .profile-governance-table tbody tr {
@@ -66,9 +69,31 @@
   vertical-align: middle;
 }
 
+/* Fixed column grid: the identifier column keeps a real share of the width no
+ * matter how long the AMBR or date strings get. */
+.profile-col-template { width: 20%; }
+.profile-col-content { width: 18%; }
+.profile-col-linked { width: 12%; }
+.profile-col-ambr { width: 17%; }
+.profile-col-owner { width: 10%; }
+.profile-col-updated { width: 15%; }
+.profile-col-actions { width: 8%; }
+
+/* The shared responsive rule hides the supplementary columns at 980px; the
+ * surviving columns take over their share instead of leaving dead space. */
+@media (max-width: 980px) {
+  .profile-col-template { width: 27%; }
+  .profile-col-content { width: 25%; }
+  .profile-col-linked { width: 17%; }
+  .profile-col-ambr,
+  .profile-col-owner { width: 0; }
+  .profile-col-updated { width: 20%; }
+  .profile-col-actions { width: 11%; }
+}
+
 .profile-template-button {
   min-width: 0;
-  max-width: 320px;
+  max-width: 100%;
   padding: 0;
   border: 0;
   display: grid;
@@ -159,9 +184,14 @@
   gap: 0.3rem;
 }
 
-.profile-linked-cell,
 .profile-owner-cell {
   white-space: nowrap;
+}
+
+/* The impact breakdown is a sentence, not an identifier: under the fixed column
+ * grid it wraps rather than pushing the table past its container. */
+.profile-linked-cell {
+  overflow-wrap: anywhere;
 }
 
 .profile-impact-breakdown {
@@ -176,6 +206,15 @@
   color: var(--text-main);
   font-size: var(--ref-font-size-data);
   white-space: nowrap;
+}
+
+/* The shared metric strip clips its detail line to one row; the template KPI
+ * breakdown is a three-part sentence and must stay readable. Two class names
+ * keep this above the primitive's own rule regardless of stylesheet order. */
+.profile-page-container .profile-metric-detail {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .profile-table-number {

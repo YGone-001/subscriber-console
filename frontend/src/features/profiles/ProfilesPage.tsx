@@ -18,7 +18,7 @@ import { hasPermission } from '../../lib/permissions';
 import { useRead } from '../../lib/api/use-read';
 import { useAppRouter } from '../../lib/ui-compat/router';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
-import { formatAmbrPair } from './profile-format';
+import { formatAmbrPairCompact } from './profile-format';
 import {
   countProfilesWithoutBilling,
   filterProfileList,
@@ -158,10 +158,7 @@ export function ProfilesPage() {
         <td data-label={t("prof_table_ambr")} data-column-priority="supplementary">
           {profile.ambr ? (
             <span className="profile-ambr-cell">
-              {formatAmbrPair(profile.ambr, t("prof_diff_not_configured"), {
-                downlink: t("sub_dl"),
-                uplink: t("sub_ul"),
-              })}
+              {formatAmbrPairCompact(profile.ambr, t("prof_diff_not_configured"))}
             </span>
           ) : (
             <span className="text-muted-label">{t("prof_diff_not_configured")}</span>
@@ -210,6 +207,7 @@ export function ProfilesPage() {
             value: statsUnavailable ? t("prof_stats_unavailable") : metrics.impacted,
             tone: statsUnavailable ? "muted" : "primary",
             detail: statsUnavailable ? undefined : impactBreakdown,
+            detailClassName: "profile-metric-detail",
           },
           {
             key: "unassigned",
@@ -281,13 +279,6 @@ export function ProfilesPage() {
             icon={<Boxes size={48} />}
             title={hasActiveFilter ? t("prof_no_match") : t("prof_empty_list")}
             description={hasActiveFilter ? t("prof_empty_filtered_desc") : t("prof_empty_desc")}
-            action={
-              canEditTemplates && !hasActiveFilter ? (
-                <button type="button" className="btn btn-primary" onClick={() => router.push('/profile/new')}>
-                  <Plus size={16} /> {t("prof_new_profile")}
-                </button>
-              ) : undefined
-            }
           />
         </div>
       ) : (
@@ -295,6 +286,15 @@ export function ProfilesPage() {
           <div className="profile-table-wrap">
             <table className="profile-governance-table">
               <caption className="sr-only">{t("prof_governance_title")}</caption>
+              <colgroup>
+                <col className="profile-col-template" />
+                <col className="profile-col-content" />
+                <col className="profile-col-linked" />
+                <col className="profile-col-ambr" />
+                <col className="profile-col-owner" />
+                <col className="profile-col-updated" />
+                <col className="profile-col-actions" />
+              </colgroup>
               <thead>
                 <tr>
                   <th data-column-priority="essential">{t("prof_table_template")}</th>

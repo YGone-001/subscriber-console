@@ -20,6 +20,9 @@ export type MetricStripItem = {
   onClick?: () => void;
   ariaLabel?: string;
   detail?: ReactNode;
+  /** Optional class for the detail line only, so one surface can let a long
+   * sentence wrap without changing the shared primitive for every consumer. */
+  detailClassName?: string;
   indicator?: ReactNode;
   accent?: string;
   compactValue?: boolean;
@@ -34,6 +37,8 @@ type MetricStripProps = {
 };
 
 export default function MetricStrip({ items, ariaLabel, className, variant = "strip", columns }: MetricStripProps) {
+  const detailClass = (item: MetricStripItem, base: string) => [base, item.detailClassName || ""].filter(Boolean).join(" ");
+
   if (variant === "cards") {
     const cardsStyle = columns ? ({ "--metric-card-count": columns } as CSSProperties) : undefined;
 
@@ -52,7 +57,7 @@ export default function MetricStrip({ items, ariaLabel, className, variant = "st
                 {item.icon ? <span className={styles.metricCardIcon}>{item.icon}</span> : null}
               </span>
               <span className={styles.metricCardValue} data-compact={item.compactValue ? "true" : undefined}>{item.value}</span>
-              {item.detail ? <span className={styles.metricCardDetail}>{item.detail}</span> : null}
+              {item.detail ? <span className={detailClass(item, styles.metricCardDetail)}>{item.detail}</span> : null}
               {item.indicator ? <span className={styles.metricCardIndicator}>{item.indicator}</span> : null}
             </>
           );
@@ -108,7 +113,7 @@ export default function MetricStrip({ items, ariaLabel, className, variant = "st
             <span className={styles.metricCopy}>
               <span className={styles.metricLabel}>{item.label}</span>
               <strong className={styles.metricValue}>{item.value}</strong>
-              {item.detail ? <span className={styles.metricDetail}>{item.detail}</span> : null}
+              {item.detail ? <span className={detailClass(item, styles.metricDetail)}>{item.detail}</span> : null}
             </span>
             {item.indicator ? <span className={styles.metricIndicator}>{item.indicator}</span> : null}
             {item.icon ? <span className={styles.metricIcon}>{item.icon}</span> : null}

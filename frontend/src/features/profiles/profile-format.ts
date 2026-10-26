@@ -30,10 +30,24 @@ export function formatAmbrPair(
   fallback: string,
   labels: { downlink: string; uplink: string },
 ): string {
-  if (typeof ambr !== 'object' || ambr === null) return fallback;
+  const sides = ambrPairOrFallback(ambr, fallback);
+  if (!sides) return fallback;
+  const [downlink, uplink] = sides;
+  return `${labels.downlink} ${downlink} / ${labels.uplink} ${uplink}`;
+}
+
+/* The list column already sits under a UE-AMBR heading, so the direction words
+ * cost width without adding information. */
+export function formatAmbrPairCompact(ambr: unknown, fallback: string): string {
+  const sides = ambrPairOrFallback(ambr, fallback);
+  return sides ? `${sides[0]} / ${sides[1]}` : fallback;
+}
+
+function ambrPairOrFallback(ambr: unknown, fallback: string): [string, string] | null {
+  if (typeof ambr !== 'object' || ambr === null) return null;
   const record = ambr as Record<string, unknown>;
   const downlink = formatAmbrSide(record.downlink, fallback);
   const uplink = formatAmbrSide(record.uplink, fallback);
-  if (downlink === fallback && uplink === fallback) return fallback;
-  return `${labels.downlink} ${downlink} / ${labels.uplink} ${uplink}`;
+  if (downlink === fallback && uplink === fallback) return null;
+  return [downlink, uplink];
 }

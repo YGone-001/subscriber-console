@@ -26,7 +26,7 @@ import {
   profileFilterFromParam,
   profileFilterToParam,
 } from '../src/features/profiles/profile-list-model';
-import { formatAmbrPair } from '../src/features/profiles/profile-format';
+import { formatAmbrPair, formatAmbrPairCompact } from '../src/features/profiles/profile-format';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -368,4 +368,62 @@ test('template detail drills down into linked subscribers through the profile fi
   const subscribersPage = read('../src/features/subscribers/SubscribersPage.tsx');
   assert.match(subscribersPage, /searchParams\.get\('profile'\)/);
   assert.match(subscribersPage, /filterParams\.set\('profile', profileDrillDown\)/);
+});
+
+test('the compact AMBR pair drops the direction words the column heading already carries', () => {
+  assert.equal(formatAmbrPairCompact(null, 'N/A'), 'N/A');
+  assert.equal(formatAmbrPairCompact({ downlink: null, uplink: null }, 'N/A'), 'N/A');
+  assert.equal(
+    formatAmbrPairCompact({ downlink: { unit: 3, value: 1000 }, uplink: { unit: 3, value: 300 } }, 'N/A'),
+    '1000 Gbps / 300 Gbps',
+  );
+  assert.equal(formatAmbrPairCompact({ downlink: { unit: 2, value: 10 } }, 'N/A'), '10 Mbps / N/A');
+});
+
+test('the template table pins its column grid so the identifier cannot be starved', () => {
+  const page = read('../src/features/profiles/ProfilesPage.tsx');
+  const css = read('../src/styles/profile.css');
+  assert.match(page, /<colgroup>/);
+  assert.match(page, /profile-col-template/);
+  assert.match(css, /\.profile-governance-table \{[^}]*table-layout: fixed/);
+  assert.match(css, /\.profile-col-template \{ width: 20%/);
+  assert.match(page, /formatAmbrPairCompact\(/);
+});
+
+test('the template filter row wraps instead of scrolling chips out of reach', () => {
+  const css = read('../src/styles/globals.css');
+  assert.match(css, /\.profile-domain-filters \{[^}]*flex-wrap: wrap/);
+  assert.doesNotMatch(css, /\.profile-domain-filters \{[^}]*overflow-x: auto/);
+  assert.match(css, /\.profile-action-bar \{[^}]*minmax\(0, auto\)/);
+  /* Between the stacked breakpoint and 1180px the filter group takes its own row,
+   * which is where three tracks starved it to 351px against 694px of chips. */
+  assert.match(css, /@media \(max-width: 1180px\) \{[\s\S]*?\.profile-domain-filters \{\s*grid-column: 1 \/ -1;/);
+});
+
+test('the column grid follows the responsive hiding of supplementary columns', () => {
+  const css = read('../src/styles/profile.css');
+  /* The shared rule hides supplementary columns at 980px; the surviving columns
+   * must absorb their share or the fixed grid leaves dead space. */
+  assert.match(css, /@media \(max-width: 980px\) \{[\s\S]*?\.profile-col-ambr,\s*\.profile-col-owner \{ width: 0; \}/);
+  assert.match(css, /\.profile-col-template \{ width: 20%; \}/);
+});
+
+test('the aggregate breakdown wraps through an opt-in class instead of editing the shared strip', () => {
+  const strip = read('../src/components/ui/MetricStrip.tsx');
+  const page = read('../src/features/profiles/ProfilesPage.tsx');
+  const css = read('../src/styles/profile.css');
+  assert.match(strip, /detailClassName\?: string/);
+  assert.match(strip, /detailClass\(item, styles\.metricDetail\)/);
+  assert.match(page, /detailClassName: "profile-metric-detail"/);
+  assert.match(css, /\.profile-page-container \.profile-metric-detail \{[^}]*white-space: normal/);
+  /* The primitive must keep clipping by default for its other consumers. */
+  assert.match(read('../src/styles/modules/ConsolePrimitives.module.css'), /\.metricDetail \{[^}]*white-space: nowrap/);
+});
+
+test('the empty template list offers one create affordance, not two', () => {
+  const page = read('../src/features/profiles/ProfilesPage.tsx');
+  const emptyIndex = page.indexOf('<EmptyState');
+  assert.ok(emptyIndex > 0, 'the list must keep its empty state');
+  assert.ok(!page.slice(emptyIndex).includes('/profile/new'), 'the empty state must not repeat the create button');
+  assert.match(page, /onClick=\{\(\) => router\.push\('\/profile\/new'\)\}/);
 });
