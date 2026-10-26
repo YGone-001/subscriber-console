@@ -169,16 +169,20 @@ check('UI-17', /NavigationTabBar/.test(shellSource) && /NavigationBreadcrumbs/.t
 check('UI-18', /'b'/.test(shellSource) && /'k'/.test(shellSource) && /Escape/.test(shellSource) && /981/.test(shellSource) && /sidebar-mobile-backdrop/.test(shellSource) && /document\.body\.style\.overflow/.test(shellSource), 'shell_interactions=ctrl+b+ctrl+k+escape+breakpoint+overlay');
 
 // 7. Dashboard presentation.
-// The dashboard is the forward-ported AnalyticsCockpit (reference composition),
-// not a locally invented layout.
+// The dashboard is the operations overview page: one stable title with two
+// URL-addressable views — the xCloud-native operations overview and the
+// forward-ported business cockpit (reference composition) mounted only while
+// its view is active.
 const dashboardSource = readSource('features/operations/OperationsOverviewPage.tsx');
 const dashboardEntrySource = readSource('features/read/ReadPages.tsx');
 const cockpitSource = readSource('components/AnalyticsCockpit.tsx');
 const emptyChartSource = readSource('components/analytics/EmptyChartState.tsx');
-check('UI-19', /OperationsOverviewPage/.test(dashboardEntrySource) && /AnalyticsCockpit/.test(dashboardSource) && /OperationsOverview/.test(dashboardSource) && /MetricStrip/.test(cockpitSource) && /WorkbenchPanel/.test(cockpitSource) && /OcsResourceStrip/.test(cockpitSource) && /TopConsumerChart/.test(cockpitSource) && /TariffPlanDistributionChart/.test(cockpitSource), 'dashboard_layout=operations-first+secondary-cockpit');
+check('UI-19', /OperationsOverviewPage/.test(dashboardEntrySource) && /OperationsOverview/.test(dashboardSource) && /AnalyticsCockpit/.test(dashboardSource) && /MetricStrip/.test(cockpitSource) && /BusinessRiskPanel/.test(cockpitSource) && /OcsHealthPanel/.test(cockpitSource) && /TopUsageChart/.test(cockpitSource) && /TariffPlanDistributionChart/.test(cockpitSource), 'dashboard_layout=operations-first+secondary-cockpit');
 check('UI-20', /SkeletonDashboard/.test(cockpitSource) && /analytics-offline/.test(cockpitSource) && /EmptyChartState/.test(emptyChartSource), 'dashboard_states=loading+error+empty');
-// The cockpit must read the accepted read contracts, never a bespoke aggregation.
-check('UI-21', ['/api/analytics/metrics', '/api/analytics/sparkline', '/api/alerts', '/api/ocs/subscribers'].every((endpoint) => cockpitSource.includes(endpoint)), 'dashboard_read_contracts=metrics+sparkline+alerts+contracts');
+// The cockpit must read the accepted read contracts, never a bespoke
+// aggregation: OCS analytics for the headline metrics, the UE Info summary for
+// subscriber/online-user counts, and the bounded orphan-reservation lookup.
+check('UI-21', ['/api/analytics/metrics', '/api/ue-info', '/api/ocs/reservations'].every((endpoint) => cockpitSource.includes(endpoint)), 'dashboard_read_contracts=metrics+ue-info+orphan-reservations');
 const DASHBOARD_FAKE_DATA = [/\b12345\b/, /lorem ipsum/i, /mockData/, /fakeData/];
 check('UI-22', DASHBOARD_FAKE_DATA.every((pattern) => !pattern.test(dashboardSource) && !pattern.test(cockpitSource)), 'dashboard_fake_data=0');
 

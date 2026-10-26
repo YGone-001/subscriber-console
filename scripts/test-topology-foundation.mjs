@@ -28,7 +28,7 @@
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import path from 'node:path';
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
@@ -677,7 +677,12 @@ async function main() {
     console.log('topology_discovery_runtime=0');
     console.log('topology_remote_executor=0');
     console.log('topology_multi_hop=0');
-    console.log('business_mutation_endpoints=29');
+    const businessMutationEndpoints = new Set(
+      JSON.parse(readFileSync(path.resolve(import.meta.dirname, '..', 'frontend/mutation-contract.json'), 'utf8'))
+        .flatMap((entry) => entry.operations)
+        .map((op) => op.request),
+    );
+    console.log(`business_mutation_endpoints=${businessMutationEndpoints.size}`);
     console.log('business_request_contracts=31');
     console.log('operational_endpoints=4');
     console.log('topology_foundation_result=PASS');

@@ -259,7 +259,49 @@ const operationalContract = JSON.parse(readFileSync(resolve(frontend, 'operation
 
 const businessOps = businessContract.flatMap((entry) => entry.operations);
 const businessUniqueEndpoints = new Set(businessOps.map((op) => op.request));
-assert.equal(businessUniqueEndpoints.size, 29, `business mutation endpoints must remain 29, got ${businessUniqueEndpoints.size}`);
+
+/* The business mutation surface legitimately grew when the knowledge-base
+ * module landed, so the total is not pinned. What must hold is that every
+ * pre-knowledge business endpoint still exists and that inventory — whose
+ * mutations live in the operational contract — never leaks into this one. */
+const CORE_BUSINESS_MUTATION_ENDPOINTS = [
+  'DELETE /api/ocs/subscribers/{imsi}',
+  'DELETE /api/profiles/{name}',
+  'DELETE /api/subscribers/{imsi}',
+  'DELETE /api/tariff-plans/{planId}',
+  'PATCH /api/ocs/subscribers/{imsi}',
+  'PATCH /api/users/{username}',
+  'POST /api/ocs/balances/{imsi}/adjust',
+  'POST /api/ocs/subscribers',
+  'POST /api/ocs/subscribers/{imsi}/resume',
+  'POST /api/ocs/subscribers/{imsi}/suspend',
+  'POST /api/profiles',
+  'POST /api/profiles/{name}/versions/{versionId}/restore',
+  'POST /api/subscribers',
+  'POST /api/subscribers/batch',
+  'POST /api/subscribers/batch-update',
+  'POST /api/subscribers/bulk-delete',
+  'POST /api/subscribers/import',
+  'POST /api/subscribers/{imsi}/profile',
+  'POST /api/subscribers/{imsi}/traffic-adjustments',
+  'POST /api/tariff-plans',
+  'POST /api/tariff-plans/{planId}/clone',
+  'POST /api/tariff-plans/{planId}/disable',
+  'POST /api/tariff-plans/{planId}/enable',
+  'POST /api/users',
+  'POST /api/users/{username}/disable',
+  'POST /api/users/{username}/password-reset',
+  'PUT /api/profiles/{name}',
+  'PUT /api/subscribers/{imsi}',
+  'PUT /api/tariff-plans/{planId}',
+];
+for (const endpoint of CORE_BUSINESS_MUTATION_ENDPOINTS) {
+  assert.ok(businessUniqueEndpoints.has(endpoint), `core business mutation endpoint missing: ${endpoint}`);
+}
+assert.ok(
+  [...businessUniqueEndpoints].every((endpoint) => !endpoint.startsWith('/api/inventory')),
+  'inventory endpoints must not appear in the business mutation contract',
+);
 assert.equal(businessReqContract.length, 31, `business request contracts must remain 31, got ${businessReqContract.length}`);
 
 const operationalOps = operationalContract.flatMap((entry) => entry.operations);
@@ -333,7 +375,7 @@ console.log('inventory_frontend_routes=3');
 console.log('inventory_api_registrations=6');
 console.log('inventory_reads=3');
 console.log('inventory_mutations=3');
-console.log('business_mutation_endpoints=29');
+console.log(`business_mutation_endpoints=${businessUniqueEndpoints.size}`);
 console.log('business_request_contracts=31');
 console.log('operational_endpoints=4');
 console.log('inventory_hard_delete_endpoint=0');

@@ -27,7 +27,7 @@
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import path from 'node:path';
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
@@ -814,7 +814,12 @@ async function main() {
     console.log('inventory_rejected_create_audit_unchanged=PASS');
     console.log('inventory_rejected_update_audit_unchanged=PASS');
     console.log('inventory_rejected_retire_audit_unchanged=PASS');
-    console.log('business_mutation_endpoints=29');
+    const businessMutationEndpoints = new Set(
+      JSON.parse(readFileSync(path.resolve(import.meta.dirname, '..', 'frontend/mutation-contract.json'), 'utf8'))
+        .flatMap((entry) => entry.operations)
+        .map((op) => op.request),
+    );
+    console.log(`business_mutation_endpoints=${businessMutationEndpoints.size}`);
     console.log('business_request_contracts=31');
     console.log('operational_endpoints=4');
     console.log('inventory_result=PASS');

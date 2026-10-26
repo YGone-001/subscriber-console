@@ -322,7 +322,13 @@ check(
 // the accepted data authorities, must not import any CNMS transport or mutation
 // endpoint, and must never present an unmeasured layer as healthy.
 // ---------------------------------------------------------------------------
-const overviewSource = readFileSync(resolve(root, 'frontend/src/features/operations/OperationalOverview.tsx'), 'utf8');
+/* The overview's endpoint reads live in its data hook, not the component: the
+ * component consumes the shared projection loader, so the source under test is
+ * the union of both files. */
+const overviewSource = [
+  readFileSync(resolve(root, 'frontend/src/features/operations/OperationalOverview.tsx'), 'utf8'),
+  readFileSync(resolve(root, 'frontend/src/features/operations/use-operational-overview-data.ts'), 'utf8'),
+].join('\n');
 const networkSource = readFileSync(resolve(root, 'frontend/src/features/operations/NetworkElementView.tsx'), 'utf8');
 const boundedEdgesSource = readFileSync(resolve(root, 'frontend/src/features/operations/use-bounded-edges.ts'), 'utf8');
 const urlStateSource = readFileSync(resolve(root, 'frontend/src/features/operations/operations-url-state.ts'), 'utf8');
