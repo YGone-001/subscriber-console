@@ -247,11 +247,20 @@ func (r *Repository) ListProfileVersions(ctx context.Context, profileName string
 			continue
 		}
 		v := ProfileVersionSummary{
-			VersionID: stringField(doc, "versionId"),
-			Action:    stringField(doc, "action"),
-			SavedAt:   timeField(doc, "savedAt"),
-			SavedBy:   stringField(doc, "savedBy"),
-			Title:     stringField(doc, "title"),
+			VersionID:   stringField(doc, "versionId"),
+			ProfileName: stringField(doc, "profileName"),
+			Action:      stringField(doc, "action"),
+			SavedAt:     timeField(doc, "savedAt"),
+			SavedBy:     stringField(doc, "savedBy"),
+			Title:       stringField(doc, "title"),
+			SliceCount:  int(aggregationInt(doc["sliceCount"])),
+		}
+		// Records written before the counter was projected carry no sliceCount;
+		// the stored snapshot remains authoritative.
+		if v.SliceCount == 0 {
+			if snapshot := asDocument(doc["profile"]); snapshot != nil {
+				v.SliceCount = arrayLen(snapshot["sliceList"])
+			}
 		}
 		versions = append(versions, v)
 	}
@@ -380,6 +389,35 @@ func sliceCount(doc bson.M) int {
 		return 0
 	}
 	if arr, ok := v.(bson.A); ok {
+		return len(arr)
+	}
+	return 0
+}
+
+// asDocument adapts a decoded nested document to bson.M. The driver returns
+// nested documents as bson.M, bson.D or map[string]any depending on the target.
+func asDocument(v any) bson.M {
+	switch doc := v.(type) {
+	case bson.M:
+		return doc
+	case map[string]any:
+		return bson.M(doc)
+	case bson.D:
+		converted := make(bson.M, len(doc))
+		for _, elem := range doc {
+			converted[elem.Key] = elem.Value
+		}
+		return converted
+	}
+	return nil
+}
+
+// arrayLen reports the length of a decoded array regardless of element type.
+func arrayLen(v any) int {
+	switch arr := v.(type) {
+	case bson.A:
+		return len(arr)
+	case []any:
 		return len(arr)
 	}
 	return 0

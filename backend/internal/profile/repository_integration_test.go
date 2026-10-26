@@ -164,3 +164,76 @@ func TestProfileVersionRetention_ErrorPropagation(t *testing.T) {
 		t.Errorf("SaveProfileVersion with empty profileName should not error, got: %v", err)
 	}
 }
+
+func TestListProfileVersionsProjectsSliceCountAndProfileName(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := profileTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	const name = "projection_profile"
+	records := []bson.M{
+		{
+			"versionId":   "v-projected",
+			"profileName": name,
+			"action":      "UPDATE",
+			"savedAt":     "2026-01-02T10:00:00.000Z",
+			"savedBy":     "admin",
+			"title":       "Projected",
+			"sliceCount":  int32(3),
+			"profile":     bson.M{"name": name, "sliceList": bson.A{}},
+		},
+		{
+			// Legacy record: no stored counter, snapshot is authoritative.
+			"versionId":   "v-legacy",
+			"profileName": name,
+			"action":      "CREATE",
+			"savedAt":     "2026-01-01T10:00:00.000Z",
+			"savedBy":     "admin",
+			"title":       "Legacy",
+			"profile": bson.M{
+				"name":      name,
+				"sliceList": bson.A{bson.M{"sst": int32(1)}, bson.M{"sst": int32(2)}},
+			},
+		},
+	}
+	for _, record := range records {
+		if err := repo.SaveProfileVersion(ctx, record); err != nil {
+			t.Fatalf("save version: %v", err)
+		}
+	}
+
+	versions, err := repo.ListProfileVersions(ctx, name, 20)
+	if err != nil {
+		t.Fatalf("list versions: %v", err)
+	}
+	if len(versions) != 2 {
+		t.Fatalf("expected 2 versions, got %d", len(versions))
+	}
+
+	byID := make(map[string]ProfileVersionSummary, len(versions))
+	for _, v := range versions {
+		byID[v.VersionID] = v
+	}
+
+	projected, ok := byID["v-projected"]
+	if !ok {
+		t.Fatal("projected version missing from list")
+	}
+	if projected.ProfileName != name {
+		t.Errorf("expected profileName %q, got %q", name, projected.ProfileName)
+	}
+	if projected.SliceCount != 3 {
+		t.Errorf("expected stored sliceCount 3, got %d", projected.SliceCount)
+	}
+
+	legacy, ok := byID["v-legacy"]
+	if !ok {
+		t.Fatal("legacy version missing from list")
+	}
+	if legacy.SliceCount != 2 {
+		t.Errorf("expected snapshot-derived sliceCount 2, got %d", legacy.SliceCount)
+	}
+}

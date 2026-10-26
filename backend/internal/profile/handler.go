@@ -188,6 +188,22 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Detail branch: callers that pass no versionId keep the list contract.
+	if versionID := r.URL.Query().Get("versionId"); versionID != "" {
+		version, err := h.repo.GetProfileVersion(r.Context(), name, versionID)
+		if err != nil {
+			response.InternalError(w)
+			return
+		}
+		if version == nil {
+			response.JSON(w, http.StatusNotFound, map[string]string{"error": "Profile version not found"})
+			return
+		}
+		delete(version, "_id")
+		response.JSON(w, http.StatusOK, ProfileVersionDetailResponse{Version: version})
+		return
+	}
+
 	limit := 20
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {

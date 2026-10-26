@@ -58,13 +58,21 @@ type ProfileVersionsResponse struct {
 	Current  *ProfileCurrentSummary  `json:"current"`
 }
 
+// ProfileVersionDetailResponse matches the versionId branch of
+// GET /api/profiles/:name/versions.
+type ProfileVersionDetailResponse struct {
+	Version map[string]any `json:"version"`
+}
+
 // ProfileVersionSummary is a summarized version record.
 type ProfileVersionSummary struct {
-	VersionID string `json:"versionId"`
-	Action    string `json:"action"`
-	SavedAt   string `json:"savedAt,omitempty"`
-	SavedBy   string `json:"savedBy,omitempty"`
-	Title     string `json:"title,omitempty"`
+	VersionID   string `json:"versionId"`
+	ProfileName string `json:"profileName,omitempty"`
+	Action      string `json:"action"`
+	SavedAt     string `json:"savedAt,omitempty"`
+	SavedBy     string `json:"savedBy,omitempty"`
+	Title       string `json:"title,omitempty"`
+	SliceCount  int    `json:"sliceCount"`
 }
 
 // ProfileCurrentSummary is the current profile summary shown in versions list.

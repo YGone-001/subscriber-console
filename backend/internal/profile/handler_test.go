@@ -1273,3 +1273,114 @@ func TestRestoreCASConflict(t *testing.T) {
 		t.Logf("CAS conflict result: %d - %s", w.Code, w.Body.String())
 	}
 }
+
+func TestVersionsDetailBranchReturnsSnapshot(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	const profileName = "test_versions_detail"
+	repo.versions = append(repo.versions, bson.M{
+		"_id":         "mongo-internal-id",
+		"versionId":   "v-001",
+		"profileName": profileName,
+		"action":      "UPDATE",
+		"savedAt":     "2026-01-01T10:00:00.000Z",
+		"savedBy":     "admin",
+		"title":       "Old Title",
+		"sliceCount":  int32(2),
+		"profile": bson.M{
+			"name":  profileName,
+			"title": "Old Title",
+			"auth": bson.M{
+				"k":   "00112233445566778899aabbccddeeff",
+				"opc": "ffeeddccbbaa99887766554433221100",
+				"amf": "8000",
+			},
+			"sliceList": bson.A{
+				bson.M{"sst": int32(1), "sd": "000001"},
+				bson.M{"sst": int32(2), "sd": "000002"},
+			},
+		},
+	})
+
+	principal := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+	req := httptest.NewRequest("GET", "/api/profiles/"+profileName+"/versions?versionId=v-001", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", profileName)
+
+	w := httptest.NewRecorder()
+	handler.Versions(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp ProfileVersionDetailResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Version == nil {
+		t.Fatal("expected a version payload, got null")
+	}
+	if got, _ := resp.Version["versionId"].(string); got != "v-001" {
+		t.Errorf("expected versionId 'v-001', got %q", got)
+	}
+	if _, exposed := resp.Version["_id"]; exposed {
+		t.Error("version detail must not expose the driver _id")
+	}
+	snapshot, ok := resp.Version["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested profile snapshot, got %T", resp.Version["profile"])
+	}
+	if got, _ := snapshot["title"].(string); got != "Old Title" {
+		t.Errorf("expected snapshot title 'Old Title', got %q", got)
+	}
+}
+
+func TestVersionsDetailBranchNotFound(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	principal := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+	req := httptest.NewRequest("GET", "/api/profiles/missing_profile/versions?versionId=v-404", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", "missing_profile")
+
+	w := httptest.NewRecorder()
+	handler.Versions(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, w.Code, w.Body.String())
+	}
+}
+
+func TestVersionsListBranchKeepsShape(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	principal := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+	req := httptest.NewRequest("GET", "/api/profiles/test_profile/versions", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", "test_profile")
+
+	w := httptest.NewRecorder()
+	handler.Versions(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if _, ok := body["versions"]; !ok {
+		t.Error("list response must keep the versions field")
+	}
+	if _, ok := body["current"]; !ok {
+		t.Error("list response must keep the current field")
+	}
+	if _, leaked := body["version"]; leaked {
+		t.Error("list response must not gain the detail-only version field")
+	}
+}
