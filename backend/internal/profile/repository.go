@@ -389,6 +389,11 @@ func timeField(doc bson.M, key string) string {
 		return t.UTC().Format("2006-01-02T15:04:05.000Z")
 	case bson.DateTime:
 		return t.Time().UTC().Format("2006-01-02T15:04:05.000Z")
+	case string:
+		// Version snapshots store savedAt as an ISO string, the same shape the
+		// profile documents carry; without this branch the version list loses
+		// every timestamp.
+		return strings.TrimSpace(t)
 	default:
 		return ""
 	}

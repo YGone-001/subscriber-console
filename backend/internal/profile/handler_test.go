@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"strings"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -1726,5 +1728,193 @@ func TestVersionsDetailBranchMasksBsonDSnapshotCredentials(t *testing.T) {
 	}
 	if got, _ := authMaterial["amf"].(string); got != "8000" {
 		t.Errorf("expected snapshot amf plaintext, got %q", got)
+	}
+}
+
+// ─── Read gate, refusal contract and write-input guards ─────────────────────
+
+func doProfileRequest(t *testing.T, call func(http.ResponseWriter, *http.Request), method, target string, body any, principal *auth.Principal, pathValues map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	var payload []byte
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("failed to encode request body: %v", err)
+		}
+		payload = encoded
+	}
+	req := httptest.NewRequest(method, target, bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	if principal != nil {
+		req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	}
+	for key, value := range pathValues {
+		req.SetPathValue(key, value)
+	}
+	w := httptest.NewRecorder()
+	call(w, req)
+	return w
+}
+
+func TestProfileMetaRequiresProfilesReadPermission(t *testing.T) {
+	handler := NewHandler(newMockRepository(), &mockLimiter{}, &mockAuditWriter{})
+
+	w := doProfileRequest(t, handler.Meta, "GET", "/api/profiles/meta", nil,
+		&auth.Principal{Username: "ghost", Role: "ghost", NormalizedRole: "ghost"}, nil)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected the meta read to be gated, got %d: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Code       string `json:"code"`
+		Permission string `json:"permission"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to unmarshal denial: %v", err)
+	}
+	if body.Code != "PERMISSION_DENIED" || body.Permission != "profiles.read" {
+		t.Errorf("unexpected denial payload: %+v", body)
+	}
+}
+
+func TestProfileWriteDenialsKeepTheirResponseContract(t *testing.T) {
+	handler := NewHandler(newMockRepository(), &mockLimiter{}, &mockAuditWriter{})
+	viewer := &auth.Principal{Username: "watcher", Role: "viewer", NormalizedRole: "viewer"}
+
+	cases := []struct {
+		label string
+		call  func(http.ResponseWriter, *http.Request)
+	}{
+		{"create", handler.Create},
+		{"update", handler.Update},
+		{"delete", handler.Delete},
+	}
+	for _, tc := range cases {
+		w := doProfileRequest(t, tc.call, "POST", "/api/profiles/test_profile", map[string]any{"name": "test_profile"}, viewer,
+			map[string]string{"name": "test_profile"})
+		if w.Code != http.StatusForbidden {
+			t.Errorf("%s: expected 403, got %d: %s", tc.label, w.Code, w.Body.String())
+			continue
+		}
+		// The refusal now also reaches the audit writer in production; the body
+		// stays exactly what it was, so no client has to be retrained.
+		var body struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s: failed to unmarshal denial: %v", tc.label, err)
+		}
+		if body.Error != "Insufficient permissions" {
+			t.Errorf("%s: denial body changed: %+v", tc.label, body)
+		}
+	}
+}
+
+func TestProfileRestoreRequiresTheReadGateFirst(t *testing.T) {
+	handler := NewHandler(newMockRepository(), &mockLimiter{}, &mockAuditWriter{})
+	pathValues := map[string]string{"name": "test_profile", "versionId": "1-abc"}
+
+	ghost := doProfileRequest(t, handler.Restore, "POST", "/api/profiles/test_profile/versions/1-abc/restore", nil,
+		&auth.Principal{Username: "ghost", Role: "ghost", NormalizedRole: "ghost"}, pathValues)
+	if ghost.Code != http.StatusForbidden {
+		t.Fatalf("expected the restore read gate to deny, got %d: %s", ghost.Code, ghost.Body.String())
+	}
+	var denial struct {
+		Code       string `json:"code"`
+		Permission string `json:"permission"`
+	}
+	if err := json.Unmarshal(ghost.Body.Bytes(), &denial); err != nil {
+		t.Fatalf("failed to unmarshal denial: %v", err)
+	}
+	if denial.Code != "PERMISSION_DENIED" || denial.Permission != "profiles.read" {
+		t.Errorf("expected a profiles.read denial, got %+v", denial)
+	}
+
+	// A reader without the rollback capability still fails the capability check.
+	viewer := doProfileRequest(t, handler.Restore, "POST", "/api/profiles/test_profile/versions/1-abc/restore", nil,
+		&auth.Principal{Username: "watcher", Role: "viewer", NormalizedRole: "viewer"}, pathValues)
+	if viewer.Code != http.StatusForbidden {
+		t.Fatalf("expected the capability gate to deny, got %d: %s", viewer.Code, viewer.Body.String())
+	}
+	var forbidden struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(viewer.Body.Bytes(), &forbidden)
+	if forbidden.Code != "FORBIDDEN" {
+		t.Errorf("expected FORBIDDEN, got %q: %s", forbidden.Code, viewer.Body.String())
+	}
+}
+
+func TestProfileUpdateRejectsMaskedCredentialMaterial(t *testing.T) {
+	handler := NewHandler(newMockRepository(), &mockLimiter{}, &mockAuditWriter{})
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "super_admin"}
+
+	for _, key := range credentialKeys {
+		authValue := map[string]any{"k": "465b2ce5b8a37f2e19d4a6c8b0e2f417", "amf": "8000"}
+		authValue[key] = maskedCredential
+		w := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/test_profile", map[string]any{"auth": authValue}, writer,
+			map[string]string{"name": "test_profile"})
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("auth.%s: expected 400, got %d: %s", key, w.Code, w.Body.String())
+			continue
+		}
+		var body struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &body)
+		if body.Code != "INVALID_PROFILE_UPDATE" {
+			t.Errorf("auth.%s: unexpected code %q", key, body.Code)
+		}
+	}
+
+	// An empty credential is a legitimate clear, not a masking sentinel.
+	if err := validateProfileUpdateBody(map[string]any{"auth": map[string]any{"k": "", "opc": "465b2ce5b8a37f2e19d4a6c8b0e2f417"}}); err != nil {
+		t.Errorf("a real credential write must stay valid: %v", err)
+	}
+}
+
+func TestProfileCreateNamePolicy(t *testing.T) {
+	cases := []struct {
+		name    string
+		allowed bool
+	}{
+		{"test_profile", true},
+		{"Gold 5G", true},
+		{"a", true},
+		{"new", false},
+		{"NEW", false},
+		{" new", false},
+		{"new ", false},
+		{"a\tb", false},
+		{"a\nb", false},
+		{strings.Repeat("x", 64), true},
+		{strings.Repeat("x", 65), false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := validNewProfileName(tc.name); got != tc.allowed {
+			t.Errorf("validNewProfileName(%q) = %v, want %v", tc.name, got, tc.allowed)
+		}
+	}
+
+	// The read path stays permissive so an existing odd-named template remains
+	// reachable even though it can no longer be created.
+	if !validProfileName.MatchString("new") || !validProfileName.MatchString("a\tb") {
+		t.Error("the historical read pattern must not tighten")
+	}
+}
+
+func TestGeneratedVersionIDStaysSizedAndDistinct(t *testing.T) {
+	pattern := regexp.MustCompile(`^[0-9]+-[0-9a-f]{16}$`)
+	seen := map[string]bool{}
+	for i := 0; i < 64; i++ {
+		id := generateVersionID()
+		if !pattern.MatchString(id) {
+			t.Fatalf("unexpected version id shape %q", id)
+		}
+		if seen[id] {
+			t.Fatalf("duplicate version id %q", id)
+		}
+		seen[id] = true
 	}
 }

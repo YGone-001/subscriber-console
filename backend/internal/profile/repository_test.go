@@ -2,6 +2,7 @@ package profile
 
 import (
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -105,5 +106,30 @@ func TestHasOCSDefaultsIgnoresEmptyObject(t *testing.T) {
 	}
 	if !hasOCSDefaults(bson.M{"ocsDefaults": bson.M{"planId": "plan_default_10gb"}}) {
 		t.Error("a declared ocsDefaults must report configured")
+	}
+}
+
+func TestTimeFieldReadsEveryStoredDateShape(t *testing.T) {
+	stamp := time.Date(2026, 3, 5, 7, 8, 9, 123_000_000, time.UTC)
+
+	// Version snapshots persist savedAt as an ISO string; reading only the driver
+	// date types used to drop it, which left the version list without a time.
+	if got := timeField(bson.M{"savedAt": "2026-03-05T07:08:09.123Z"}, "savedAt"); got != "2026-03-05T07:08:09.123Z" {
+		t.Errorf("string date: expected the stored ISO value, got %q", got)
+	}
+	if got := timeField(bson.M{"savedAt": stamp}, "savedAt"); got != "2026-03-05T07:08:09.123Z" {
+		t.Errorf("time.Time: got %q", got)
+	}
+	if got := timeField(bson.M{"savedAt": bson.NewDateTimeFromTime(stamp)}, "savedAt"); got != "2026-03-05T07:08:09.123Z" {
+		t.Errorf("bson.DateTime: got %q", got)
+	}
+	if got := timeField(bson.M{"savedAt": nil}, "savedAt"); got != "" {
+		t.Errorf("null: expected an absent value, got %q", got)
+	}
+	if got := timeField(bson.M{}, "savedAt"); got != "" {
+		t.Errorf("missing key: expected an absent value, got %q", got)
+	}
+	if got := timeField(bson.M{"savedAt": 17}, "savedAt"); got != "" {
+		t.Errorf("non-date type: expected an absent value, got %q", got)
 	}
 }

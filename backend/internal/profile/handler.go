@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,19 @@ import (
 )
 
 var validProfileName = regexp.MustCompile(`^[a-zA-Z0-9_\s-]+$`)
+
+// newProfileName is the creation-time policy: no tab or newline, no leading or
+// trailing space, and bounded length. The read path keeps the historical
+// pattern so an existing odd-named template stays reachable.
+var newProfileName = regexp.MustCompile(`^[a-zA-Z0-9_-](?:[a-zA-Z0-9_ -]{0,62}[a-zA-Z0-9_-])?$`)
+
+// reservedProfileName is an SPA route segment a template key would shadow: the
+// detail route is /profile/:name, so a template named "new" could never open.
+var reservedProfileName = regexp.MustCompile(`(?i)^new$`)
+
+func validNewProfileName(name string) bool {
+	return newProfileName.MatchString(name) && !reservedProfileName.MatchString(name)
+}
 
 // ProfileReader defines the read interface for profile data.
 type ProfileReader interface {
@@ -163,6 +177,12 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	// The meta payload carries the credential-visibility decision, so it is a
+	// template read and gated as one, like every other profile read.
+	if !audit.RequirePermissionWithAudit(w, r, p, "profiles.read", h.denials) {
 		return
 	}
 
@@ -387,6 +407,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Check profiles.write permission (super_admin, ops_admin)
 	if !auth.HasPermission(p, "profiles.write") {
+		// Record the refusal like the read guards do, keeping the existing body.
+		audit.RecordPermissionDenied(h.denials, r, p, audit.DenialMetadata{Permission: "profiles.write"})
 		response.Forbidden(w, "Insufficient permissions")
 		return
 	}
@@ -404,7 +426,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate profile name
-	if !validProfileName.MatchString(req.Name) {
+	if !validNewProfileName(req.Name) {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
 		return
 	}
@@ -542,6 +564,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Check profiles.write permission
 	if !auth.HasPermission(p, "profiles.write") {
+		// Record the refusal like the read guards do, keeping the existing body.
+		audit.RecordPermissionDenied(h.denials, r, p, audit.DenialMetadata{Permission: "profiles.write"})
 		response.Forbidden(w, "Insufficient permissions")
 		return
 	}
@@ -696,6 +720,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	// Check profiles.write permission
 	if !auth.HasPermission(p, "profiles.write") {
+		// Record the refusal like the read guards do, keeping the existing body.
+		audit.RecordPermissionDenied(h.denials, r, p, audit.DenialMetadata{Permission: "profiles.write"})
 		response.Forbidden(w, "Insufficient permissions")
 		return
 	}
@@ -801,6 +827,12 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 
 	name := r.PathValue("name")
 	versionId := r.PathValue("versionId")
+
+	// A restore reads a stored snapshot, which carries template credential
+	// material, so the template read gate applies before the capability check.
+	if !audit.RequirePermissionWithAudit(w, r, p, "profiles.read", h.denials) {
+		return
+	}
 
 	slog.Info("profile_restore_start",
 		"operation", "PROFILE_RESTORE",
@@ -1307,10 +1339,9 @@ func generateVersionID() string {
 // randomHex generates a random hex string of the given byte length.
 func randomHex(n int) string {
 	b := make([]byte, n)
-	for i := range b {
-		b[i] = byte(time.Now().UnixNano() >> (8 * i))
-	}
-	return fmt.Sprintf("%x", b)
+	// crypto/rand.Read never returns a non-nil error on the supported platforms.
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // writeStrictAudit writes an audit record and logs on failure without gating.
@@ -1425,6 +1456,17 @@ func validateProfileUpdateBody(body map[string]any) error {
 		}
 		// Reject unknown fields
 		return fmt.Errorf("unknown field: %s", field)
+	}
+	// The read path substitutes the masking sentinel for credential material.
+	// Echoing it back would store it as a real key and the governed apply would
+	// copy it into a subscriber's security block, so the sentinel is never valid
+	// write input.
+	if authValue, ok := body["auth"].(map[string]any); ok {
+		for _, key := range credentialKeys {
+			if text, _ := authValue[key].(string); text == maskedCredential {
+				return fmt.Errorf("auth.%s: masked credential material cannot be written back", key)
+			}
+		}
 	}
 	return nil
 }
