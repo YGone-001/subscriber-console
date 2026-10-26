@@ -180,7 +180,7 @@ func main() {
 	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter, auditWriter)
 
 	// Profile handler
-	profileHandler := profile.NewHandler(profileRepo, limiter, auditWriter)
+	profileHandler := profile.NewHandler(profileRepo, limiter, auditWriter, auditWriter)
 
 	// Auth handler (login / logout / me)
 	authAuditAdapter := &authAuditRecorder{writer: auditWriter}

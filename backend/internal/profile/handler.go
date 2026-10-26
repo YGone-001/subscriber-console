@@ -61,11 +61,50 @@ type Handler struct {
 	repo    ProfileReadWriter
 	limiter RateLimiter
 	audit   AuditWriter
+	// denials receives authorization-denied evidence for the read permission
+	// gate. It is the concrete audit writer; nil only in unit tests.
+	denials *audit.Writer
 }
 
-// NewHandler creates a new profile Handler.
-func NewHandler(repo ProfileReadWriter, limiter RateLimiter, auditWriter AuditWriter) *Handler {
-	return &Handler{repo: repo, limiter: limiter, audit: auditWriter}
+// NewHandler creates a new profile Handler. The optional denial writer records
+// read-permission refusals; unit tests may omit it.
+func NewHandler(repo ProfileReadWriter, limiter RateLimiter, auditWriter AuditWriter, denials ...*audit.Writer) *Handler {
+	h := &Handler{repo: repo, limiter: limiter, audit: auditWriter}
+	if len(denials) > 0 {
+		h.denials = denials[0]
+	}
+	return h
+}
+
+// maskedCredential replaces stored authentication material values for callers
+// without the subscriber write permission. Key presence is preserved so a
+// masked reader can still tell a configured field from an unconfigured one.
+const maskedCredential = "[MASKED]"
+
+var credentialKeys = []string{"k", "op", "opc"}
+
+func maskCredentialMaterial(doc bson.M, canSeeCredentials bool) {
+	if doc == nil || canSeeCredentials {
+		return
+	}
+	authMaterial, ok := doc["auth"].(bson.M)
+	if !ok {
+		return
+	}
+	for _, key := range credentialKeys {
+		if value, ok := authMaterial[key].(string); ok && value != "" {
+			authMaterial[key] = maskedCredential
+		}
+	}
+}
+
+func maskVersionSnapshot(version bson.M, canSeeCredentials bool) {
+	if version == nil || canSeeCredentials {
+		return
+	}
+	if snapshot, ok := version["profile"].(bson.M); ok {
+		maskCredentialMaterial(snapshot, false)
+	}
 }
 
 // List handles GET /api/profiles
@@ -73,6 +112,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "profiles.read", h.denials) {
 		return
 	}
 
@@ -141,6 +184,10 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !audit.RequirePermissionWithAudit(w, r, p, "profiles.read", h.denials) {
+		return
+	}
+
 	name := r.PathValue("name")
 	if !validProfileName.MatchString(name) {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
@@ -161,6 +208,12 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Same predicate as the credentialVisibility capability bit served by Meta:
+	// template plaintext is provisioning material, so the subscriber write
+	// permission decides visibility, aligned with the subscriber detail
+	// auth4G redaction.
+	maskCredentialMaterial(profile, auth.HasPermission(p, "subscribers.write"))
+
 	stats, err := h.repo.GetProfileStats(r.Context(), name)
 	if err != nil {
 		response.InternalError(w)
@@ -178,6 +231,10 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "profiles.read", h.denials) {
 		return
 	}
 
@@ -219,6 +276,10 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !audit.RequirePermissionWithAudit(w, r, p, "profiles.read", h.denials) {
+		return
+	}
+
 	name := r.PathValue("name")
 	if !validProfileName.MatchString(name) {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
@@ -241,6 +302,8 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		delete(version, "_id")
+		// The snapshot embeds the full stored profile, credentials included.
+		maskVersionSnapshot(version, auth.HasPermission(p, "subscribers.write"))
 		response.JSON(w, http.StatusOK, ProfileVersionDetailResponse{Version: version})
 		return
 	}

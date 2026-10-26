@@ -1454,3 +1454,182 @@ func TestProfileMetaReportsViewerRestrictions(t *testing.T) {
 		t.Errorf("viewer must see masked credentials, got %q", resp.Capabilities.CredentialVisibility)
 	}
 }
+
+func TestProfileReadsRequireProfilesReadPermission(t *testing.T) {
+	// All three canonical roles carry profiles.read, so the gate's denial path
+	// is exercised with a principal that holds no permissions at all.
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	principal := &auth.Principal{Username: "ghost", Role: "ghost", NormalizedRole: "ghost"}
+
+	requests := []struct {
+		label string
+		call  func(w http.ResponseWriter, r *http.Request)
+	}{
+		{"list", handler.List},
+		{"get", func(w http.ResponseWriter, r *http.Request) {
+			r.SetPathValue("name", "some_profile")
+			handler.Get(w, r)
+		}},
+		{"stats", func(w http.ResponseWriter, r *http.Request) {
+			r.SetPathValue("name", "some_profile")
+			handler.Stats(w, r)
+		}},
+		{"versions", func(w http.ResponseWriter, r *http.Request) {
+			r.SetPathValue("name", "some_profile")
+			handler.Versions(w, r)
+		}},
+	}
+
+	for _, tc := range requests {
+		t.Run(tc.label, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/profiles", nil)
+			req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+			w := httptest.NewRecorder()
+			tc.call(w, req)
+
+			if w.Code != http.StatusForbidden {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusForbidden, w.Code, w.Body.String())
+			}
+			var body struct {
+				Code       string `json:"code"`
+				Permission string `json:"permission"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatalf("failed to unmarshal denial response: %v", err)
+			}
+			if body.Code != "PERMISSION_DENIED" || body.Permission != "profiles.read" {
+				t.Errorf("unexpected denial payload: %+v", body)
+			}
+		})
+	}
+}
+
+func TestProfileGetMasksCredentialsForViewer(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	repo.profiles["tpl"] = bson.M{
+		"name": "tpl",
+		"auth": bson.M{
+			"k":   "00112233445566778899aabbccddeeff",
+			"opc": "ffeeddccbbaa99887766554433221100",
+			"op":  "",
+			"amf": "8000",
+		},
+	}
+
+	principal := &auth.Principal{Username: "viewer1", Role: "viewer", NormalizedRole: "viewer"}
+	req := httptest.NewRequest("GET", "/api/profiles/tpl", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", "tpl")
+
+	w := httptest.NewRecorder()
+	handler.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp ProfileDetailResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	authMaterial, ok := resp.Profile["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected auth object, got %T", resp.Profile["auth"])
+	}
+	if got, _ := authMaterial["k"].(string); got != maskedCredential {
+		t.Errorf("expected k masked, got %q", got)
+	}
+	if got, _ := authMaterial["opc"].(string); got != maskedCredential {
+		t.Errorf("expected opc masked, got %q", got)
+	}
+	if got, _ := authMaterial["op"].(string); got != "" {
+		t.Errorf("an unconfigured op must stay empty, got %q", got)
+	}
+	if got, _ := authMaterial["amf"].(string); got != "8000" {
+		t.Errorf("amf is not credential material and must stay plaintext, got %q", got)
+	}
+}
+
+func TestProfileGetKeepsPlaintextForSubscriberWriter(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	repo.profiles["tpl"] = bson.M{
+		"name": "tpl",
+		"auth": bson.M{
+			"k":   "00112233445566778899aabbccddeeff",
+			"opc": "ffeeddccbbaa99887766554433221100",
+			"amf": "8000",
+		},
+	}
+
+	principal := &auth.Principal{Username: "op1", Role: "operator", NormalizedRole: "operator"}
+	req := httptest.NewRequest("GET", "/api/profiles/tpl", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", "tpl")
+
+	w := httptest.NewRecorder()
+	handler.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp ProfileDetailResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	authMaterial, _ := resp.Profile["auth"].(map[string]any)
+	if got, _ := authMaterial["k"].(string); got != "00112233445566778899aabbccddeeff" {
+		t.Errorf("operator must keep plaintext k, got %q", got)
+	}
+}
+
+func TestVersionsDetailBranchMasksSnapshotCredentials(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	repo.versions = append(repo.versions, bson.M{
+		"versionId":   "v-001",
+		"profileName": "tpl",
+		"action":      "UPDATE",
+		"profile": bson.M{
+			"name": "tpl",
+			"auth": bson.M{
+				"k":   "00112233445566778899aabbccddeeff",
+				"opc": "ffeeddccbbaa99887766554433221100",
+				"amf": "8000",
+			},
+		},
+	})
+
+	principal := &auth.Principal{Username: "viewer1", Role: "viewer", NormalizedRole: "viewer"}
+	req := httptest.NewRequest("GET", "/api/profiles/tpl/versions?versionId=v-001", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", "tpl")
+
+	w := httptest.NewRecorder()
+	handler.Versions(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp ProfileVersionDetailResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	snapshot, ok := resp.Version["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested profile snapshot, got %T", resp.Version["profile"])
+	}
+	authMaterial, _ := snapshot["auth"].(map[string]any)
+	if got, _ := authMaterial["k"].(string); got != maskedCredential {
+		t.Errorf("expected snapshot k masked, got %q", got)
+	}
+	if got, _ := authMaterial["amf"].(string); got != "8000" {
+		t.Errorf("expected snapshot amf plaintext, got %q", got)
+	}
+}
