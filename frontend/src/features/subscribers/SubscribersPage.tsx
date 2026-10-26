@@ -19,6 +19,7 @@
  * model, the summary strip, the toolbar, the table and the modals — is unchanged.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ArrowUpDown, Layers } from 'lucide-react';
 import SubscriberModal from '../../components/SubscriberModal';
 import BatchCreateModal from '../../components/BatchCreateModal';
@@ -36,6 +37,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useRead } from '../../lib/api/use-read';
 import { deleteJson, postJson } from '../../lib/api/mutation-client';
+import { buildProfileApplyRequest } from './mutation-contract';
 import type {
   FeedbackState,
   PendingDelete,
@@ -84,6 +86,13 @@ export function SubscribersPage() {
   const [modalImsi, setModalImsi] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [profileApplyTarget, setProfileApplyTarget] = useState<SubscriberRow | null>(null);
+  const [applyProfileName, setApplyProfileName] = useState('');
+  const [isApplyingProfile, setIsApplyingProfile] = useState(false);
+
+  /* Template drill-down arrives as ?profile=<name> from the template detail page. */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const profileDrillDown = searchParams.get('profile') ?? '';
 
   const timeAgo = (dateStr: string) => {
     if (!dateStr) return t('unknown');
@@ -125,6 +134,7 @@ export function SubscribersPage() {
   if (filters.provisioning !== 'all') filterParams.set('provisioning', filters.provisioning);
   if (filters.planId) filterParams.set('planId', filters.planId);
   if (filters.balance !== 'all') filterParams.set('balanceStatus', filters.balance);
+  if (profileDrillDown) filterParams.set('profile', profileDrillDown);
   const subscribersUrl = `/api/subscribers?${filterParams.toString()}`;
   const { data: subscribersData, isLoading, mutate: mutateSubscribers } = useRead<SubscribersResponse>(subscribersUrl);
 
@@ -141,7 +151,8 @@ export function SubscribersPage() {
     || filters.contract !== 'all'
     || filters.provisioning !== 'all'
     || filters.balance !== 'all'
-    || filters.planId !== '';
+    || filters.planId !== ''
+    || profileDrillDown !== '';
   const canAdjustBalance = hasPermission(user, 'ocs.balance.adjust');
 
   const handleOpenNew = () => {
@@ -168,6 +179,54 @@ export function SubscribersPage() {
     const total = sub.traffic?.total || 0;
     const balance = sub.traffic?.balance ?? Math.max(0, total - used);
     setTrafficAdjustmentTarget({ imsi: sub.imsi, traffic: { used, total, balance } });
+  };
+
+  const handleOpenProfileApply = (sub: SubscriberRow) => {
+    setProfileApplyTarget(sub);
+    setApplyProfileName('');
+  };
+
+  const executeProfileApply = async () => {
+    if (!profileApplyTarget) return;
+    const targetImsi = profileApplyTarget.imsi;
+    const profileName = applyProfileName.trim();
+    if (!profileName) return;
+    setIsApplyingProfile(true);
+    try {
+      const data = await postJson<{ outcome?: string; message?: string }>(
+        `/api/subscribers/${encodeURIComponent(targetImsi)}/profile`,
+        buildProfileApplyRequest(profileName),
+      );
+      setProfileApplyTarget(null);
+      setApplyProfileName('');
+      setFeedback({
+        tone: 'success',
+        title: t('sub_feedback_success_title'),
+        message: data?.outcome === 'no_effect'
+          ? t('sub_apply_profile_no_effect', { imsi: targetImsi })
+          : t('sub_apply_profile_success', { imsi: targetImsi, name: profileName }),
+      });
+      await mutateSubscribers();
+    } catch (failure) {
+      const detail = failure instanceof Error && failure.message ? failure.message : '';
+      setFeedback({
+        tone: 'danger',
+        title: t('sub_feedback_error_title'),
+        message: detail
+          ? `${t('sub_apply_profile_error', { imsi: targetImsi })} (${detail})`
+          : t('sub_apply_profile_error', { imsi: targetImsi }),
+      });
+      setProfileApplyTarget(null);
+      setApplyProfileName('');
+    } finally {
+      setIsApplyingProfile(false);
+    }
+  };
+
+  const clearProfileDrillDown = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete('profile');
+    setSearchParams(params, { replace: true });
   };
 
   const handleBulkDelete = () => {
@@ -389,6 +448,37 @@ export function SubscribersPage() {
           />
         )}
 
+        {profileApplyTarget && (
+          <ConfirmActionPanel
+            presentation="modal"
+            tone="warning"
+            title={t('sub_apply_profile_title', { imsi: profileApplyTarget.imsi })}
+            message={t('sub_apply_profile_desc', { imsi: profileApplyTarget.imsi })}
+            confirmLabel={t('sub_apply_profile_confirm')}
+            cancelLabel={t('cancel')}
+            isWorking={isApplyingProfile}
+            confirmDisabled={!applyProfileName.trim() || profileList.length === 0}
+            onConfirm={() => void executeProfileApply()}
+            onCancel={() => { setProfileApplyTarget(null); setApplyProfileName(''); }}
+          >
+            <div>
+              <label className="form-label" htmlFor="subscriber-apply-profile-select">{t('profile_template')}</label>
+              <select
+                id="subscriber-apply-profile-select"
+                className="form-input"
+                value={applyProfileName}
+                onChange={(event) => setApplyProfileName(event.target.value)}
+                disabled={profileList.length === 0}
+              >
+                <option value="">{profileList.length > 0 ? t('sub_apply_profile_pick') : t('sub_no_profiles')}</option>
+                {profileList.map((profile: { name: string; title?: string }) => (
+                  <option key={profile.name} value={profile.name}>{profile.title || profile.name}</option>
+                ))}
+              </select>
+            </div>
+          </ConfirmActionPanel>
+        )}
+
         <SubscriberToolbar
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
@@ -410,6 +500,15 @@ export function SubscribersPage() {
           onChange={handleFiltersChange}
           onReset={resetFilters}
         />
+
+        {profileDrillDown && (
+          <div className="page-action-bar" role="status">
+            <span className="form-label">{t('sub_filter_profile', { name: profileDrillDown })}</span>
+            <button type="button" className="btn btn-outline" onClick={clearProfileDrillDown}>
+              {t('sub_filter_reset')}
+            </button>
+          </div>
+        )}
 
         <div className="dash-card shadow table-card">
           <SubscriberTable
@@ -443,6 +542,7 @@ export function SubscribersPage() {
             activeDropdown={activeDropdown}
             setActiveDropdown={setActiveDropdown}
             handleOpenTrafficAdjustment={handleOpenTrafficAdjustment}
+            handleOpenProfileApply={handleOpenProfileApply}
           />
           {!isLoading && (
             <DataTablePagination

@@ -35,7 +35,7 @@ test('compact desktop density preserves the mobile interaction baseline', () => 
 test('subscriber row action menu stays inside the viewport and flips above the last row', () => {
   assert.deepEqual(
     getSubscriberActionMenuPosition({ top: 760, right: 1180, bottom: 792 }, 1200, 900),
-    { top: 618, left: 1000, placement: 'top' },
+    { top: 582, left: 1000, placement: 'top' },
   );
   assert.deepEqual(
     getSubscriberActionMenuPosition({ top: 120, right: 70, bottom: 152 }, 1200, 900),

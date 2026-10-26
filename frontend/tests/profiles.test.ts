@@ -315,3 +315,31 @@ test('a genuinely different section is still detected', () => {
   const rows = buildDraftChangeRows(payload, snapshot);
   assert.equal(rows.find((row) => row.key === 'auth')?.changed, true);
 });
+
+test('template apply is wired to the governed endpoint from both surfaces', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(detailPage, /import \{ buildProfileApplyRequest \} from '\.\.\/subscribers\/mutation-contract'/);
+  assert.match(detailPage, /buildProfileApplyRequest\(profileName\)/);
+  assert.match(detailPage, /\/api\/subscribers\/\$\{encodeURIComponent\(imsi\)\}\/profile/);
+  assert.match(detailPage, /subscribers\.write/);
+
+  const subscribersPage = read('../src/features/subscribers/SubscribersPage.tsx');
+  assert.match(subscribersPage, /buildProfileApplyRequest\(profileName\)/);
+  assert.match(subscribersPage, /\/api\/subscribers\/\$\{encodeURIComponent\(targetImsi\)\}\/profile/);
+});
+
+test('the client-side template merge is create-only; existing subscribers use the governed endpoint', () => {
+  const editMode = read('../src/features/subscribers/components/subscriber/SubscriberEditMode.tsx');
+  const guardIndex = editMode.indexOf('{isNewSubscriber && (');
+  const loadIndex = editMode.indexOf('loadFromProfile(e.target.value)');
+  assert.ok(guardIndex >= 0 && loadIndex > guardIndex, 'the template select must sit inside the create-only guard');
+});
+
+test('template detail drills down into linked subscribers through the profile filter', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(detailPage, /\/subscribers\?profile=\$\{encodeURIComponent\(profileName\)\}/);
+
+  const subscribersPage = read('../src/features/subscribers/SubscribersPage.tsx');
+  assert.match(subscribersPage, /searchParams\.get\('profile'\)/);
+  assert.match(subscribersPage, /filterParams\.set\('profile', profileDrillDown\)/);
+});

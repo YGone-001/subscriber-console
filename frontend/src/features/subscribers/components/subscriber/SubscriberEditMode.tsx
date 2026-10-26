@@ -190,20 +190,25 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                 </div>
               )}
             </div>
-            <div>
-              <label className="form-label">{t("profile_template")}</label>
-              <select
-                className="form-input"
-                defaultValue=""
-                onChange={(e) => { loadFromProfile(e.target.value); e.target.value = ''; }}
-                disabled={profileList.length === 0}
-              >
-                <option value="" disabled>{profileList.length > 0 ? t("sub_load_profile") : t("sub_no_profiles")}</option>
-                {profileList.map((p: any) => (
-                  <option key={p.name} value={p.name}>{p.title || p.name}</option>
-                ))}
-              </select>
-            </div>
+            {/* Template defaults are a create-time affordance only. Editing an
+              * existing subscriber must go through the governed apply endpoint,
+              * never a client-side merge of template content into the draft. */}
+            {isNewSubscriber && (
+              <div>
+                <label className="form-label">{t("profile_template")}</label>
+                <select
+                  className="form-input"
+                  defaultValue=""
+                  onChange={(e) => { loadFromProfile(e.target.value); e.target.value = ''; }}
+                  disabled={profileList.length === 0}
+                >
+                  <option value="" disabled>{profileList.length > 0 ? t("sub_load_profile") : t("sub_no_profiles")}</option>
+                  {profileList.map((p: any) => (
+                    <option key={p.name} value={p.name}>{p.title || p.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
       </div>

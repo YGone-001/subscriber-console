@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus, Users, CheckCircle2, Copy, Eye, Trash2, MoreHorizontal, BatteryCharging, AlertTriangle, ExternalLink } from "lucide-react";
+import { Plus, Users, CheckCircle2, Copy, Eye, Trash2, MoreHorizontal, BatteryCharging, AlertTriangle, ExternalLink, Boxes } from "lucide-react";
 import { useI18n } from '../../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../../components/ui/OperationFeedback';
 import { SortableTableHeader } from '../../../components/ui/SortableTableHeader';
@@ -16,7 +16,7 @@ import { formatBytes } from '../../../lib/unitParser';
 import type { SubscriberRow } from '../types';
 
 const ACTION_MENU_WIDTH = 180;
-const ACTION_MENU_HEIGHT = 136;
+const ACTION_MENU_HEIGHT = 172;
 const ACTION_MENU_GAP = 6;
 const ACTION_MENU_VIEWPORT_MARGIN = 8;
 
@@ -83,6 +83,7 @@ export interface SubscriberTableProps {
   activeDropdown: string | null;
   setActiveDropdown: React.Dispatch<React.SetStateAction<string | null>>;
   handleOpenTrafficAdjustment: (sub: SubscriberRow, e?: React.MouseEvent) => void;
+  handleOpenProfileApply: (sub: SubscriberRow) => void;
 }
 
 function contractStatusLabel(t: (key: string, params?: Record<string, string | number>) => string, value?: string) {
@@ -117,7 +118,7 @@ export function SubscriberTable(props: SubscriberTableProps) {
     selectedImsis, setSelectedImsis, copiedImsi, handleCopyImsi, resolveNetwork,
     formatFullDate, timeAgo, handleOpenView, handleDelete,
     isDeletingSingle, pendingDelete, activeDropdown, setActiveDropdown,
-    handleOpenTrafficAdjustment,
+    handleOpenTrafficAdjustment, handleOpenProfileApply,
   } = props;
 
   useEffect(() => {
@@ -438,6 +439,9 @@ export function SubscriberTable(props: SubscriberTableProps) {
                               </button>
                               <button type="button" role="menuitem" className="dropdown-menu-item" onClick={() => { setActiveDropdown(null); setActionMenuPosition(null); router.push(`/ocs/balances/${encodeURIComponent(sub.imsi)}`); }}>
                                 <ExternalLink size={14} /> {t("sub_view_balance")}
+                              </button>
+                              <button type="button" role="menuitem" className="dropdown-menu-item" onClick={() => { setActiveDropdown(null); setActionMenuPosition(null); handleOpenProfileApply(sub); }}>
+                                <Boxes size={14} /> {t("sub_apply_profile_action")}
                               </button>
                               <button type="button" role="menuitem" className="dropdown-menu-item danger" onClick={(event) => { setActionMenuPosition(null); handleDelete(sub.imsi, event); }} disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}>
                                 <Trash2 size={14} /> {isDeletingSingle === sub.imsi ? t("deleting") : t("action_delete")}

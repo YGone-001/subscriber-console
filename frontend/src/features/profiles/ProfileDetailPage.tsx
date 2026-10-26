@@ -8,11 +8,12 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
-import { ArrowLeft, Boxes, Pencil, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, Boxes, Pencil, Save, Trash2, UserPlus, Users } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { useRead } from '../../lib/api/use-read';
 import { MutationApiError, deleteJson, postJson, putJson } from '../../lib/api/mutation-client';
+import { buildProfileApplyRequest } from '../subscribers/mutation-contract';
 import { useAppParam, useAppRouter } from '../../lib/ui-compat/router';
 import { hasPermission } from '../../lib/permissions';
 import PageHeader from '../../components/ui/PageHeader';
@@ -77,6 +78,9 @@ export function ProfileDetailPage() {
   const [discardTarget, setDiscardTarget] = useState<'leave' | 'cancel' | null>(null);
   const [isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded] = useState(false);
   const [newlyAddedSliceIndex, setNewlyAddedSliceIndex] = useState<number | null>(null);
+  const [isApplyOpen, setIsApplyOpen] = useState(false);
+  const [applyImsi, setApplyImsi] = useState('');
+  const [isApplying, setIsApplying] = useState(false);
 
   useEffect(() => {
     if (!profile || isEditing) return;
@@ -92,6 +96,9 @@ export function ProfileDetailPage() {
 
   const canWrite = meta?.capabilities.canWrite ?? hasPermission(user, 'profiles.write');
   const canRestore = meta?.capabilities.canRestore ?? hasPermission(user, 'profiles.write');
+  /* Applying a template to a subscriber is the governed subscriber write, so the
+   * entry point follows the subscriber capability, not the template one. */
+  const canApplyTemplates = hasPermission(user, 'subscribers.write');
   const accessBits = meta?.accessRestriction.bits ?? null;
 
   const impactedSubscribers = detail?.stats?.totalSubscribers ?? 0;
@@ -238,6 +245,33 @@ export function ProfileDetailPage() {
     }
   };
 
+  const executeApply = async () => {
+    if (!profileName) return;
+    const imsi = applyImsi.trim();
+    setIsApplying(true);
+    setError(null);
+    try {
+      const data = await postJson<{ outcome?: string }>(
+        `/api/subscribers/${encodeURIComponent(imsi)}/profile`,
+        buildProfileApplyRequest(profileName),
+      );
+      setIsApplyOpen(false);
+      setApplyImsi('');
+      setNotice({
+        type: 'success',
+        text: data?.outcome === 'no_effect'
+          ? t('prof_apply_no_effect', { imsi })
+          : t('prof_apply_success', { imsi }),
+      });
+    } catch (err) {
+      setIsApplyOpen(false);
+      const detail = err instanceof Error ? err.message : '';
+      setError(detail ? `${t('prof_apply_error', { imsi })} (${detail})` : t('prof_apply_error', { imsi }));
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
   const resetDraftAndExit = () => {
     if (isCreate || !profile) {
       router.push('/profile');
@@ -324,6 +358,22 @@ export function ProfileDetailPage() {
           </div>
         ) : (
           <div className="page-action-buttons">
+            {canApplyTemplates && !isCreate && (
+              <button
+                className="btn btn-outline"
+                onClick={() => { setApplyImsi(''); setIsApplyOpen(true); }}
+              >
+                <UserPlus size={16} /> {t('prof_apply_btn')}
+              </button>
+            )}
+            {!isCreate && (
+              <button
+                className="btn btn-outline"
+                onClick={() => router.push(`/subscribers?profile=${encodeURIComponent(profileName)}`)}
+              >
+                <Users size={16} /> {t('prof_view_linked')}
+              </button>
+            )}
             {canWrite && (
               <button className="btn btn-outline" onClick={() => setIsDeleteConfirmOpen(true)} disabled={isDeleting}>
                 <Trash2 size={16} /> {t('delete')}
@@ -405,6 +455,37 @@ export function ProfileDetailPage() {
                 </strong>
               </div>
             ))}
+          </div>
+        </ConfirmActionPanel>
+      )}
+
+      {isApplyOpen && (
+        <ConfirmActionPanel
+          tone="warning"
+          title={t('prof_apply_title', { name: draft.title || profileName || '' })}
+          message={t('prof_apply_desc')}
+          confirmLabel={t('prof_apply_confirm')}
+          cancelLabel={t('cancel')}
+          isWorking={isApplying}
+          confirmDisabled={!/^\d{15}$/.test(applyImsi.trim())}
+          onConfirm={() => { void executeApply(); }}
+          onCancel={() => setIsApplyOpen(false)}
+        >
+          <div>
+            <label className="form-label" htmlFor="profile-apply-imsi">{t('prof_apply_imsi_label')}</label>
+            <input
+              id="profile-apply-imsi"
+              type="text"
+              className="form-input"
+              inputMode="numeric"
+              autoComplete="off"
+              value={applyImsi}
+              onChange={(event) => setApplyImsi(event.target.value)}
+              placeholder={t('prof_apply_imsi_ph')}
+            />
+            {applyImsi.trim() !== '' && !/^\d{15}$/.test(applyImsi.trim()) && (
+              <div className="warning-text">{t('prof_apply_imsi_invalid')}</div>
+            )}
           </div>
         </ConfirmActionPanel>
       )}
