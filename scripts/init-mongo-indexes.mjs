@@ -460,7 +460,6 @@ async function ensureIndexes() {
   // ── xcloud_ops collections ──
   createdIndexes.push(...(await appDb.collection('app_profiles').createIndexes([
     { key: { name: 1 }, unique: true, name: 'uniq_profile_name' },
-    { key: { updated_at: -1 }, name: 'profile_updated_at_desc' },
   ])).map((name) => ({ database: appDbName, collection: 'app_profiles', name })));
 
   createdIndexes.push(...(await appDb.collection('app_profile_versions').createIndexes([

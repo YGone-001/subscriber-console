@@ -51,7 +51,6 @@ var expectedIndexes = []expectedIndexDef{
 	{database: "xcloud", collection: "ocs_balances", name: "uniq_ocs_balance_imsi", key: bson.D{{Key: "imsi", Value: 1}}, unique: &boolTrue},
 	{database: "xcloud", collection: "ocs_balances", name: "ocs_balance_updated_at_desc", key: bson.D{{Key: "updated_at", Value: -1}}},
 	{database: "app", collection: "app_profiles", name: "uniq_profile_name", key: bson.D{{Key: "name", Value: 1}}, unique: &boolTrue},
-	{database: "app", collection: "app_profiles", name: "profile_updated_at_desc", key: bson.D{{Key: "updated_at", Value: -1}}},
 	{database: "app", collection: "app_profile_versions", name: "profile_versions_by_profile", key: bson.D{{Key: "profileName", Value: 1}, {Key: "savedAt", Value: -1}}},
 	{database: "app", collection: "app_profile_versions", name: "uniq_profile_version_id", key: bson.D{{Key: "versionId", Value: 1}}, unique: &boolTrue},
 	{database: "app", collection: "app_users", name: "uniq_username", key: bson.D{{Key: "username", Value: 1}}, unique: &boolTrue},

@@ -29,7 +29,7 @@ const expectedIndexes = {
   ocs_tariff_plans: ['uniq_plan_id', 'rules_rating_group'],
   ocs_subscribers: ['uniq_ocs_subscriber_imsi', 'ocs_subscriber_plan_id'],
   ocs_balances: ['uniq_ocs_balance_imsi', 'ocs_balance_updated_at_desc'],
-  app_profiles: ['uniq_profile_name', 'profile_updated_at_desc'],
+  app_profiles: ['uniq_profile_name'],
   app_profile_versions: ['profile_versions_by_profile', 'uniq_profile_version_id'],
   app_users: ['uniq_username'],
   app_audit_logs: ['audit_timestamp_desc', 'audit_target_timestamp', 'audit_action_timestamp'],
@@ -146,7 +146,6 @@ async function ensureIndexes(db, appDb) {
 
   await appDb.collection('app_profiles').createIndexes([
     { key: { name: 1 }, unique: true, name: 'uniq_profile_name' },
-    { key: { updated_at: -1 }, name: 'profile_updated_at_desc' },
   ]);
 
   await appDb.collection('app_profile_versions').createIndexes([
