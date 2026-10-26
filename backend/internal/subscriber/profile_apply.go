@@ -211,9 +211,8 @@ func BuildSubscriberAfterProfileApply(current bson.M, profile bson.M, profileNam
 		next["ambr"] = ambr
 	}
 
-	// Apply profile slices — convert legacy sliceList to Xcloud format.
-	// The subscriber's stored slice array is the identifier base: an unchanged
-	// profile must reproduce the document exactly, not re-mint embedded _ids.
+	// Apply profile slices — convert legacy sliceList to Xcloud format, with the
+	// stored array as the identifier base so an unchanged profile reproduces exactly.
 	if sliceList := profile["sliceList"]; sliceList != nil {
 		next["slice"] = convertSlicesFrom(sliceList, current["slice"])
 	}

@@ -537,7 +537,7 @@ func TestConvertSlicesFromMintsIdentifiersForNewEntries(t *testing.T) {
 }
 
 func TestConvertSlicesWithoutBaseAlwaysMints(t *testing.T) {
-	legacyOnly := convertSlices(bson.A{bson.M{"sst": int32(1), "default_indicator": true}})
+	legacyOnly := convertSlicesFrom(bson.A{bson.M{"sst": int32(1), "default_indicator": true}}, nil)
 	if len(legacyOnly) != 1 {
 		t.Fatalf("expected one slice, got %d", len(legacyOnly))
 	}
@@ -546,8 +546,8 @@ func TestConvertSlicesWithoutBaseAlwaysMints(t *testing.T) {
 		t.Fatalf("expected a minted ObjectId, got %v (%T)", doc["_id"], doc["_id"])
 	}
 
-	// A base is never consulted by the batch-create path.
-	second := convertSlices(bson.A{bson.M{"sst": int32(1), "default_indicator": true}})
+	// A subscriber that carries no stored slices has nothing to reuse.
+	second := convertSlicesFrom(bson.A{bson.M{"sst": int32(1), "default_indicator": true}}, nil)
 	if a, b := toMap(legacyOnly[0])["_id"], toMap(second[0])["_id"]; a == b {
 		t.Error("independent conversions must not share an identifier")
 	}

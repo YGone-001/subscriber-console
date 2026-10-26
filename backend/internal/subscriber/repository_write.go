@@ -877,9 +877,9 @@ func buildXcloudSubscriberFromLegacy(imsi string, payload UpdatePayload, existin
 		if ambr, ok := payload.Sub4G["ambr"]; ok && ambr != nil {
 			result["ambr"] = ambr
 		}
-		// Handle slices (legacy key is sliceList)
+		// Handle slices (legacy key is sliceList); the stored array is the identifier base.
 		if slices, ok := payload.Sub4G["sliceList"]; ok && slices != nil {
-			result["slice"] = convertSlices(slices)
+			result["slice"] = convertSlicesFrom(slices, existing["slice"])
 		}
 		// Handle msisdn (legacy key is msisdnList)
 		if msisdn, ok := payload.Sub4G["msisdnList"]; ok && msisdn != nil {
@@ -898,18 +898,12 @@ func buildXcloudSubscriberFromLegacy(imsi string, payload UpdatePayload, existin
 	return result
 }
 
-// convertSlices converts legacy sliceList format to core slice format
-// with ObjectIds for _id and session._id.
-func convertSlices(slices any) []any {
-	return convertSlicesFrom(slices, nil)
-}
-
 // convertSlicesFrom converts legacy sliceList format to core slice format,
 // reusing the embedded _id that base already carries for each corresponding
 // entry and minting an ObjectId only where base has none. base is the
 // subscriber's currently stored slice array; pass nil when there is none.
-// Without this reuse, re-applying an unchanged profile rewrites every embedded
-// identifier, so the document never reaches a fixed point.
+// Without this reuse, writing the same slice content again rewrites every
+// embedded identifier, so the document never reaches a fixed point.
 func convertSlicesFrom(slices any, base any) []any {
 	list, ok := slices.([]any)
 	if !ok {
@@ -1006,8 +1000,8 @@ func convertSlicesFrom(slices any, base any) []any {
 
 // embeddedID returns the _id stored on a slice or session entry, or a fresh
 // ObjectId when the entry is absent or carries no usable identifier. Only the
-// identifier is ever taken from a stored document; every other field comes
-// from the profile, so a stored document cannot smuggle content through.
+// identifier is ever taken from a stored document; every other field comes from
+// the incoming sliceList, so a stored document cannot smuggle content through.
 func embeddedID(entry any) bson.ObjectID {
 	if doc := toMap(entry); doc != nil {
 		if id, ok := doc["_id"].(bson.ObjectID); ok && !id.IsZero() {

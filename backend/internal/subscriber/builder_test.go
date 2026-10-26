@@ -151,6 +151,55 @@ func TestBuildXcloudSubscriberFromLegacy_MsisdnUpdated(t *testing.T) {
 	}
 }
 
+// TestBuildXcloudSubscriberFromLegacy_SliceIdentifiersPreserved verifies that a
+// save which does not change the slice content keeps the embedded identifiers
+// of the stored document instead of minting a new set on every write.
+func TestBuildXcloudSubscriberFromLegacy_SliceIdentifiersPreserved(t *testing.T) {
+	storedSliceID := bson.NewObjectID()
+	storedSessionID := bson.NewObjectID()
+	existing := deepCopyBsonM(buildDefaultSubscriber("417001234567890", nil))
+	existing["slice"] = bson.A{bson.D{
+		{Key: "_id", Value: storedSliceID},
+		{Key: "sst", Value: int32(1)},
+		{Key: "default_indicator", Value: true},
+		{Key: "session", Value: bson.A{bson.D{
+			{Key: "_id", Value: storedSessionID},
+			{Key: "name", Value: "internet"},
+		}}},
+	}}
+
+	sliceList := []any{map[string]any{
+		"sst": int32(1), "default_indicator": true,
+		"session_list": []any{map[string]any{"name": "internet", "type": int32(3)}},
+	}}
+	payload := UpdatePayload{Sub4G: map[string]any{"sliceList": sliceList}}
+
+	first := buildXcloudSubscriberFromLegacy("417001234567890", payload, existing)
+	second := buildXcloudSubscriberFromLegacy("417001234567890", payload, first)
+
+	if stableJSON(first["slice"]) != stableJSON(second["slice"]) {
+		t.Errorf("an unchanged sliceList must not rewrite embedded identifiers:\nfirst:  %s\nsecond: %s",
+			stableJSON(first["slice"]), stableJSON(second["slice"]))
+	}
+
+	slices := anySliceOrEmpty(second["slice"])
+	if len(slices) != 1 {
+		t.Fatalf("expected one slice, got %d", len(slices))
+	}
+	sliceDoc := toMap(slices[0])
+	if id, ok := sliceDoc["_id"].(bson.ObjectID); !ok || id != storedSliceID {
+		t.Errorf("slice identifier = %v, want the stored %v", sliceDoc["_id"], storedSliceID)
+	}
+	sessions := anySliceOrEmpty(sliceDoc["session"])
+	if len(sessions) != 1 {
+		t.Fatalf("expected one session, got %d", len(sessions))
+	}
+	sessionDoc := toMap(sessions[0])
+	if id, ok := sessionDoc["_id"].(bson.ObjectID); !ok || id != storedSessionID {
+		t.Errorf("session identifier = %v, want the stored %v", sessionDoc["_id"], storedSessionID)
+	}
+}
+
 // TestExtractPrimaryMsisdn verifies extractPrimaryMsisdn matches Node getPrimaryMsisdn.
 func TestExtractPrimaryMsisdn(t *testing.T) {
 	tests := []struct {
