@@ -45,6 +45,28 @@ CNMS RBAC is NOT used.
 - Unknown xCloud fields preserved during reads (bson.M)
 - Binary/Buffer: never emit Go base64 if Node uses hex/string
 
+## Template Read Gate and Credential Masking
+
+The four template read endpoints (`GET /api/profiles`, `GET /api/profiles/{name}`,
+`GET /api/profiles/{name}/stats`, `GET /api/profiles/{name}/versions`) require the
+`profiles.read` permission; a refusal returns 403 `PERMISSION_DENIED` and records
+`authorization.denied` audit evidence via `RequirePermissionWithAudit`.
+
+`GET /api/profiles/{name}` and the versions detail branch replace non-empty
+`auth.k` / `auth.op` / `auth.opc` values with `[MASKED]` for roles without the
+`subscribers.write` permission. Key presence is preserved so a masked reader still
+distinguishes configured from unconfigured; `amf` is not credential material and
+stays plaintext. The masking handles every decoded document shape the MongoDB
+driver can produce for nested documents (`bson.M`, `bson.D`, `map[string]any`).
+
+The visibility predicate is the same one that drives the `credentialVisibility`
+capability bit served by `GET /api/profiles/meta` (`plaintext` for
+`subscribers.write` holders, `masked` otherwise), and matches the subscriber
+detail policy that removes `auth4G.k/opc/op` for roles without the
+`subscriber_write` capability. The only consumer of template plaintext outside
+the template surface is the subscriber create form's template defaults, which is
+itself behind the `subscribers.write` gate, so masking does not regress it.
+
 ## Rate Limiting
 
 MongoDB fixed window per endpoint:
