@@ -8,6 +8,7 @@ import { useI18n } from '../../providers/I18nProvider';
 import { AlertTriangle, Boxes, Clock, Pencil, Plus, Users } from "lucide-react";
 import ProfileModal from '../../components/ProfileModal';
 import { EmptyState, LoadingRows, OperationNotice } from '../../components/ui/OperationFeedback';
+import { ErrorState } from '../../components/ui/StatePanel';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useRead } from '../../lib/api/use-read';
@@ -67,7 +68,7 @@ function getRiskLevel(sliceCount: number, impactedSubscribers: number): RiskLeve
 
 export function ProfilesPage() {
   const { t } = useI18n();
-  const { data, isLoading, mutate } = useRead<ProfilesResponse>('/api/profiles');
+  const { data, isLoading, error, mutate } = useRead<ProfilesResponse>('/api/profiles');
   const profileRows = data?.profiles;
   const backendSummary = data?.summary;
   const profiles: ProfileSummary[] = useMemo(() => profileRows || [], [profileRows]);
@@ -194,6 +195,15 @@ export function ProfilesPage() {
         {isLoading ? (
           <div className="dash-card profile-table-state">
             <LoadingRows columns={9} rows={4} />
+          </div>
+        ) : error ? (
+          <div className="dash-card profile-table-state">
+            <ErrorState
+              title={t("prof_err_load")}
+              message={error instanceof Error ? error.message : String(error)}
+              retryLabel={t("retry")}
+              onRetry={() => { void mutate(); }}
+            />
           </div>
         ) : filteredProfiles.length === 0 ? (
           <div className="dash-card profile-table-state">

@@ -9,6 +9,7 @@ import { Save, Trash2, X, Pencil, History, RotateCcw, GitCompareArrows } from "l
 import { parseBytes, formatBytes, parseEvents, formatEvents } from '../lib/unitParser';
 import ProfileViewMode from '../features/profiles/components/ProfileViewMode';
 import ProfileEditMode from '../features/profiles/components/ProfileEditMode';
+import { buildProfileVersionDiff } from '../features/profiles/profile-version-diff';
 import { useAuth } from '../providers/AuthProvider';
 import { hasPermission } from '../lib/permissions';
 import { ConfirmActionPanel, LoadingRows, OperationNotice } from './ui/OperationFeedback';
@@ -82,7 +83,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const [versions, setVersions] = useState<ProfileVersionSummary[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<ProfileVersionDetail | null>(null);
   const [isVersionsLoading, setIsVersionsLoading] = useState(false);
-  const [restoreConfirmVersionId, setRestoreConfirmVersionId] = useState<string | null>(null);
+  const [isVersionDetailLoading, setIsVersionDetailLoading] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<ProfileVersionDetail | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Blinking animation state flag
@@ -325,27 +327,27 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
 
   const openVersion = async (versionId: string) => {
     if (!profileName) return;
+    setIsVersionDetailLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/profiles/${profileName}/versions?versionId=${encodeURIComponent(versionId)}`);
-      if (!res.ok) throw new Error("Failed to fetch version");
-      const data = await res.json();
-      setSelectedVersion(data.version || null);
-      setRestoreConfirmVersionId(null);
-    } catch {
-      setError(t("prof_version_err_load"));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.version) throw new Error(data.error || t("prof_version_err_load"));
+      setSelectedVersion(data.version);
+    } catch (err: any) {
+      setSelectedVersion(null);
+      setError(err?.message || t("prof_version_err_load"));
+    } finally {
+      setIsVersionDetailLoading(false);
     }
   };
 
   const handleRestoreVersion = async () => {
-    if (!profileName || !selectedVersion) return;
-    if (restoreConfirmVersionId !== selectedVersion.versionId) {
-      setRestoreConfirmVersionId(selectedVersion.versionId);
-      return;
-    }
+    if (!profileName || !restoreTarget) return;
     setIsRestoring(true);
     setError(null);
     try {
-      const res = await fetch(`/api/profiles/${profileName}/versions/${selectedVersion.versionId}/restore`, { method: "POST" });
+      const res = await fetch(`/api/profiles/${profileName}/versions/${restoreTarget.versionId}/restore`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || t("prof_version_err_restore"));
@@ -355,13 +357,13 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       await loadProfileData();
       await loadVersions();
       setSelectedVersion(null);
-      setRestoreConfirmVersionId(null);
+      setRestoreTarget(null);
       setIsEditing(false);
       onRefresh();
       onOperation?.({ type: "success", text: t("prof_version_msg_restored") });
     } catch (err: any) {
-      const message = err.message || t("prof_version_err_restore");
-      setError(message);
+      setRestoreTarget(null);
+      setError(err?.message || t("prof_version_err_restore"));
     } finally {
       setIsRestoring(false);
     }
@@ -380,6 +382,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
    */
   const submitProfile = async (targetName: string, payload: any) => {
     setIsSaving(true);
+    const isCreate = !profileName;
     try {
       //  Profile
       if (!profileName) {
@@ -399,7 +402,10 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error(t("prof_err_save"));
+      if (!res.ok) {
+        const detail = await readError(res, t("prof_err_save"));
+        throw new Error(isCreate ? t("prof_err_create_partial", { detail }) : detail);
+      }
       setIsSaveConfirmOpen(false);
       onRefresh();
       onOperation?.({ type: "success", text: t("prof_msg_saved") });
@@ -472,6 +478,20 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     setSlices(s);
   };
 
+  const versionDiffSections = useMemo(() => {
+    if (!selectedVersion) return [];
+    return buildProfileVersionDiff(selectedVersion.profile, profileSnapshot, {
+      notConfigured: t("prof_diff_not_configured"),
+      sliceUnit: t("prof_version_slices"),
+      sessionUnit: t("prof_diff_session_unit"),
+      pccUnit: t("prof_diff_pcc_unit"),
+      accessNone: t("prof_diff_access_none"),
+      accessSuspended: t("prof_diff_access_suspended"),
+      maskedSecret: t("prof_diff_masked"),
+    });
+  }, [profileSnapshot, selectedVersion, t]);
+  const changedSectionCount = versionDiffSections.filter(section => section.changed).length;
+
   const renderVersionHistory = () => {
     if (!profileName) return null;
 
@@ -521,7 +541,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           <div className="pm-version-diff">
             {!selectedVersion ? (
               <div className="pm-version-diff-empty">
-                {t("prof_version_select")}
+                {isVersionDetailLoading ? t("prof_version_loading") : t("prof_version_select")}
               </div>
             ) : (
               <div className="pm-version-diff-body">
@@ -532,15 +552,45 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
                       {t("prof_version_diff")}
                     </div>
                     <div className="pm-version-diff-meta">
-                      {formatVersionTime(selectedVersion.savedAt)} · {selectedVersion.savedBy}
+                      {t(`prof_version_action_${selectedVersion.action}` as any)} · {formatVersionTime(selectedVersion.savedAt)} · {selectedVersion.savedBy}
                     </div>
                   </div>
                   {(isRoot || isOperator) && (
-                    <button className="btn btn-primary pm-restore-btn" onClick={handleRestoreVersion} disabled={isRestoring}>
-                      <RotateCcw size={14} /> {isRestoring ? t("prof_version_restoring") : (restoreConfirmVersionId === selectedVersion.versionId ? t("prof_version_restore_confirm_btn") : t("prof_version_restore"))}
+                    <button className="btn btn-primary pm-restore-btn" onClick={() => setRestoreTarget(selectedVersion)} disabled={isRestoring}>
+                      <RotateCcw size={14} /> {isRestoring ? t("prof_version_restoring") : t("prof_version_restore")}
                     </button>
                   )}
                 </div>
+                {changedSectionCount === 0 ? (
+                  <p className="pm-diff-summary-note">{t("prof_version_no_changes")}</p>
+                ) : (
+                  <div className="pm-version-diff-sections">
+                    <div className="pm-diff-columns" aria-hidden="true">
+                      <span />
+                      <span>{t("prof_diff_version_col")}</span>
+                      <span>{t("prof_diff_current_col")}</span>
+                    </div>
+                    {versionDiffSections.map(section => (
+                      <details key={section.key} className={`pm-diff-section ${section.changed ? "changed" : ""}`} open={section.changed}>
+                        <summary>
+                          <span className="pm-diff-section-title">{t(section.labelKey)}</span>
+                          <strong className={section.changed ? "pm-confirm-diff-changed" : "pm-confirm-diff-unchanged"}>
+                            {section.changed ? t("prof_version_changed") : t("prof_version_unchanged")}
+                          </strong>
+                        </summary>
+                        <div className="pm-diff-rows">
+                          {section.rows.map(row => (
+                            <div key={row.key} className={`pm-diff-row ${row.changed ? "changed" : ""}`}>
+                              <span className="pm-diff-row-label">{row.labelParams ? t(row.labelKey, row.labelParams) : t(row.labelKey)}</span>
+                              <span className="pm-diff-row-value">{row.versionValue}</span>
+                              <span className="pm-diff-row-value">{row.currentValue}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -651,6 +701,25 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           </div>
         )}
 
+        {restoreTarget && (
+          <div className="pm-confirm-panel">
+            <ConfirmActionPanel
+              presentation="modal"
+              tone="warning"
+              title={t("prof_version_restore_confirm_title", { name: profileName || "" })}
+              message={t("prof_version_restore_confirm_desc", {
+                action: t(`prof_version_action_${restoreTarget.action}` as any),
+                time: formatVersionTime(restoreTarget.savedAt),
+              })}
+              confirmLabel={t("prof_version_restore_confirm_btn")}
+              cancelLabel={t("cancel")}
+              isWorking={isRestoring}
+              onConfirm={handleRestoreVersion}
+              onCancel={() => setRestoreTarget(null)}
+            />
+          </div>
+        )}
+
         {isSaveConfirmOpen && (
           <div className="pm-confirm-panel">
             <ConfirmActionPanel
@@ -743,7 +812,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
               * notice portals above the confirmation and would make its buttons
               * unreachable, which is the exact failure the confirm dialog must not have.
               */}
-            {error && !isDeleteConfirmOpen && forceDeleteCount === null && !isSaveConfirmOpen && (
+            {error && !isDeleteConfirmOpen && forceDeleteCount === null && !restoreTarget && !isSaveConfirmOpen && (
               <OperationNotice
                 presentation="modal"
                 tone="danger"

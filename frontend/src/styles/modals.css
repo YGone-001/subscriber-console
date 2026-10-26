@@ -32,8 +32,19 @@
 .pm-version-diff-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; }
 .pm-version-diff-meta { margin-top: 0.35rem; color: var(--text-muted); font-size: var(--ref-font-size-data); }
 .pm-restore-btn { padding: 0.55rem 0.85rem; font-size: var(--ref-font-size-data-relaxed); white-space: nowrap; }
-.pm-diff-rows { display: grid; gap: 0.5rem; }
-.pm-diff-row { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--surface-border); padding: 0.55rem 0; }
+.pm-version-diff-sections { display: flex; flex-direction: column; gap: 0.5rem; }
+.pm-diff-columns { display: grid; grid-template-columns: minmax(110px, 0.8fr) minmax(110px, 1fr) minmax(110px, 1fr); gap: 0.75rem; padding: 0 0.7rem; color: var(--text-muted); font-size: var(--ref-font-size-label); }
+.pm-diff-section { border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); background: var(--background); }
+.pm-diff-section > summary { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.55rem 0.7rem; cursor: pointer; }
+.pm-diff-section-title { font-weight: 600; }
+.pm-diff-section.changed > summary { border-bottom: 1px solid var(--surface-border); }
+.pm-diff-rows { display: flex; flex-direction: column; }
+.pm-diff-row { display: grid; grid-template-columns: minmax(110px, 0.8fr) minmax(110px, 1fr) minmax(110px, 1fr); gap: 0.75rem; padding: 0.45rem 0.7rem; border-top: 1px solid var(--surface-border); font-size: var(--ref-font-size-data); }
+.pm-diff-row:first-child { border-top: none; }
+.pm-diff-row.changed { background: var(--selection-soft); }
+.pm-diff-row-label { color: var(--text-secondary); }
+.pm-diff-row-value { font-family: var(--font-data); color: var(--text-main); overflow-wrap: anywhere; }
+.pm-diff-summary-note { margin: 0; color: var(--text-muted); font-size: var(--ref-font-size-data); }
 .pm-diff-label { color: var(--text-secondary); }
 .pm-diff-changed { color: var(--warning); font-weight: 700; }
 .pm-diff-unchanged { color: var(--success); font-weight: 700; }
