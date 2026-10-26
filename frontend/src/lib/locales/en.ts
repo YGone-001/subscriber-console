@@ -272,6 +272,7 @@ export const en: Record<string, string> = {
     prof_empty_filtered_desc: "Adjust the search text or filter to view matching templates.",
     prof_governance_title: "User templates",
     prof_governance_subtitle: "Manage reusable subscriber templates by what they actually contain, who they are linked to, and which defaults are configured.",
+    prof_detail_subtitle: "Review the template's actual configuration. Saving creates a rollback point and affects subscribers provisioned from it.",
     prof_governance_total: "Templates",
     prof_governance_impacted: "Linked Users",
     prof_governance_not_modified: "Not modified",

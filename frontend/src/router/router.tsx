@@ -16,6 +16,7 @@ import { ContractDetailPage } from '../features/ocs/contracts/ContractDetailPage
 import { TariffsPage } from '../features/ocs/tariffs/TariffsPage';
 import { TariffDetailPage } from '../features/ocs/tariffs/TariffDetailPage';
 import { ProfilesPage } from '../features/profiles/ProfilesPage';
+import { ProfileDetailPage } from '../features/profiles/ProfileDetailPage';
 import { UsersPage } from '../features/users/UsersPage';
 import { UserDetailPage } from '../features/users/UserDetailPage';
 import { UserCreatePage } from '../features/users/UserCreatePage';
@@ -60,6 +61,8 @@ const pages: Record<string, ReactNode> = {
   '/ocs/tariffs': <TariffsPage />,
   '/ocs/tariffs/:planId': <TariffDetailPage />,
   '/profile': <ProfilesPage />,
+  '/profile/new': <ProfileDetailPage />,
+  '/profile/:name': <ProfileDetailPage />,
   '/subscribers': <SubscribersPage />,
   '/system-health': <SystemHealthPage />,
   '/users': <UsersPage />,

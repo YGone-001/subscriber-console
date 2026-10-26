@@ -166,10 +166,28 @@
     "mode": "read",
     "source": "frontend/src/features/profiles/ProfilesPage.tsx",
     "readEndpoints": [
-      "GET /api/profiles",
+      "GET /api/profiles"
+    ]
+  },
+  {
+    "route": "/profile/new",
+    "mode": "read",
+    "source": "frontend/src/features/profiles/ProfileDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/profiles/meta",
+      "GET /api/tariff-plans"
+    ]
+  },
+  {
+    "route": "/profile/:name",
+    "mode": "read",
+    "source": "frontend/src/features/profiles/ProfileDetailPage.tsx",
+    "readEndpoints": [
       "GET /api/profiles/{name}",
-      "GET /api/profiles/{name}/stats",
-      "GET /api/profiles/{name}/versions"
+      "GET /api/profiles/{name}/versions",
+      "GET /api/profiles/meta",
+      "GET /api/tariff-plans",
+      "GET /api/ratings"
     ]
   },
   {

@@ -7,6 +7,7 @@ import { Pencil, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Pl
 import ProfileSliceEditor from './ProfileSliceEditor';
 import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from '../../../lib/unitParser';
 import { AMBR_UNITS } from '../../subscribers/components/subscriber/utils';
+import { DEFAULT_ACCESS_RESTRICTION_BITS, accessBitLabel } from '../profile-access';
 
 function ratingTypeLabel(t: (key: string) => string, value?: string) {
   if (value === "data_volume") return t("rating_service_data");
@@ -26,7 +27,7 @@ function ratingUnitLabel(t: (key: string) => string, value?: string) {
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
   const {
     profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsDefaults, tariffPlanList, ratingList, tariffPlanStatus, ratingStatus, slices, newlyAddedSliceIndex
+    ocsDefaults, tariffPlanList, ratingList, tariffPlanStatus, ratingStatus, accessBits, slices, newlyAddedSliceIndex
   } = state;
 
   const {
@@ -47,6 +48,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
     ? activePlans
     : (currentPlanId ? [{ plan_id: currentPlanId, name: currentPlanId }, ...activePlans] : activePlans);
   const planSelectDisabled = tariffPlanStatus !== 'ready' || planOptions.length === 0;
+  const bitOptions = Array.isArray(accessBits) && accessBits.length > 0 ? accessBits : DEFAULT_ACCESS_RESTRICTION_BITS;
   const handleTitleChange = (value: string) => {
     setProfileTitle(value);
     if (!profileName) setInputName(value);
@@ -259,16 +261,8 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
         {isAccessRestrictionsExpanded && (
           <div className="dash-card-body">
             <div className="access-restriction-grid">
-              {[
-                { val: 128, label: t("sub_acc_nr") },
-                { val: 16, label: t("sub_acc_eutran") },
-                { val: 1, label: t("sub_acc_utran") },
-                { val: 2, label: t("sub_acc_geran") },
-                { val: 32, label: t("sub_acc_non3gpp") },
-                { val: 4, label: t("sub_acc_gan") },
-                { val: 8, label: t("sub_acc_ihspa") },
-                { val: 64, label: t("sub_acc_nbiot") }
-              ].map(opt => {
+              {bitOptions.map(bit => {
+                const opt = { val: bit.value, label: accessBitLabel(t, bit) };
                 const restriction = typeof accessRestriction === "number" ? accessRestriction : 0;
                 const isLegacySuspended = restriction === 255;
                 const isChecked = (restriction & opt.val) !== 0 || isLegacySuspended;

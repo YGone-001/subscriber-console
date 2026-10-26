@@ -305,7 +305,7 @@ admin    = read/write
 ```
 
 The backend remains the final authorization authority. Go registration count is
-`158`; canonical frontend routes are `39`.
+`159`; canonical frontend routes are `41`.
 
 ### 6.1 Metadata
 

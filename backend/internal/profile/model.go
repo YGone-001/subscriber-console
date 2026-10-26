@@ -93,6 +93,33 @@ type ProfileVersionDetailResponse struct {
 	Version map[string]any `json:"version"`
 }
 
+// ProfileMetaResponse matches GET /api/profiles/meta.
+type ProfileMetaResponse struct {
+	Capabilities      ProfileCapabilities          `json:"capabilities"`
+	AccessRestriction ProfileAccessRestrictionMeta `json:"accessRestriction"`
+}
+
+// ProfileCapabilities reports what the requesting principal may do with a
+// template. The server is the authority; the UI only mirrors it.
+type ProfileCapabilities struct {
+	CanWrite             bool   `json:"canWrite"`
+	CanRestore           bool   `json:"canRestore"`
+	CredentialVisibility string `json:"credentialVisibility"`
+}
+
+// ProfileAccessRestrictionMeta is the 3GPP access-restriction vocabulary.
+type ProfileAccessRestrictionMeta struct {
+	Unrestricted int                           `json:"unrestricted"`
+	Suspended    int                           `json:"suspended"`
+	Bits         []ProfileAccessRestrictionBit `json:"bits"`
+}
+
+// ProfileAccessRestrictionBit is one named bit of access_restriction_data.
+type ProfileAccessRestrictionBit struct {
+	Value int    `json:"value"`
+	Key   string `json:"key"`
+}
+
 // ProfileVersionSummary is a summarized version record.
 type ProfileVersionSummary struct {
 	VersionID   string `json:"versionId"`

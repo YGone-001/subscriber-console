@@ -118,6 +118,16 @@
     "dynamicParameters": []
   },
   {
+    "route": "/profile/new",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/profile/:name",
+    "dynamicParameters": [
+      "name"
+    ]
+  },
+  {
     "route": "/rating",
     "dynamicParameters": []
   },

@@ -102,6 +102,20 @@
   white-space: nowrap;
 }
 
+.profile-detail-back {
+  margin-bottom: 1rem;
+}
+
+.profile-search-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.profile-search-submit {
+  white-space: nowrap;
+}
+
 .profile-chip {
   display: inline-flex;
   align-items: center;

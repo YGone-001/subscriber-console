@@ -1384,3 +1384,73 @@ func TestVersionsListBranchKeepsShape(t *testing.T) {
 		t.Error("list response must not gain the detail-only version field")
 	}
 }
+
+func TestProfileMetaReportsCapabilitiesAndVocabulary(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	principal := &auth.Principal{Username: "testuser", Role: "operator", NormalizedRole: "operator"}
+	req := httptest.NewRequest("GET", "/api/profiles/meta", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+
+	w := httptest.NewRecorder()
+	handler.Meta(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp ProfileMetaResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if !resp.Capabilities.CanWrite {
+		t.Error("operator must report canWrite")
+	}
+	if !resp.Capabilities.CanRestore {
+		t.Error("operator must report canRestore")
+	}
+	if resp.Capabilities.CredentialVisibility != "plaintext" {
+		t.Errorf("operator must see plaintext credentials, got %q", resp.Capabilities.CredentialVisibility)
+	}
+	if resp.AccessRestriction.Unrestricted != 0 || resp.AccessRestriction.Suspended != 255 {
+		t.Errorf("unexpected sentinels: %+v", resp.AccessRestriction)
+	}
+	if len(resp.AccessRestriction.Bits) != 8 {
+		t.Fatalf("expected 8 access restriction bits, got %d", len(resp.AccessRestriction.Bits))
+	}
+	combined := 0
+	for _, bit := range resp.AccessRestriction.Bits {
+		combined |= bit.Value
+	}
+	if combined != 255 {
+		t.Errorf("access restriction bits must cover 0xFF, got %d", combined)
+	}
+}
+
+func TestProfileMetaReportsViewerRestrictions(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	principal := &auth.Principal{Username: "viewer1", Role: "viewer", NormalizedRole: "viewer"}
+	req := httptest.NewRequest("GET", "/api/profiles/meta", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+
+	w := httptest.NewRecorder()
+	handler.Meta(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp ProfileMetaResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Capabilities.CanWrite || resp.Capabilities.CanRestore {
+		t.Errorf("viewer must not report write or restore capability: %+v", resp.Capabilities)
+	}
+	if resp.Capabilities.CredentialVisibility != "masked" {
+		t.Errorf("viewer must see masked credentials, got %q", resp.Capabilities.CredentialVisibility)
+	}
+}

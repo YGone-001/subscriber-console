@@ -14,7 +14,18 @@ import {
   type ProfileDiffSection,
 } from '../src/features/profiles/profile-version-diff';
 import { findProfileDraftIssue } from '../src/features/profiles/profile-validation';
-import { countProfilesWithoutBilling, filterProfileList } from '../src/features/profiles/profile-list-model';
+import {
+  buildDraftChangeRows,
+  buildProfilePayload,
+  createDraftFromProfile,
+  createEmptyDraft,
+} from '../src/features/profiles/profile-draft';
+import {
+  countProfilesWithoutBilling,
+  filterProfileList,
+  profileFilterFromParam,
+  profileFilterToParam,
+} from '../src/features/profiles/profile-list-model';
 import { formatAmbrPair } from '../src/features/profiles/profile-format';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
@@ -126,16 +137,17 @@ test('a missing AMBR side is not rendered as zero', () => {
 });
 
 test('the version panel requests the detail branch the backend serves', () => {
-  const source = read('../src/components/ProfileModal.tsx');
+  const source = read('../src/features/profiles/components/ProfileVersionsCard.tsx');
   assert.match(source, /versions\?versionId=/);
   assert.match(source, /data\.version/);
 });
 
 test('a failed template write surfaces the server message instead of a generic failure', () => {
-  const source = read('../src/components/ProfileModal.tsx');
-  assert.match(source, /readError\(res, t\("prof_err_save"\)\)/);
-  assert.doesNotMatch(source, /throw new Error\(t\("prof_err_save"\)\)/);
+  const source = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(source, /putJson\(/);
+  assert.match(source, /mutation-client/);
   assert.match(source, /prof_err_create_partial/);
+  assert.doesNotMatch(source, /throw new Error\(t\("prof_err_save"\)\)/);
 });
 
 test('the template list renders a retryable error instead of an empty state', () => {
@@ -219,7 +231,8 @@ test('an absent AMBR is reported as not configured, never as zero', () => {
 
 test('the template surface no longer fabricates defaults or classifications', () => {
   const files = [
-    '../src/components/ProfileModal.tsx',
+    '../src/features/profiles/ProfileDetailPage.tsx',
+    '../src/features/profiles/profile-draft.ts',
     '../src/features/profiles/components/ProfileEditMode.tsx',
     '../src/features/profiles/components/ProfileViewMode.tsx',
     '../src/features/profiles/ProfilesPage.tsx',
@@ -241,4 +254,64 @@ test('the fabricated governance vocabulary is gone from both locales', () => {
       assert.ok(!source.includes(key), `${file} still defines ${key}`);
     }
   }
+});
+
+test('a draft without billing defaults emits no billing object', () => {
+  const payload = buildProfilePayload(createEmptyDraft(), 'template', false);
+  assert.equal(payload.ocsDefaults, undefined);
+});
+
+test('clearing billing defaults is explicit only when the template had them', () => {
+  const payload = buildProfilePayload(createEmptyDraft(), 'template', true);
+  assert.deepEqual(payload.ocsDefaults, {});
+});
+
+test('stored billing keys the form does not edit survive a save', () => {
+  const draft = createDraftFromProfile(
+    { ocsDefaults: { planId: 'plan_a', voiceTotal: 3600, plmn: '00101' } },
+    'template',
+  );
+  const payload = buildProfilePayload(draft, 'template', true) as { ocsDefaults: Record<string, unknown> };
+  assert.equal(payload.ocsDefaults.planId, 'plan_a');
+  assert.equal(payload.ocsDefaults.voiceTotal, 3600);
+  assert.equal(payload.ocsDefaults.plmn, '00101');
+});
+
+test('a template without AMBR or access restriction keeps those drafts empty', () => {
+  const draft = createDraftFromProfile({ name: 'bare' }, 'bare');
+  assert.deepEqual(draft.ueAmbr, { downlink: { unit: 2 }, uplink: { unit: 2 } });
+  assert.equal(draft.accessRestriction, null);
+  const payload = buildProfilePayload(draft, 'bare', false) as Record<string, unknown>;
+  assert.equal(payload.access_restriction_data, undefined);
+});
+
+test('typing an AMBR value is enough because the unit is part of the draft', () => {
+  const draft = createEmptyDraft();
+  draft.auth = { k: 'a'.repeat(32), opValue: 'b'.repeat(32), amf: '8000' };
+  draft.ueAmbr = { downlink: { unit: 2, value: 100 }, uplink: { unit: 2, value: 50 } };
+  const issue = findProfileDraftIssue({ name: 'template', auth: draft.auth, ambr: draft.ueAmbr, slices: [] });
+  assert.equal(issue, null);
+});
+
+test('the billing filter round-trips through the URL value', () => {
+  assert.equal(profileFilterToParam('all'), '');
+  assert.equal(profileFilterToParam('withBilling'), 'configured');
+  assert.equal(profileFilterFromParam('configured'), 'withBilling');
+  assert.equal(profileFilterFromParam('missing'), 'withoutBilling');
+  assert.equal(profileFilterFromParam('unlinked'), 'unassigned');
+  assert.equal(profileFilterFromParam('garbage'), 'all');
+});
+
+test('section change detection ignores object key order', () => {
+  const payload = { auth: { k: 'a', amf: '8000', opc: 'b' } };
+  const snapshot = { auth: { k: 'a', opc: 'b', amf: '8000' } };
+  const rows = buildDraftChangeRows(payload, snapshot);
+  assert.equal(rows.find((row) => row.key === 'auth')?.changed, false);
+});
+
+test('a genuinely different section is still detected', () => {
+  const payload = { auth: { k: 'a', amf: '8000', opc: 'b' } };
+  const snapshot = { auth: { k: 'c', opc: 'b', amf: '8000' } };
+  const rows = buildDraftChangeRows(payload, snapshot);
+  assert.equal(rows.find((row) => row.key === 'auth')?.changed, true);
 });

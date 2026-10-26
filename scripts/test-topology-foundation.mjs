@@ -642,8 +642,8 @@ async function main() {
     console.log('topology_api_read_count=5');
     console.log('topology_api_mutation_count=3');
     console.log('topology_api_total_count=8');
-    console.log('go_registration_count=158');
-    console.log('frontend_route_count=39');
+    console.log('go_registration_count=159');
+    console.log('frontend_route_count=41');
     console.log('topology_read_permission=core.read');
     console.log('topology_write_permission=core.configure');
     console.log('inventory_node_authority=PASS');

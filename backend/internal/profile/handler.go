@@ -92,6 +92,47 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Meta handles GET /api/profiles/meta.
+func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "profiles:meta:"+p.Username, 120, 60) {
+		return
+	}
+
+	_, canRestore := auth.CapabilityDecision(p, "profile_rollback")
+	credentialVisibility := "masked"
+	if auth.HasPermission(p, "subscribers.write") {
+		credentialVisibility = "plaintext"
+	}
+
+	response.JSON(w, http.StatusOK, ProfileMetaResponse{
+		Capabilities: ProfileCapabilities{
+			CanWrite:             auth.HasPermission(p, "profiles.write"),
+			CanRestore:           canRestore,
+			CredentialVisibility: credentialVisibility,
+		},
+		AccessRestriction: ProfileAccessRestrictionMeta{
+			Unrestricted: 0,
+			Suspended:    255,
+			Bits: []ProfileAccessRestrictionBit{
+				{Value: 128, Key: "nr"},
+				{Value: 16, Key: "eutran"},
+				{Value: 1, Key: "utran"},
+				{Value: 2, Key: "geran"},
+				{Value: 32, Key: "non3gpp"},
+				{Value: 4, Key: "gan"},
+				{Value: 8, Key: "ihspa"},
+				{Value: 64, Key: "nbiot"},
+			},
+		},
+	})
+}
+
 // Get handles GET /api/profiles/:name
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())

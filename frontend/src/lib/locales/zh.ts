@@ -272,6 +272,7 @@ export const zh: Record<string, string> = {
     prof_empty_filtered_desc: "调整搜索内容或筛选条件后再查看匹配模板。",
     prof_governance_title: "用户模板",
     prof_governance_subtitle: "管理可复用的用户签约模板：实际内容构成、关联用户与已配置的默认值。",
+    prof_detail_subtitle: "查看模板的实际配置；修改会生成回滚点，并影响后续按此模板开通的用户。",
     prof_governance_total: "模板数",
     prof_governance_impacted: "关联用户",
     prof_governance_not_modified: "暂无变更记录",

@@ -6,7 +6,7 @@
  * - Route count = 28 (26 -> 28 intentional Stage 2 transition)
  * - Topology frontend routes = 2
  * - Topology Go registrations = 8 (5 reads, 3 mutations)
- * - Go registrations = 158 (intentional platform extensions)
+ * - Go registrations = 159 (intentional platform extensions)
  * - Topology reads use core.read, mutations use core.configure
  * - Topology hard-delete endpoint = 0
  * - No generic command execution endpoint exists
@@ -39,7 +39,7 @@ console.log('-- Topology Contract & Security Evidence Suite --\n');
 
 // 1. Route contract
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
-assert.equal(routes.length, 39, `Total route count must be exactly 39, got ${routes.length}`);
+assert.equal(routes.length, 41, `Total route count must be exactly 41, got ${routes.length}`);
 
 const topologyRoutes = routes.filter((r) => r.route.startsWith('/topology'));
 assert.equal(topologyRoutes.length, 2, `Topology frontend route count must be 2, got ${topologyRoutes.length}`);
@@ -50,7 +50,7 @@ for (const expected of ['/topology', '/topology/:resourceId']) {
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 158, `Go registered operations must be exactly 158, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 159, `Go registered operations must be exactly 159, got ${goRegistrations.length}`);
 
 const topologyGoRoutes = goRegistrations.filter((r) => r.includes('/api/topology'));
 assert.equal(topologyGoRoutes.length, 8, `Topology Go registrations must be exactly 8, got ${topologyGoRoutes.length}`);
@@ -311,12 +311,12 @@ assert.equal(inventoryContract.flatMap((entry) => entry.operations).length, 3, '
 const inventoryGoRoutes = goRegistrations.filter((r) => r.includes('/api/inventory'));
 assert.equal(inventoryGoRoutes.length, 6, `inventory Go registrations must remain 6, got ${inventoryGoRoutes.length}`);
 
-console.log('route_count=39');
+console.log('route_count=41');
 console.log('topology_frontend_routes=2');
 console.log('topology_api_registrations=8');
 console.log('topology_reads=5');
 console.log('topology_mutations=3');
-console.log('go_registration_count=158');
+console.log('go_registration_count=159');
 console.log('topology_contract_apis=8');
 console.log('topology_request_contract_exact=PASS');
 console.log('topology_request_contract_negative_sentinels=PASS');

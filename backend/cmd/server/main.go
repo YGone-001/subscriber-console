@@ -466,6 +466,7 @@ func main() {
 
 	// Profiles
 	mux.Handle("GET /api/profiles", authMiddleware(http.HandlerFunc(profileHandler.List)))
+	mux.Handle("GET /api/profiles/meta", authMiddleware(http.HandlerFunc(profileHandler.Meta)))
 	mux.Handle("GET /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Get)))
 	mux.Handle("GET /api/profiles/{name}/stats", authMiddleware(http.HandlerFunc(profileHandler.Stats)))
 	mux.Handle("GET /api/profiles/{name}/versions", authMiddleware(http.HandlerFunc(profileHandler.Versions)))

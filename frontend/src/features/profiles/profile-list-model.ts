@@ -5,6 +5,27 @@
 
 export type ProfileListFilter = 'all' | 'withBilling' | 'withoutBilling' | 'unassigned';
 
+/* The URL carries a stable value per filter so a shared link survives wording
+ * changes in the labels. */
+const FILTER_PARAM_VALUES: Record<Exclude<ProfileListFilter, 'all'>, string> = {
+  withBilling: 'configured',
+  withoutBilling: 'missing',
+  unassigned: 'unlinked',
+};
+const FILTER_FROM_PARAM: Record<string, ProfileListFilter> = {
+  configured: 'withBilling',
+  missing: 'withoutBilling',
+  unlinked: 'unassigned',
+};
+
+export function profileFilterFromParam(value: string | null | undefined): ProfileListFilter {
+  return FILTER_FROM_PARAM[value ?? ''] ?? 'all';
+}
+
+export function profileFilterToParam(filter: ProfileListFilter): string {
+  return filter === 'all' ? '' : FILTER_PARAM_VALUES[filter];
+}
+
 export type ProfileListEntry = {
   name: string;
   title?: string;
