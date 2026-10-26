@@ -21,7 +21,7 @@ function ratingUnitLabel(t: (key: string) => string, value?: string) {
   return value || "-";
 }
 
-export default function ProfileViewMode({ t, authData, credentialsMasked, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats }: any) {
+export default function ProfileViewMode({ t, authData, credentialsMasked, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats, statsUnavailable }: any) {
   /* The server already withheld credential values for masked roles; the page
    * shows only the configured/unconfigured distinction, never a fake value. */
   const credentialDisplay = (value: string) =>
@@ -47,12 +47,20 @@ export default function ProfileViewMode({ t, authData, credentialsMasked, usimTy
 
   return (
     <div className="animate-fade-in profile-container">
-      {backendStats && (
+      {(backendStats || statsUnavailable) && (
         <div className="dash-card dash-card-spaced" id="psec-stats">
           <div className="dash-card-header">
             <Users size={20} color="var(--primary)" />
-            <h3 className="card-title">{t("prof_change_impacted")} ({backendStats.totalSubscribers})</h3>
+            <h3 className="card-title">{t("prof_change_impacted")}{backendStats ? ` (${backendStats.totalSubscribers})` : ""}</h3>
           </div>
+          {!backendStats ? (
+            /* The attribution failed: report it as unavailable rather than
+             * showing nothing, or worse, a screenful of zeroes. */
+            <div className="dash-card-body">
+              <span className="warning-text">{t("prof_stats_unavailable")}</span>
+            </div>
+          ) : (
+            <>
           <div className="dash-card-body grid-3-col">
             <div>
               <div className="label-muted">{t("prof_change_impacted")}</div>
@@ -72,6 +80,8 @@ export default function ProfileViewMode({ t, authData, credentialsMasked, usimTy
               <span className="label-muted label-muted-inline">{t("prof_stat_samples")}:</span>
               <span className="value-mono value-mono-dim">{backendStats.sampleImsis.join(", ")}</span>
             </div>
+          )}
+            </>
           )}
         </div>
       )}

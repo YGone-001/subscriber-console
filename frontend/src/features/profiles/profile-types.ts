@@ -17,6 +17,8 @@ export type ProfileRecord = {
   updatedAt?: string;
   updatedBy?: string;
   createdBy?: string;
+  /** Monotonic write counter; a save preconditions on the value it loaded. */
+  revision?: number;
 };
 
 export type ProfileStats = {
@@ -31,6 +33,9 @@ export type ProfileStats = {
 export type ProfileDetailResponse = {
   profile: ProfileRecord;
   stats: ProfileStats | null;
+  /** `unavailable` means the subscriber attribution failed, not that no
+   * subscriber uses the template. */
+  statsCompleteness?: 'complete' | 'unavailable';
 };
 
 export type ProfileListItem = {
@@ -81,7 +86,9 @@ export type ProfileVersionDetail = ProfileVersionSummary & { profile?: ProfileRe
 
 export type ProfileVersionsResponse = {
   versions: ProfileVersionSummary[];
-  current: { title?: string; updatedAt?: string; updatedBy?: string; sliceCount?: number } | null;
+  current: { title?: string; updatedAt?: string; updatedBy?: string; sliceCount?: number; revision?: number } | null;
+  /** A deleted template keeps its snapshots, so a restore can bring it back. */
+  profileExists?: boolean;
 };
 
 export type ProfileMetaResponse = {

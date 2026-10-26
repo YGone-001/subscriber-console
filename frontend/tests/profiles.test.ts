@@ -529,3 +529,37 @@ test('the template editor collapses slices like the subscriber form does', () =>
   );
 });
 
+test('a template save and delete precondition on the revision that was loaded', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  const types = read('../src/features/profiles/profile-types.ts');
+  assert.match(types, /revision\?: number/);
+  assert.match(types, /statsCompleteness\?: 'complete' \| 'unavailable'/);
+  assert.match(types, /profileExists\?: boolean/);
+  assert.match(detailPage, /storedRevision === null \? payload : \{ \.\.\.payload, expectedRevision: storedRevision \}/);
+  assert.match(detailPage, /params\.set\('expectedRevision', String\(storedRevision\)\)/);
+  /* A create has no counter to precondition on. */
+  assert.match(detailPage, /await postJson\('\/api\/profiles', \{ \.\.\.payload, name: targetName \}\)/);
+});
+
+test('a revision conflict keeps the draft and says so in both locales', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(detailPage, /err\.code === 'PROFILE_REVISION_CONFLICT'/);
+  assert.match(detailPage, /setError\(t\('prof_err_revision_conflict'\)\)/);
+  /* The draft survives: the conflict path must not reset it or leave edit mode. */
+  const conflictBlock = detailPage.slice(detailPage.indexOf("err.code === 'PROFILE_REVISION_CONFLICT'"), detailPage.indexOf("err.code === 'PROFILE_REVISION_CONFLICT'") + 320);
+  assert.ok(!conflictBlock.includes('setIsEditing(false)'), 'a conflict must not drop the operator out of editing');
+  assert.ok(!conflictBlock.includes('createDraftFromProfile'), 'a conflict must not rebuild the draft');
+  for (const file of ['../src/lib/locales/en.ts', '../src/lib/locales/zh.ts']) {
+    assert.match(read(file), /prof_err_revision_conflict: /);
+  }
+});
+
+test('an unavailable subscriber attribution is reported as unavailable', () => {
+  const viewMode = read('../src/features/profiles/components/ProfileViewMode.tsx');
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(detailPage, /detail\?\.statsCompleteness === 'unavailable'/);
+  assert.match(detailPage, /statsUnavailable=\{statsUnavailable\}/);
+  assert.match(viewMode, /\{\(backendStats \|\| statsUnavailable\) && \(/);
+  assert.match(viewMode, /t\("prof_stats_unavailable"\)/);
+});
+

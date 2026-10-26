@@ -129,6 +129,10 @@ export function ProfileDetailPage() {
   const accessBits = meta?.accessRestriction.bits ?? null;
 
   const impactedSubscribers = detail?.stats?.totalSubscribers ?? 0;
+  const statsUnavailable = detail?.statsCompleteness === 'unavailable';
+  /* The counter the page loaded with; every write preconditions on it so a
+   * concurrent edit surfaces as a conflict instead of a silent overwrite. */
+  const storedRevision = typeof profile?.revision === 'number' ? profile.revision : null;
   const hasUnsavedChanges = isEditing && editingBaseline !== null && editingBaseline !== draftSignature(draft);
 
   const draftPayload = useMemo(
@@ -208,7 +212,10 @@ export function ProfileDetailPage() {
          * CREATE followed by UPDATE in the history. */
         await postJson('/api/profiles', { ...payload, name: targetName });
       } else {
-        await putJson(`/api/profiles/${encodeURIComponent(targetName)}`, payload);
+        await putJson(
+          `/api/profiles/${encodeURIComponent(targetName)}`,
+          storedRevision === null ? payload : { ...payload, expectedRevision: storedRevision },
+        );
       }
       setIsSaveConfirmOpen(false);
       setIsEditing(false);
@@ -221,7 +228,13 @@ export function ProfileDetailPage() {
       await mutateDetail();
       await mutateVersions();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('prof_err_save'));
+      if (err instanceof MutationApiError && err.code === 'PROFILE_REVISION_CONFLICT') {
+        // Keep the draft: the operator's edits are worth more than a reload.
+        setError(t('prof_err_revision_conflict'));
+        void mutateDetail();
+      } else {
+        setError(err instanceof Error ? err.message : t('prof_err_save'));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -250,12 +263,21 @@ export function ProfileDetailPage() {
     setIsDeleting(true);
     setError(null);
     try {
-      await deleteJson(`/api/profiles/${encodeURIComponent(profileName)}${force ? '?force=true' : ''}`);
+      const params = new URLSearchParams();
+      if (force) params.set('force', 'true');
+      if (storedRevision !== null) params.set('expectedRevision', String(storedRevision));
+      const query = params.toString();
+      await deleteJson(`/api/profiles/${encodeURIComponent(profileName)}${query ? `?${query}` : ''}`);
       await globalMutate('/api/profiles');
       router.push('/profile');
     } catch (err) {
       setIsDeleteConfirmOpen(false);
       const message = err instanceof Error ? err.message : t('prof_err_delete');
+      if (err instanceof MutationApiError && err.code === 'PROFILE_REVISION_CONFLICT') {
+        setError(t('prof_err_revision_conflict'));
+        void mutateDetail();
+        return;
+      }
       const conflict = err instanceof MutationApiError
         && err.status === 409
         && (err.code === 'PROFILE_IN_USE' || /in use by/i.test(message));
@@ -664,6 +686,7 @@ export function ProfileDetailPage() {
               accessRestriction={draft.accessRestriction}
               slices={draft.slices}
               backendStats={detail?.stats ?? null}
+              statsUnavailable={statsUnavailable}
             />
           )}
 
