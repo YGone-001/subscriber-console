@@ -6,7 +6,7 @@
  * routed at the Nginx edge with no Node fallback:
  *
  * 1. Go API Surface & Inventory Checks (derived from Go router source):
- *    - Go router registers exactly 159 METHOD+PATH operations
+ *    - Go router registers exactly 162 METHOD+PATH operations
  *    - No duplicate METHOD+PATH registrations
  *    - All 4 authentication routes registered:
  *        POST /api/auth/login
@@ -145,8 +145,8 @@ async function main() {
   const goKeys = registrations.keys;
   const goKeySet = new Set(goKeys);
 
-  verify('Go router registers exactly 159 METHOD+PATH operations', () => {
-    assert.equal(goKeys.length, 159, `Expected 159 registrations, found ${goKeys.length}`);
+  verify('Go router registers exactly 162 METHOD+PATH operations', () => {
+    assert.equal(goKeys.length, 162, `Expected 162 registrations, found ${goKeys.length}`);
   });
 
   verify('No duplicate METHOD+PATH registrations in Go router sources', () => {

@@ -143,14 +143,7 @@ func (r *Repository) GetProfileStats(ctx context.Context, profileName string) (P
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{
-		"$or": bson.A{
-			bson.M{"webui_meta.profile_name": profileName},
-			bson.M{"webui_meta.profile": profileName},
-			bson.M{"profile_name": profileName},
-			bson.M{"profile": profileName},
-		},
-	}
+	filter := profileAttributionFilter(profileName)
 
 	// Count by status
 	pipeline := mongo.Pipeline{
@@ -230,6 +223,64 @@ func (r *Repository) GetProfileStats(ctx context.Context, profileName string) (P
 	}
 
 	return stats, nil
+}
+
+// profileAttributionFilter is the single attribution rule of the template
+// surface: a subscriber counts as linked when any of the four legacy fields
+// names the template. Statistics and the drift probe must not diverge on it.
+func profileAttributionFilter(profileName string) bson.M {
+	return bson.M{
+		"$or": bson.A{
+			bson.M{"webui_meta.profile_name": profileName},
+			bson.M{"webui_meta.profile": profileName},
+			bson.M{"profile_name": profileName},
+			bson.M{"profile": profileName},
+		},
+	}
+}
+
+// ListSubscribersAttributedTo loads the provisioning documents of the
+// subscribers linked to a template. It fetches limit + 1 documents so the caller
+// can tell a complete read from a truncated one. The documents are compared in
+// memory and never serialized into a response.
+func (r *Repository) ListSubscribersAttributedTo(ctx context.Context, profileName string, limit int) ([]bson.M, error) {
+	return r.findSubscribers(ctx, profileAttributionFilter(profileName), limit)
+}
+
+// ListSubscribersByImsis loads the provisioning documents of an explicit IMSI
+// set under the same bound.
+func (r *Repository) ListSubscribersByImsis(ctx context.Context, imsis []string, limit int) ([]bson.M, error) {
+	if len(imsis) == 0 {
+		return nil, nil
+	}
+	return r.findSubscribers(ctx, bson.M{"imsi": bson.M{"$in": imsis}}, limit)
+}
+
+func (r *Repository) findSubscribers(ctx context.Context, filter bson.M, limit int) ([]bson.M, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	cursor, err := r.subscribers.Find(ctx, filter,
+		options.Find().SetSort(bson.D{{Key: "imsi", Value: 1}}).SetLimit(int64(limit)+1))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	docs := make([]bson.M, 0, limit)
+	for cursor.Next(ctx) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, err
+		}
+		docs = append(docs, doc)
+		if len(docs) > limit {
+			// One over the bound: the caller reports truncation instead of a
+			// partial list that looks complete.
+			return docs, nil
+		}
+	}
+	return docs, cursor.Err()
 }
 
 // ListProfileVersions returns version history for a profile.
@@ -761,14 +812,7 @@ func (r *Repository) CountSubscribersByProfile(ctx context.Context, profileName 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{
-		"$or": bson.A{
-			bson.M{"webui_meta.profile_name": profileName},
-			bson.M{"webui_meta.profile": profileName},
-			bson.M{"profile_name": profileName},
-			bson.M{"profile": profileName},
-		},
-	}
+	filter := profileAttributionFilter(profileName)
 
 	return r.subscribers.CountDocuments(ctx, filter)
 }

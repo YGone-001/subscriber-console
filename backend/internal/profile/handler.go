@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -18,6 +19,7 @@ import (
 	"subscriber/internal/auth"
 	"subscriber/internal/middleware"
 	"subscriber/internal/response"
+	"subscriber/internal/subscriber"
 )
 
 var validProfileName = regexp.MustCompile(`^[a-zA-Z0-9_\s-]+$`)
@@ -35,6 +37,25 @@ func validNewProfileName(name string) bool {
 	return newProfileName.MatchString(name) && !reservedProfileName.MatchString(name)
 }
 
+// cloneProfileFields are the content fields a clone copies verbatim. Identity,
+// timestamps and the write counter are rebuilt instead.
+var cloneProfileFields = []string{
+	"description", "auth", "ambr", "access_restriction_data", "sliceList", "ocsDefaults",
+}
+
+// exportFilename keeps a download name inside the characters a Content-Disposition
+// header may carry unquoted; the stored key itself is never rewritten.
+func exportFilename(name string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			return r
+		default:
+			return '_'
+		}
+	}, name)
+}
+
 // ProfileReader defines the read interface for profile data.
 type ProfileReader interface {
 	ListProfiles(ctx context.Context) ([]ProfileListItem, ProfileSummary, error)
@@ -42,6 +63,10 @@ type ProfileReader interface {
 	GetProfileVersion(ctx context.Context, profileName, versionId string) (bson.M, error)
 	GetProfileStats(ctx context.Context, name string) (ProfileStats, error)
 	ListProfileVersions(ctx context.Context, name string, limit int) ([]ProfileVersionSummary, error)
+	// ListSubscribersAttributedTo and ListSubscribersByImsis back the drift probe.
+	// They return whole documents for in-memory comparison only, bounded.
+	ListSubscribersAttributedTo(ctx context.Context, profileName string, limit int) ([]bson.M, error)
+	ListSubscribersByImsis(ctx context.Context, imsis []string, limit int) ([]bson.M, error)
 }
 
 // ProfileWriter defines the write interface for profile data.
@@ -413,6 +438,317 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── Write Handlers ──────────────────────────────────────────────────────────
+
+// profileDriftLimit bounds one drift probe so a template with a large
+// population cannot turn a read into an unbounded scan.
+const profileDriftLimit = 200
+
+var validImsiDigits = regexp.MustCompile(`^[0-9]{15}$`)
+
+// DriftPrecheck handles POST /api/profiles/:name/drift-precheck.
+//
+// It is a semantic read: it compares each linked subscriber's stored
+// provisioning with the document the governed apply would produce, using the
+// same projection, and writes nothing. Because it must read subscriber
+// authentication material to answer, it is gated on the subscriber write
+// capability — the same predicate that decides whether template credentials are
+// plaintext — rather than on the template read permission alone.
+func (h *Handler) DriftPrecheck(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "profiles.read", h.denials) {
+		return
+	}
+	if !audit.RequireCapabilityWithAudit(w, r, p, "subscriber_write", h.denials) {
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "profiles:drift:"+p.Username, 30, 60) {
+		return
+	}
+
+	name := r.PathValue("name")
+	if !validProfileName.MatchString(name) {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
+		return
+	}
+
+	var body ProfileDriftRequest
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			response.BadRequest(w, "Invalid request body", "INVALID_REQUEST")
+			return
+		}
+	}
+	if len(body.Imsis) > profileDriftLimit {
+		response.Error(w, http.StatusBadRequest, fmt.Sprintf("At most %d IMSIs may be probed at once", profileDriftLimit), "DRIFT_LIMIT_EXCEEDED")
+		return
+	}
+	for _, imsi := range body.Imsis {
+		if !validImsiDigits.MatchString(imsi) {
+			response.Error(w, http.StatusBadRequest, "Invalid IMSI format", "INVALID_IMSI")
+			return
+		}
+	}
+
+	profile, err := h.repo.GetProfile(r.Context(), name)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if profile == nil {
+		response.JSON(w, http.StatusNotFound, map[string]string{"error": "Profile not found"})
+		return
+	}
+
+	var docs []bson.M
+	if len(body.Imsis) > 0 {
+		docs, err = h.repo.ListSubscribersByImsis(r.Context(), body.Imsis, profileDriftLimit)
+	} else {
+		docs, err = h.repo.ListSubscribersAttributedTo(r.Context(), name, profileDriftLimit)
+	}
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+
+	truncated := len(docs) > profileDriftLimit
+	if truncated {
+		docs = docs[:profileDriftLimit]
+	}
+
+	resp := ProfileDriftResponse{
+		ProfileName: name,
+		Truncated:   truncated,
+		Results:     make([]ProfileDriftEntry, 0, len(docs)),
+	}
+	seen := make(map[string]bool, len(docs))
+	for _, doc := range docs {
+		imsi, _ := doc["imsi"].(string)
+		state, changed := subscriber.ProfileDrift(doc, profile, name)
+		if imsi == "" {
+			// A document without a usable IMSI cannot be attributed; report it
+			// rather than silently dropping it.
+			state = DriftStateUnknown
+		}
+		seen[imsi] = true
+		resp.Checked++
+		switch state {
+		case subscriber.DriftInSync:
+			resp.InSync++
+		case DriftStateUnknown:
+			resp.Unknown++
+		default:
+			resp.Changed++
+		}
+		resp.Results = append(resp.Results, ProfileDriftEntry{Imsi: imsi, State: state, Changed: changed})
+	}
+	// An explicitly requested IMSI with no document is unknown, never in sync.
+	for _, imsi := range body.Imsis {
+		if seen[imsi] {
+			continue
+		}
+		resp.Checked++
+		resp.Unknown++
+		resp.Results = append(resp.Results, ProfileDriftEntry{Imsi: imsi, State: DriftStateUnknown})
+	}
+
+	response.JSON(w, http.StatusOK, resp)
+}
+
+// Clone handles POST /api/profiles/:name/clone
+// It copies the source template into a new key in one write, producing a single
+// CREATE snapshot. The source is left untouched.
+func (h *Handler) Clone(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !auth.HasPermission(p, "profiles.write") {
+		audit.RecordPermissionDenied(h.denials, r, p, audit.DenialMetadata{Permission: "profiles.write"})
+		response.Forbidden(w, "Insufficient permissions")
+		return
+	}
+	if _, actorErr := RevalidateFreshActor(r.Context(), h.userRepo, p); actorErr != nil {
+		response.Error(w, actorErr.Status, actorErr.Message, actorErr.Code)
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "profiles:clone:"+p.Username, 20, 60) {
+		return
+	}
+
+	sourceName := r.PathValue("name")
+	if !validProfileName.MatchString(sourceName) {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
+		return
+	}
+
+	var body struct {
+		Name  string `json:"name"`
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		response.BadRequest(w, "Invalid request body", "INVALID_REQUEST")
+		return
+	}
+	target := strings.TrimSpace(body.Name)
+	if !validNewProfileName(target) {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
+		return
+	}
+	if target == sourceName {
+		response.Error(w, http.StatusBadRequest, "The clone target must differ from the source", "PROFILE_CLONE_TARGET_SAME")
+		return
+	}
+
+	source, err := h.repo.GetProfile(r.Context(), sourceName)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if source == nil {
+		response.JSON(w, http.StatusNotFound, map[string]string{"error": "Profile not found"})
+		return
+	}
+
+	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	doc := bson.M{
+		"name":      target,
+		"title":     target,
+		"createdAt": now,
+		"createdBy": p.Username,
+		"updatedAt": now,
+		"updatedBy": p.Username,
+		"revision":  int64(1),
+	}
+	for _, field := range cloneProfileFields {
+		if value, ok := source[field]; ok {
+			doc[field] = value
+		}
+	}
+	if title := strings.TrimSpace(body.Title); title != "" {
+		// The display title defaults to the new key rather than copying the
+		// source's, so two templates never share one name on screen.
+		doc["title"] = title
+	}
+
+	if err := h.repo.InsertProfileCreateOnly(r.Context(), doc); err != nil {
+		if err == ErrProfileExists {
+			response.Error(w, http.StatusConflict, "Profile already exists", "PROFILE_EXISTS")
+			return
+		}
+		h.writeStrictAudit(r.Context(), "PROFILE_CLONE", "profile", target, p.Username, p.NormalizedRole, nil, nil, "failed", "FAILED_NO_MUTATION", false, err)
+		response.JSON(w, http.StatusInternalServerError, map[string]any{
+			"error":     "Profile creation failed",
+			"code":      "PROFILE_CREATE_FAILED",
+			"committed": false,
+		})
+		return
+	}
+
+	versionRecord := bson.M{
+		"versionId":   generateVersionID(),
+		"profileName": target,
+		"profile":     doc,
+		"action":      "CREATE",
+		"savedAt":     now,
+		"savedBy":     p.Username,
+		"title":       firstStringField(doc, "title", "name"),
+		"sliceCount":  countSliceList(doc),
+	}
+	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
+		h.writeStrictAudit(r.Context(), "PROFILE_CLONE", "profile", target, p.Username, p.NormalizedRole, nil, doc, "failed", "PARTIAL_WRITE", true, err)
+		response.JSON(w, http.StatusInternalServerError, map[string]any{
+			"error":     "Profile created but version save failed",
+			"code":      "PROFILE_CREATE_PARTIAL_WRITE",
+			"committed": true,
+		})
+		return
+	}
+
+	h.writeStrictAudit(r.Context(), "PROFILE_CLONE", "profile", target, p.Username, p.NormalizedRole, source, doc, "success", "SUCCESS", true, nil)
+	response.JSON(w, http.StatusCreated, CreateProfileResponse{
+		Message: "Profile cloned successfully",
+		Name:    target,
+	})
+}
+
+// Export handles GET /api/profiles/:name/export
+//
+// The download carries the template content as JSON. Authentication material is
+// subject to the same visibility predicate as the detail read, so a role that
+// cannot see plaintext credentials cannot export them either.
+func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "profiles.read", h.denials) {
+		return
+	}
+
+	name := r.PathValue("name")
+	if !validProfileName.MatchString(name) {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "profiles:export:"+p.Username, 30, 60) {
+		return
+	}
+
+	profile, err := h.repo.GetProfile(r.Context(), name)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if profile == nil {
+		response.JSON(w, http.StatusNotFound, map[string]string{"error": "Profile not found"})
+		return
+	}
+
+	exported := deepCopyBsonM(profile)
+	if !auth.HasPermission(p, "subscribers.write") {
+		maskCredentialDoc(exported)
+	}
+	delete(exported, "_id")
+	delete(exported, "revision")
+
+	visibility := "masked"
+	if auth.HasPermission(p, "subscribers.write") {
+		visibility = "plaintext"
+	}
+
+	payload := map[string]any{
+		"version":      1,
+		"exported_at":  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		"exported_by":  p.Username,
+		"profile_name": name,
+		// The manifest states what the reader actually got, so a masked export is
+		// never mistaken for a complete backup.
+		"credentials": map[string]any{"visibility": visibility},
+		"profile":     exported,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="profile-`+exportFilename(name)+`.json"`)
+	w.Header().Set("Cache-Control", "no-store")
+	// Written directly rather than through response.JSON: the export contract
+	// pins the bare `application/json` media type, as the tariff export does.
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		slog.Error("profile_export_encode_failed", "profile", name, "error", err)
+	}
+}
 
 // Create handles POST /api/profiles
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {

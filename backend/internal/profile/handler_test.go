@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/subscriber"
 	"subscriber/internal/user"
 )
 
@@ -28,6 +29,9 @@ type mockRepository struct {
 	profiles    map[string]bson.M
 	versions    []bson.M
 	subscribers map[string]int64
+	// driftDocs and driftErr back the bounded subscriber reads of the probe.
+	driftDocs []bson.M
+	driftErr  error
 }
 
 func newMockRepository() *mockRepository {
@@ -84,6 +88,14 @@ func (m *mockRepository) DeleteProfileCAS(ctx context.Context, name string, expe
 func (m *mockRepository) SaveProfileVersion(ctx context.Context, record bson.M) error {
 	m.versions = append(m.versions, record)
 	return nil
+}
+
+func (m *mockRepository) ListSubscribersAttributedTo(_ context.Context, _ string, _ int) ([]bson.M, error) {
+	return m.driftDocs, m.driftErr
+}
+
+func (m *mockRepository) ListSubscribersByImsis(_ context.Context, _ []string, _ int) ([]bson.M, error) {
+	return m.driftDocs, m.driftErr
 }
 
 func (m *mockRepository) CountSubscribersByProfile(ctx context.Context, profileName string) (int64, error) {
@@ -2251,5 +2263,283 @@ func TestProfileVersionsReportExistenceAndRevision(t *testing.T) {
 	_ = json.Unmarshal(missing.Body.Bytes(), &missingBody)
 	if missing.Code != http.StatusOK || missingBody.ProfileExists || len(missingBody.Current) != 0 {
 		t.Errorf("a deleted template keeps its history but says so: %d %s", missing.Code, missing.Body.String())
+	}
+}
+
+// ─── Drift probe, clone and export ──────────────────────────────────────────
+
+const driftProfileName = "Gold"
+
+func driftProfileDoc() bson.M {
+	return bson.M{
+		"name":                    driftProfileName,
+		"title":                   "Gold Premium",
+		"auth":                    bson.M{"k": "465b2ce5b8a37f2e19d4a6c8b0e2f417", "opc": "cd6cfa9c8ed9c4c7f5e0d2a9b6c3e4f5", "amf": "8000"},
+		"ambr":                    bson.M{"downlink": bson.M{"unit": int32(2), "value": int32(100)}, "uplink": bson.M{"unit": int32(2), "value": int32(50)}},
+		"access_restriction_data": int32(0),
+		"sliceList":               bson.A{},
+	}
+}
+
+// driftSubjects builds the population from the same projection the governed
+// apply performs, so the fixture cannot disagree with the probe's authority.
+func driftSubjects() []bson.M {
+	profile := driftProfileDoc()
+	applied := func(imsi string) bson.M {
+		return subscriber.BuildSubscriberAfterProfileApply(bson.M{"imsi": imsi}, profile, driftProfileName)
+	}
+	inSync := applied("001010000000001")
+	changed := applied("001010000000002")
+	changed["ambr"] = bson.M{"downlink": bson.M{"unit": int32(1), "value": int32(2)}}
+	orphan := bson.M{"security": bson.M{"k": "x"}}
+	return []bson.M{inSync, changed, orphan}
+}
+
+func TestProfileDriftPrecheckReadsStateWithoutWriting(t *testing.T) {
+	repo := newMockRepository()
+	repo.profiles[driftProfileName] = driftProfileDoc()
+	repo.driftDocs = driftSubjects()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	operator := &auth.Principal{Username: "op", Role: "operator", NormalizedRole: "operator"}
+
+	versionsBefore := len(repo.versions)
+	profilesBefore := len(repo.profiles)
+
+	w := doProfileRequest(t, handler.DriftPrecheck, "POST", "/api/profiles/Gold/drift-precheck", map[string]any{}, operator,
+		map[string]string{"name": driftProfileName})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp ProfileDriftResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode the probe: %v", err)
+	}
+	if resp.ProfileName != driftProfileName || resp.Checked != 3 || resp.InSync != 1 || resp.Changed != 1 || resp.Unknown != 1 {
+		t.Fatalf("unexpected tally: %+v", resp)
+	}
+	byImsi := map[string]ProfileDriftEntry{}
+	for _, entry := range resp.Results {
+		byImsi[entry.Imsi] = entry
+	}
+	if byImsi["001010000000001"].State != subscriber.DriftInSync {
+		t.Errorf("an applied subscriber must read as in sync: %+v", byImsi["001010000000001"])
+	}
+	changed := byImsi["001010000000002"]
+	if changed.State != DriftStateChanged || len(changed.Changed) != 1 || changed.Changed[0] != "ambr" {
+		t.Errorf("an ambr edit must surface as one changed group: %+v", changed)
+	}
+	if byImsi[""].State != DriftStateUnknown {
+		t.Errorf("a document without an IMSI must be unknown, not in sync: %+v", byImsi[""])
+	}
+	if len(repo.versions) != versionsBefore || len(repo.profiles) != profilesBefore {
+		t.Error("the probe is a read and must not write")
+	}
+}
+
+func TestProfileDriftPrecheckGatesAndBounds(t *testing.T) {
+	repo := newMockRepository()
+	repo.profiles[driftProfileName] = driftProfileDoc()
+	repo.driftDocs = driftSubjects()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	operator := &auth.Principal{Username: "op", Role: "operator", NormalizedRole: "operator"}
+	pathValues := map[string]string{"name": driftProfileName}
+
+	// The probe reads subscriber authentication material, so it follows the
+	// same predicate as plaintext template credentials.
+	viewer := doProfileRequest(t, handler.DriftPrecheck, "POST", "/api/profiles/Gold/drift-precheck", map[string]any{},
+		&auth.Principal{Username: "watcher", Role: "viewer", NormalizedRole: "viewer"}, pathValues)
+	if viewer.Code != http.StatusForbidden {
+		t.Errorf("a viewer must be refused: %d %s", viewer.Code, viewer.Body.String())
+	}
+
+	missing := doProfileRequest(t, handler.DriftPrecheck, "POST", "/api/profiles/gone/drift-precheck", map[string]any{}, operator,
+		map[string]string{"name": "gone"})
+	if missing.Code != http.StatusNotFound {
+		t.Errorf("an unknown template must 404, got %d", missing.Code)
+	}
+
+	badImsi := doProfileRequest(t, handler.DriftPrecheck, "POST", "/api/profiles/Gold/drift-precheck",
+		map[string]any{"imsis": []string{"00101"}}, operator, pathValues)
+	var badCode struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(badImsi.Body.Bytes(), &badCode)
+	if badImsi.Code != http.StatusBadRequest || badCode.Code != "INVALID_IMSI" {
+		t.Errorf("a malformed IMSI must be refused: %d %s", badImsi.Code, badImsi.Body.String())
+	}
+
+	overflow := make([]string, profileDriftLimit+1)
+	for i := range overflow {
+		overflow[i] = "001010000000001"
+	}
+	tooMany := doProfileRequest(t, handler.DriftPrecheck, "POST", "/api/profiles/Gold/drift-precheck",
+		map[string]any{"imsis": overflow}, operator, pathValues)
+	var limitCode struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(tooMany.Body.Bytes(), &limitCode)
+	if tooMany.Code != http.StatusBadRequest || limitCode.Code != "DRIFT_LIMIT_EXCEEDED" {
+		t.Errorf("the bound must be enforced before any read: %d %s", tooMany.Code, tooMany.Body.String())
+	}
+
+	// A requested IMSI with no document is unknown, never silently in sync.
+	repo.driftDocs = driftSubjects()[:1]
+	partial := doProfileRequest(t, handler.DriftPrecheck, "POST", "/api/profiles/Gold/drift-precheck",
+		map[string]any{"imsis": []string{"001010000000001", "001010000000009"}}, operator, pathValues)
+	var partialResp ProfileDriftResponse
+	_ = json.Unmarshal(partial.Body.Bytes(), &partialResp)
+	if partialResp.Unknown != 1 || partialResp.Checked != 2 {
+		t.Errorf("a missing subscriber must be reported unknown: %+v", partialResp)
+	}
+}
+
+func TestProfileCloneCopiesContentInOneWrite(t *testing.T) {
+	repo := newMockRepository()
+	repo.profiles["Gold"] = bson.M{
+		"name": "Gold", "title": "Gold Premium", "description": "source",
+		"auth":        bson.M{"k": "465b2ce5b8a37f2e19d4a6c8b0e2f417", "amf": "8000"},
+		"ambr":        bson.M{"downlink": bson.M{"unit": int32(2), "value": int32(100)}},
+		"sliceList":   bson.A{bson.M{"sst": int32(1)}},
+		"ocsDefaults": bson.M{"planId": "gold_plan"},
+		"revision":    int64(9), "createdBy": "someone", "updatedAt": "2020-01-01T00:00:00.000Z",
+	}
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	handler.UseUserRepository(activeUserRepoFor(writer))
+
+	w := doProfileRequest(t, handler.Clone, "POST", "/api/profiles/Gold/clone", map[string]any{"name": "Silver"}, writer,
+		map[string]string{"name": "Gold"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	silver := repo.profiles["Silver"]
+	if silver["name"] != "Silver" || silver["title"] != "Silver" {
+		t.Errorf("identity must be the new key, not the source's: %v / %v", silver["name"], silver["title"])
+	}
+	if silver["description"] != "source" {
+		t.Errorf("content was not copied: %v", silver["description"])
+	}
+	ocs := storedRecord(silver["ocsDefaults"])
+	if ocs["planId"] != "gold_plan" {
+		t.Errorf("billing defaults were not copied: %v", silver["ocsDefaults"])
+	}
+	if silver["revision"] != int64(1) {
+		t.Errorf("a clone starts its own counter, got %v", silver["revision"])
+	}
+	if silver["createdBy"] != "testuser" || silver["updatedAt"] == "2020-01-01T00:00:00.000Z" {
+		t.Errorf("provenance must belong to the clone, got %v / %v", silver["createdBy"], silver["updatedAt"])
+	}
+	if repo.profiles["Gold"]["revision"] != int64(9) {
+		t.Error("the source template must be untouched")
+	}
+
+	var created []bson.M
+	for _, record := range repo.versions {
+		if record["profileName"] == "Silver" {
+			created = append(created, record)
+		}
+	}
+	if len(created) != 1 || created[0]["action"] != "CREATE" {
+		t.Errorf("a clone is one create, got %d records: %+v", len(created), created)
+	}
+
+	same := doProfileRequest(t, handler.Clone, "POST", "/api/profiles/Gold/clone", map[string]any{"name": "Gold"}, writer,
+		map[string]string{"name": "Gold"})
+	var sameCode struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(same.Body.Bytes(), &sameCode)
+	if same.Code != http.StatusBadRequest || sameCode.Code != "PROFILE_CLONE_TARGET_SAME" {
+		t.Errorf("cloning onto the source must be refused: %d %s", same.Code, same.Body.String())
+	}
+
+	reserved := doProfileRequest(t, handler.Clone, "POST", "/api/profiles/Gold/clone", map[string]any{"name": "new"}, writer,
+		map[string]string{"name": "Gold"})
+	if reserved.Code != http.StatusBadRequest {
+		t.Errorf("the clone target obeys the create key policy, got %d", reserved.Code)
+	}
+
+	repo.profiles["Taken"] = bson.M{"name": "Taken"}
+	duplicate := doProfileRequest(t, handler.Clone, "POST", "/api/profiles/Gold/clone", map[string]any{"name": "Taken"}, writer,
+		map[string]string{"name": "Gold"})
+	if duplicate.Code != http.StatusConflict {
+		t.Errorf("an existing target must conflict, got %d", duplicate.Code)
+	}
+}
+
+func TestProfileExportShapeAndCredentialVisibility(t *testing.T) {
+	repo := newMockRepository()
+	repo.profiles["Gold 5G"] = bson.M{
+		"name": "Gold 5G", "title": "Gold",
+		"auth":     bson.M{"k": "465b2ce5b8a37f2e19d4a6c8b0e2f417", "amf": "8000"},
+		"revision": int64(4),
+	}
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	pathValues := map[string]string{"name": "Gold 5G"}
+
+	admin := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	w := doProfileRequest(t, handler.Export, "GET", "/api/profiles/Gold%205G/export", nil, admin, pathValues)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("Content-Type"); got != "application/json" {
+		t.Errorf("Content-Type: %q", got)
+	}
+	// The stored key keeps its space; the download name cannot carry one.
+	if got := w.Header().Get("Content-Disposition"); got != `attachment; filename="profile-Gold_5G.json"` {
+		t.Errorf("Content-Disposition: %q", got)
+	}
+	if got := w.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control: %q", got)
+	}
+
+	var full struct {
+		Version     int            `json:"version"`
+		ProfileName string         `json:"profile_name"`
+		ExportedAt  string         `json:"exported_at"`
+		Credentials map[string]any `json:"credentials"`
+		Profile     map[string]any `json:"profile"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &full); err != nil {
+		t.Fatalf("failed to decode the export: %v", err)
+	}
+	if full.Version != 1 || full.ProfileName != "Gold 5G" || full.ExportedAt == "" {
+		t.Errorf("export manifest: %+v", full)
+	}
+	if full.Credentials["visibility"] != "plaintext" {
+		t.Errorf("credential visibility: %v", full.Credentials)
+	}
+	if _, leaked := full.Profile["revision"]; leaked {
+		t.Error("the write counter is not template content")
+	}
+	authDoc, _ := full.Profile["auth"].(map[string]any)
+	if authDoc["k"] != "465b2ce5b8a37f2e19d4a6c8b0e2f417" {
+		t.Errorf("a plaintext reader must get the stored value, got %v", authDoc["k"])
+	}
+
+	viewer := &auth.Principal{Username: "watcher", Role: "viewer", NormalizedRole: "viewer"}
+	masked := doProfileRequest(t, handler.Export, "GET", "/api/profiles/Gold%205G/export", nil, viewer, pathValues)
+	var maskedBody struct {
+		Credentials map[string]any `json:"credentials"`
+		Profile     struct {
+			Auth map[string]any `json:"auth"`
+		} `json:"profile"`
+	}
+	if err := json.Unmarshal(masked.Body.Bytes(), &maskedBody); err != nil {
+		t.Fatalf("failed to decode the masked export: %v", err)
+	}
+	if maskedBody.Credentials["visibility"] != "masked" {
+		t.Errorf("a masked reader must be told: %v", maskedBody.Credentials)
+	}
+	if maskedBody.Profile.Auth["k"] != maskedCredential {
+		t.Errorf("an export must not carry material the reader cannot see: %v", maskedBody.Profile.Auth["k"])
+	}
+	if maskedBody.Profile.Auth["amf"] != "8000" {
+		t.Error("amf is not credential material and stays readable")
+	}
+	if repo.profiles["Gold 5G"] == nil {
+		t.Error("an export must not mutate the stored template")
 	}
 }

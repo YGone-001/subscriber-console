@@ -151,6 +151,40 @@ type ProfileCurrentSummary struct {
 
 // ── Write Request/Response Types ────────────────────────────────────────────
 
+// Drift states of the template probe.
+const (
+	DriftStateInSync  = "in_sync"
+	DriftStateChanged = "changed"
+	// DriftStateUnknown is a requested IMSI the platform has no document for.
+	DriftStateUnknown = "unknown"
+)
+
+// ProfileDriftEntry is one subscriber's standing against a template.
+type ProfileDriftEntry struct {
+	Imsi    string   `json:"imsi"`
+	State   string   `json:"state"`
+	Changed []string `json:"changedGroups,omitempty"`
+}
+
+// ProfileDriftResponse matches POST /api/profiles/:name/drift-precheck.
+type ProfileDriftResponse struct {
+	ProfileName string `json:"profileName"`
+	Checked     int    `json:"checked"`
+	InSync      int    `json:"inSync"`
+	Changed     int    `json:"changed"`
+	Unknown     int    `json:"unknown"`
+	// Truncated marks a probe that hit the bound, so a partial answer is never
+	// read as the whole population.
+	Truncated bool                `json:"truncated"`
+	Results   []ProfileDriftEntry `json:"results"`
+}
+
+// ProfileDriftRequest is the optional body of the drift probe. Without it the
+// probe covers the subscribers attributed to the template.
+type ProfileDriftRequest struct {
+	Imsis []string `json:"imsis"`
+}
+
 // CreateProfileResponse matches POST /api/profiles response shape.
 type CreateProfileResponse struct {
 	Message string `json:"message"`

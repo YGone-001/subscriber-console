@@ -471,9 +471,12 @@ func main() {
 	mux.Handle("GET /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Get)))
 	mux.Handle("GET /api/profiles/{name}/stats", authMiddleware(http.HandlerFunc(profileHandler.Stats)))
 	mux.Handle("GET /api/profiles/{name}/versions", authMiddleware(http.HandlerFunc(profileHandler.Versions)))
+	mux.Handle("GET /api/profiles/{name}/export", authMiddleware(http.HandlerFunc(profileHandler.Export)))
 
 	// Profile write endpoints (authorized admin/operator direct execution)
 	mux.Handle("POST /api/profiles", authMiddleware(http.HandlerFunc(profileHandler.Create)))
+	mux.Handle("POST /api/profiles/{name}/clone", authMiddleware(http.HandlerFunc(profileHandler.Clone)))
+	mux.Handle("POST /api/profiles/{name}/drift-precheck", authMiddleware(http.HandlerFunc(profileHandler.DriftPrecheck)))
 	mux.Handle("PUT /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Update)))
 	mux.Handle("DELETE /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Delete)))
 	mux.Handle("POST /api/profiles/{name}/versions/{versionId}/restore", authMiddleware(http.HandlerFunc(profileHandler.Restore)))
