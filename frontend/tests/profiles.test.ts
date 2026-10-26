@@ -563,3 +563,42 @@ test('an unavailable subscriber attribution is reported as unavailable', () => {
   assert.match(viewMode, /t\("prof_stats_unavailable"\)/);
 });
 
+test('the drift probe asks the server and renders only what it answers', () => {
+  const card = read('../src/features/profiles/components/ProfileDriftCard.tsx');
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(card, /\/api\/profiles\/\$\{encodeURIComponent\(profileName\)\}\/drift-precheck/);
+  assert.match(card, /postJson<ProfileDriftReport>/);
+  /* The client never derives drift from stored fields; it only reports states. */
+  assert.ok(!/webui_meta|access_restriction_data\s*!==/.test(card), 'the card must not compute drift locally');
+  assert.match(card, /entry\.state !== 'in_sync'/);
+  assert.match(card, /report\.truncated/);
+  /* The panel follows the subscriber capability, not the template one. */
+  assert.match(detailPage, /canApplyTemplates && profileName && \(\s*<ProfileDriftCard/);
+});
+
+test('clone and export are wired to their endpoints and stay permission-gated', () => {
+  const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(detailPage, /\/api\/profiles\/\$\{encodeURIComponent\(profileName\)\}\/clone/);
+  assert.match(detailPage, /getBlob\(`\/api\/profiles\/\$\{encodeURIComponent\(profileName\)\}\/export`\)/);
+  assert.match(detailPage, /import \{ getBlob \} from '\.\.\/\.\.\/lib\/api\/read-client'/);
+  /* Clone is a write and sits behind canWrite; export is a read and does not. */
+  const cloneGuard = detailPage.indexOf('{canWrite && (\n              <button');
+  const cloneButton = detailPage.indexOf("t('prof_clone_btn')");
+  const exportButton = detailPage.indexOf("t('prof_export_btn')");
+  assert.ok(cloneGuard >= 0 && cloneButton > cloneGuard, 'the clone action must be gated on profiles.write');
+  assert.ok(exportButton > cloneButton, 'the export action must follow');
+  const between = detailPage.slice(cloneButton, exportButton);
+  assert.ok(!between.includes('{canWrite &&'), 'export must not hide behind the write gate');
+});
+
+test('both locales carry the same template keys', () => {
+  const keys = (source: string) => new Set((source.match(/^\s+(prof_[a-z0-9_]+):/gm) ?? []).map((line) => line.trim().split(':')[0]));
+  const en = keys(read('../src/lib/locales/en.ts'));
+  const zh = keys(read('../src/lib/locales/zh.ts'));
+  const onlyEn = [...en].filter((key) => !zh.has(key));
+  const onlyZh = [...zh].filter((key) => !en.has(key));
+  assert.deepEqual(onlyEn, [], 'keys missing from zh');
+  assert.deepEqual(onlyZh, [], 'keys missing from en');
+  assert.ok(en.size >= 190, `expected the template vocabulary to be present, got ${en.size} keys`);
+});
+

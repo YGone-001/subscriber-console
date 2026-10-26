@@ -8,10 +8,11 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
-import { ArrowLeft, Boxes, Pencil, Save, Trash2, UserPlus, Users } from 'lucide-react';
+import { ArrowLeft, Boxes, Copy, Download, Pencil, Save, Trash2, UserPlus, Users } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { useRead } from '../../lib/api/use-read';
+import { getBlob } from '../../lib/api/read-client';
 import { MutationApiError, deleteJson, postJson, putJson } from '../../lib/api/mutation-client';
 import { buildProfileApplyRequest } from '../subscribers/mutation-contract';
 import { useAppParam, useAppRouter } from '../../lib/ui-compat/router';
@@ -22,6 +23,7 @@ import { ConfirmActionPanel, LoadingRows, OperationNotice } from '../../componen
 import ProfileViewMode from './components/ProfileViewMode';
 import ProfileEditMode from './components/ProfileEditMode';
 import ProfileSectionNav, { type ProfileSectionAnchor } from './components/ProfileSectionNav';
+import { ProfileDriftCard } from './components/ProfileDriftCard';
 import { ProfileVersionsCard } from './components/ProfileVersionsCard';
 import {
   buildDraftChangeRows,
@@ -102,6 +104,11 @@ export function ProfileDetailPage() {
   const [isApplyOpen, setIsApplyOpen] = useState(false);
   const [applyImsi, setApplyImsi] = useState('');
   const [isApplying, setIsApplying] = useState(false);
+  const [isCloneOpen, setIsCloneOpen] = useState(false);
+  const [cloneKey, setCloneKey] = useState('');
+  const [cloneTitle, setCloneTitle] = useState('');
+  const [isCloning, setIsCloning] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (!profile || isEditing) return;
@@ -341,6 +348,50 @@ export function ProfileDetailPage() {
     }
   };
 
+  const executeClone = async () => {
+    if (!profileName) return;
+    const target = cloneKey.trim();
+    setIsCloning(true);
+    setError(null);
+    try {
+      const created = await postJson<{ name?: string }>(`/api/profiles/${encodeURIComponent(profileName)}/clone`, {
+        name: target,
+        title: cloneTitle.trim() || undefined,
+      });
+      setIsCloneOpen(false);
+      setCloneKey('');
+      setCloneTitle('');
+      await globalMutate('/api/profiles');
+      router.push(`/profile/${encodeURIComponent(created?.name || target)}`);
+    } catch (err) {
+      setIsCloneOpen(false);
+      setError(err instanceof Error ? err.message : t('prof_clone_err'));
+    } finally {
+      setIsCloning(false);
+    }
+  };
+
+  const downloadExport = async () => {
+    if (!profileName) return;
+    setIsExporting(true);
+    setError(null);
+    try {
+      const blob = await getBlob(`/api/profiles/${encodeURIComponent(profileName)}/export`);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `profile-${profileName.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('prof_export_err'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const resetDraftAndExit = () => {
     if (isCreate || !profile) {
       router.push('/profile');
@@ -453,6 +504,17 @@ export function ProfileDetailPage() {
                 <UserPlus size={16} /> {t('prof_apply_btn')}
               </button>
             )}
+            {canWrite && (
+              <button
+                className="btn btn-outline"
+                onClick={() => { setCloneKey(''); setCloneTitle(''); setIsCloneOpen(true); }}
+              >
+                <Copy size={16} /> {t('prof_clone_btn')}
+              </button>
+            )}
+            <button className="btn btn-outline" onClick={() => { void downloadExport(); }} disabled={isExporting}>
+              <Download size={16} /> {isExporting ? t('prof_export_busy') : t('prof_export_btn')}
+            </button>
             {canWrite && (
               <button className="btn btn-danger" onClick={() => setIsDeleteConfirmOpen(true)} disabled={isDeleting}>
                 <Trash2 size={16} /> {t('delete')}
@@ -576,6 +638,47 @@ export function ProfileDetailPage() {
         </ConfirmActionPanel>
       )}
 
+      {isCloneOpen && (
+        <ConfirmActionPanel
+          tone="info"
+          title={t('prof_clone_title', { name: profileName || '' })}
+          message={t('prof_clone_desc')}
+          confirmLabel={t('prof_clone_confirm')}
+          cancelLabel={t('cancel')}
+          isWorking={isCloning}
+          confirmDisabled={!cloneKey.trim() || cloneKey.trim() === profileName}
+          onConfirm={() => { void executeClone(); }}
+          onCancel={() => setIsCloneOpen(false)}
+        >
+          <div className="profile-clone-fields">
+            <div>
+              <label className="form-label" htmlFor="profile-clone-key">{t('prof_clone_key_label')}</label>
+              <input
+                id="profile-clone-key"
+                type="text"
+                className="form-input"
+                autoComplete="off"
+                value={cloneKey}
+                onChange={(event) => setCloneKey(event.target.value)}
+                placeholder={t('prof_clone_key_ph')}
+              />
+            </div>
+            <div>
+              <label className="form-label" htmlFor="profile-clone-title">{t('prof_clone_title_label')}</label>
+              <input
+                id="profile-clone-title"
+                type="text"
+                className="form-input"
+                autoComplete="off"
+                value={cloneTitle}
+                onChange={(event) => setCloneTitle(event.target.value)}
+                placeholder={t('prof_clone_title_ph')}
+              />
+            </div>
+          </div>
+        </ConfirmActionPanel>
+      )}
+
       {restoreTarget && (
         <ConfirmActionPanel
           tone="warning"
@@ -687,6 +790,14 @@ export function ProfileDetailPage() {
               slices={draft.slices}
               backendStats={detail?.stats ?? null}
               statsUnavailable={statsUnavailable}
+            />
+          )}
+
+          {!isCreate && !isEditing && canApplyTemplates && profileName && (
+            <ProfileDriftCard
+              t={t}
+              profileName={profileName}
+              onRejected={(message) => { setError(message); }}
             />
           )}
 
