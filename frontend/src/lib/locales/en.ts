@@ -328,6 +328,7 @@ export const en: Record<string, string> = {
     prof_drift_unknown: "{count} unknown",
     prof_drift_truncated: "Partial: the linked population exceeds the probe limit",
     prof_drift_none: "Every probed subscriber matches the template.",
+    prof_drift_empty: "No subscriber is attributed to this template, so there is nothing to compare.",
     prof_drift_state_changed: "differs",
     prof_drift_state_unknown: "unknown",
     prof_drift_no_imsi: "unidentified subscriber",

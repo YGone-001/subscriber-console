@@ -328,6 +328,7 @@ export const zh: Record<string, string> = {
     prof_drift_unknown: "未知 {count}",
     prof_drift_truncated: "部分结果：关联用户数超过单次检查上限",
     prof_drift_none: "被检查的用户均与模板一致。",
+    prof_drift_empty: "没有用户归属到该模板，无可比对对象。",
     prof_drift_state_changed: "有差异",
     prof_drift_state_unknown: "未知",
     prof_drift_no_imsi: "无法识别的用户",

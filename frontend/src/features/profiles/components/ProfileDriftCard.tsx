@@ -86,7 +86,10 @@ export function ProfileDriftCard({ t, profileName, onRejected }: {
               <span className="profile-drift-tally-item profile-drift-warn">{t('prof_drift_truncated')}</span>
             )}
           </div>
-          {outstanding.length === 0 ? (
+          {report.checked === 0 ? (
+            /* "all match" would be vacuously true with nothing probed. */
+            <p className="text-muted-label">{t('prof_drift_empty')}</p>
+          ) : outstanding.length === 0 ? (
             <p className="text-muted-label">{t('prof_drift_none')}</p>
           ) : (
             <ul className="profile-drift-list">
