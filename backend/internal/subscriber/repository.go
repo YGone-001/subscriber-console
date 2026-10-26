@@ -651,6 +651,9 @@ func (r *Repository) ListSubscriberRowsFiltered(ctx context.Context, page, limit
 	if err != nil {
 		return SubscriberListResult[SubscriberRow]{}, err
 	}
+	if profileCondition := profileNameMatchFilter(filters.ProfileFilter); profileCondition != nil {
+		filter = bson.M{"$and": bson.A{filter, profileCondition}}
+	}
 	if !valid {
 		return SubscriberListResult[SubscriberRow]{
 			Subscribers: []SubscriberRow{},
@@ -747,6 +750,22 @@ func (r *Repository) ListSubscriberRowsFiltered(ctx context.Context, page, limit
 		MatchedBy:   matchedBy,
 		MatchSource: matchSource,
 	}, nil
+}
+
+// profileNameMatchFilter mirrors the linked-subscriber definition of the
+// profile stats aggregation: a template binding is whichever of the stored
+// binding fields carries the profile name. Returns nil when no name is given,
+// leaving the query untouched.
+func profileNameMatchFilter(profileName string) bson.M {
+	if profileName == "" {
+		return nil
+	}
+	return bson.M{"$or": bson.A{
+		bson.M{"webui_meta.profile_name": profileName},
+		bson.M{"webui_meta.profile": profileName},
+		bson.M{"profile_name": profileName},
+		bson.M{"profile": profileName},
+	}}
 }
 
 // resolveSearchFilter keeps the legacy IMSI-prefix search as the default and

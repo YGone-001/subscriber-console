@@ -822,3 +822,50 @@ func TestToSubscriberRowProvisioningSignals(t *testing.T) {
 		t.Fatal("orphan row must not be treated as low traffic")
 	}
 }
+
+func TestParseSubscriberListFiltersProfile(t *testing.T) {
+	filters := parseSubscriberListFilters(url.Values{
+		"profile": {"  tpl_a  "},
+		"planId":  {"plan_b"},
+	})
+	if filters.ProfileFilter != "tpl_a" {
+		t.Fatalf("ProfileFilter = %q, want tpl_a", filters.ProfileFilter)
+	}
+	if filters.PlanID != "plan_b" {
+		t.Fatalf("PlanID = %q, want plan_b", filters.PlanID)
+	}
+
+	if empty := parseSubscriberListFilters(url.Values{}); empty.ProfileFilter != "" {
+		t.Fatalf("default ProfileFilter = %q, want empty", empty.ProfileFilter)
+	}
+}
+
+func TestProfileNameMatchFilter(t *testing.T) {
+	if profileNameMatchFilter("") != nil {
+		t.Fatal("empty profile name must leave the query untouched")
+	}
+
+	condition := profileNameMatchFilter("tpl_a")
+	or, ok := condition["$or"].(bson.A)
+	if !ok || len(or) != 4 {
+		t.Fatalf("profile match condition = %v, want a 4-branch $or", condition)
+	}
+	seen := map[string]bool{}
+	for _, branch := range or {
+		doc, ok := branch.(bson.M)
+		if !ok || len(doc) != 1 {
+			t.Fatalf("$or branch %v must be a single-field match", branch)
+		}
+		for key, value := range doc {
+			if value != "tpl_a" {
+				t.Fatalf("$or branch %q must match the requested name", key)
+			}
+			seen[key] = true
+		}
+	}
+	for _, key := range []string{"webui_meta.profile_name", "webui_meta.profile", "profile_name", "profile"} {
+		if !seen[key] {
+			t.Fatalf("profile match condition must cover %q, got %v", key, seen)
+		}
+	}
+}

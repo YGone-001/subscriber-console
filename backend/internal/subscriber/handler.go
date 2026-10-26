@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
@@ -170,6 +171,8 @@ func parseSubscriberListFilters(q url.Values) SubscriberListFilters {
 	}
 
 	filters.PlanID = q.Get("planId")
+	// Drill-down by template binding; the value is a profile name, not a query.
+	filters.ProfileFilter = strings.TrimSpace(q.Get("profile"))
 	return filters
 }
 

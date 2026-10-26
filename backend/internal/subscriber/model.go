@@ -46,6 +46,7 @@ type SubscriberListFilters struct {
 	Provisioning   string
 	PlanID         string
 	BalanceStatus  string
+	ProfileFilter  string
 }
 
 // SubscriberRow is the enriched row for detail=true mode.
