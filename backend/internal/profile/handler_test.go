@@ -2845,3 +2845,105 @@ func TestProfileUpdateRealChangeStillCommits(t *testing.T) {
 		t.Errorf("expected one archived snapshot, got %d", len(repo.versions))
 	}
 }
+
+// A snapshot carrying the read-projection sentinel must never be promoted into
+// the live template, because a governed apply would copy it into a subscriber's
+// security block.
+func TestProfileRestoreRefusesMaskedCredentialMaterial(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	handler := NewHandler(repo, &mockLimiter{}, auditWriter)
+
+	const profileName = "tpl_restore_masked"
+	repo.profiles[profileName] = bson.M{
+		"name":     profileName,
+		"title":    "Live",
+		"revision": int64(2),
+		"auth":     bson.M{"k": "00112233445566778899aabbccddeeff", "amf": "8000"},
+	}
+	repo.versions = append(repo.versions, bson.M{
+		"versionId":   "v-masked",
+		"profileName": profileName,
+		"action":      "UPDATE",
+		"savedAt":     "2026-01-01T10:00:00.000Z",
+		"savedBy":     "admin",
+		"profile": bson.M{
+			"name":  profileName,
+			"title": "Historical",
+			"auth":  bson.M{"k": maskedCredential, "amf": "8000"},
+		},
+	})
+
+	principal := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	handler.UseUserRepository(activeUserRepoFor(principal))
+
+	req := httptest.NewRequest("POST", "/api/profiles/"+profileName+"/versions/v-masked/restore", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", profileName)
+	req.SetPathValue("versionId", "v-masked")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to unmarshal refusal: %v", err)
+	}
+	if body["code"] != "PROFILE_RESTORE_MASKED_MATERIAL" || body["committed"] != false {
+		t.Errorf("unexpected refusal payload: %v", body)
+	}
+
+	stored := repo.profiles[profileName]
+	if got, _ := fieldOf(fieldOf(stored, "auth"), "k").(string); got != "00112233445566778899aabbccddeeff" {
+		t.Errorf("the live template must be untouched, got %q", got)
+	}
+	if stored["revision"] != int64(2) {
+		t.Errorf("a refused restore must not advance the revision, got %v", stored["revision"])
+	}
+	if len(repo.versions) != 1 {
+		t.Errorf("a refused restore must not archive a snapshot, got %d", len(repo.versions))
+	}
+	recorded := false
+	for _, record := range auditWriter.records {
+		if record.Metadata["classification"] == "MASKED_CREDENTIAL_MATERIAL" {
+			recorded = true
+		}
+	}
+	if !recorded {
+		t.Error("the refusal must be recorded in the operation log")
+	}
+}
+
+// The rollback denial keeps its historical body while recording the refusal.
+func TestProfileRestoreCapabilityDenialKeepsResponseShape(t *testing.T) {
+	repo := newMockRepository()
+	repo.profiles["tpl_gate"] = bson.M{"name": "tpl_gate", "title": "Gate"}
+	repo.versions = append(repo.versions, bson.M{
+		"versionId":   "v-1",
+		"profileName": "tpl_gate",
+		"action":      "UPDATE",
+		"savedAt":     "2026-01-01T10:00:00.000Z",
+		"profile":     bson.M{"name": "tpl_gate", "title": "Gate"},
+	})
+
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	principal := &auth.Principal{Username: "viewer1", Role: "viewer", NormalizedRole: "viewer"}
+
+	req := httptest.NewRequest("POST", "/api/profiles/tpl_gate/versions/v-1/restore", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", "tpl_gate")
+	req.SetPathValue("versionId", "v-1")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusForbidden, w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"FORBIDDEN"`) {
+		t.Errorf("the historical denial code must be preserved, got %s", w.Body.String())
+	}
+}

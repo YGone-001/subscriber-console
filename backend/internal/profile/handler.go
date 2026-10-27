@@ -130,6 +130,22 @@ const maskedCredential = "[MASKED]"
 
 var credentialKeys = []string{"k", "op", "opc"}
 
+// carriesMaskedCredential reports whether a document holds the read-projection
+// sentinel in a credential field. The sentinel is never real material, so it is
+// not a legal value in any document that becomes a live template.
+func carriesMaskedCredential(doc any) bool {
+	material := fieldOf(doc, "auth")
+	if material == nil {
+		return false
+	}
+	for _, key := range credentialKeys {
+		if text, _ := fieldOf(material, key).(string); text == maskedCredential {
+			return true
+		}
+	}
+	return false
+}
+
 // maskCredentialDoc masks the auth child of a decoded profile document. Shape
 // handling lives in fieldOf/setFieldOf, the package's single authority for the
 // bson.M / bson.D / map[string]any forms the MongoDB driver can produce; a
@@ -1297,8 +1313,11 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check capability
-	_, allowed := auth.CapabilityDecision(p, "profile_rollback")
+	decision, allowed := auth.CapabilityDecision(p, "profile_rollback")
 	if !allowed {
+		// The refusal keeps its historical body; the evidence is recorded like
+		// the other template guards do.
+		audit.RecordPermissionDenied(h.denials, r, p, audit.DenialMetadata{Capability: "profile_rollback", Decision: decision})
 		response.Error(w, http.StatusForbidden, "Permission denied", "FORBIDDEN")
 		return
 	}
@@ -1333,6 +1352,19 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 	}
 	if intent == nil {
 		response.Error(w, http.StatusNotFound, "Version not found", "VERSION_NOT_FOUND")
+		return
+	}
+	if carriesMaskedCredential(intent.EffectiveRestored) {
+		// The read projection substitutes the sentinel for material the reader
+		// may not see. A snapshot carrying it must never be promoted into the
+		// live template, where a governed apply would copy it into a
+		// subscriber's security block. Zero writes have happened at this point.
+		h.writeStrictAudit(r.Context(), "PROFILE_RESTORE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "MASKED_CREDENTIAL_MATERIAL", false, nil)
+		response.JSON(w, http.StatusBadRequest, map[string]any{
+			"error":     "Profile restore refused",
+			"code":      "PROFILE_RESTORE_MASKED_MATERIAL",
+			"committed": false,
+		})
 		return
 	}
 
@@ -1397,6 +1429,9 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 		"result", "success",
 	)
 
+	// The restored document is returned whole. It is not masked here: rollback
+	// is a capability only the roles that also hold subscribers.write receive,
+	// so the audience of this response is inside the credential-visibility set.
 	response.JSON(w, http.StatusOK, map[string]interface{}{
 		"message": "Profile restored successfully",
 		"profile": result,
