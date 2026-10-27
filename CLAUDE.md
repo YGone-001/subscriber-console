@@ -810,6 +810,8 @@ NF 告警规则底座：权威存储 `xcloud_ops.app_nf_alert_rules` + `xcloud_o
 
 模板应用投影与嵌入标识：`xcloud.subscribers` 的两个切片写方——模板 governed apply（`POST /api/subscribers/{imsi}/profile`）与 legacy 订阅者更新（`PUT /api/subscribers/{imsi}`）——把 `sliceList` 投影为 `slice` 时一律以订阅者当前存储的切片数组为标识基线，切片与会话各按输出位置复用其既有 `_id`，仅当基线在该位置没有可用 ObjectId 时才新铸；基线只贡献标识，`sst`/`sd`/`default_indicator` 与会话内容一律取自入参，存储文档无法经标识通道夹带内容。因此同一模板重复应用是真实不动点，第二次起返回 `SUBSCRIBER_PROFILE_APPLY_NO_EFFECT`；legacy 更新仍执行整文档替换，但存储标识不再随每次保存漂移。新建路径（默认切片与批量创建）没有基线，照旧每次新铸。`ProfileDrift` 继续按剥离 `_id` 后的内容比较，先于该规则写入的订阅者不会被误报漂移。订阅者更新的冻结预览（`applyPayload`）与真实写入共用同一投影：切片走 `convertSlicesFrom`、MSISDN 走 `convertMsisdnList`，因此预览快照就是落库形状，携带未变更 `sliceList` 的 PUT 如实返回 409 `SUBSCRIBER_UPDATE_NO_EFFECT`（历史上预览直接存入 payload 原文，令每次带切片的保存都被判为有变更）。
 
+模板列表分页判据与统计成本（已裁决，非待办）：`GET /api/profiles` 维持全量返回、不设 `limit`/`cursor`，前端模板列表不做服务端分页。重启该项的触发条件（任一成立即需重新评估，且先复核当时实况）：`xcloud_ops.app_profiles` 文档数超过 200；或 `GET /api/profiles` 的 P95 延迟超过 300ms；或列表读出现可复现的内存、超时或游标失效问题。触发之前不得为假设规模预建分页状态机。性能定位（`PERFORMANCE_FINDING`，非缺陷，本次不处置）：列表统计来自 `profileSubscriberCounts`，它对 `xcloud.subscribers` 做一次全集合聚合（`$project` 用四层 `$ifNull` 解析归因字段 → `$match` → `$group`），分组键是计算值因而无法命中索引，成本为 O(订阅者总数) 且与模板数量无关，因此分页并非该成本的对症解法。按 §8.3 此处只报告不处置：不得在读路径改动中顺带创建索引；统计快照化或有界化属独立决定，需另行批准。
+
 ### 7.6 订阅者与搜索契约
 
 - `GET /api/subscribers` 模式：`detail=false` → `listSubscriberImsis()`；`detail=true` → `listSubscriberRows()`；`msisdn` 有值 → MSISDN 查找模式。query 别名：`detail`、`page`、`limit`、`q`、`status`、`sortField`、`sort`、`sortDirection`、`sortDir`、`order`、`msisdn`、`excludeImsi`。已知状态：`all`、`active`、`restricted`、`lowTraffic`。不要重新设计校验逻辑。
