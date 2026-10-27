@@ -2653,3 +2653,78 @@ func TestFieldAccessorsRewriteEveryDecodedShapeInPlace(t *testing.T) {
 		})
 	}
 }
+
+// The audit projection runs on documents the driver decoded, so it must read
+// the auth child through the shape authority rather than a map assertion.
+func TestSafeProfileSnapshotReportsAuthConfiguredForDriverDecode(t *testing.T) {
+	roundTrip := func(auth bson.M) bson.M {
+		stored, err := bson.Marshal(bson.M{
+			"name":      "tpl_safe",
+			"title":     "Safe",
+			"auth":      auth,
+			"sliceList": bson.A{bson.M{"sst": int32(1)}, bson.M{"sst": int32(2)}},
+		})
+		if err != nil {
+			t.Fatalf("failed to marshal fixture: %v", err)
+		}
+		var decoded bson.M
+		if err := bson.Unmarshal(stored, &decoded); err != nil {
+			t.Fatalf("failed to unmarshal fixture: %v", err)
+		}
+		return decoded
+	}
+
+	configured := safeProfileSnapshot(roundTrip(bson.M{
+		"k":   "00112233445566778899aabbccddeeff",
+		"opc": "ffeeddccbbaa99887766554433221100",
+		"amf": "8000",
+	}))
+	if value, ok := configured["authConfigured"]; !ok {
+		t.Fatal("a decoded document must still report whether credentials are configured")
+	} else if value != true {
+		t.Errorf("expected authConfigured true, got %v", value)
+	}
+	encoded, _ := json.Marshal(configured)
+	if strings.Contains(string(encoded), "00112233445566778899aabbccddeeff") {
+		t.Error("the audit snapshot must not carry credential material")
+	}
+
+	allZero := safeProfileSnapshot(roundTrip(bson.M{
+		"k":   "00000000000000000000000000000000",
+		"opc": "00000000000000000000000000000000",
+		"amf": "8000",
+	}))
+	if allZero["authConfigured"] != false {
+		t.Errorf("an all-zero key is not configured material, got %v", allZero["authConfigured"])
+	}
+
+	if count := sliceCount(roundTrip(bson.M{"k": "secret"})); count != 2 {
+		t.Errorf("a decoded sliceList must be counted, got %d", count)
+	}
+}
+
+// Export and the CAS precondition both rely on a copy that is genuinely deep;
+// aliasing a decoded nested document would let one projection mutate the other.
+func TestDeepCopyBsonMDoesNotAliasDecodedNestedDocuments(t *testing.T) {
+	stored, err := bson.Marshal(bson.M{
+		"name": "tpl_copy",
+		"auth": bson.M{"k": "00112233445566778899aabbccddeeff", "amf": "8000"},
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal fixture: %v", err)
+	}
+	var decoded bson.M
+	if err := bson.Unmarshal(stored, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal fixture: %v", err)
+	}
+
+	copied := deepCopyBsonM(decoded)
+	maskCredentialDoc(copied)
+
+	if got, _ := fieldOf(fieldOf(decoded, "auth"), "k").(string); got != "00112233445566778899aabbccddeeff" {
+		t.Errorf("masking a copy must not reach the source document, got %q", got)
+	}
+	if got, _ := fieldOf(fieldOf(copied, "auth"), "k").(string); got != maskedCredential {
+		t.Errorf("expected the copy to be masked, got %q", got)
+	}
+}

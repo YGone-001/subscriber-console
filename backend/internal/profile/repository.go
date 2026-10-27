@@ -491,15 +491,8 @@ func timeField(doc bson.M, key string) string {
 	}
 }
 
-func sliceCount(doc bson.M) int {
-	v, ok := doc["sliceList"]
-	if !ok || v == nil {
-		return 0
-	}
-	if arr, ok := v.(bson.A); ok {
-		return len(arr)
-	}
-	return 0
+func sliceCount(doc any) int {
+	return arrayLen(fieldOf(doc, "sliceList"))
 }
 
 // asDocument adapts a decoded nested document to bson.M. The driver returns

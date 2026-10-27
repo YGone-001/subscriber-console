@@ -630,7 +630,7 @@ func (h *Handler) Clone(w http.ResponseWriter, r *http.Request) {
 		"savedAt":     now,
 		"savedBy":     p.Username,
 		"title":       firstStringField(doc, "title", "name"),
-		"sliceCount":  countSliceList(doc),
+		"sliceCount":  sliceCount(doc),
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		h.writeStrictAudit(r.Context(), "PROFILE_CLONE", "profile", target, p.Username, p.NormalizedRole, nil, doc, "failed", "PARTIAL_WRITE", true, err)
@@ -892,7 +892,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		"savedAt":     now,
 		"savedBy":     p.Username,
 		"title":       firstStringField(doc, "title", "name"),
-		"sliceCount":  countSliceList(doc),
+		"sliceCount":  sliceCount(doc),
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was created but version save failed - partial write
@@ -1085,7 +1085,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			"savedAt":     now,
 			"savedBy":     p.Username,
 			"title":       existing["title"],
-			"sliceCount":  countSliceList(existing),
+			"sliceCount":  sliceCount(existing),
 		}
 		if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 			// Profile was updated but version save failed - partial write
@@ -1224,7 +1224,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		"savedAt":     now,
 		"savedBy":     p.Username,
 		"title":       existing["title"],
-		"sliceCount":  countSliceList(existing),
+		"sliceCount":  sliceCount(existing),
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was deleted but version save failed - partial write
@@ -1566,7 +1566,7 @@ func (h *Handler) executeFrozenRestoreV2(ctx context.Context, p *auth.Principal,
 			"savedAt":     now,
 			"savedBy":     p.Username,
 			"title":       intent.CurrentProfile["title"],
-			"sliceCount":  countSliceList(intent.CurrentProfile),
+			"sliceCount":  sliceCount(intent.CurrentProfile),
 		}
 		if err := h.repo.SaveProfileVersion(ctx, versionRecord); err != nil {
 			// Partial write - profile was restored but version save failed
@@ -1840,8 +1840,8 @@ func safeProfileSnapshot(profile any) map[string]interface{} {
 		return nil
 	}
 
-	doc, ok := profile.(bson.M)
-	if !ok {
+	doc := asDocument(profile)
+	if doc == nil {
 		return map[string]interface{}{"_type": "unknown"}
 	}
 
@@ -1854,9 +1854,12 @@ func safeProfileSnapshot(profile any) map[string]interface{} {
 		}
 	}
 
-	// Add authConfigured indicator (no raw secrets)
-	if auth, ok := doc["auth"].(bson.M); ok {
-		safe["authConfigured"] = auth["k"] != "" && auth["k"] != "00000000000000000000000000000000"
+	// Add authConfigured indicator (no raw secrets). The auth child of a stored
+	// document decodes as bson.D, so it is read through the shape authority: a
+	// plain bson.M assertion silently dropped this for every real read.
+	if material := fieldOf(doc, "auth"); material != nil {
+		key, _ := fieldOf(material, "k").(string)
+		safe["authConfigured"] = key != "" && key != "00000000000000000000000000000000"
 	}
 
 	return safe
@@ -1874,14 +1877,6 @@ func isAllowedProfileField(field string) bool {
 		"ocsDefaults":             true,
 	}
 	return allowed[field]
-}
-
-// countSliceList counts the number of slices in a profile.
-func countSliceList(doc bson.M) int {
-	if sl, ok := doc["sliceList"].(bson.A); ok {
-		return len(sl)
-	}
-	return 0
 }
 
 // validateProfileUpdateBody validates the PUT body fields.
@@ -1926,8 +1921,28 @@ func deepCopyBsonValue(v any) any {
 	switch val := v.(type) {
 	case bson.M:
 		return deepCopyBsonM(val)
+	case map[string]any:
+		cp := make(map[string]any, len(val))
+		for key, item := range val {
+			cp[key] = deepCopyBsonValue(item)
+		}
+		return cp
+	case bson.D:
+		// The decoded shape is preserved: rebuilding an ordered snapshot as a
+		// map would reorder the exported document.
+		cp := make(bson.D, len(val))
+		for i, elem := range val {
+			cp[i] = bson.E{Key: elem.Key, Value: deepCopyBsonValue(elem.Value)}
+		}
+		return cp
 	case bson.A:
 		cp := make(bson.A, len(val))
+		for i, item := range val {
+			cp[i] = deepCopyBsonValue(item)
+		}
+		return cp
+	case []any:
+		cp := make([]any, len(val))
 		for i, item := range val {
 			cp[i] = deepCopyBsonValue(item)
 		}
