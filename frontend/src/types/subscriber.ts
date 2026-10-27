@@ -3,6 +3,8 @@
  * frontend/src/types/subscriber.ts
  * Adaptations: "use client" dropped; `@/` aliases and CSS-module imports repointed for the Vite runtime.
  */
+import type { CredentialState } from './credential';
+
 export interface Ambr {
   downlink: { unit: number; value: number };
   uplink: { unit: number; value: number };
@@ -42,6 +44,9 @@ export interface Auth4GData {
   opValue: string;
   sqn: number;
   amf: string;
+  /* Stated by the server when the reader may not see the material: withheld is
+   * not the same as unconfigured. */
+  credentialState?: CredentialState;
 }
 
 export interface Rating {

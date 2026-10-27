@@ -2,13 +2,14 @@
  * Read/DTO shapes for the template surface. They mirror the Go responses; no
  * field is inferred on the client.
  */
+import type { CredentialState } from '../../types/credential';
 
 export type ProfileAmbrSide = { unit?: number; value?: number };
 
 export type ProfileRecord = {
   name?: string;
   title?: string;
-  auth?: { k?: string; opc?: string; op?: string; amf?: string };
+  auth?: { k?: string; opc?: string; op?: string; amf?: string; credentialState?: CredentialState };
   ambr?: { downlink?: ProfileAmbrSide | null; uplink?: ProfileAmbrSide | null } | null;
   access_restriction_data?: number | null;
   sliceList?: unknown[];

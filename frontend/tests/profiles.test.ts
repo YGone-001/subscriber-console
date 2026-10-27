@@ -38,6 +38,7 @@ const LABELS: ProfileDiffLabels = {
   accessNone: 'UNRESTRICTED',
   accessSuspended: 'SUSPENDED',
   maskedSecret: '****',
+  withheld: 'WITHHELD',
 };
 
 const BASE_PROFILE = {
@@ -225,13 +226,15 @@ test('a caller who cannot see credentials never writes them back', () => {
   const payload = buildProfilePayload(draft, 'template', true, { includeAuth: false });
   assert.ok(!('auth' in payload), 'the auth block must be absent so the stored material is preserved');
 
-  const maskedAuth = { k: '[MASKED]', opValue: '[MASKED]', amf: '8000' };
+  /* A withheld block arrives with no values at all, plus the server's stated
+   * condition; the reader is not asked to format keys they never received. */
+  const withheldAuth = { k: '', opValue: '', amf: '8000' };
   assert.equal(
-    findProfileDraftIssue({ name: 'template', auth: maskedAuth, ambr: draft.ueAmbr, slices: draft.slices, validateAuth: false }),
+    findProfileDraftIssue({ name: 'template', auth: withheldAuth, ambr: draft.ueAmbr, slices: draft.slices, validateAuth: false }),
     null,
   );
   assert.deepEqual(
-    findProfileDraftIssue({ name: 'template', auth: maskedAuth, ambr: draft.ueAmbr, slices: draft.slices }),
+    findProfileDraftIssue({ name: 'template', auth: withheldAuth, ambr: draft.ueAmbr, slices: draft.slices }),
     { code: 'kFormat' },
   );
 
@@ -293,24 +296,34 @@ test('the list action renders view or edit by template permission', () => {
   assert.match(source, /: <Eye size=/);
 });
 
-test('credential display follows the meta capability bit, not a client guess', () => {
-  const source = read('../src/features/profiles/ProfileDetailPage.tsx');
-  assert.match(source, /capabilities\.credentialVisibility/);
-  assert.match(source, /credentialsMasked/);
+test('credential display is driven by the server-stated condition, not a client guess', () => {
+  const detail = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(detail, /capabilities\.credentialVisibility/);
+  assert.match(detail, /credentialState=\{profile\?\.auth\?\.credentialState/);
+
+  const view = read('../src/features/profiles/components/ProfileViewMode.tsx');
+  assert.match(view, /credentialDisplay\(authData\.k, 'k'\)/);
+  assert.match(view, /credentialState\[field\] === 'configured' \? t\("credential_withheld"\)/);
 });
 
-test('the view mode never renders withheld credential values', () => {
-  const source = read('../src/features/profiles/components/ProfileViewMode.tsx');
-  assert.match(source, /credentialDisplay\(authData\.k\)/);
-  assert.match(source, /credentialDisplay\(authData\.opValue\)/);
-  assert.match(source, /prof_credential_masked/);
-});
+/* Withheld material and unconfigured material are two different facts, and the
+ * response carries no placeholder value for the first one. */
+test('the diff reports the stated condition of withheld material', () => {
+  const withheld = {
+    ...BASE_PROFILE,
+    auth: {
+      amf: '8000',
+      credentialState: { visibility: 'masked', k: 'configured', op: 'not_configured', opc: 'configured' },
+    },
+  };
+  const sections = buildProfileVersionDiff(withheld, withheld, LABELS);
+  assert.equal(row(sections, 'auth', 'k').versionValue, LABELS.withheld);
+  assert.equal(row(sections, 'auth', 'opc').versionValue, LABELS.withheld);
+  assert.equal(row(sections, 'auth', 'op').versionValue, LABELS.notConfigured);
 
-test('server-masked material reads as withheld, not as a value with a fake suffix', () => {
-  const masked = { ...BASE_PROFILE, auth: { k: '[MASKED]', opc: '[MASKED]', amf: '8000' } };
-  const sections = buildProfileVersionDiff(masked, masked, LABELS);
-  assert.equal(row(sections, 'auth', 'k').versionValue, LABELS.maskedSecret);
-  assert.equal(row(sections, 'auth', 'opc').versionValue, LABELS.maskedSecret);
+  // A reader who can see the material gets a shortened value, never the key.
+  const visible = buildProfileVersionDiff(BASE_PROFILE, BASE_PROFILE, LABELS);
+  assert.equal(row(visible, 'auth', 'k').versionValue, '0011…eeff');
 });
 
 const VALID_AUTH = { k: 'a'.repeat(32), opValue: 'b'.repeat(32), amf: '8000' };

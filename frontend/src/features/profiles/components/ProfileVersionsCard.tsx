@@ -66,6 +66,7 @@ export function ProfileVersionsCard({
       accessNone: t('prof_diff_access_none'),
       accessSuspended: t('prof_diff_access_suspended'),
       maskedSecret: t('prof_diff_masked'),
+      withheld: t('credential_withheld'),
     })
     : [];
   const changedSectionCount = diffSections.filter((section) => section.changed).length;

@@ -10,6 +10,7 @@ import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
 import { deleteJson, MutationApiError, postJson, putJson } from '../../lib/api/mutation-client';
 import { buildSubscriberCreateRequest } from './mutation-contract';
 import { ONBOARDING_TEMPLATE, isRecommendedOnboardingPlan } from './onboarding-template';
+import type { Auth4GData } from '../../types/subscriber';
 
 type ApiRecord = Record<string, any>;
 
@@ -58,7 +59,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [expandedSlices, setExpandedSlices] = useState<number[]>([0]);
   const [isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded] = useState(false);
 
-  const [auth4GData, setAuth4GData] = useState({ k: "", opValue: "", sqn: 0, amf: "8000" });
+  const [auth4GData, setAuth4GData] = useState<Auth4GData>({ k: "", opValue: "", sqn: 0, amf: "8000" });
   const [usimType, setUsimType] = useState<"opc" | "op">("opc");
   const [baseSub4G, setBaseSub4G] = useState<any>({});
   const [msisdn, setMsisdn] = useState("");
@@ -335,7 +336,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
             k: data.auth4G.k || "",
             opValue: data.auth4G.opc || data.auth4G.op || "",
             sqn: data.auth4G.sqn || 0,
-            amf: data.auth4G.amf || "8000"
+            amf: data.auth4G.amf || "8000",
+            credentialState: data.auth4G.credentialState
           });
         }
         setHasOcsBalance(Boolean(data.ocsTraffic));

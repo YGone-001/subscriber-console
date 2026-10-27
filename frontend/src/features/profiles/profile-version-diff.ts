@@ -14,6 +14,7 @@ export type ProfileDiffLabels = {
   accessNone: string;
   accessSuspended: string;
   maskedSecret: string;
+  withheld: string;
 };
 
 export type ProfileDiffRow = {
@@ -71,13 +72,21 @@ function formatEventValue(value: unknown, fallback: string): string {
   return events === null ? fallback : formatEvents(events);
 }
 
-/* Marker the backend substitutes for credential values a role must not see. */
-const MASKED_CREDENTIAL = '[MASKED]';
-
-function maskSecret(value: unknown, labels: ProfileDiffLabels): string {
-  const secret = typeof value === 'string' ? value.trim() : '';
+/*
+ * A reader who may not see credential material gets no value at all, only the
+ * stated condition of each key. The comparison therefore works on the condition
+ * for withheld material and on a shortened form of the value when the reader can
+ * see it — never on a placeholder string that could be mistaken for a key.
+ */
+function credentialCell(auth: unknown, field: 'k' | 'op' | 'opc', labels: ProfileDiffLabels): string {
+  const record = asRecord(auth);
+  const state = asRecord(record.credentialState);
+  const value = typeof record[field] === 'string' ? record[field] as string : '';
+  if (state.visibility === 'masked') {
+    return state[field] === 'configured' ? labels.withheld : labels.notConfigured;
+  }
+  const secret = value.trim();
   if (secret === '') return labels.notConfigured;
-  if (secret === MASKED_CREDENTIAL) return labels.maskedSecret;
   if (secret.length <= 8) return `${labels.maskedSecret}${secret.slice(-2)}`;
   return `${secret.slice(0, 4)}…${secret.slice(-4)}`;
 }
@@ -142,9 +151,9 @@ export function buildProfileVersionDiff(
   const versionAuth = asRecord(version.auth);
   const currentAuth = asRecord(current.auth);
   push('auth', 'sec_security_auth', [
-    buildRow('k', 'prof_diff_k', maskSecret(versionAuth.k, labels), maskSecret(currentAuth.k, labels)),
-    buildRow('opc', 'prof_diff_opc', maskSecret(versionAuth.opc, labels), maskSecret(currentAuth.opc, labels)),
-    buildRow('op', 'prof_diff_op', maskSecret(versionAuth.op, labels), maskSecret(currentAuth.op, labels)),
+    buildRow('k', 'prof_diff_k', credentialCell(version.auth, 'k', labels), credentialCell(current.auth, 'k', labels)),
+    buildRow('opc', 'prof_diff_opc', credentialCell(version.auth, 'opc', labels), credentialCell(current.auth, 'opc', labels)),
+    buildRow('op', 'prof_diff_op', credentialCell(version.auth, 'op', labels), credentialCell(current.auth, 'op', labels)),
     buildRow('amf', 'prof_diff_amf', toText(versionAuth.amf, labels.notConfigured), toText(currentAuth.amf, labels.notConfigured)),
   ]);
 

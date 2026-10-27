@@ -203,6 +203,7 @@ export function ProfileDetailPage() {
       accessNone: t('prof_diff_access_none'),
       accessSuspended: t('prof_diff_access_suspended'),
       maskedSecret: t('prof_diff_masked'),
+      withheld: t('credential_withheld'),
     })
       .map((section) => ({ ...section, rows: section.rows.filter((row) => row.changed) }))
       .filter((section) => section.rows.length > 0)
@@ -841,7 +842,7 @@ export function ProfileDetailPage() {
             <ProfileViewMode
               t={t}
               authData={draft.auth}
-              credentialsMasked={credentialsMasked}
+              credentialState={profile?.auth?.credentialState ?? null}
               usimType={draft.usimType}
               ocsDefaults={draft.ocsDefaults}
               tariffPlanList={plansData?.plans ?? []}

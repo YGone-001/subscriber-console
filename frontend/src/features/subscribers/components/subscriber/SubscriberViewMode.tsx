@@ -89,13 +89,32 @@ function AuthValueCard({
   copyable = false,
   singleLine = false,
   canReveal = true,
+  t,
+  credentialState,
+  field,
 }: {
   label: string;
   value: string;
   copyable?: boolean;
   singleLine?: boolean;
   canReveal?: boolean;
+  t: (key: string) => string;
+  credentialState?: Auth4GData['credentialState'];
+  field?: 'k' | 'op' | 'opc';
 }) {
+  /* Withheld material arrives with no value at all. Say which of the two
+   * empty-looking cases this is, instead of rendering a bare placeholder. */
+  if (!value && credentialState?.visibility === 'masked' && field) {
+    return (
+      <div className="auth-value-card">
+        <div className="auth-value-label">{label}</div>
+        <div className="auth-value-text">
+          {credentialState[field] === 'configured' ? t("credential_withheld") : t("sub_not_configured")}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="auth-value-card">
       <div className="auth-value-label">
@@ -406,10 +425,10 @@ export default function SubscriberViewMode({
 
         <DetailPanel id="sec-security" title={t("sec_security_auth")} icon={<KeyRound size={18} color="var(--primary)" />}>
           <div className="auth-grid">
-            <AuthValueCard label={t("sub_key_k")} value={auth4GData.k} copyable singleLine canReveal={canRevealCredentials} />
-            <AuthValueCard label={`${t("sub_key_op")} (${usimType.toUpperCase()})`} value={auth4GData.opValue} copyable singleLine canReveal={canRevealCredentials} />
-            <AuthValueCard label="AMF" value={auth4GData.amf || "N/A"} />
-            <AuthValueCard label="SQN" value={String(auth4GData.sqn || 0)} />
+            <AuthValueCard label={t("sub_key_k")} value={auth4GData.k} copyable singleLine canReveal={canRevealCredentials} t={t} credentialState={auth4GData.credentialState} field="k" />
+            <AuthValueCard label={`${t("sub_key_op")} (${usimType.toUpperCase()})`} value={auth4GData.opValue} copyable singleLine canReveal={canRevealCredentials} t={t} credentialState={auth4GData.credentialState} field={usimType === "op" ? "op" : "opc"} />
+            <AuthValueCard label="AMF" value={auth4GData.amf || "N/A"} t={t} />
+            <AuthValueCard label="SQN" value={String(auth4GData.sqn || 0)} t={t} />
           </div>
         </DetailPanel>
 

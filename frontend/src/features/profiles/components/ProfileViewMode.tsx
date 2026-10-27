@@ -7,16 +7,18 @@ import { Users, Shield, Signal, Gauge, Server, Lock, ChevronDown, ChevronUp } fr
 import { AMBR_UNITS, getAmbrString, typeLabel } from '../../subscribers/components/subscriber/utils';
 import { ratingTypeLabel, ratingUnitLabel } from '../profile-format';
 
-export default function ProfileViewMode({ t, authData, credentialsMasked, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats, statsUnavailable }: any) {
-  /* The server already withheld credential values for masked roles; the page
-   * shows only the configured/unconfigured distinction, never a fake value. */
-  const credentialDisplay = (value: string) =>
-    credentialsMasked ? (value ? t("prof_credential_masked") : "N/A") : (value || "N/A");
+export default function ProfileViewMode({ t, authData, credentialState, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats, statsUnavailable }: any) {
   const planId = String(ocsDefaults.planId || ocsDefaults.plan_id || '');
   const selectedPlan = Array.isArray(tariffPlanList)
     ? tariffPlanList.find((plan: any) => plan.plan_id === planId)
     : null;
   const notConfigured = t("prof_diff_not_configured");
+  /* The server states the condition of material this reader may not see:
+   * withheld is not the same as absent, and neither is rendered as a value. */
+  const credentialDisplay = (value: string, field: 'k' | 'op' | 'opc') => {
+    if (credentialState?.visibility !== 'masked') return value || notConfigured;
+    return credentialState[field] === 'configured' ? t("credential_withheld") : notConfigured;
+  };
   const ambrSide = (side: any) => {
     const value = Number(side?.value);
     if (!Number.isFinite(value)) return { text: notConfigured, unit: '' };
@@ -81,15 +83,15 @@ export default function ProfileViewMode({ t, authData, credentialsMasked, usimTy
         <div className="dash-card-body grid-3-col">
           <div>
             <div className="label-muted">K</div>
-            <div className="value-mono">{credentialDisplay(authData.k)}</div>
+            <div className="value-mono">{credentialDisplay(authData.k, 'k')}</div>
           </div>
           <div>
             <div className="label-muted">{usimType === "op" ? "OP" : "OPc"}</div>
-            <div className="value-mono">{credentialDisplay(authData.opValue)}</div>
+            <div className="value-mono">{credentialDisplay(authData.opValue, usimType === "op" ? 'op' : 'opc')}</div>
           </div>
           <div>
             <div className="label-muted">AMF</div>
-            <div className="value-mono">{authData.amf || "N/A"}</div>
+            <div className="value-mono">{authData.amf || notConfigured}</div>
           </div>
         </div>
       </div>
