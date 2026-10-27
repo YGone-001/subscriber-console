@@ -49,45 +49,45 @@ const (
 
 // InventorySection is the platform-wide inventory population.
 type InventorySection struct {
-	Completeness string                   `json:"completeness"`
-	Scope        string                   `json:"scope"`
-	Error        string                   `json:"error,omitempty"`
+	Completeness string                    `json:"completeness"`
+	Scope        string                    `json:"scope"`
+	Error        string                    `json:"error,omitempty"`
 	Counts       *inventory.ResourceCounts `json:"counts,omitempty"`
 }
 
 // DiscoverySection is the full discovery source and candidate observation
 // population.
 type DiscoverySection struct {
-	Completeness string                       `json:"completeness"`
-	Scope        string                       `json:"scope"`
-	Error        string                       `json:"error,omitempty"`
-	Sources      *int64                       `json:"sources,omitempty"`
+	Completeness string                        `json:"completeness"`
+	Scope        string                        `json:"scope"`
+	Error        string                        `json:"error,omitempty"`
+	Sources      *int64                        `json:"sources,omitempty"`
 	Candidates   *discovery.ObservationSummary `json:"candidates,omitempty"`
 }
 
 // HealthSection is the full NF health target population projected with the
 // same freshness/overall semantics as the target list.
 type HealthSection struct {
-	Completeness string                              `json:"completeness"`
-	Scope        string                              `json:"scope"`
-	Error        string                              `json:"error,omitempty"`
-	Targets      *nfhealth.HealthTargetStateSummary   `json:"targets,omitempty"`
+	Completeness string                             `json:"completeness"`
+	Scope        string                             `json:"scope"`
+	Error        string                             `json:"error,omitempty"`
+	Targets      *nfhealth.HealthTargetStateSummary `json:"targets,omitempty"`
 }
 
 // AlertsSection is the full alert instance population and rule totals.
 type AlertsSection struct {
-	Completeness string              `json:"completeness"`
-	Scope        string              `json:"scope"`
-	Error        string              `json:"error,omitempty"`
+	Completeness string                `json:"completeness"`
+	Scope        string                `json:"scope"`
+	Error        string                `json:"error,omitempty"`
 	Alerts       *nfalert.AlertSummary `json:"alerts,omitempty"`
 }
 
 // TopologySection is the declared-edge population. Declared relationships are
 // operator-recorded facts, not connectivity truth.
 type TopologySection struct {
-	Completeness string               `json:"completeness"`
-	Scope        string               `json:"scope"`
-	Error        string               `json:"error,omitempty"`
+	Completeness string                `json:"completeness"`
+	Scope        string                `json:"scope"`
+	Error        string                `json:"error,omitempty"`
 	Edges        *topology.EdgeSummary `json:"edges,omitempty"`
 }
 

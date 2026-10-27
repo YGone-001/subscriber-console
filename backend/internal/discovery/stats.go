@@ -34,7 +34,7 @@ type observationStateRow struct {
 func (r *Repository) ObservationSummary(ctx context.Context) (ObservationSummary, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$group", Value: bson.M{
-			"_id": "$observationState",
+			"_id":   "$observationState",
 			"total": bson.M{"$sum": 1},
 			"linked": bson.M{"$sum": bson.M{"$cond": bson.A{
 				bson.M{"$ne": bson.A{"$linkedResourceId", nil}},

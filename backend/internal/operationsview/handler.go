@@ -29,8 +29,8 @@ const (
 
 // Handler serves the operations summary API surface.
 type Handler struct {
-	service    *Service
-	limiter    RateLimiter
+	service     *Service
+	limiter     RateLimiter
 	auditWriter AuditWriter
 }
 

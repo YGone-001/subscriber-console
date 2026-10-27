@@ -34,11 +34,11 @@ func (s *stubInventory) ResourceCounts(ctx context.Context) (inventory.ResourceC
 
 // stubDiscovery implements DiscoveryStats.
 type stubDiscovery struct {
-	sources     int64
-	candidates  discovery.ObservationSummary
-	sourcesErr  error
-	summaryErr  error
-	called      bool
+	sources    int64
+	candidates discovery.ObservationSummary
+	sourcesErr error
+	summaryErr error
+	called     bool
 }
 
 func (s *stubDiscovery) CountSources(ctx context.Context) (int, error) {
