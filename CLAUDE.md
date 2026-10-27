@@ -731,6 +731,7 @@ GET    /api/nf-health/targets
 GET    /api/nf-health/targets/{targetId}
 GET    /api/nf-health/targets/{targetId}/history
 GET    /api/nf-health/samples
+GET    /api/nf-health/interfaces
 GET    /api/nf-health/runs
 GET    /api/nf-health/runs/{runId}
 POST   /api/nf-health/targets
@@ -752,7 +753,27 @@ DELETE /api/nf-alerts/rules/{ruleId}
 POST   /api/nf-alerts/{alertId}/acknowledge
 POST   /api/nf-alerts/{alertId}/resolve
 GET    /api/operations/summary
+GET    /api/operations/resources
 GET    /api/ue-info
+GET    /api/nf-logs/sources
+GET    /api/nf-logs/stream
+GET    /api/nf-notifications/channels
+POST   /api/nf-notifications/channels
+PUT    /api/nf-notifications/channels/{channelId}
+DELETE /api/nf-notifications/channels/{channelId}
+GET    /api/nf-notifications/escalations
+POST   /api/nf-notifications/escalations
+PUT    /api/nf-notifications/escalations/{escalationId}
+DELETE /api/nf-notifications/escalations/{escalationId}
+GET    /api/nf-notifications/deliveries
+GET    /api/knowledge/meta
+GET    /api/knowledge/entries
+GET    /api/knowledge/entries/{entryId}
+POST   /api/knowledge/entries
+PUT    /api/knowledge/entries/{entryId}
+DELETE /api/knowledge/entries/{entryId}
+GET    /api/knowledge/files/{fileId}
+POST   /api/knowledge/files
 ```
 
 状态：
