@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -44,10 +44,10 @@ assert.ok(rootGitignore.includes('backend/internal/spa/static/*'), 'root .gitign
 // 6. Verify staging script exists
 assert.ok(existsSync(join(root, 'scripts', 'stage-spa-for-go.mjs')), 'scripts/stage-spa-for-go.mjs must exist');
 
-// 7. Verify Go API registrations remain exactly 136
+// 7. Verify the derived Go registrations match the shared frozen count
 const { keys: registrations, duplicates } = deriveGoRegistrations(root);
 assert.deepEqual(duplicates, [], 'No duplicate Go registrations permitted');
-assert.equal(registrations.length, 136, `Expected exactly 136 Go registrations, got ${registrations.length}`);
+assert.equal(registrations.length, EXPECTED_GO_REGISTRATIONS, `Expected exactly ${EXPECTED_GO_REGISTRATIONS} Go registrations, got ${registrations.length}`);
 
 // 8. Verify no runtime dist-path or Node dependency in backend Go source
 function collectGoFiles(dir) {

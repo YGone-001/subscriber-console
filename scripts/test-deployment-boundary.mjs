@@ -17,9 +17,9 @@
  * fronting real bundled Go, against a real MongoDB. Source assertions are
  * supplemental only and live in an explicitly labelled section.
  *
- * Route authority is DERIVED from the Go registration site (136 exact METHOD+PATH entries in
- * backend/cmd/server/main.go + backend/internal/remediation/handler.go). No historical
- * route-owner table is consulted.
+ * Route authority is DERIVED from the Go registration site (METHOD+PATH entries in
+ * backend/cmd/server/main.go + backend/internal/remediation/handler.go); the expected surface size
+ * lives once in EXPECTED_GO_REGISTRATIONS. No historical route-owner table is consulted.
  *
  * Usage:
  *   node scripts/test-deployment-boundary.mjs
