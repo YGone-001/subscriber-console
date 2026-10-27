@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, MUTATION_CENSUS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const spa = resolve(root, 'frontend');
@@ -532,7 +532,7 @@ assert.equal(validation.authorizationSchemaErrors, 0);
 assert.equal(validation.authorizationMismatches, 0);
 
 // Verify Request Contracts
-assert.equal(requestContractsValidation.entries, 33);
+assert.equal(requestContractsValidation.entries, MUTATION_CENSUS.requestContracts);
 assert.equal(requestContractsValidation.duplicates, 0);
 assert.equal(requestContractsValidation.invalidAuthorities, 0);
 assert.equal(requestContractsValidation.shapeErrors, 0);
@@ -554,7 +554,7 @@ assert.equal(importPrecheckExecuteConsistency, 'PASS');
 assert.equal(trafficAdjustResponseSemantics, 'PASS');
 
 // Verify Endpoints
-assert.equal(contractUniqueEndpoints.size, 34);
+assert.equal(contractUniqueEndpoints.size, MUTATION_CENSUS.uniqueEndpoints);
 assert.equal(validation.unregisteredEndpoints, 0);
 assert.equal(validation.outOfScopeEndpoints, 0);
 assert.equal(validation.disabledEndpoints, 0);
