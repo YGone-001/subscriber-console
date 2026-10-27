@@ -49,8 +49,22 @@ const BANNED_RUNTIME_MODULES = [
 /** A live MongoDB client connection is a data plane the UI runtime must never own. */
 const MONGODB_CLIENT_RE = /\bnew\s+MongoClient\s*\(|\bMongoClient\s*\.\s*connect\s*\(|\bMongoClient\b\s*</;
 
-/** The complete UI-only runtime dependency allowlist. */
-const EXPECTED_RUNTIME_DEPENDENCIES = ['lucide-react', 'react', 'react-dom', 'react-router-dom', 'recharts', 'swr'];
+/**
+ * The complete UI-only runtime dependency allowlist. react-markdown and
+ * remark-gfm render knowledge-base entries in the browser; the renderer never
+ * touches the API runtime boundary (raw HTML is not rendered, links are
+ * allowlisted).
+ */
+const EXPECTED_RUNTIME_DEPENDENCIES = [
+  'lucide-react',
+  'react',
+  'react-dom',
+  'react-markdown',
+  'react-router-dom',
+  'recharts',
+  'remark-gfm',
+  'swr',
+];
 
 /**
  * Node-era backend helpers that were removed from the UI runtime.

@@ -278,6 +278,7 @@ React Router 7
 Lucide React
 Recharts
 SWR
+react-markdown + remark-gfm（知识库条目的 Markdown 渲染）
 Plain CSS design-token layers (frontend/src/styles: tokens / base / shell / components / pages / utilities)
 Node 20 (.nvmrc)
 UI-only dependency set (no frontend jose / mongodb / jiti)
