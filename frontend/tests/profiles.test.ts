@@ -144,10 +144,23 @@ test('the version panel requests the detail branch the backend serves', () => {
 
 test('a failed template write surfaces the server message instead of a generic failure', () => {
   const source = read('../src/features/profiles/ProfileDetailPage.tsx');
-  assert.match(source, /putJson\(/);
+  assert.match(source, /await putJson/);
   assert.match(source, /mutation-client/);
   assert.match(source, /setError\(err instanceof Error \? err\.message : t\('prof_err_save'\)\)/);
   assert.doesNotMatch(source, /throw new Error\(t\("prof_err_save"\)\)/);
+});
+
+/* The backend distinguishes a committed change from a submission that changed
+ * nothing; the page must report what actually happened. */
+test('an unchanged template save reports no effect instead of claiming a save', () => {
+  const source = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(source, /classification === 'NO_EFFECT'/);
+  assert.match(source, /committedAsNoEffect \? t\('prof_msg_no_effect'\)/);
+
+  const en = read('../src/lib/locales/en.ts');
+  const zh = read('../src/lib/locales/zh.ts');
+  assert.match(en, /prof_msg_no_effect:/);
+  assert.match(zh, /prof_msg_no_effect:/);
 });
 
 test('creating a template is one governed write, not a default followed by an update', () => {

@@ -230,20 +230,22 @@ export function ProfileDetailPage() {
     setIsSaving(true);
     setError(null);
     try {
+      let committedAsNoEffect = false;
       if (isCreate) {
         /* One governed write: the create endpoint accepts the same content
          * fields as the update endpoint, so a new template no longer lands as
          * CREATE followed by UPDATE in the history. */
         await postJson('/api/profiles', { ...payload, name: targetName });
       } else {
-        await putJson(
+        const result = await putJson<{ classification?: string }>(
           `/api/profiles/${encodeURIComponent(targetName)}`,
           storedRevision === null ? payload : { ...payload, expectedRevision: storedRevision },
         );
+        committedAsNoEffect = result?.classification === 'NO_EFFECT';
       }
       setIsSaveConfirmOpen(false);
       setIsEditing(false);
-      setNotice({ type: 'success', text: t('prof_msg_saved') });
+      setNotice({ type: 'success', text: committedAsNoEffect ? t('prof_msg_no_effect') : t('prof_msg_saved') });
       await globalMutate('/api/profiles');
       if (isCreate) {
         router.replace(`/profile/${encodeURIComponent(targetName)}`);
