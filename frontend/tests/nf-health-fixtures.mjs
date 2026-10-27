@@ -991,6 +991,35 @@ function handleApi(req, res, url, context) {
       ],
       page: page(20),
     },
+    // Two foreign-domain reads the shared operations overview performs: the
+    // runtime link projection and the online-user counts. Both answer the
+    // honest "not configured" state so the cards render unavailable rather than
+    // the page logging a failed request.
+    '/api/topology/live': {
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      host: { hostId: 'fixture-host', hostName: 'fixture-host' },
+      runtime: {
+        total: 0, running: 0, stopped: 0, unverified: 0, permissionDenied: 0,
+        unknown: 0, stale: 0, notDetected: 0, expected: 0,
+      },
+      config: { manifestConfigured: false, sourceCount: 0, availableSources: 0, complete: false },
+      nodes: [],
+      edges: [],
+      unresolvedPeers: [],
+      summary: { nodeCount: 0, edgeCount: 0, configuredEdgeCount: 0, unresolvedPeerCount: 0 },
+    },
+    '/api/ue-info': {
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      configured: false,
+      complete: false,
+      summary: {
+        total: 0, registered: null, idle: null, connected: null, stateUnreported: 0,
+        epc5gcOnlineUsers: null, imsOnlineUsers: null, totalSubscribers: null, totalIMSUsers: null,
+      },
+      sources: [],
+      items: [],
+      pagination: { limit: 20, offset: 0, total: 0 },
+    },
   };
   if (Object.prototype.hasOwnProperty.call(BENIGN_EMPTY, pathname)) {
     return sendJson(res, 200, BENIGN_EMPTY[pathname]);
