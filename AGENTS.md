@@ -759,7 +759,7 @@ GET    /api/ue-info
 
 ```text
 Go production API registrations = 162 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
-Canonical API surface = 33 operations + 2 legacy read aliases
+Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0
 OCS writes = 13 (tariff plan + subscriber contract + balance)

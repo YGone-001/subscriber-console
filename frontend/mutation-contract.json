@@ -138,6 +138,25 @@
     "disabledOperations": []
   },
   {
+    "route": "/profile/:name",
+    "source": "frontend/src/features/profiles/ProfileDetailPage.tsx",
+    "operations": [
+      {
+        "name": "profile clone",
+        "request": "POST /api/profiles/{name}/clone",
+        "authorization": {
+          "kind": "permission",
+          "value": "profiles.write"
+        },
+        "confirmation": true
+      }
+    ],
+    "preflightOperations": [
+      "POST /api/profiles/{name}/drift-precheck"
+    ],
+    "disabledOperations": []
+  },
+  {
     "route": "/ocs/balances",
     "source": "frontend/src/features/ocs/balances/BalancesPage.tsx",
     "operations": [

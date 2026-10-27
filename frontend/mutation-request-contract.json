@@ -310,6 +310,36 @@
     "responseSemantics": "mutation-result"
   },
   {
+    "name": "profile clone",
+    "method": "POST",
+    "path": "/api/profiles/{name}/clone",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/profile/handler.go",
+    "productionReference": "frontend/src/features/profiles/ProfileDetailPage.tsx",
+    "requiredBodyKeys": [
+      "name"
+    ],
+    "optionalBodyKeys": [
+      "title"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "profile drift precheck",
+    "method": "POST",
+    "path": "/api/profiles/{name}/drift-precheck",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/profile/handler.go",
+    "productionReference": "frontend/src/features/profiles/components/ProfileDriftCard.tsx",
+    "requiredBodyKeys": [],
+    "optionalBodyKeys": [
+      "imsis"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "preflight-result"
+  },
+  {
     "name": "balance adjust",
     "method": "POST",
     "path": "/api/ocs/balances/{imsi}/adjust",

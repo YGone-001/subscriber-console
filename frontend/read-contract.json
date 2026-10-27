@@ -185,6 +185,7 @@
     "readEndpoints": [
       "GET /api/profiles/{name}",
       "GET /api/profiles/{name}/versions",
+      "GET /api/profiles/{name}/export",
       "GET /api/profiles/meta",
       "GET /api/tariff-plans",
       "GET /api/ratings"
@@ -223,7 +224,9 @@
     "mode": "read",
     "source": "frontend/src/features/subscribers/SubscribersPage.tsx",
     "readEndpoints": [
-      "GET /api/subscribers"
+      "GET /api/subscribers",
+      "GET /api/profiles",
+      "GET /api/profiles/{name}"
     ],
     "staticReads": [
       "/data/mcc-mnc-table.json"

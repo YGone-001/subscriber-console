@@ -40,6 +40,7 @@ const routeInventory = new Map(routes.map((route) => [route.route, route]));
 const expectedContractRoutes = new Set([
   '/subscribers',
   '/profile',
+  '/profile/:name',
   '/ocs/balances',
   '/ocs/balances/:imsi',
   '/ocs/contracts',
@@ -52,7 +53,7 @@ const expectedContractRoutes = new Set([
   '/knowledge',
 ]);
 
-// Expected 33 enabled registered business mutations
+// Expected 34 enabled registered business mutations
 const expectedEnabledEndpoints = new Set([
   'POST /api/subscribers',
   'PUT /api/subscribers/{imsi}',
@@ -79,6 +80,7 @@ const expectedEnabledEndpoints = new Set([
   'PUT /api/profiles/{name}',
   'DELETE /api/profiles/{name}',
   'POST /api/profiles/{name}/versions/{versionId}/restore',
+  'POST /api/profiles/{name}/clone',
   'POST /api/users',
   'PATCH /api/users/{username}',
   'POST /api/users/{username}/disable',
@@ -117,6 +119,7 @@ const expectedAuthorizations = {
   'PUT /api/profiles/{name}': { kind: 'permission', value: 'profiles.write' },
   'DELETE /api/profiles/{name}': { kind: 'permission', value: 'profiles.write' },
   'POST /api/profiles/{name}/versions/{versionId}/restore': { kind: 'capability', value: 'profile_rollback' },
+  'POST /api/profiles/{name}/clone': { kind: 'permission', value: 'profiles.write' },
   'POST /api/ocs/balances/{imsi}/adjust': { kind: 'permission', value: 'ocs.balance.adjust' },
   'POST /api/ocs/subscribers': { kind: 'capability', value: 'ocs.subscriber.write' },
   'PATCH /api/ocs/subscribers/{imsi}': { kind: 'capability', value: 'ocs.subscriber.write' },
@@ -519,7 +522,7 @@ const trafficAdjustResponseSemantics = passedTests.has('traffic adjustment: clas
 assert.equal(routes.length, 41, 'route contract must contain 41 routes');
 
 // Verify Contract Checks
-assert.equal(contracts.length, 12);
+assert.equal(contracts.length, 13);
 assert.equal(validation.duplicateRoutes, 0);
 assert.equal(validation.missingRoutes, 0);
 assert.equal(validation.unknownRoutes, 0);
@@ -529,7 +532,7 @@ assert.equal(validation.authorizationSchemaErrors, 0);
 assert.equal(validation.authorizationMismatches, 0);
 
 // Verify Request Contracts
-assert.equal(requestContractsValidation.entries, 31);
+assert.equal(requestContractsValidation.entries, 33);
 assert.equal(requestContractsValidation.duplicates, 0);
 assert.equal(requestContractsValidation.invalidAuthorities, 0);
 assert.equal(requestContractsValidation.shapeErrors, 0);
@@ -551,7 +554,7 @@ assert.equal(importPrecheckExecuteConsistency, 'PASS');
 assert.equal(trafficAdjustResponseSemantics, 'PASS');
 
 // Verify Endpoints
-assert.equal(contractUniqueEndpoints.size, 33);
+assert.equal(contractUniqueEndpoints.size, 34);
 assert.equal(validation.unregisteredEndpoints, 0);
 assert.equal(validation.outOfScopeEndpoints, 0);
 assert.equal(validation.disabledEndpoints, 0);

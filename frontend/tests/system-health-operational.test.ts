@@ -171,8 +171,8 @@ test('traffic and business mutation contracts remain untouched', () => {
   const businessContracts = JSON.parse(readFileSync(businessContractFile, 'utf8'));
   const requestContracts = JSON.parse(readFileSync(businessRequestContractFile, 'utf8'));
 
-  assert.equal(businessContracts.length, 12, 'business mutation routes must remain 12');
-  assert.equal(requestContracts.length, 31, 'business mutation request contracts must remain 31');
+  assert.equal(businessContracts.length, 13, 'business mutation routes must remain 13');
+  assert.equal(requestContracts.length, 33, 'business mutation request contracts must remain 33');
 
   const trafficContract = requestContracts.find(
     (c: { name: string }) => c.name === 'subscriber traffic adjustment',
