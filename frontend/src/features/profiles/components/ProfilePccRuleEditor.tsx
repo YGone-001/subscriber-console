@@ -7,10 +7,7 @@ import React from "react";
 import { useI18n } from '../../../providers/I18nProvider';
 import { X } from "lucide-react";
 import { pccQosPreset } from '../../../lib/imsQosPresets.js';
-
-const AMBR_UNITS = [
-  { label: 'bps', val: 0 }, { label: 'Kbps', val: 1 }, { label: 'Mbps', val: 2 }, { label: 'Gbps', val: 3 }, { label: 'Tbps', val: 4 }
-];
+import { AmbrUnitSelect } from './AmbrUnitSelect';
 
 interface ProfilePccRuleEditorProps {
   rule: {
@@ -88,18 +85,14 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, anchorId, onChan
           <label className="form-label pcc-rule-label">{t("pcc_mbr_dl")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.mbr?.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "mbr", "downlink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
-            <select value={rule.qos?.mbr?.downlink?.unit || 1} onChange={(e) => updateField(["qos", "mbr", "downlink", "unit"], Number(e.target.value))}>
-              {AMBR_UNITS.map(u => <option key={u.val} value={u.val}>{u.label}</option>)}
-            </select>
+            <AmbrUnitSelect unit={rule.qos?.mbr?.downlink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => updateField(["qos", "mbr", "downlink", "unit"], value)} />
           </div>
         </div>
         <div>
           <label className="form-label pcc-rule-label">{t("pcc_mbr_ul")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.mbr?.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "mbr", "uplink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
-            <select value={rule.qos?.mbr?.uplink?.unit || 1} onChange={(e) => updateField(["qos", "mbr", "uplink", "unit"], Number(e.target.value))}>
-              {AMBR_UNITS.map(u => <option key={u.val} value={u.val}>{u.label}</option>)}
-            </select>
+            <AmbrUnitSelect unit={rule.qos?.mbr?.uplink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => updateField(["qos", "mbr", "uplink", "unit"], value)} />
           </div>
         </div>
         <div/>
@@ -108,18 +101,14 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, anchorId, onChan
           <label className="form-label pcc-rule-label">{t("pcc_gbr_dl")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.gbr?.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "gbr", "downlink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
-            <select value={rule.qos?.gbr?.downlink?.unit || 1} onChange={(e) => updateField(["qos", "gbr", "downlink", "unit"], Number(e.target.value))}>
-              {AMBR_UNITS.map(u => <option key={u.val} value={u.val}>{u.label}</option>)}
-            </select>
+            <AmbrUnitSelect unit={rule.qos?.gbr?.downlink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => updateField(["qos", "gbr", "downlink", "unit"], value)} />
           </div>
         </div>
         <div>
           <label className="form-label pcc-rule-label">{t("pcc_gbr_ul")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.gbr?.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "gbr", "uplink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
-            <select value={rule.qos?.gbr?.uplink?.unit || 1} onChange={(e) => updateField(["qos", "gbr", "uplink", "unit"], Number(e.target.value))}>
-              {AMBR_UNITS.map(u => <option key={u.val} value={u.val}>{u.label}</option>)}
-            </select>
+            <AmbrUnitSelect unit={rule.qos?.gbr?.uplink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => updateField(["qos", "gbr", "uplink", "unit"], value)} />
           </div>
         </div>
       </div>

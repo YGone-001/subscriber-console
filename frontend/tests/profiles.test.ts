@@ -26,7 +26,7 @@ import {
   profileFilterFromParam,
   profileFilterToParam,
 } from '../src/features/profiles/profile-list-model';
-import { formatAmbrPair, formatAmbrPairCompact } from '../src/features/profiles/profile-format';
+import { ambrSelectUnit, formatAmbrPair, formatAmbrPairCompact } from '../src/features/profiles/profile-format';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -637,5 +637,48 @@ test('the hierarchy rail describes the draft shape and jumps into it', () => {
   assert.match(detailPage, /setExpandedSlices\(\(current\) => \(current\.includes\(index\) \? current : \[\.\.\.current, index\]\)\)/);
   assert.match(detailPage, /el\.classList\.add\('profile-anchor-flash'\)/);
   assert.match(read('../src/styles/profile.css'), /\.profile-anchor-flash \{/);
+});
+
+test('bps is a selectable unit and the resolver never invents one', () => {
+  assert.equal(ambrSelectUnit(0), 0);
+  assert.equal(ambrSelectUnit(4), 4);
+  assert.equal(ambrSelectUnit(undefined), '');
+  assert.equal(ambrSelectUnit(null), '');
+  assert.equal(ambrSelectUnit(''), '');
+  assert.equal(ambrSelectUnit(5), '');
+});
+
+test('a cleared AMBR value stays absent and is rejected instead of stored as zero', () => {
+  const cleared = { downlink: { unit: 2 }, uplink: VALID_AMBR.uplink };
+  assert.deepEqual(
+    findProfileDraftIssue({ name: 'template', auth: VALID_AUTH, ambr: cleared, slices: [] }),
+    { code: 'ambrInvalid', direction: 'downlink' },
+  );
+  const payload = buildProfilePayload(
+    { ...createEmptyDraft(), ueAmbr: cleared as never },
+    'template',
+    false,
+  ) as { ambr: { downlink: Record<string, unknown> } };
+  assert.ok(!('value' in payload.ambr.downlink), 'an absent value must not be written as 0');
+});
+
+test('a stored bps unit survives the draft round trip', () => {
+  const draft = createDraftFromProfile(
+    { ...BASE_PROFILE, ambr: { downlink: { value: 512000, unit: 0 }, uplink: { value: 512000, unit: 0 } } },
+    'template',
+  );
+  assert.equal(draft.ueAmbr.downlink.unit, 0);
+  const payload = buildProfilePayload(draft, 'template', false) as { ambr: { downlink: { unit: number } } };
+  assert.equal(payload.ambr.downlink.unit, 0);
+});
+
+/* Lint stand-in: the two coercions that made the editor lie about AMBR. */
+test('template editors resolve units through the shared select, not a local default', () => {
+  for (const file of ['ProfileEditMode.tsx', 'ProfilePccRuleEditor.tsx']) {
+    const source = read(`../src/features/profiles/components/${file}`);
+    assert.match(source, /<AmbrUnitSelect /);
+    assert.ok(!/\.unit \|\| 1/.test(source), `${file} still defaults an absent unit to Kbps`);
+    assert.ok(!/=== "" \? 0\b/.test(source), `${file} still defaults a cleared number input to zero`);
+  }
 });
 

@@ -7,7 +7,7 @@ import { Pencil, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Pl
 import ProfileHierarchyRail from './ProfileHierarchyRail';
 import ProfileSliceEditor from './ProfileSliceEditor';
 import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from '../../../lib/unitParser';
-import { AMBR_UNITS } from '../../subscribers/components/subscriber/utils';
+import { AmbrUnitSelect } from './AmbrUnitSelect';
 import { DEFAULT_ACCESS_RESTRICTION_BITS, accessBitLabel } from '../profile-access';
 
 function ratingTypeLabel(t: (key: string) => string, value?: string) {
@@ -225,19 +225,15 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
             <div>
               <label className="form-label label-secondary"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_dl")}</label>
               <div className="input-composite">
-                <input type="number" value={ueAmbr.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => setUeAmbr({...ueAmbr, downlink: { ...ueAmbr.downlink, value: e.target.value === "" ? 0 : Number(e.target.value) }})} />
-                <select value={ueAmbr.downlink?.unit || 1} onChange={(e) => setUeAmbr({...ueAmbr, downlink: { ...ueAmbr.downlink, unit: Number(e.target.value) }})}>
-                  {AMBR_UNITS.map(u => <option key={u.val} value={u.val}>{u.label}</option>)}
-                </select>
+                <input type="number" value={ueAmbr.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => setUeAmbr({...ueAmbr, downlink: { ...ueAmbr.downlink, value: e.target.value === "" ? undefined : Number(e.target.value) }})} />
+                <AmbrUnitSelect unit={ueAmbr.downlink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => setUeAmbr({...ueAmbr, downlink: { ...ueAmbr.downlink, unit: value }})} />
               </div>
             </div>
             <div>
               <label className="form-label label-secondary"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_ul")}</label>
               <div className="input-composite">
-                <input type="number" value={ueAmbr.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => setUeAmbr({...ueAmbr, uplink: { ...ueAmbr.uplink, value: e.target.value === "" ? 0 : Number(e.target.value) }})} />
-                <select value={ueAmbr.uplink?.unit || 1} onChange={(e) => setUeAmbr({...ueAmbr, uplink: { ...ueAmbr.uplink, unit: Number(e.target.value) }})}>
-                  {AMBR_UNITS.map(u => <option key={u.val} value={u.val}>{u.label}</option>)}
-                </select>
+                <input type="number" value={ueAmbr.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => setUeAmbr({...ueAmbr, uplink: { ...ueAmbr.uplink, value: e.target.value === "" ? undefined : Number(e.target.value) }})} />
+                <AmbrUnitSelect unit={ueAmbr.uplink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => setUeAmbr({...ueAmbr, uplink: { ...ueAmbr.uplink, unit: value }})} />
               </div>
             </div>
           </div>

@@ -15,6 +15,18 @@ export function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
+/* A decoded AMBR side may carry no unit, and bps is a legal unit at index 0.
+ * Resolving the absent case to any index would both display and persist an
+ * invented unit, so an absent or out-of-range unit reports '' and the caller
+ * shows it as unset. */
+export function ambrSelectUnit(unit: unknown): number | '' {
+  const index = toFiniteNumber(unit);
+  if (index === null || !Number.isInteger(index) || index < 0 || index >= AMBR_UNIT_LABELS.length) {
+    return '';
+  }
+  return index;
+}
+
 export function formatAmbrSide(side: unknown, fallback: string): string {
   if (typeof side !== 'object' || side === null) return fallback;
   const record = side as Record<string, unknown>;
