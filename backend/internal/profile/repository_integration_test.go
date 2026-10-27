@@ -238,6 +238,67 @@ func TestListProfileVersionsProjectsSliceCountAndProfileName(t *testing.T) {
 	}
 }
 
+// History was written by two generators: the legacy Node path stored savedAt as
+// an ISO string and some Go writers stored a native date. A direct sort groups
+// by type before time, so the read must order on a normalized key.
+func TestListProfileVersionsOrdersAcrossMixedSavedAtTypes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := profileTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	const name = "mixed_timestamp_profile"
+	records := []bson.M{
+		{
+			"versionId":   "v-date-oldest",
+			"profileName": name,
+			"action":      "CREATE",
+			"savedAt":     time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC),
+		},
+		{
+			"versionId":   "v-string-middle",
+			"profileName": name,
+			"action":      "UPDATE",
+			"savedAt":     "2026-01-02T10:00:00.000Z",
+		},
+		{
+			"versionId":   "v-date-newest",
+			"profileName": name,
+			"action":      "RESTORE",
+			"savedAt":     time.Date(2026, 1, 3, 10, 0, 0, 0, time.UTC),
+		},
+	}
+	for _, record := range records {
+		if err := repo.SaveProfileVersion(ctx, record); err != nil {
+			t.Fatalf("save version: %v", err)
+		}
+	}
+
+	versions, err := repo.ListProfileVersions(ctx, name, 20)
+	if err != nil {
+		t.Fatalf("list versions: %v", err)
+	}
+	var order []string
+	for _, v := range versions {
+		order = append(order, v.VersionID)
+	}
+	expected := []string{"v-date-newest", "v-string-middle", "v-date-oldest"}
+	if len(order) != len(expected) {
+		t.Fatalf("expected %d versions, got %v", len(expected), order)
+	}
+	for i := range expected {
+		if order[i] != expected[i] {
+			t.Fatalf("expected chronological order %v, got %v", expected, order)
+		}
+	}
+	// The served form stays the canonical ISO string for both storage types.
+	if versions[0].SavedAt != "2026-01-03T10:00:00.000Z" {
+		t.Errorf("a date-typed snapshot must project as an ISO string, got %q", versions[0].SavedAt)
+	}
+}
+
 func TestListProfilesProjectsContentAndCompleteness(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires MongoDB")

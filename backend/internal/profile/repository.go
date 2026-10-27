@@ -292,11 +292,16 @@ func (r *Repository) ListProfileVersions(ctx context.Context, profileName string
 		limit = 20
 	}
 
-	// Match Node ordering: sorted by savedAt descending (most recent first)
-	cursor, err := r.versions.Find(ctx,
-		bson.M{"profileName": profileName},
-		options.Find().SetSort(bson.D{{Key: "savedAt", Value: -1}}).SetLimit(int64(limit)),
-	)
+	// Match Node ordering: sorted by savedAt descending (most recent first).
+	// The sort runs on a normalized key because legacy snapshots stored a
+	// native date while the current writers store an ISO string, and a direct
+	// sort on a mixed-type field groups by type before it orders by time.
+	cursor, err := r.versions.Aggregate(ctx, bson.A{
+		bson.M{"$match": bson.M{"profileName": profileName}},
+		bson.M{"$addFields": bson.M{"savedAtKey": savedAtSortKey()}},
+		bson.M{"$sort": bson.M{"savedAtKey": -1}},
+		bson.M{"$limit": int64(limit)},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -430,6 +435,42 @@ func stringField(doc bson.M, key string) string {
 	return ""
 }
 
+// profileTimeLayout is the single timestamp form the profile domain stores and
+// serves: fixed-width UTC with millisecond precision, so a lexicographic
+// comparison is also a chronological one.
+const profileTimeLayout = "2006-01-02T15:04:05.000Z"
+
+// nowProfileTime stamps a version snapshot. Every writer must use this so the
+// history sorts on one type; the legacy Node writer used this same ISO string,
+// while some Go writers stored a native date, and a mixed-type index sorts by
+// type before time.
+func nowProfileTime() string {
+	return time.Now().UTC().Format(profileTimeLayout)
+}
+
+// savedAtDateFormat is the $dateToString spelling of profileTimeLayout: MongoDB
+// formats dates with strftime tokens, so passing the Go layout here would
+// render the same literal for every date and collapse the ordering.
+const savedAtDateFormat = "%Y-%m-%dT%H:%M:%S.%LZ"
+
+// savedAtSortKey projects any stored savedAt form onto the canonical string so
+// a sort or a retention prune orders legacy dates and ISO strings together.
+func savedAtSortKey() bson.M {
+	return bson.M{"$switch": bson.M{
+		"branches": bson.A{
+			bson.M{
+				"case": bson.M{"$eq": bson.A{bson.M{"$type": "$savedAt"}, "date"}},
+				"then": bson.M{"$dateToString": bson.M{
+					"format":   savedAtDateFormat,
+					"date":     "$savedAt",
+					"timezone": "UTC",
+				}},
+			},
+		},
+		"default": bson.M{"$ifNull": bson.A{"$savedAt", ""}},
+	}}
+}
+
 func timeField(doc bson.M, key string) string {
 	v, ok := doc[key]
 	if !ok || v == nil {
@@ -437,9 +478,9 @@ func timeField(doc bson.M, key string) string {
 	}
 	switch t := v.(type) {
 	case time.Time:
-		return t.UTC().Format("2006-01-02T15:04:05.000Z")
+		return t.UTC().Format(profileTimeLayout)
 	case bson.DateTime:
-		return t.Time().UTC().Format("2006-01-02T15:04:05.000Z")
+		return t.Time().UTC().Format(profileTimeLayout)
 	case string:
 		// Version snapshots store savedAt as an ISO string, the same shape the
 		// profile documents carry; without this branch the version list loses
@@ -638,9 +679,9 @@ func jsonDateOrNull(doc bson.M, key string) any {
 	}
 	switch t := v.(type) {
 	case time.Time:
-		return t.UTC().Format("2006-01-02T15:04:05.000Z")
+		return t.UTC().Format(profileTimeLayout)
 	case bson.DateTime:
-		return t.Time().UTC().Format("2006-01-02T15:04:05.000Z")
+		return t.Time().UTC().Format(profileTimeLayout)
 	case string:
 		if t == "" {
 			return nil
@@ -826,14 +867,16 @@ func (r *Repository) SaveProfileVersion(ctx context.Context, record bson.M) erro
 		return nil
 	}
 
-	// Find versions beyond the limit
-	cursor, err := r.versions.Find(ctx,
-		bson.M{"profileName": profileName},
-		options.Find().
-			SetSort(bson.D{{Key: "savedAt", Value: -1}}).
-			SetSkip(int64(ProfileVersionLimit)).
-			SetProjection(bson.M{"versionId": 1}),
-	)
+	// Find versions beyond the limit. The same normalized key the history read
+	// uses decides which records are stale: sorting a mixed-type field would
+	// keep the newest date-typed snapshot and delete newer string-typed ones.
+	cursor, err := r.versions.Aggregate(ctx, bson.A{
+		bson.M{"$match": bson.M{"profileName": profileName}},
+		bson.M{"$addFields": bson.M{"savedAtKey": savedAtSortKey()}},
+		bson.M{"$sort": bson.M{"savedAtKey": -1}},
+		bson.M{"$skip": int64(ProfileVersionLimit)},
+		bson.M{"$project": bson.M{"versionId": 1}},
+	})
 	if err != nil {
 		return fmt.Errorf("query stale versions: %w", err)
 	}

@@ -587,7 +587,7 @@ func (h *Handler) Clone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	now := nowProfileTime()
 	doc := bson.M{
 		"name":      target,
 		"title":     target,
@@ -699,7 +699,7 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 
 	payload := map[string]any{
 		"version":      1,
-		"exported_at":  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		"exported_at":  nowProfileTime(),
 		"exported_by":  p.Username,
 		"profile_name": name,
 		// The manifest states what the reader actually got, so a masked export is
@@ -780,7 +780,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build default profile document (matches Node defaultProfile exactly)
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	now := nowProfileTime()
 	doc := bson.M{
 		"name":      name,
 		"title":     name,
@@ -1000,7 +1000,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	now := nowProfileTime()
 
 	var updated bson.M
 
@@ -1215,7 +1215,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save version record
-	now := time.Now().UTC()
+	now := nowProfileTime()
 	versionRecord := bson.M{
 		"versionId":   generateVersionID(),
 		"profileName": name,
@@ -1536,7 +1536,7 @@ func (h *Handler) assertFrozenRestoreV2(ctx context.Context, p *auth.Principal, 
 
 // executeFrozenRestoreV2 executes the restore operation.
 func (h *Handler) executeFrozenRestoreV2(ctx context.Context, p *auth.Principal, name string, intent *RestoreIntent) (bson.M, error) {
-	now := time.Now().UTC()
+	now := nowProfileTime()
 
 	if intent.CurrentState == "present" {
 		// CAS update for existing profile
@@ -1728,7 +1728,7 @@ func buildEffectiveRestoredProfile(current bson.M, versionDoc bson.M, name, acto
 		now = time.Now().UTC()
 	}
 	// Format as ISO string with milliseconds to match Node behavior
-	nowISO := now.Format("2006-01-02T15:04:05.000Z")
+	nowISO := now.Format(profileTimeLayout)
 
 	if versionProfile["createdAt"] != nil {
 		restored["createdAt"] = versionProfile["createdAt"]
