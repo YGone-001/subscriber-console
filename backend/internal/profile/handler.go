@@ -129,49 +129,18 @@ const maskedCredential = "[MASKED]"
 
 var credentialKeys = []string{"k", "op", "opc"}
 
-// maskCredentialDoc masks the auth child of a decoded profile document.
-// Documents decoded from MongoDB appear as bson.M, bson.D or map[string]any
-// depending on the decode target, so every shape must be handled; a missing
-// or unrecognized auth field leaves the document untouched.
+// maskCredentialDoc masks the auth child of a decoded profile document. Shape
+// handling lives in fieldOf/setFieldOf, the package's single authority for the
+// bson.M / bson.D / map[string]any forms the MongoDB driver can produce; a
+// missing or unrecognized auth field leaves the document untouched.
 func maskCredentialDoc(doc any) {
-	switch d := doc.(type) {
-	case bson.M:
-		maskCredentialValue(d["auth"])
-	case map[string]any:
-		maskCredentialValue(d["auth"])
-	case bson.D:
-		for i := range d {
-			if d[i].Key == "auth" {
-				maskCredentialValue(d[i].Value)
-				return
-			}
-		}
+	material := fieldOf(doc, "auth")
+	if material == nil {
+		return
 	}
-}
-
-func maskCredentialValue(value any) {
-	switch material := value.(type) {
-	case bson.M:
-		for _, key := range credentialKeys {
-			if v, ok := material[key].(string); ok && v != "" {
-				material[key] = maskedCredential
-			}
-		}
-	case map[string]any:
-		for _, key := range credentialKeys {
-			if v, ok := material[key].(string); ok && v != "" {
-				material[key] = maskedCredential
-			}
-		}
-	case bson.D:
-		for i := range material {
-			for _, key := range credentialKeys {
-				if material[i].Key == key {
-					if v, ok := material[i].Value.(string); ok && v != "" {
-						material[i].Value = maskedCredential
-					}
-				}
-			}
+	for _, key := range credentialKeys {
+		if value, ok := fieldOf(material, key).(string); ok && value != "" {
+			setFieldOf(material, key, maskedCredential)
 		}
 	}
 }

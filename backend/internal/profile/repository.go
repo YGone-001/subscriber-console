@@ -463,6 +463,10 @@ func sliceCount(doc bson.M) int {
 
 // asDocument adapts a decoded nested document to bson.M. The driver returns
 // nested documents as bson.M, bson.D or map[string]any depending on the target.
+//
+// Read-only by contract: for bson.D the returned map is a copy, so writing
+// through it detaches from the document the response marshals. Projecting a
+// masked or otherwise rewritten field must go through setFieldOf instead.
 func asDocument(v any) bson.M {
 	switch doc := v.(type) {
 	case bson.M:
@@ -477,6 +481,54 @@ func asDocument(v any) bson.M {
 		return converted
 	}
 	return nil
+}
+
+// fieldOf reads one field from a decoded document of any shape and returns the
+// live value, so callers can descend into nested documents and still mutate
+// them in place. It is the read counterpart of setFieldOf.
+func fieldOf(doc any, key string) any {
+	switch d := doc.(type) {
+	case bson.M:
+		return d[key]
+	case map[string]any:
+		return d[key]
+	case bson.D:
+		for i := range d {
+			if d[i].Key == key {
+				return d[i].Value
+			}
+		}
+	}
+	return nil
+}
+
+// setFieldOf rewrites a field inside a decoded document of any shape, in place.
+// bson.D must be mutated through its element slice: copying it into a map first
+// would leave the marshalled response untouched and turn the write into a
+// silent no-op. Missing keys are not created; false reports "nothing rewritten".
+func setFieldOf(doc any, key string, value any) bool {
+	switch d := doc.(type) {
+	case bson.M:
+		if _, ok := d[key]; !ok {
+			return false
+		}
+		d[key] = value
+		return true
+	case map[string]any:
+		if _, ok := d[key]; !ok {
+			return false
+		}
+		d[key] = value
+		return true
+	case bson.D:
+		for i := range d {
+			if d[i].Key == key {
+				d[i].Value = value
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // arrayLen reports the length of a decoded array regardless of element type.

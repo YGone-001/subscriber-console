@@ -78,6 +78,13 @@ detail policy that removes `auth4G.k/opc/op` for roles without the
 the template surface is the subscriber create form's template defaults, which is
 itself behind the `subscribers.write` gate, so masking does not regress it.
 
+Server-side projections rewrite decoded documents through the profile package's
+`fieldOf`/`setFieldOf` accessors, the single authority for the decoded shapes.
+`asDocument` returns a rebuilt map for a `bson.D` input, so it is read-only by
+contract: writing through its result mutates nothing the response marshals. A
+regression test replays the driver's own BSON round-trip, so an assumption about
+the decoded shape fails in the suite instead of passing against a hand-built map.
+
 The masking sentinel `[MASKED]` is never valid write input: `PUT /api/profiles/{name}`
 rejects it inside `auth.k` / `auth.op` / `auth.opc` with 400
 `INVALID_PROFILE_UPDATE`. Echoing a read projection back would store the sentinel as

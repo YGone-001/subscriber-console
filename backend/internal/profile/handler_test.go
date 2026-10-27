@@ -2543,3 +2543,113 @@ func TestProfileExportShapeAndCredentialVisibility(t *testing.T) {
 		t.Error("an export must not mutate the stored template")
 	}
 }
+
+// The masking must survive the decode the repository actually performs. This
+// round-trips through BSON instead of hand-building a map, so a future shape
+// assumption fails here rather than passing against a convenient mock.
+func TestProfileGetMasksCredentialsAfterDriverDecode(t *testing.T) {
+	stored, err := bson.Marshal(bson.M{
+		"name": "tpl_roundtrip",
+		"auth": bson.M{
+			"k":   "00112233445566778899aabbccddeeff",
+			"opc": "ffeeddccbbaa99887766554433221100",
+			"amf": "8000",
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal fixture: %v", err)
+	}
+
+	// Same target type as Repository.GetProfile: a top-level map whose nested
+	// documents the driver may decode into any supported shape.
+	var decoded bson.M
+	if err := bson.Unmarshal(stored, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal fixture: %v", err)
+	}
+
+	repo := newMockRepository()
+	repo.profiles["tpl_roundtrip"] = decoded
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	principal := &auth.Principal{Username: "viewer1", Role: "viewer", NormalizedRole: "viewer"}
+	req := httptest.NewRequest("GET", "/api/profiles/tpl_roundtrip", nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", "tpl_roundtrip")
+
+	w := httptest.NewRecorder()
+	handler.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), maskedCredential) {
+		t.Fatalf("driver-decoded credentials must reach the client masked, got %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "00112233445566778899aabbccddeeff") {
+		t.Error("plaintext k leaked through the driver-decoded path")
+	}
+	if !strings.Contains(w.Body.String(), "8000") {
+		t.Errorf("amf must stay plaintext, got %s", w.Body.String())
+	}
+}
+
+// fieldOf/setFieldOf are the package's only in-place path across decoded
+// shapes; asDocument's bson.D branch returns a copy and must never be used to
+// rewrite a stored document.
+func TestFieldAccessorsRewriteEveryDecodedShapeInPlace(t *testing.T) {
+	cases := []struct {
+		label string
+		doc   any
+		// adaptingToMap is true where asDocument rebuilds the document, so a
+		// write through its result cannot reach the value being marshalled.
+		adaptingToMap bool
+	}{
+		{label: "bson.M", doc: bson.M{"auth": bson.M{"k": "secret", "op": "", "amf": "8000"}}},
+		{label: "map[string]any", doc: map[string]any{"auth": map[string]any{"k": "secret", "op": "", "amf": "8000"}}},
+		{
+			label: "bson.D",
+			doc: bson.D{
+				{Key: "auth", Value: bson.D{
+					{Key: "k", Value: "secret"},
+					{Key: "op", Value: ""},
+					{Key: "amf", Value: "8000"},
+				}},
+			},
+			adaptingToMap: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			maskCredentialDoc(tc.doc)
+
+			material := fieldOf(tc.doc, "auth")
+			if got, _ := fieldOf(material, "k").(string); got != maskedCredential {
+				t.Errorf("k must be rewritten in place, got %q", got)
+			}
+			if got, _ := fieldOf(material, "op").(string); got != "" {
+				t.Errorf("an unconfigured field must stay empty, got %q", got)
+			}
+			if got, _ := fieldOf(material, "amf").(string); got != "8000" {
+				t.Errorf("amf must stay plaintext, got %q", got)
+			}
+			if setFieldOf(material, "absent_key", maskedCredential) {
+				t.Error("setFieldOf must not create keys the stored document does not carry")
+			}
+
+			if !tc.adaptingToMap {
+				return
+			}
+			// The trap this refactor closes: writing through an adapted copy
+			// looks successful in the unit and is a no-op in the response.
+			copied := asDocument(material)
+			if copied == nil {
+				t.Fatal("asDocument must adapt a decoded document")
+			}
+			copied["k"] = "through-a-copy"
+			if got, _ := fieldOf(fieldOf(tc.doc, "auth"), "k").(string); got != maskedCredential {
+				t.Errorf("an adapted copy must not reach the stored document, got %q", got)
+			}
+		})
+	}
+}
