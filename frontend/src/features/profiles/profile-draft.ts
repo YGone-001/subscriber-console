@@ -118,16 +118,23 @@ export function buildProfilePayload(
   draft: ProfileDraft,
   targetName: string,
   hasStoredOcsDefaults: boolean,
+  /* A caller that cannot see the credential material must not write it back:
+   * the stored auth block stays untouched because the endpoint merges only the
+   * fields the body carries. */
+  options: { includeAuth?: boolean } = {},
 ): Record<string, unknown> {
+  const includeAuth = options.includeAuth !== false;
   const authPayload: Record<string, unknown> = { k: draft.auth.k, amf: draft.auth.amf };
   authPayload[draft.usimType] = draft.auth.opValue;
 
   const body: Record<string, unknown> = {
     title: draft.title || targetName,
-    auth: authPayload,
     ambr: draft.ueAmbr,
     sliceList: draft.slices,
   };
+  if (includeAuth) {
+    body.auth = authPayload;
+  }
   if (typeof draft.accessRestriction === 'number') {
     body.access_restriction_data = draft.accessRestriction;
   }
@@ -161,13 +168,18 @@ function stableStringify(value: unknown): string {
 export function buildDraftChangeRows(
   payload: Record<string, unknown>,
   snapshot: any,
+  /* Sections the write does not carry are not candidates for change: an omitted
+   * auth block must not be reported as a difference the operator is about to make. */
+  excludeKeys: readonly string[] = [],
 ): Array<{ key: string; labelKey: string; changed: boolean }> {
   const current = snapshot || {};
-  return PROFILE_SECTION_FIELDS.map((field) => ({
-    key: field.key,
-    labelKey: field.labelKey,
-    changed: stableStringify(current[field.key]) !== stableStringify(payload[field.key]),
-  }));
+  return PROFILE_SECTION_FIELDS
+    .filter((field) => !excludeKeys.includes(field.key))
+    .map((field) => ({
+      key: field.key,
+      labelKey: field.labelKey,
+      changed: stableStringify(current[field.key]) !== stableStringify(payload[field.key]),
+    }));
 }
 
 export function buildProfileKeyFromTitle(title: string): string {

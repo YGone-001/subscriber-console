@@ -6,6 +6,22 @@
 
 export const AMBR_UNIT_LABELS = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps'];
 
+/* Rating rule vocabulary shared by the template view and editors. */
+export function ratingTypeLabel(t: (key: string) => string, value?: string): string {
+  if (value === 'data_volume') return t('rating_service_data');
+  if (value === 'voice_time') return t('rating_service_voice');
+  if (value === 'sms_event' || value === 'event') return t('rating_service_sms');
+  if (value === 'free') return t('rating_service_ims');
+  return value || '-';
+}
+
+export function ratingUnitLabel(t: (key: string) => string, value?: string): string {
+  if (value === 'bytes' || value === 'octets') return t('rating_unit_bytes');
+  if (value === 'seconds') return t('rating_unit_seconds');
+  if (value === 'events') return t('rating_unit_events');
+  return value || '-';
+}
+
 export function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value === 'string' && value.trim() !== '') {

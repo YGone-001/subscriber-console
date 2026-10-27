@@ -141,6 +141,9 @@ export function ProfileDetailPage() {
     meta?.capabilities.credentialVisibility
     ?? (hasPermission(user, 'subscribers.write') ? 'plaintext' : 'masked')
   ) === 'masked';
+  /* Writing credential material requires both authorities; the server states it
+   * so the page does not infer the coupling from the role table. */
+  const canEditCredentials = meta?.capabilities.canEditCredentials ?? (canWrite && !credentialsMasked);
   /* Applying a template to a subscriber is the governed subscriber write, so the
    * entry point follows the subscriber capability, not the template one. */
   const canApplyTemplates = hasPermission(user, 'subscribers.write');
@@ -154,12 +157,12 @@ export function ProfileDetailPage() {
   const hasUnsavedChanges = isEditing && editingBaseline !== null && editingBaseline !== draftSignature(draft);
 
   const draftPayload = useMemo(
-    () => (profile ? buildProfilePayload(draft, profileName || '', !!profile.ocsDefaults) : {}),
-    [draft, profile, profileName],
+    () => (profile ? buildProfilePayload(draft, profileName || '', !!profile.ocsDefaults, { includeAuth: canEditCredentials }) : {}),
+    [draft, profile, profileName, canEditCredentials],
   );
   const draftChangeRows = useMemo(
-    () => (profile ? buildDraftChangeRows(draftPayload, profile) : []),
-    [draftPayload, profile],
+    () => (profile ? buildDraftChangeRows(draftPayload, profile, canEditCredentials ? [] : ['auth']) : []),
+    [draftPayload, profile, canEditCredentials],
   );
   const changedDraftRows = draftChangeRows.filter((row) => row.changed);
 
@@ -202,8 +205,11 @@ export function ProfileDetailPage() {
       maskedSecret: t('prof_diff_masked'),
     })
       .map((section) => ({ ...section, rows: section.rows.filter((row) => row.changed) }))
-      .filter((section) => section.rows.length > 0);
-  }, [draftPayload, profile, t]);
+      .filter((section) => section.rows.length > 0)
+      /* The credential block is not part of this write when the caller cannot
+       * see it, so it is not a difference the operator is being warned about. */
+      .filter((section) => canEditCredentials || section.key !== 'auth');
+  }, [draftPayload, profile, t, canEditCredentials]);
 
   const describeIssue = (issue: ProfileDraftIssue): string => {
     switch (issue.code) {
@@ -229,12 +235,18 @@ export function ProfileDetailPage() {
   const prepareSave = (): { targetName: string; payload: Record<string, unknown> } | null => {
     setError(null);
     const targetName = profileName || buildProfileKeyFromTitle(draft.title);
-    const issue = findProfileDraftIssue({ name: targetName, auth: draft.auth, ambr: draft.ueAmbr, slices: draft.slices });
+    const issue = findProfileDraftIssue({
+      name: targetName,
+      auth: draft.auth,
+      ambr: draft.ueAmbr,
+      slices: draft.slices,
+      validateAuth: canEditCredentials,
+    });
     if (issue) {
       setError(describeIssue(issue));
       return null;
     }
-    return { targetName, payload: buildProfilePayload(draft, targetName, !!profile?.ocsDefaults) };
+    return { targetName, payload: buildProfilePayload(draft, targetName, !!profile?.ocsDefaults, { includeAuth: canEditCredentials }) };
   };
 
   const submit = async (targetName: string, payload: Record<string, unknown>) => {
@@ -281,7 +293,7 @@ export function ProfileDetailPage() {
     const prepared = prepareSave();
     if (!prepared) return;
     if (profileName) {
-      const preparedRows = buildDraftChangeRows(prepared.payload, profile).filter((row) => row.changed);
+      const preparedRows = buildDraftChangeRows(prepared.payload, profile, canEditCredentials ? [] : ['auth']).filter((row) => row.changed);
       if (preparedRows.length > 0 && !isSaveConfirmOpen) {
         setIsSaveConfirmOpen(true);
         return;
@@ -794,6 +806,7 @@ export function ProfileDetailPage() {
                 inputName: draft.title,
                 profileTitle: draft.title,
                 authData: draft.auth,
+                canEditCredentials,
                 usimType: draft.usimType,
                 ueAmbr: draft.ueAmbr,
                 isAccessRestrictionsExpanded,

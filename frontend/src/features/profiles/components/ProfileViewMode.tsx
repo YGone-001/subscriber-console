@@ -5,21 +5,7 @@
  */
 import { Users, Shield, Signal, Gauge, Server, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import { AMBR_UNITS, getAmbrString, typeLabel } from '../../subscribers/components/subscriber/utils';
-
-function ratingTypeLabel(t: (key: string) => string, value?: string) {
-  if (value === "data_volume") return t("rating_service_data");
-  if (value === "voice_time") return t("rating_service_voice");
-  if (value === "sms_event" || value === "event") return t("rating_service_sms");
-  if (value === "free") return t("rating_service_ims");
-  return value || "-";
-}
-
-function ratingUnitLabel(t: (key: string) => string, value?: string) {
-  if (value === "bytes" || value === "octets") return t("rating_unit_bytes");
-  if (value === "seconds") return t("rating_unit_seconds");
-  if (value === "events") return t("rating_unit_events");
-  return value || "-";
-}
+import { ratingTypeLabel, ratingUnitLabel } from '../profile-format';
 
 export default function ProfileViewMode({ t, authData, credentialsMasked, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats, statsUnavailable }: any) {
   /* The server already withheld credential values for masked roles; the page

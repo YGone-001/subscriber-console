@@ -176,6 +176,7 @@ export const en: Record<string, string> = {
     prof_err_save: "Failed to save",
     prof_err_revision_conflict: "This template changed since you opened it. Your edits are kept; reload the template and apply them again.",
     prof_msg_saved: "Profile saved.",
+    prof_credential_not_editable: "Your role cannot see the authentication material, so K/OPc/AMF are not editable here; the stored credential block is preserved as-is on save.",
     prof_msg_created: "Profile created.",
     prof_msg_no_effect: "No content change; no new version was created.",
     prof_msg_deleted: "Profile deleted.",

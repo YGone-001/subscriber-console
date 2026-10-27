@@ -218,6 +218,49 @@ test('the template mutation and read contracts list clone, drift precheck and ex
   assert.ok(subscriberReads.includes('GET /api/profiles/{name}'), 'the create form reads one template');
 });
 
+/* Writing credential material needs both authorities; when the caller cannot
+ * see it, the block leaves the payload so the stored one survives. */
+test('a caller who cannot see credentials never writes them back', () => {
+  const draft = createDraftFromProfile(BASE_PROFILE, 'template');
+  const payload = buildProfilePayload(draft, 'template', true, { includeAuth: false });
+  assert.ok(!('auth' in payload), 'the auth block must be absent so the stored material is preserved');
+
+  const maskedAuth = { k: '[MASKED]', opValue: '[MASKED]', amf: '8000' };
+  assert.equal(
+    findProfileDraftIssue({ name: 'template', auth: maskedAuth, ambr: draft.ueAmbr, slices: draft.slices, validateAuth: false }),
+    null,
+  );
+  assert.deepEqual(
+    findProfileDraftIssue({ name: 'template', auth: maskedAuth, ambr: draft.ueAmbr, slices: draft.slices }),
+    { code: 'kFormat' },
+  );
+
+  const rows = buildDraftChangeRows(payload, BASE_PROFILE, ['auth']);
+  assert.ok(!rows.some((row) => row.key === 'auth'), 'an unwritten section is not a pending change');
+  assert.ok(rows.some((row) => row.key === 'title'));
+});
+
+test('the editor locks the credential block when the material is not visible', () => {
+  const editMode = read('../src/features/profiles/components/ProfileEditMode.tsx');
+  assert.match(editMode, /const credentialsEditable = canEditCredentials !== false;/);
+  assert.match(editMode, /disabled=\{!credentialsEditable\}/);
+  assert.match(editMode, /t\("prof_credential_not_editable"\)/);
+
+  const detail = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(detail, /capabilities\.canEditCredentials/);
+  assert.match(detail, /includeAuth: canEditCredentials/);
+});
+
+test('rating vocabulary and AMBR units each have one definition', () => {
+  for (const file of ['components/ProfileViewMode.tsx', 'components/ProfileEditMode.tsx']) {
+    const source = read(`../src/features/profiles/${file}`);
+    assert.ok(!/function ratingTypeLabel/.test(source), `${file} still defines its own rating labels`);
+    assert.match(source, /ratingTypeLabel, ratingUnitLabel } from '..\/profile-format'/);
+  }
+  const pccEditor = read('../src/features/profiles/components/ProfilePccRuleEditor.tsx');
+  assert.ok(!/const AMBR_UNITS =/.test(pccEditor), 'the PCC editor must reuse the shared unit table');
+});
+
 test('creating a template is one governed write, not a default followed by an update', () => {
   const source = read('../src/features/profiles/ProfileDetailPage.tsx');
   assert.match(source, /await postJson\('\/api\/profiles', \{ \.\.\.payload, name: targetName \}\)/);

@@ -96,6 +96,7 @@ export type ProfileMetaResponse = {
     canWrite: boolean;
     canRestore: boolean;
     credentialVisibility: 'plaintext' | 'masked';
+    canEditCredentials: boolean;
   };
   accessRestriction: {
     unrestricted: number;

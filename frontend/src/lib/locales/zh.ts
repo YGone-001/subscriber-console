@@ -176,6 +176,7 @@ export const zh: Record<string, string> = {
     prof_err_save: "保存失败",
     prof_err_revision_conflict: "该模板在你打开后已被他人修改。你的编辑仍保留在表单中，请重新加载模板后再应用。",
     prof_msg_saved: "模板已保存。",
+    prof_credential_not_editable: "当前角色看不到鉴权材料，因此本模板的 K/OPc/AMF 不可编辑；保存时将原样保留存储中的凭据块。",
     prof_msg_created: "模板已创建。",
     prof_msg_no_effect: "内容未变更，未产生新版本。",
     prof_msg_deleted: "模板已删除。",

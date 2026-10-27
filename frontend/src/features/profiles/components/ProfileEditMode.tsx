@@ -9,28 +9,17 @@ import ProfileSliceEditor from './ProfileSliceEditor';
 import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from '../../../lib/unitParser';
 import { AmbrUnitSelect } from './AmbrUnitSelect';
 import { DEFAULT_ACCESS_RESTRICTION_BITS, accessBitLabel } from '../profile-access';
-
-function ratingTypeLabel(t: (key: string) => string, value?: string) {
-  if (value === "data_volume") return t("rating_service_data");
-  if (value === "voice_time") return t("rating_service_voice");
-  if (value === "sms_event" || value === "event") return t("rating_service_sms");
-  if (value === "free") return t("rating_service_ims");
-  return value || "-";
-}
-
-function ratingUnitLabel(t: (key: string) => string, value?: string) {
-  if (value === "bytes" || value === "octets") return t("rating_unit_bytes");
-  if (value === "seconds") return t("rating_unit_seconds");
-  if (value === "events") return t("rating_unit_events");
-  return value || "-";
-}
+import { ratingTypeLabel, ratingUnitLabel } from '../profile-format';
 
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
   const {
-    profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
+    profileTitle, authData, canEditCredentials, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
     ocsDefaults, tariffPlanList, ratingList, tariffPlanStatus, ratingStatus, accessBits, slices, newlyAddedSliceIndex,
     expandedSlices
   } = state;
+  /* Absent means the caller did not say otherwise; only an explicit false
+   * locks the credential block. */
+  const credentialsEditable = canEditCredentials !== false;
 
   const {
     setInputName, setProfileTitle, setAuthData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
@@ -81,23 +70,26 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
           <h3 className="card-title">{t("sec_security_auth")}</h3>
         </div>
         <div className="dash-card-body grid-2-col">
+          {!credentialsEditable && (
+            <div className="col-span-all warning-text">{t("prof_credential_not_editable")}</div>
+          )}
           <div className="col-span-all">
             <label className="form-label"><span className="form-asterisk">*</span>{t("sub_key_k")}</label>
-            <input type="text" className="form-input input-mono-large" value={authData.k} onChange={(e) => setAuthData({...authData, k: e.target.value})} placeholder={t("sub_ph_hex")} />
+            <input type="text" className="form-input input-mono-large" value={authData.k} disabled={!credentialsEditable} onChange={(e) => setAuthData({...authData, k: e.target.value})} placeholder={t("sub_ph_hex")} />
           </div>
           <div className="col-span-all">
             <label className="form-label"><span className="form-asterisk">*</span>{t("sub_key_op")} ({usimType === "op" ? "OP" : "OPc"})</label>
             <div className="op-type-container">
-              <select className="form-input op-type-select" value={usimType} onChange={(e) => setUsimType(e.target.value as "opc" | "op")}>
+              <select className="form-input op-type-select" value={usimType} disabled={!credentialsEditable} onChange={(e) => setUsimType(e.target.value as "opc" | "op")}>
                 <option value="opc">OPc</option>
                 <option value="op">OP</option>
               </select>
-              <input type="text" className="form-input input-mono-large op-type-input" value={authData.opValue} onChange={(e) => setAuthData({...authData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} />
+              <input type="text" className="form-input input-mono-large op-type-input" value={authData.opValue} disabled={!credentialsEditable} onChange={(e) => setAuthData({...authData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} />
             </div>
           </div>
           <div>
             <label className="form-label"><span className="form-asterisk">*</span>{t("sub_key_amf")}</label>
-            <input type="text" className="form-input" value={authData.amf} onChange={(e) => setAuthData({...authData, amf: e.target.value})} placeholder={t("sub_ph_amf")} />
+            <input type="text" className="form-input" value={authData.amf} disabled={!credentialsEditable} onChange={(e) => setAuthData({...authData, amf: e.target.value})} placeholder={t("sub_ph_amf")} />
           </div>
         </div>
       </div>

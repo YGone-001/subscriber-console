@@ -19,6 +19,10 @@ export type ProfileDraftInput = {
   auth?: { k?: unknown; opValue?: unknown; amf?: unknown } | null;
   ambr?: ProfileAmbrInput | null;
   slices?: ProfileSliceInput[] | null;
+  /* False when the caller cannot see the credential material at all: the block
+   * is then not part of the write, so its format is not the operator's error to
+   * fix. Defaults to validated. */
+  validateAuth?: boolean;
 };
 
 export type ProfileDraftIssue =
@@ -43,10 +47,12 @@ function text(value: unknown): string {
 export function findProfileDraftIssue(input: ProfileDraftInput): ProfileDraftIssue | null {
   if (text(input.name) === '') return { code: 'nameRequired' };
 
-  const auth = input.auth ?? {};
-  if (!HEX_32.test(text(auth.k))) return { code: 'kFormat' };
-  if (!HEX_32.test(text(auth.opValue))) return { code: 'opFormat' };
-  if (!HEX_4.test(text(auth.amf))) return { code: 'amfFormat' };
+  if (input.validateAuth !== false) {
+    const auth = input.auth ?? {};
+    if (!HEX_32.test(text(auth.k))) return { code: 'kFormat' };
+    if (!HEX_32.test(text(auth.opValue))) return { code: 'opFormat' };
+    if (!HEX_4.test(text(auth.amf))) return { code: 'amfFormat' };
+  }
 
   for (const direction of ['downlink', 'uplink'] as const) {
     const side = input.ambr?.[direction];
