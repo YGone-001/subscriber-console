@@ -1967,6 +1967,40 @@ func TestProfileUpdateRejectsMaskedCredentialMaterial(t *testing.T) {
 	}
 }
 
+// The credential state is computed for the reader. An exported document carries
+// it inside auth, so a copy-paste round trip must not plant it in the template.
+func TestProfileUpdateRejectsProjectedCredentialState(t *testing.T) {
+	err := validateProfileUpdateBody(map[string]any{
+		"auth": map[string]any{
+			"k":                 "465b2ce5b8a37f2e19d4a6c8b0e2f417",
+			"amf":               "8000",
+			credential.StateKey: map[string]any{"visibility": "plaintext", "k": "configured"},
+		},
+	})
+	if err == nil {
+		t.Fatal("the projected credential state must not be accepted as write input")
+	}
+	if !strings.Contains(err.Error(), credential.StateKey) {
+		t.Errorf("refusal must name the offending field, got %v", err)
+	}
+
+	writer := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	repo := newMockRepository()
+	repo.profiles["test_profile"] = bson.M{"name": "test_profile", "title": "Before"}
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	handler.UseUserRepository(activeUserRepoFor(writer))
+
+	w := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/test_profile", map[string]any{
+		"auth": map[string]any{credential.StateKey: map[string]any{"visibility": "masked"}},
+	}, writer, map[string]string{"name": "test_profile"})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if _, stamped := repo.profiles["test_profile"]["updatedAt"]; stamped {
+		t.Error("a rejected write must not restamp the template")
+	}
+}
+
 func TestProfileCreateNamePolicy(t *testing.T) {
 	cases := []struct {
 		name    string

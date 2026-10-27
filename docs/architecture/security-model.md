@@ -113,6 +113,12 @@ projection no longer emits it, but a document written while it existed must neve
 become live authentication material that a governed apply copies into a
 subscriber's `security.k`.
 
+An exported document carries `credentialState` inside `auth`, so that key is
+rejected as write input too (same 400 shape): a read projection cannot become a
+stored fact, where it would pollute content comparison and version diffs. The
+other `auth` sub-keys are deliberately not whitelisted — unknown xCloud fields
+must survive a read and a write untouched.
+
 Template creation applies a stricter key policy than path resolution:
 `POST /api/profiles` rejects an empty key, one longer than 64 characters, one with
 leading or trailing whitespace or an embedded tab or newline, and the reserved key

@@ -2018,6 +2018,13 @@ func validateProfileUpdateBody(body map[string]any) error {
 				return fmt.Errorf("auth.%s: masked credential material cannot be written back", key)
 			}
 		}
+		// The credential state is computed for the reader, never stored. An
+		// exported document now carries it inside auth, so a copy-paste round
+		// trip must not plant a projection field in the live template, where it
+		// would pollute content comparison and version diffs.
+		if _, projected := authValue[credential.StateKey]; projected {
+			return fmt.Errorf("auth.%s: projected credential state cannot be written back", credential.StateKey)
+		}
 	}
 	return nil
 }
