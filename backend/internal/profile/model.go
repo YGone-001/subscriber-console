@@ -194,6 +194,9 @@ type CreateProfileResponse struct {
 // UpdateProfileResponse matches PUT /api/profiles/:name response shape.
 type UpdateProfileResponse struct {
 	Message string `json:"message"`
+	// Classification is additive: it distinguishes a real write from a submission
+	// that changed nothing, without altering the historical message field.
+	Classification string `json:"classification,omitempty"`
 }
 
 // DeleteProfileResponse matches DELETE /api/profiles/:name response shape.

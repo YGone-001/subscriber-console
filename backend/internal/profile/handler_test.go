@@ -2747,3 +2747,101 @@ func TestProfileAttributionFilterFailsClosedOnEmptyName(t *testing.T) {
 		t.Fatalf("expected the shared four-branch attribution filter, got %v", filter)
 	}
 }
+
+func updateProfileRequest(t *testing.T, handler *Handler, name string, body map[string]any) *httptest.ResponseRecorder {
+	t.Helper()
+
+	principal := &auth.Principal{Username: "op1", Role: "operator", NormalizedRole: "operator"}
+	handler.UseUserRepository(activeUserRepoFor(principal))
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("failed to marshal body: %v", err)
+	}
+	req := httptest.NewRequest("PUT", "/api/profiles/"+name, bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+	req.SetPathValue("name", name)
+
+	w := httptest.NewRecorder()
+	handler.Update(w, req)
+	return w
+}
+
+// Re-submitting the content a template already carries must not advance the
+// revision, archive an identical snapshot, or break another client's
+// precondition.
+func TestProfileUpdateIdenticalContentIsTrueNoEffect(t *testing.T) {
+	content := bson.M{
+		"name":  "tpl_stable",
+		"title": "Stable",
+		"auth":  bson.D{{Key: "k", Value: "00112233445566778899aabbccddeeff"}, {Key: "amf", Value: "8000"}},
+		"ambr":  bson.M{"downlink": bson.M{"unit": int32(2), "value": int32(100)}},
+	}
+
+	repo := newMockRepository()
+	repo.profiles["tpl_stable"] = content
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	body := map[string]any{
+		"title": "Stable",
+		// Submitted as a plain map while stored as a decoded bson.D: same
+		// content, different shape and key order.
+		"auth": map[string]any{"amf": "8000", "k": "00112233445566778899aabbccddeeff"},
+		"ambr": map[string]any{"downlink": map[string]any{"unit": 2, "value": 100}},
+	}
+
+	w := updateProfileRequest(t, handler, "tpl_stable", body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp UpdateProfileResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Classification != "NO_EFFECT" {
+		t.Errorf("expected a NO_EFFECT classification, got %q", resp.Classification)
+	}
+	stored := repo.profiles["tpl_stable"]
+	if _, touched := stored["revision"]; touched {
+		t.Errorf("a no-effect save must leave the revision alone, got %v", stored["revision"])
+	}
+	if _, stamped := stored["updatedAt"]; stamped {
+		t.Error("a no-effect save must not restamp updatedAt")
+	}
+	if len(repo.versions) != 0 {
+		t.Errorf("a no-effect save must not archive a snapshot, got %d", len(repo.versions))
+	}
+}
+
+// A real change still writes, stamps and archives.
+func TestProfileUpdateRealChangeStillCommits(t *testing.T) {
+	repo := newMockRepository()
+	repo.profiles["tpl_change"] = bson.M{
+		"name":     "tpl_change",
+		"title":    "Before",
+		"revision": int64(3),
+	}
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	w := updateProfileRequest(t, handler, "tpl_change", map[string]any{"title": "After"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp UpdateProfileResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Classification != "" {
+		t.Errorf("a committed change must not report NO_EFFECT, got %q", resp.Classification)
+	}
+	stored := repo.profiles["tpl_change"]
+	if stored["revision"] != int64(4) {
+		t.Errorf("expected revision 4, got %v", stored["revision"])
+	}
+	if len(repo.versions) != 1 {
+		t.Errorf("expected one archived snapshot, got %d", len(repo.versions))
+	}
+}

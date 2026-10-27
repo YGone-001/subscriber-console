@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1038,7 +1039,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Perform CAS update or insert if profile doesn't exist
 	if existing != nil {
-		// CAS update for existing profile
+		// A submission that carries the content the template already has is a
+		// true no-op: it must not advance the revision, archive an identical
+		// snapshot, or invalidate other clients' preconditions.
+		if profileContentFingerprint(existing) == profileContentFingerprint(updated) {
+			h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "success", "NO_EFFECT", false, nil)
+			response.JSON(w, http.StatusOK, UpdateProfileResponse{
+				Message:        "Profile already carries the submitted content",
+				Classification: "NO_EFFECT",
+			})
+			return
+		}
+
 		if err := h.repo.ReplaceProfileCAS(r.Context(), name, existing, updated); err != nil {
 			if err == ErrProfilePreconditionChanged {
 				// Audit PRECONDITION_CHANGED
@@ -1661,6 +1673,67 @@ func computeProfileHash(profile interface{}) (string, error) {
 
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:]), nil
+}
+
+// writeManagedProfileFields are stamped by the writer itself, so they never
+// count as a content change.
+var writeManagedProfileFields = []string{"_id", "updatedAt", "updatedBy", "revision"}
+
+// profileContentFingerprint renders a profile document as canonical JSON: the
+// decoded shape and the key order of a stored document must not read as a
+// change against a submission that carries the same content.
+func profileContentFingerprint(doc bson.M) string {
+	canonical := make(map[string]any, len(doc))
+	for key, value := range doc {
+		if slices.Contains(writeManagedProfileFields, key) {
+			continue
+		}
+		canonical[key] = canonicalProfileValue(value)
+	}
+	data, err := json.Marshal(canonical)
+	if err != nil {
+		// An unmarshalable document cannot be compared; treat it as changed so
+		// the write still happens instead of silently dropping the submission.
+		return "\x00uncomparable"
+	}
+	return string(data)
+}
+
+func canonicalProfileValue(value any) any {
+	switch v := value.(type) {
+	case bson.D:
+		canonical := make(map[string]any, len(v))
+		for _, elem := range v {
+			canonical[elem.Key] = canonicalProfileValue(elem.Value)
+		}
+		return canonical
+	case bson.M:
+		canonical := make(map[string]any, len(v))
+		for key, item := range v {
+			canonical[key] = canonicalProfileValue(item)
+		}
+		return canonical
+	case map[string]any:
+		canonical := make(map[string]any, len(v))
+		for key, item := range v {
+			canonical[key] = canonicalProfileValue(item)
+		}
+		return canonical
+	case bson.A:
+		return canonicalProfileItems(v)
+	case []any:
+		return canonicalProfileItems(v)
+	default:
+		return v
+	}
+}
+
+func canonicalProfileItems(items []any) []any {
+	canonical := make([]any, 0, len(items))
+	for _, item := range items {
+		canonical = append(canonical, canonicalProfileValue(item))
+	}
+	return canonical
 }
 
 // computeOperationFingerprint computes SHA256 of stable JSON of the operation.
