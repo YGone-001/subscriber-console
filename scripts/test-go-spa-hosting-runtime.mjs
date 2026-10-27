@@ -7,7 +7,7 @@ import net from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync, spawn } from 'node:child_process';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 function rawHttpGet(host, port, rawPath) {
   return new Promise((resolve, reject) => {
@@ -63,7 +63,7 @@ async function main() {
   const { keys: registrations, duplicates } = deriveGoRegistrations(root);
   assert.deepEqual(duplicates, [], 'No duplicate registrations permitted');
   const regCount = registrations.length;
-  assert.equal(regCount, 136, `Expected exactly 136 registrations, got ${regCount}`);
+  assert.equal(regCount, EXPECTED_GO_REGISTRATIONS, `Expected exactly ${EXPECTED_GO_REGISTRATIONS} registrations, got ${regCount}`);
   console.log(`go_spa_api_registration_count=${regCount}`);
 
   // 2. Ensure frontend build exists; if not, build it
