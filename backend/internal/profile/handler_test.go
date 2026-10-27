@@ -2728,3 +2728,22 @@ func TestDeepCopyBsonMDoesNotAliasDecodedNestedDocuments(t *testing.T) {
 		t.Errorf("expected the copy to be masked, got %q", got)
 	}
 }
+
+// An empty template name must never widen a statistics or attribution query
+// into a whole-collection match.
+func TestProfileAttributionFilterFailsClosedOnEmptyName(t *testing.T) {
+	empty := profileAttributionFilter("")
+	expr, ok := empty["$expr"].(bson.M)
+	if !ok {
+		t.Fatalf("an empty template name must produce a match-nothing filter, got %v", empty)
+	}
+	if value, present := expr["$literal"]; !present || value != false {
+		t.Errorf("expected a literal false expression, got %v", expr)
+	}
+
+	filter := profileAttributionFilter("Gold")
+	branches, ok := filter["$or"].(bson.A)
+	if !ok || len(branches) != 4 {
+		t.Fatalf("expected the shared four-branch attribution filter, got %v", filter)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"subscriber/internal/subscriber"
 )
 
 // Repository provides access to profile data.
@@ -225,18 +226,15 @@ func (r *Repository) GetProfileStats(ctx context.Context, profileName string) (P
 	return stats, nil
 }
 
-// profileAttributionFilter is the single attribution rule of the template
-// surface: a subscriber counts as linked when any of the four legacy fields
-// names the template. Statistics and the drift probe must not diverge on it.
+// profileAttributionFilter is the template surface's use of the subscriber
+// attribution rule, owned by the subscriber package so statistics, the drift
+// probe and the subscriber list filter cannot diverge on it. An empty template
+// name never widens into an unrestricted match: it reports no subscribers.
 func profileAttributionFilter(profileName string) bson.M {
-	return bson.M{
-		"$or": bson.A{
-			bson.M{"webui_meta.profile_name": profileName},
-			bson.M{"webui_meta.profile": profileName},
-			bson.M{"profile_name": profileName},
-			bson.M{"profile": profileName},
-		},
+	if strings.TrimSpace(profileName) == "" {
+		return bson.M{"$expr": bson.M{"$literal": false}}
 	}
+	return subscriber.ProfileAttributionFilter(profileName)
 }
 
 // ListSubscribersAttributedTo loads the provisioning documents of the

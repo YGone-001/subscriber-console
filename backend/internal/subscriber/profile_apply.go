@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -77,7 +78,7 @@ func PrepareFrozenSubscriberProfileApply(ctx context.Context, imsi string, profi
 	// No-effect detection
 	if !securityMaterialChanged(subscriber, effective) &&
 		stableJSON(before) == stableJSON(afterPreview) &&
-		getProfileName(subscriber) == profileName {
+		GetProfileName(subscriber) == profileName {
 		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_PROFILE_APPLY_NO_EFFECT"}
 	}
 
@@ -313,7 +314,7 @@ func computeSubscriberPreconditionHash(doc bson.M) string {
 		"slice":                   doc["slice"],
 		"access_restriction_data": doc["access_restriction_data"],
 		"network_access_mode":     doc["network_access_mode"],
-		"webui_meta":              map[string]any{"profile_name": getProfileName(doc)},
+		"webui_meta":              map[string]any{"profile_name": GetProfileName(doc)},
 	}
 	return sha256Hex(stableJSON(data))
 }
@@ -366,14 +367,60 @@ func securityMaterialChanged(current, effective bson.M) bool {
 	return false
 }
 
-// getProfileName extracts profile_name from webui_meta.
-func getProfileName(doc bson.M) string {
-	meta := toMap(doc["webui_meta"])
-	if meta == nil {
-		return ""
+// profileBindingFields lists, in precedence order, every field a subscriber
+// document may use to record its template binding. The attribution filter and
+// the name reader both derive from this single list, so a subscriber governed
+// by a template can never be invisible to that template's linked-subscriber
+// read, and a subscriber bound through a legacy field is not forever reported
+// as drifted.
+var profileBindingFields = []string{
+	"webui_meta.profile_name",
+	"webui_meta.profile",
+	"profile_name",
+	"profile",
+}
+
+// GetProfileName reports the template a subscriber document is bound to,
+// reading every field the attribution filter matches.
+func GetProfileName(doc bson.M) string {
+	for _, path := range profileBindingFields {
+		if value, ok := nestedStringField(doc, path); ok {
+			return value
+		}
 	}
-	name, _ := meta["profile_name"].(string)
-	return name
+	return ""
+}
+
+// ProfileAttributionFilter matches the subscriber documents bound to
+// profileName. An empty name returns nil so callers can append it unconditionally.
+func ProfileAttributionFilter(profileName string) bson.M {
+	if profileName == "" {
+		return nil
+	}
+	conditions := make(bson.A, 0, len(profileBindingFields))
+	for _, path := range profileBindingFields {
+		conditions = append(conditions, bson.M{path: profileName})
+	}
+	return bson.M{"$or": conditions}
+}
+
+// nestedStringField reads a dotted path from a decoded document, following
+// nested documents through the driver's shape authority.
+func nestedStringField(doc bson.M, path string) (string, bool) {
+	segments := strings.Split(path, ".")
+	current := doc
+	for depth, segment := range segments {
+		if depth == len(segments)-1 {
+			text, ok := current[segment].(string)
+			return text, ok && text != ""
+		}
+		next := toMap(current[segment])
+		if next == nil {
+			return "", false
+		}
+		current = next
+	}
+	return "", false
 }
 
 // sha256Hex computes the SHA-256 hex digest.
@@ -391,7 +438,7 @@ func IsProfileApplyNoEffect(current bson.M, profile bson.M, profileName string) 
 	}
 	before := SubscriberSafeSnapshot(current)
 	after := SubscriberSafeSnapshot(effective)
-	return stableJSON(before) == stableJSON(after) && getProfileName(current) == profileName
+	return stableJSON(before) == stableJSON(after) && GetProfileName(current) == profileName
 }
 
 // SecurityMaterialChanged checks if security material differs.

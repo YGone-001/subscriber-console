@@ -31,7 +31,7 @@ func ProfileDrift(current bson.M, profile bson.M, profileName string) (string, [
 			changed = append(changed, field)
 		}
 	}
-	if getProfileName(current) != profileName {
+	if GetProfileName(current) != profileName {
 		changed = append(changed, "profile_name")
 	}
 	if len(changed) == 0 {

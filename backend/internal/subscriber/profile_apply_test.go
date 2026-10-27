@@ -317,15 +317,15 @@ func TestGetProfileName(t *testing.T) {
 				"profile_name": "test-profile",
 			},
 		}
-		if getProfileName(doc) != "test-profile" {
-			t.Errorf("expected test-profile, got %s", getProfileName(doc))
+		if GetProfileName(doc) != "test-profile" {
+			t.Errorf("expected test-profile, got %s", GetProfileName(doc))
 		}
 	})
 
 	t.Run("without webui_meta", func(t *testing.T) {
 		doc := bson.M{}
-		if getProfileName(doc) != "" {
-			t.Errorf("expected empty, got %s", getProfileName(doc))
+		if GetProfileName(doc) != "" {
+			t.Errorf("expected empty, got %s", GetProfileName(doc))
 		}
 	})
 }
@@ -749,4 +749,77 @@ func TestProfileApplyCrossRuntimeFixture(t *testing.T) {
 			t.Errorf("sentinel fields affected hash: expected %s, got %s", expectedProfileHash, hash)
 		}
 	})
+}
+
+// A template binding is recorded in whichever of four fields the writer used.
+// The reader must agree with the attribution filter, or a subscriber bound
+// through a legacy field is reported as unbound forever.
+func TestGetProfileNameReadsEveryAttributionField(t *testing.T) {
+	cases := []struct {
+		label string
+		doc   bson.M
+		want  string
+	}{
+		{"webui_meta.profile_name", bson.M{"webui_meta": bson.M{"profile_name": "Gold"}}, "Gold"},
+		{"webui_meta.profile", bson.M{"webui_meta": bson.M{"profile": "Gold"}}, "Gold"},
+		{"profile_name", bson.M{"profile_name": "Gold"}, "Gold"},
+		{"profile", bson.M{"profile": "Gold"}, "Gold"},
+		{"none", bson.M{"imsi": "001010000000001"}, ""},
+		{"decoded nested", bson.M{"webui_meta": bson.D{{Key: "profile", Value: "Gold"}}}, "Gold"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			if got := GetProfileName(tc.doc); got != tc.want {
+				t.Errorf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestProfileAttributionFilterCoversEveryBindingField(t *testing.T) {
+	if ProfileAttributionFilter("") != nil {
+		t.Error("an empty template name must add no condition")
+	}
+
+	filter := ProfileAttributionFilter("Gold")
+	branches, ok := filter["$or"].(bson.A)
+	if !ok || len(branches) != 4 {
+		t.Fatalf("expected four attribution branches, got %v", filter)
+	}
+	seen := map[string]bool{}
+	for _, branch := range branches {
+		entry, ok := branch.(bson.M)
+		if !ok {
+			t.Fatalf("unexpected branch type %T", branch)
+		}
+		for key, value := range entry {
+			if value != "Gold" {
+				t.Errorf("branch %s must match the template name, got %v", key, value)
+			}
+			seen[key] = true
+		}
+	}
+	for _, field := range profileBindingFields {
+		if !seen[field] {
+			t.Errorf("attribution filter is missing the %s branch", field)
+		}
+	}
+}
+
+// The same document must not be in sync for the apply path and drifted for the
+// probe: both read the attribution through one rule.
+func TestProfileDriftTreatsLegacyBindingAsAttribution(t *testing.T) {
+	profile := driftTestProfile()
+	applied := BuildSubscriberAfterProfileApply(bson.M{"imsi": "001010000000001"}, profile, "Gold")
+
+	// A subscriber whose binding lives only in the legacy field.
+	delete(applied, "webui_meta")
+	applied["profile"] = "Gold"
+
+	if state, changed := ProfileDrift(applied, profile, "Gold"); state != DriftInSync {
+		t.Errorf("a subscriber bound through a legacy field must read as in sync, got %v", changed)
+	}
+	if !IsProfileApplyNoEffect(applied, profile, "Gold") {
+		t.Error("re-applying to a legacy-bound subscriber must classify as no effect")
+	}
 }

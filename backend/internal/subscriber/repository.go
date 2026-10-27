@@ -752,20 +752,10 @@ func (r *Repository) ListSubscriberRowsFiltered(ctx context.Context, page, limit
 	}, nil
 }
 
-// profileNameMatchFilter mirrors the linked-subscriber definition of the
-// profile stats aggregation: a template binding is whichever of the stored
-// binding fields carries the profile name. Returns nil when no name is given,
-// leaving the query untouched.
+// profileNameMatchFilter keeps the list filter on the same attribution rule as
+// the template statistics and the apply path.
 func profileNameMatchFilter(profileName string) bson.M {
-	if profileName == "" {
-		return nil
-	}
-	return bson.M{"$or": bson.A{
-		bson.M{"webui_meta.profile_name": profileName},
-		bson.M{"webui_meta.profile": profileName},
-		bson.M{"profile_name": profileName},
-		bson.M{"profile": profileName},
-	}}
+	return ProfileAttributionFilter(profileName)
 }
 
 // resolveSearchFilter keeps the legacy IMSI-prefix search as the default and
