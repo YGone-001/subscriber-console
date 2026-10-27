@@ -45,7 +45,7 @@ CNMS RBAC is NOT used.
 - Unknown xCloud fields preserved during reads (bson.M)
 - Binary/Buffer: never emit Go base64 if Node uses hex/string
 
-## Template Read Gate and Credential Masking
+## Template Read Gate and Credential Projection
 
 The five template read endpoints (`GET /api/profiles`, `GET /api/profiles/meta`,
 `GET /api/profiles/{name}`, `GET /api/profiles/{name}/stats`,
@@ -63,40 +63,55 @@ body and now also record `authorization.denied` evidence through
 `audit.RecordPermissionDenied`, so a refused write leaves the same refusal trail a
 refused read does without changing the response contract.
 
-`GET /api/profiles/{name}` and the versions detail branch replace non-empty
-`auth.k` / `auth.op` / `auth.opc` values with `[MASKED]` for roles without the
-`subscribers.write` permission. Key presence is preserved so a masked reader still
-distinguishes configured from unconfigured; `amf` is not credential material and
-stays plaintext. The masking handles every decoded document shape the MongoDB
-driver can produce for nested documents (`bson.M`, `bson.D`, `map[string]any`).
+`GET /api/profiles/{name}`, the versions detail branch and
+`GET /api/profiles/{name}/export` remove `auth.k` / `auth.op` / `auth.opc`
+entirely for roles without the `subscribers.write` permission and attach a
+`credentialState` object inside the same block: `visibility` plus one
+`configured` / `not_configured` entry per key. `amf` and the sequence number are
+not key material and stay readable.
+
+No placeholder value is substituted for withheld material. A string that looks
+like a key is displayed as one, compared as one, and can be written back as one —
+and a governed subscriber apply copies template `auth` into `security.k`. With the
+material deleted and its condition stated separately, key presence no longer
+carries meaning and "withheld" cannot be confused with "unconfigured". The
+condition and the definition of "configured" (non-empty and not all zeros) live in
+`backend/internal/credential`, shared by the template surface and the subscriber
+detail projection so the two planes report one semantics to the same reader.
 
 The visibility predicate is the same one that drives the `credentialVisibility`
 capability bit served by `GET /api/profiles/meta` (`plaintext` for
-`subscribers.write` holders, `masked` otherwise), and matches the subscriber
-detail policy that removes `auth4G.k/opc/op` for roles without the
-`subscriber_write` capability. The only consumer of template plaintext outside
+`subscribers.write` holders, `masked` otherwise), and it is the subscriber-write
+capability that governs the same decision on `auth4G` in the subscriber detail.
+The only consumer of template plaintext outside
 the template surface is the subscriber create form's template defaults, which is
 itself behind the `subscribers.write` gate, so masking does not regress it.
 
 Server-side projections rewrite decoded documents through the profile package's
-`fieldOf`/`setFieldOf` accessors, the single authority for the decoded shapes.
-`asDocument` returns a rebuilt map for a `bson.D` input, so it is read-only by
-contract: writing through its result mutates nothing the response marshals. A
-regression test replays the driver's own BSON round-trip, so an assumption about
-the decoded shape fails in the suite instead of passing against a hand-built map.
+`fieldOf`/`replaceFieldOf` accessors, the single authority for the decoded shapes
+(`bson.M`, `bson.D`, `map[string]any`). `asDocument` returns a rebuilt map for a
+`bson.D` input, so it is read-only by contract: writing through its result
+mutates nothing the response marshals, and `bson.D` cannot grow in place — which
+is why the credential block is re-emitted as a whole instead of being patched
+field by field. A regression test replays the driver's own BSON round-trip, so an
+assumption about the decoded shape fails in the suite instead of passing against
+a hand-built map.
 
 `GET /api/profiles/meta` also serves `canEditCredentials`, the conjunction of
 `profiles.write` and `subscribers.write`. The coupling used to be implicit — it
 held only because the canonical role table happens to grant both — so the server
 now states it. When the bit is false the template editor keeps the credential
-block read-only and the update payload omits `auth` entirely, which leaves the
-stored material untouched rather than writing back the `[MASKED]` placeholder.
+block read-only and the update payload omits `auth` entirely, so the stored
+material is preserved rather than rewritten with whatever the reader was shown.
 
-The masking sentinel `[MASKED]` is never valid write input: `PUT /api/profiles/{name}`
-rejects it inside `auth.k` / `auth.op` / `auth.opc` with 400
-`INVALID_PROFILE_UPDATE`. Echoing a read projection back would store the sentinel as
-real authentication material, and the governed subscriber apply copies template `auth`
-into `security.k`, so the write path closes that loop.
+The retired `[MASKED]` placeholder remains invalid write input:
+`PUT /api/profiles/{name}` and `POST /api/profiles` reject it inside `auth.k` /
+`auth.op` / `auth.opc` with 400 `INVALID_PROFILE_UPDATE` /
+`INVALID_PROFILE_CREATE`, and a stored snapshot carrying it is refused before a
+restore writes anything (400 `PROFILE_RESTORE_MASKED_MATERIAL`, zero writes). The
+projection no longer emits it, but a document written while it existed must never
+become live authentication material that a governed apply copies into a
+subscriber's `security.k`.
 
 Template creation applies a stricter key policy than path resolution:
 `POST /api/profiles` rejects an empty key, one longer than 64 characters, one with

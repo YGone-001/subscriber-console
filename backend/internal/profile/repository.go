@@ -498,7 +498,7 @@ func sliceCount(doc any) int {
 //
 // Read-only by contract: for bson.D the returned map is a copy, so writing
 // through it detaches from the document the response marshals. Projecting a
-// masked or otherwise rewritten field must go through setFieldOf instead.
+// rewritten field must go through replaceFieldOf instead.
 func asDocument(v any) bson.M {
 	switch doc := v.(type) {
 	case bson.M:
@@ -515,9 +515,31 @@ func asDocument(v any) bson.M {
 	return nil
 }
 
+// replaceFieldOf swaps the value of a field inside a decoded document of any
+// shape. It never grows the document: bson.D is a slice value, so a projection
+// rewrites the whole field instead of appending into it.
+func replaceFieldOf(doc any, key string, value any) bool {
+	switch d := doc.(type) {
+	case bson.M:
+		d[key] = value
+		return true
+	case map[string]any:
+		d[key] = value
+		return true
+	case bson.D:
+		for i := range d {
+			if d[i].Key == key {
+				d[i].Value = value
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // fieldOf reads one field from a decoded document of any shape and returns the
-// live value, so callers can descend into nested documents and still mutate
-// them in place. It is the read counterpart of setFieldOf.
+// live value, so a caller can descend into a nested document before rewriting
+// the field that holds it.
 func fieldOf(doc any, key string) any {
 	switch d := doc.(type) {
 	case bson.M:
@@ -532,35 +554,6 @@ func fieldOf(doc any, key string) any {
 		}
 	}
 	return nil
-}
-
-// setFieldOf rewrites a field inside a decoded document of any shape, in place.
-// bson.D must be mutated through its element slice: copying it into a map first
-// would leave the marshalled response untouched and turn the write into a
-// silent no-op. Missing keys are not created; false reports "nothing rewritten".
-func setFieldOf(doc any, key string, value any) bool {
-	switch d := doc.(type) {
-	case bson.M:
-		if _, ok := d[key]; !ok {
-			return false
-		}
-		d[key] = value
-		return true
-	case map[string]any:
-		if _, ok := d[key]; !ok {
-			return false
-		}
-		d[key] = value
-		return true
-	case bson.D:
-		for i := range d {
-			if d[i].Key == key {
-				d[i].Value = value
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // arrayLen reports the length of a decoded array regardless of element type.

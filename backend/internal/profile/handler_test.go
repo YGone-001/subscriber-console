@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/credential"
 	"subscriber/internal/subscriber"
 	"subscriber/internal/user"
 )
@@ -1571,7 +1572,47 @@ func TestProfileReadsRequireProfilesReadPermission(t *testing.T) {
 	}
 }
 
-func TestProfileGetMasksCredentialsForViewer(t *testing.T) {
+// authProjection reads the projected credential block and its state out of a
+// decoded response document.
+func authProjection(t *testing.T, doc map[string]any) (map[string]any, map[string]any) {
+	t.Helper()
+
+	block, ok := doc["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected an auth object, got %T", doc["auth"])
+	}
+	state, ok := block[credential.StateKey].(map[string]any)
+	if !ok {
+		t.Fatalf("expected a %s object inside the credential block, got %T", credential.StateKey, block[credential.StateKey])
+	}
+	return block, state
+}
+
+// Withheld material is absent, not substituted: a placeholder string can be
+// displayed, compared and written back as if it were a key.
+func assertCredentialsWithheld(t *testing.T, block, state map[string]any, configured ...string) {
+	t.Helper()
+
+	if state["visibility"] != credential.VisibilityMasked {
+		t.Errorf("expected masked visibility, got %v", state["visibility"])
+	}
+	for _, key := range []string{"k", "op", "opc"} {
+		if _, present := block[key]; present {
+			t.Errorf("%s must be removed from the response, got %v", key, block[key])
+		}
+		want := credential.FieldNotConfigured
+		for _, name := range configured {
+			if name == key {
+				want = credential.FieldConfigured
+			}
+		}
+		if state[key] != want {
+			t.Errorf("%s state: expected %s, got %v", key, want, state[key])
+		}
+	}
+}
+
+func TestProfileGetWithholdsCredentialsForViewer(t *testing.T) {
 	repo := newMockRepository()
 	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
 	repo.profiles["tpl"] = bson.M{
@@ -1595,26 +1636,18 @@ func TestProfileGetMasksCredentialsForViewer(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
+	if strings.Contains(w.Body.String(), "00112233445566778899aabbccddeeff") {
+		t.Errorf("credential material leaked to a viewer: %s", w.Body.String())
+	}
 
 	var resp ProfileDetailResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	authMaterial, ok := resp.Profile["auth"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected auth object, got %T", resp.Profile["auth"])
-	}
-	if got, _ := authMaterial["k"].(string); got != maskedCredential {
-		t.Errorf("expected k masked, got %q", got)
-	}
-	if got, _ := authMaterial["opc"].(string); got != maskedCredential {
-		t.Errorf("expected opc masked, got %q", got)
-	}
-	if got, _ := authMaterial["op"].(string); got != "" {
-		t.Errorf("an unconfigured op must stay empty, got %q", got)
-	}
-	if got, _ := authMaterial["amf"].(string); got != "8000" {
-		t.Errorf("amf is not credential material and must stay plaintext, got %q", got)
+	block, state := authProjection(t, resp.Profile)
+	assertCredentialsWithheld(t, block, state, "k", "opc")
+	if got, _ := block["amf"].(string); got != "8000" {
+		t.Errorf("amf is not credential material and must stay readable, got %q", got)
 	}
 }
 
@@ -1646,13 +1679,22 @@ func TestProfileGetKeepsPlaintextForSubscriberWriter(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	authMaterial, _ := resp.Profile["auth"].(map[string]any)
-	if got, _ := authMaterial["k"].(string); got != "00112233445566778899aabbccddeeff" {
+	block, state := authProjection(t, resp.Profile)
+	if state["visibility"] != credential.VisibilityPlaintext {
+		t.Errorf("a subscriber writer must be told the material is plaintext, got %v", state["visibility"])
+	}
+	if state["k"] != credential.FieldConfigured {
+		t.Errorf("expected k configured, got %v", state["k"])
+	}
+	if state["op"] != credential.FieldNotConfigured {
+		t.Errorf("an absent op must report not_configured, got %v", state["op"])
+	}
+	if got, _ := block["k"].(string); got != "00112233445566778899aabbccddeeff" {
 		t.Errorf("operator must keep plaintext k, got %q", got)
 	}
 }
 
-func TestVersionsDetailBranchMasksSnapshotCredentials(t *testing.T) {
+func TestVersionsDetailBranchWithholdsSnapshotCredentials(t *testing.T) {
 	repo := newMockRepository()
 	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
 
@@ -1681,6 +1723,9 @@ func TestVersionsDetailBranchMasksSnapshotCredentials(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
+	if strings.Contains(w.Body.String(), "00112233445566778899aabbccddeeff") {
+		t.Errorf("a version snapshot leaked material the reader may not see: %s", w.Body.String())
+	}
 
 	var resp ProfileVersionDetailResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -1690,18 +1735,16 @@ func TestVersionsDetailBranchMasksSnapshotCredentials(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected nested profile snapshot, got %T", resp.Version["profile"])
 	}
-	authMaterial, _ := snapshot["auth"].(map[string]any)
-	if got, _ := authMaterial["k"].(string); got != maskedCredential {
-		t.Errorf("expected snapshot k masked, got %q", got)
-	}
-	if got, _ := authMaterial["amf"].(string); got != "8000" {
-		t.Errorf("expected snapshot amf plaintext, got %q", got)
+	block, state := authProjection(t, snapshot)
+	assertCredentialsWithheld(t, block, state, "k", "opc")
+	if got, _ := block["amf"].(string); got != "8000" {
+		t.Errorf("expected snapshot amf readable, got %q", got)
 	}
 }
 
 // Production decodes nested documents as bson.D (ordered), not bson.M; the
-// masking must survive the real decode shape or it silently becomes a no-op.
-func TestProfileGetMasksCredentialsForBsonDDecode(t *testing.T) {
+// projection must survive the real decode shape or it silently becomes a no-op.
+func TestProfileGetWithholdsCredentialsForBsonDDecode(t *testing.T) {
 	repo := newMockRepository()
 	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
 	repo.profiles["tpl_d"] = bson.M{
@@ -1730,25 +1773,14 @@ func TestProfileGetMasksCredentialsForBsonDDecode(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	authMaterial, ok := resp.Profile["auth"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected auth object, got %T", resp.Profile["auth"])
-	}
-	if got, _ := authMaterial["k"].(string); got != maskedCredential {
-		t.Errorf("expected k masked for a bson.D decode, got %q", got)
-	}
-	if got, _ := authMaterial["opc"].(string); got != maskedCredential {
-		t.Errorf("expected opc masked for a bson.D decode, got %q", got)
-	}
-	if got, _ := authMaterial["op"].(string); got != "" {
-		t.Errorf("an unconfigured op must stay empty, got %q", got)
-	}
-	if got, _ := authMaterial["amf"].(string); got != "8000" {
-		t.Errorf("amf must stay plaintext, got %q", got)
+	block, state := authProjection(t, resp.Profile)
+	assertCredentialsWithheld(t, block, state, "k", "opc")
+	if got, _ := block["amf"].(string); got != "8000" {
+		t.Errorf("amf must stay readable through a bson.D decode, got %q", got)
 	}
 }
 
-func TestVersionsDetailBranchMasksBsonDSnapshotCredentials(t *testing.T) {
+func TestVersionsDetailBranchWithholdsBsonDSnapshotCredentials(t *testing.T) {
 	repo := newMockRepository()
 	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
 
@@ -1785,12 +1817,10 @@ func TestVersionsDetailBranchMasksBsonDSnapshotCredentials(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected nested profile snapshot, got %T", resp.Version["profile"])
 	}
-	authMaterial, _ := snapshot["auth"].(map[string]any)
-	if got, _ := authMaterial["k"].(string); got != maskedCredential {
-		t.Errorf("expected snapshot k masked for a bson.D decode, got %q", got)
-	}
-	if got, _ := authMaterial["amf"].(string); got != "8000" {
-		t.Errorf("expected snapshot amf plaintext, got %q", got)
+	block, state := authProjection(t, snapshot)
+	assertCredentialsWithheld(t, block, state, "k")
+	if got, _ := block["amf"].(string); got != "8000" {
+		t.Errorf("expected snapshot amf readable, got %q", got)
 	}
 }
 
@@ -2533,8 +2563,15 @@ func TestProfileExportShapeAndCredentialVisibility(t *testing.T) {
 	if maskedBody.Credentials["visibility"] != "masked" {
 		t.Errorf("a masked reader must be told: %v", maskedBody.Credentials)
 	}
-	if maskedBody.Profile.Auth["k"] != maskedCredential {
+	if _, present := maskedBody.Profile.Auth["k"]; present {
 		t.Errorf("an export must not carry material the reader cannot see: %v", maskedBody.Profile.Auth["k"])
+	}
+	state, ok := maskedBody.Profile.Auth[credential.StateKey].(map[string]any)
+	if !ok {
+		t.Fatalf("an export must still report the credential state, got %T", maskedBody.Profile.Auth[credential.StateKey])
+	}
+	if state["visibility"] != credential.VisibilityMasked || state["k"] != credential.FieldConfigured {
+		t.Errorf("unexpected exported credential state: %v", state)
 	}
 	if maskedBody.Profile.Auth["amf"] != "8000" {
 		t.Error("amf is not credential material and stays readable")
@@ -2582,75 +2619,134 @@ func TestProfileGetMasksCredentialsAfterDriverDecode(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), maskedCredential) {
-		t.Fatalf("driver-decoded credentials must reach the client masked, got %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), credential.StateKey) {
+		t.Fatalf("driver-decoded credentials must reach the client with a stated condition, got %s", w.Body.String())
 	}
 	if strings.Contains(w.Body.String(), "00112233445566778899aabbccddeeff") {
-		t.Error("plaintext k leaked through the driver-decoded path")
+		t.Error("material leaked through the driver-decoded path")
 	}
 	if !strings.Contains(w.Body.String(), "8000") {
-		t.Errorf("amf must stay plaintext, got %s", w.Body.String())
+		t.Errorf("amf must stay readable, got %s", w.Body.String())
 	}
 }
 
-// fieldOf/setFieldOf are the package's only in-place path across decoded
-// shapes; asDocument's bson.D branch returns a copy and must never be used to
-// rewrite a stored document.
-func TestFieldAccessorsRewriteEveryDecodedShapeInPlace(t *testing.T) {
+// The credential projection has to work on every shape the driver can produce,
+// including the ordered bson.D that a real read decodes into.
+func TestCredentialProjectionHandlesEveryDecodedShape(t *testing.T) {
 	cases := []struct {
 		label string
 		doc   any
-		// adaptingToMap is true where asDocument rebuilds the document, so a
-		// write through its result cannot reach the value being marshalled.
-		adaptingToMap bool
 	}{
-		{label: "bson.M", doc: bson.M{"auth": bson.M{"k": "secret", "op": "", "amf": "8000"}}},
-		{label: "map[string]any", doc: map[string]any{"auth": map[string]any{"k": "secret", "op": "", "amf": "8000"}}},
-		{
-			label: "bson.D",
-			doc: bson.D{
-				{Key: "auth", Value: bson.D{
-					{Key: "k", Value: "secret"},
-					{Key: "op", Value: ""},
-					{Key: "amf", Value: "8000"},
-				}},
-			},
-			adaptingToMap: true,
-		},
+		{"bson.M", bson.M{"auth": bson.M{"k": "secret", "op": "", "amf": "8000"}}},
+		{"map[string]any", map[string]any{"auth": map[string]any{"k": "secret", "op": "", "amf": "8000"}}},
+		{"bson.D", bson.D{
+			{Key: "auth", Value: bson.D{
+				{Key: "k", Value: "secret"},
+				{Key: "op", Value: ""},
+				{Key: "amf", Value: "8000"},
+			}},
+		}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			maskCredentialDoc(tc.doc)
+			projectCredentialState(tc.doc, false)
 
-			material := fieldOf(tc.doc, "auth")
-			if got, _ := fieldOf(material, "k").(string); got != maskedCredential {
-				t.Errorf("k must be rewritten in place, got %q", got)
+			block := asDocument(fieldOf(tc.doc, "auth"))
+			if block == nil {
+				t.Fatal("the credential block must still be projected")
 			}
-			if got, _ := fieldOf(material, "op").(string); got != "" {
-				t.Errorf("an unconfigured field must stay empty, got %q", got)
+			for _, key := range []string{"k", "op", "opc"} {
+				if _, present := block[key]; present {
+					t.Errorf("%s must be removed, not substituted, got %v", key, block[key])
+				}
 			}
-			if got, _ := fieldOf(material, "amf").(string); got != "8000" {
-				t.Errorf("amf must stay plaintext, got %q", got)
+			if got, _ := block["amf"].(string); got != "8000" {
+				t.Errorf("amf must stay readable, got %q", got)
 			}
-			if setFieldOf(material, "absent_key", maskedCredential) {
-				t.Error("setFieldOf must not create keys the stored document does not carry")
+			state := projectedCredentialState(t, block)
+			if state.Visibility != credential.VisibilityMasked {
+				t.Errorf("expected masked visibility, got %q", state.Visibility)
+			}
+			if state.K != credential.FieldConfigured {
+				t.Errorf("expected k configured, got %q", state.K)
+			}
+			if state.Op != credential.FieldNotConfigured {
+				t.Errorf("an empty op must be reported not_configured, got %q", state.Op)
 			}
 
-			if !tc.adaptingToMap {
-				return
+			// Re-projecting for a writer must restore nothing on its own; the
+			// material is simply still there in the stored document.
+			projectCredentialState(tc.doc, true)
+			writerBlock := asDocument(fieldOf(tc.doc, "auth"))
+			if projectedCredentialState(t, writerBlock).Visibility != credential.VisibilityPlaintext {
+				t.Error("expected plaintext visibility for a writer")
 			}
-			// The trap this refactor closes: writing through an adapted copy
-			// looks successful in the unit and is a no-op in the response.
-			copied := asDocument(material)
-			if copied == nil {
-				t.Fatal("asDocument must adapt a decoded document")
-			}
-			copied["k"] = "through-a-copy"
-			if got, _ := fieldOf(fieldOf(tc.doc, "auth"), "k").(string); got != maskedCredential {
-				t.Errorf("an adapted copy must not reach the stored document, got %q", got)
+			if occurrences := countStateKeys(writerBlock); occurrences != 1 {
+				t.Errorf("the state key must be replaced in place, not duplicated (%d)", occurrences)
 			}
 		})
+	}
+}
+
+// projectedCredentialState reads the state the projection attached, in the form
+// it has inside the process before the response is marshalled.
+func projectedCredentialState(t *testing.T, block map[string]any) credential.State {
+	t.Helper()
+
+	state, ok := block[credential.StateKey].(credential.State)
+	if !ok {
+		t.Fatalf("expected a credential state, got %T", block[credential.StateKey])
+	}
+	return state
+}
+
+func countStateKeys(block map[string]any) int {
+	found := 0
+	for key := range block {
+		if key == credential.StateKey {
+			found++
+		}
+	}
+	return found
+}
+
+// A zero-filled field is a placeholder the writer never provisioned, so it is
+// reported as unconfigured rather than as withheld material.
+func TestCredentialProjectionTreatsAllZeroAsUnconfigured(t *testing.T) {
+	doc := bson.M{"auth": bson.M{"k": "00000000000000000000000000000000", "amf": "8000"}}
+	projectCredentialState(doc, false)
+
+	block := asDocument(fieldOf(doc, "auth"))
+	state := projectedCredentialState(t, block)
+	if state.K != credential.FieldNotConfigured {
+		t.Errorf("an all-zero key is not material, got %q", state.K)
+	}
+	if _, present := block["k"]; present {
+		t.Error("material keys are withheld either way")
+	}
+}
+
+// Writing through asDocument's rebuilt map is the trap this projection avoids:
+// it looks successful inside a unit test and is a no-op in the marshalled
+// response. replaceFieldOf is the sanctioned rewrite path.
+func TestReplaceFieldOfReachesTheDocumentWhileAnAdaptedCopyDoesNot(t *testing.T) {
+	doc := bson.D{{Key: "auth", Value: bson.D{{Key: "k", Value: "secret"}}}}
+
+	adapted := asDocument(fieldOf(doc, "auth"))
+	if adapted == nil {
+		t.Fatal("asDocument must adapt a decoded document")
+	}
+	adapted["k"] = "through-a-copy"
+	if got, _ := fieldOf(fieldOf(doc, "auth"), "k").(string); got != "secret" {
+		t.Errorf("an adapted copy must not reach the stored document, got %q", got)
+	}
+
+	if !replaceFieldOf(doc, "auth", bson.M{"k": "through-a-replacement"}) {
+		t.Fatal("replaceFieldOf must rewrite a field the document carries")
+	}
+	if got, _ := fieldOf(fieldOf(doc, "auth"), "k").(string); got != "through-a-replacement" {
+		t.Errorf("replaceFieldOf must reach the document, got %q", got)
 	}
 }
 
@@ -2719,13 +2815,16 @@ func TestDeepCopyBsonMDoesNotAliasDecodedNestedDocuments(t *testing.T) {
 	}
 
 	copied := deepCopyBsonM(decoded)
-	maskCredentialDoc(copied)
+	projectCredentialState(copied, false)
 
 	if got, _ := fieldOf(fieldOf(decoded, "auth"), "k").(string); got != "00112233445566778899aabbccddeeff" {
-		t.Errorf("masking a copy must not reach the source document, got %q", got)
+		t.Errorf("projecting a copy must not reach the source document, got %q", got)
 	}
-	if got, _ := fieldOf(fieldOf(copied, "auth"), "k").(string); got != maskedCredential {
-		t.Errorf("expected the copy to be masked, got %q", got)
+	if _, present := fieldOf(fieldOf(copied, "auth"), "k").(string); present {
+		t.Error("the copy must withhold the material from the reader")
+	}
+	if asDocument(fieldOf(copied, "auth"))[credential.StateKey] == nil {
+		t.Error("the copy must still state the condition of the withheld material")
 	}
 }
 

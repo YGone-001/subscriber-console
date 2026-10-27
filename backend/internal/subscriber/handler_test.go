@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"subscriber/internal/credential"
 )
 
 func TestClampSearchLimit(t *testing.T) {
@@ -720,21 +721,48 @@ func TestRedactAuthMaterial(t *testing.T) {
 		},
 	}
 
-	redactAuthMaterial(state, false)
+	projectAuthMaterial(state, false)
 	if _, ok := state.Auth4G["k"]; ok {
-		t.Fatal("k must be redacted for read-only roles")
+		t.Fatal("k must be withheld for read-only roles")
 	}
 	if _, ok := state.Auth4G["opc"]; ok {
-		t.Fatal("opc must be redacted for read-only roles")
+		t.Fatal("opc must be withheld for read-only roles")
 	}
 	if state.Auth4G["amf"] != "8000" {
 		t.Fatal("non-secret AMF must remain")
 	}
+	if state.Auth4G["sqn"] != 0 {
+		t.Fatal("the sequence number is not key material and must remain")
+	}
+	// Withheld is not the same as absent: the reader is told which is which.
+	state4G, ok := state.Auth4G[credential.StateKey].(credential.State)
+	if !ok {
+		t.Fatalf("expected a credential state, got %T", state.Auth4G[credential.StateKey])
+	}
+	if state4G.Visibility != credential.VisibilityMasked {
+		t.Errorf("visibility: expected masked, got %q", state4G.Visibility)
+	}
+	if state4G.K != credential.FieldConfigured || state4G.Opc != credential.FieldConfigured {
+		t.Errorf("configured keys must be reported as configured: %+v", state4G)
+	}
+	if state4G.Op != credential.FieldNotConfigured {
+		t.Errorf("an absent op must be reported not_configured, got %q", state4G.Op)
+	}
 
 	privileged := &LegacySubscriberState{Auth4G: map[string]any{"k": "key", "opc": "opc"}}
-	redactAuthMaterial(privileged, true)
+	projectAuthMaterial(privileged, true)
 	if privileged.Auth4G["k"] != "key" || privileged.Auth4G["opc"] != "opc" {
 		t.Fatal("privileged roles must retain authentication material")
+	}
+	if privileged.Auth4G[credential.StateKey].(credential.State).Visibility != credential.VisibilityPlaintext {
+		t.Error("a privileged reader must be told the material is plaintext")
+	}
+
+	// A subscriber with no authentication block gains nothing from the projection.
+	empty := &LegacySubscriberState{}
+	projectAuthMaterial(empty, false)
+	if empty.Auth4G != nil {
+		t.Error("an absent auth4G block must stay absent")
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/credential"
 	"subscriber/internal/ratelimit"
 	"subscriber/internal/response"
 )
@@ -132,7 +133,7 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redactAuthMaterial(state, auth.HasCapability(p, "subscriber_write"))
+	projectAuthMaterial(state, auth.HasCapability(p, "subscriber_write"))
 
 	response.JSON(w, http.StatusOK, state)
 }
@@ -176,14 +177,27 @@ func parseSubscriberListFilters(q url.Values) SubscriberListFilters {
 	return filters
 }
 
-// redactAuthMaterial removes permanent subscriber keys for read-only roles.
-// The keys are only needed by roles that can provision authentication material.
-func redactAuthMaterial(state *LegacySubscriberState, canProvision bool) {
-	if state == nil || canProvision {
+// projectAuthMaterial withholds the permanent subscriber keys from roles that
+// cannot provision authentication material, and states the condition of every
+// key in their place. Deleting the keys alone would leave a reader unable to
+// tell "this subscriber has no OPc" from "you may not see the OPc"; the same
+// projection governs the template surface.
+func projectAuthMaterial(state *LegacySubscriberState, canProvision bool) {
+	if state == nil || state.Auth4G == nil {
 		return
 	}
-	for _, key := range []string{"k", "opc", "op"} {
-		delete(state.Auth4G, key)
+
+	visibility := credential.VisibilityMasked
+	if canProvision {
+		visibility = credential.VisibilityPlaintext
+	}
+	state.Auth4G[credential.StateKey] = credential.Describe(state.Auth4G, visibility)
+
+	if canProvision {
+		return
+	}
+	for _, key := range credential.Keys {
+		delete(state.Auth4G, string(key))
 	}
 }
 

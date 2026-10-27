@@ -18,6 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/credential"
 	"subscriber/internal/middleware"
 	"subscriber/internal/response"
 	"subscriber/internal/subscriber"
@@ -123,16 +124,17 @@ func NewHandler(repo ProfileReadWriter, limiter RateLimiter, auditWriter AuditWr
 	return h
 }
 
-// maskedCredential replaces stored authentication material values for callers
-// without the subscriber write permission. Key presence is preserved so a
-// masked reader can still tell a configured field from an unconfigured one.
+// maskedCredential is the placeholder this projection replaced: a string that
+// looks like a key can be displayed as one, compared as one, stored as one, and
+// copied into a subscriber by a governed apply. It is no longer emitted, and it
+// is never accepted as write input.
 const maskedCredential = "[MASKED]"
 
 var credentialKeys = []string{"k", "op", "opc"}
 
-// carriesMaskedCredential reports whether a document holds the read-projection
-// sentinel in a credential field. The sentinel is never real material, so it is
-// not a legal value in any document that becomes a live template.
+// carriesMaskedCredential reports whether a document holds the retired
+// placeholder in a credential field. The sentinel is never real material, so it
+// is not a legal value in any document that becomes a live template.
 func carriesMaskedCredential(doc any) bool {
 	material := fieldOf(doc, "auth")
 	if material == nil {
@@ -146,20 +148,31 @@ func carriesMaskedCredential(doc any) bool {
 	return false
 }
 
-// maskCredentialDoc masks the auth child of a decoded profile document. Shape
-// handling lives in fieldOf/setFieldOf, the package's single authority for the
-// bson.M / bson.D / map[string]any forms the MongoDB driver can produce; a
-// missing or unrecognized auth field leaves the document untouched.
-func maskCredentialDoc(doc any) {
-	material := fieldOf(doc, "auth")
-	if material == nil {
+// projectCredentialState describes the auth block of a decoded profile document
+// for its reader and withholds the material itself when the reader may not see
+// it. The state rides inside the block so the response keeps its stored section
+// shape; the block is rebuilt as a whole because bson.D cannot grow in place,
+// and the state is computed before deletion because presence is what it reports.
+func projectCredentialState(doc any, canSeeMaterial bool) {
+	stored := asDocument(fieldOf(doc, "auth"))
+	if stored == nil {
 		return
 	}
-	for _, key := range credentialKeys {
-		if value, ok := fieldOf(material, key).(string); ok && value != "" {
-			setFieldOf(material, key, maskedCredential)
-		}
+	visibility := credential.VisibilityMasked
+	if canSeeMaterial {
+		visibility = credential.VisibilityPlaintext
 	}
+
+	projected := bson.M{}
+	for key, value := range stored {
+		if key == credential.StateKey || (!canSeeMaterial && credential.IsMaterial(key)) {
+			continue
+		}
+		projected[key] = value
+	}
+	projected[credential.StateKey] = credential.Describe(map[string]any(stored), visibility)
+
+	replaceFieldOf(doc, "auth", projected)
 }
 
 // List handles GET /api/profiles
@@ -275,10 +288,8 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	// Same predicate as the credentialVisibility capability bit served by Meta:
 	// template plaintext is provisioning material, so the subscriber write
 	// permission decides visibility, aligned with the subscriber detail
-	// auth4G redaction.
-	if !auth.HasPermission(p, "subscribers.write") {
-		maskCredentialDoc(profile)
-	}
+	// auth4G projection.
+	projectCredentialState(profile, auth.HasPermission(p, "subscribers.write"))
 
 	stats, err := h.repo.GetProfileStats(r.Context(), name)
 	if err != nil {
@@ -377,9 +388,7 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 		}
 		delete(version, "_id")
 		// The snapshot embeds the full stored profile, credentials included.
-		if !auth.HasPermission(p, "subscribers.write") {
-			maskCredentialDoc(version["profile"])
-		}
+		projectCredentialState(version["profile"], auth.HasPermission(p, "subscribers.write"))
 		response.JSON(w, http.StatusOK, ProfileVersionDetailResponse{Version: version})
 		return
 	}
@@ -705,16 +714,15 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	canSeeCredentials := auth.HasPermission(p, "subscribers.write")
 	exported := deepCopyBsonM(profile)
-	if !auth.HasPermission(p, "subscribers.write") {
-		maskCredentialDoc(exported)
-	}
+	projectCredentialState(exported, canSeeCredentials)
 	delete(exported, "_id")
 	delete(exported, "revision")
 
-	visibility := "masked"
-	if auth.HasPermission(p, "subscribers.write") {
-		visibility = "plaintext"
+	visibility := credential.VisibilityMasked
+	if canSeeCredentials {
+		visibility = credential.VisibilityPlaintext
 	}
 
 	payload := map[string]any{
@@ -1968,9 +1976,8 @@ func safeProfileSnapshot(profile any) map[string]interface{} {
 	// Add authConfigured indicator (no raw secrets). The auth child of a stored
 	// document decodes as bson.D, so it is read through the shape authority: a
 	// plain bson.M assertion silently dropped this for every real read.
-	if material := fieldOf(doc, "auth"); material != nil {
-		key, _ := fieldOf(material, "k").(string)
-		safe["authConfigured"] = key != "" && key != "00000000000000000000000000000000"
+	if material := asDocument(fieldOf(doc, "auth")); material != nil {
+		safe["authConfigured"] = credential.Configured(material["k"])
 	}
 
 	return safe

@@ -101,7 +101,7 @@ While existing documents may contain legacy roles, **all write operations (creat
 | `ocs.rating.write` | ✓ | ✓ | ✗ |
 
 > [!NOTE]
-> Template credential visibility follows `subscribers.write`, not `profiles.write`: the four template read endpoints require `profiles.read` (all three roles), but `GET /api/profiles/{name}` and the versions detail branch mask `auth.k`/`auth.op`/`auth.opc` as `[MASKED]` for roles without `subscribers.write`. See `docs/architecture/security-model.md` ("Template Read Gate and Credential Masking").
+> Template credential visibility follows `subscribers.write`, not `profiles.write`: the template read endpoints require `profiles.read` (all three roles), but `GET /api/profiles/{name}`, the versions detail branch and the export remove `auth.k`/`auth.op`/`auth.opc` for roles without `subscribers.write` and report `credentialState` in their place (withheld, not absent). The subscriber detail applies the same projection to `auth4G`. See `docs/architecture/security-model.md` ("Template Read Gate and Credential Projection").
 
 ---
 
