@@ -192,6 +192,7 @@ Go registration set                  = 162
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
 - 所有 location 剥离客户端身份头（`X-User` / `X-Role` / `X-Permissions`），并生成 `Host` / `X-Real-IP` / `X-Forwarded-For` / `X-Forwarded-Proto`；`client_max_body_size 10m`。
 - `deploy/nginx/setup.sh [listen_port]` 在 reload 前执行 `nginx -t` 校验。
+- 生产拓扑的权威细节（边缘契约与被剥离的身份头、单体内嵌 SPA 的路由分类与回退、前端构建→stage→`go:embed` 的产物链、重启验收判据）：`docs/architecture/production-topology.md`。
 
 ### 2.3 架构演进状态
 
@@ -571,6 +572,7 @@ backend/internal/remediation/handler.go
 ```
 
 共享解析助手：`scripts/lib/go-registrations.mjs`。
+期望值同样只存一处：注册集合总数 `EXPECTED_GO_REGISTRATIONS` 与业务变更契约普查 `MUTATION_CENSUS`（`frontend/mutation-contract.json` 的唯一 METHOD+PATH 端点数、`frontend/mutation-request-contract.json` 的条目数）都由该助手导出，各门禁引用常量而不得复制字面量。重锚 `MUTATION_CENSUS` 必须在确认新增端点确属有意登记之后进行，与同步 `EXPECTED_GO_REGISTRATIONS` 及本文件/`CLAUDE.md` 的总数声明同属一步，不得仅为让门禁转绿而直接改数。
 
 必须保持：
 
