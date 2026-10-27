@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Search, SidebarClose, SidebarOpen, X } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { getSidebarGroups, matchesRoute, type SidebarGroup } from '../../lib/navigation';
@@ -21,11 +21,10 @@ function readStoredGroup(): string | null {
  * Restored grouped sidebar.
  *
  * Four first-level entries: the dashboard plus three domain groups. Each domain
- * keeps a single expansion level, with non-interactive section captions for the
- * OCS and observability children. Groups and entries are resolved from the
- * current navigation authority, so a role that cannot reach a route never sees
- * the corresponding entry. Grouping is presentation only; the backend remains
- * the security authority.
+ * keeps a single expansion level with a flat child list. Groups and entries are
+ * resolved from the current navigation authority, so a role that cannot reach a
+ * route never sees the corresponding entry. Grouping is presentation only; the
+ * backend remains the security authority.
  */
 export function AppSidebar({
   sidebarOpen,
@@ -148,27 +147,21 @@ export function AppSidebar({
                   </button>
                   {sidebarOpen && expanded ? (
                     <div className="sidebar-subnav" id={`sidebar-subnav-${entry.key}`} role="group" aria-label={t(entry.key)}>
-                      {children.map((child, index) => {
-                        const previous = children[index - 1];
-                        const showCaption = Boolean(child.sidebarSection) && child.sidebarSection !== previous?.sidebarSection;
+                      {children.map((child) => {
                         const childIsActive = isActivePath(child.targetRoute);
                         return (
-                          <Fragment key={child.targetRoute}>
-                            {showCaption ? (
-                              <div className="sidebar-group-caption">{t(`nav_section_${child.sidebarSection}`)}</div>
-                            ) : null}
-                            <NavLink
-                              to={child.targetRoute}
-                              className={`sidebar-link child${childIsActive ? ' active' : ''}`}
-                              aria-current={childIsActive ? 'page' : undefined}
-                              onClick={closeOnMobile}
-                            >
-                              <span className="sidebar-active-bar" aria-hidden="true" />
-                              <span className="sidebar-rail-node" aria-hidden="true" />
-                              <span className="sidebar-label">{t(child.labelKey)}</span>
-                              <span className="sidebar-tooltip" role="tooltip">{t(child.labelKey)}</span>
-                            </NavLink>
-                          </Fragment>
+                          <NavLink
+                            key={child.targetRoute}
+                            to={child.targetRoute}
+                            className={`sidebar-link child${childIsActive ? ' active' : ''}`}
+                            aria-current={childIsActive ? 'page' : undefined}
+                            onClick={closeOnMobile}
+                          >
+                            <span className="sidebar-active-bar" aria-hidden="true" />
+                            <span className="sidebar-rail-node" aria-hidden="true" />
+                            <span className="sidebar-label">{t(child.labelKey)}</span>
+                            <span className="sidebar-tooltip" role="tooltip">{t(child.labelKey)}</span>
+                          </NavLink>
                         );
                       })}
                     </div>

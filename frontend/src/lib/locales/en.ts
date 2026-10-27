@@ -905,8 +905,6 @@ export const en: Record<string, string> = {
     nav_business: "Business operations",
     nav_network_ops: "Network operations",
     nav_platform: "Platform management",
-    nav_section_charging: "Charging and tariffs",
-    nav_section_observability: "Monitoring and alerts",
     nav_subscriber: "Subscribers",
     nav_profile: "User templates",
     nav_profile_new: "New template",

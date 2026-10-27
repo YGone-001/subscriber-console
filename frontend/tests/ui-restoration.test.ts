@@ -71,7 +71,6 @@ test('sidebar groups expose the restored navigation hierarchy for an administrat
     business.children.map((child) => child.targetRoute),
     ['/subscribers', '/profile', '/ocs/tariffs', '/ocs/contracts', '/ocs/balances'],
   );
-  assert.equal(business.children.find((child) => child.targetRoute === '/ocs/tariffs')?.sidebarSection, 'charging');
 
   const network = groups.find((group) => group.key === 'nav_network_ops');
   assert.ok(network);
@@ -79,7 +78,6 @@ test('sidebar groups expose the restored navigation hierarchy for an administrat
     network.children.map((child) => child.targetRoute),
     ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info'],
   );
-  assert.equal(network.children.find((child) => child.targetRoute === '/nf-health')?.sidebarSection, 'observability');
 
   const platform = groups.find((group) => group.key === 'nav_platform');
   assert.ok(platform);
@@ -88,6 +86,16 @@ test('sidebar groups expose the restored navigation hierarchy for an administrat
   // The reference sidebar renders no Rating entry: the rating routes redirect to
   // the tariff surface, so exposing them would be a dead link.
   assert.ok(!keys.includes('nav_rating'), 'sidebar must not expose a Rating entry');
+});
+
+/*
+ * Domain groups are a single flat list: an in-group section caption would add a
+ * second hierarchy level that the routes themselves do not carry.
+ */
+test('sidebar children carry no in-group section captions', () => {
+  assert.ok(APP_ROUTES.every((route) => !('sidebarSection' in route)));
+  const sidebarSource = read('../src/app/components/AppSidebar.tsx');
+  assert.ok(!sidebarSource.includes('sidebar-group-caption'));
 });
 
 test('sidebar grouping is role-aware and never exposes an unauthorised group', () => {

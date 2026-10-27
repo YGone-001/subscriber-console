@@ -905,8 +905,6 @@ export const zh: Record<string, string> = {
     nav_business: "业务运营",
     nav_network_ops: "网络运维",
     nav_platform: "平台管理",
-    nav_section_charging: "计费与资费",
-    nav_section_observability: "监控与告警",
     nav_subscriber: "订阅用户",
     nav_profile: "用户模板",
     nav_profile_new: "新建模板",

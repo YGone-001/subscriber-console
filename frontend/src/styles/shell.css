@@ -605,17 +605,6 @@
   border-left: 1px solid var(--surface-border);
 }
 
-.sidebar-group-caption {
-  margin: 0.35rem 0 0.1rem;
-  padding-left: 1.35rem;
-  color: var(--text-muted);
-  font-size: var(--ref-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.75;
-}
-
 .sidebar-link.child {
   position: relative;
   min-height: 34px;

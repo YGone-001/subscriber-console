@@ -9,7 +9,6 @@ export type NavigationRoute = {
   labelKey: string;
   icon: LucideIcon;
   group?: 'business' | 'network' | 'platform';
-  sidebarSection?: 'charging' | 'observability';
   visible?: boolean;
   permission?: 'users.read';
 };
@@ -24,24 +23,24 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/topology/:resourceId', targetRoute: '/topology/:resourceId', dynamicParameters: ['resourceId'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/discovery', targetRoute: '/discovery', dynamicParameters: [], labelKey: 'nav_discovery', icon: Radar, group: 'network', visible: true },
   { route: '/discovery/sources/:sourceId', targetRoute: '/discovery/sources/:sourceId', dynamicParameters: ['sourceId'], labelKey: 'nav_discovery', icon: FileText },
-  { route: '/nf-health', targetRoute: '/nf-health', dynamicParameters: [], labelKey: 'nav_nf_health', icon: HeartPulse, group: 'network', sidebarSection: 'observability', visible: true },
+  { route: '/nf-health', targetRoute: '/nf-health', dynamicParameters: [], labelKey: 'nav_nf_health', icon: HeartPulse, group: 'network', visible: true },
   { route: '/nf-health/:targetId', targetRoute: '/nf-health/:targetId', dynamicParameters: ['targetId'], labelKey: 'nav_nf_health', icon: FileText },
-  { route: '/nf-alerts', targetRoute: '/nf-alerts', dynamicParameters: [], labelKey: 'nav_nf_alerts', icon: BellRing, group: 'network', sidebarSection: 'observability', visible: true },
-  { route: '/ue-info', targetRoute: '/ue-info', dynamicParameters: [], labelKey: 'nav_ue_info', icon: Smartphone, group: 'network', sidebarSection: 'observability', visible: true },
+  { route: '/nf-alerts', targetRoute: '/nf-alerts', dynamicParameters: [], labelKey: 'nav_nf_alerts', icon: BellRing, group: 'network', visible: true },
+  { route: '/ue-info', targetRoute: '/ue-info', dynamicParameters: [], labelKey: 'nav_ue_info', icon: Smartphone, group: 'network', visible: true },
   { route: '/logs', targetRoute: '/logs', dynamicParameters: [], labelKey: 'nav_logs', icon: ScrollText, group: 'platform', visible: true },
   { route: '/knowledge', targetRoute: '/knowledge', dynamicParameters: [], labelKey: 'nav_knowledge', icon: BookOpen, group: 'platform', visible: true },
   { route: '/knowledge/new', targetRoute: '/knowledge/new', dynamicParameters: [], labelKey: 'nav_knowledge_new', icon: BookOpen },
   { route: '/knowledge/:entryId', targetRoute: '/knowledge/:entryId', dynamicParameters: ['entryId'], labelKey: 'nav_knowledge', icon: BookOpen },
   { route: '/knowledge/:entryId/edit', targetRoute: '/knowledge/:entryId/edit', dynamicParameters: ['entryId'], labelKey: 'nav_knowledge_edit', icon: BookOpen },
   { route: '/ocs', targetRoute: '/ocs', dynamicParameters: [], labelKey: 'nav_ocs', icon: Zap },
-  { route: '/ocs/balances', targetRoute: '/ocs/balances', dynamicParameters: [], labelKey: 'nav_ocs_balances', icon: Wallet, group: 'business', sidebarSection: 'charging', visible: true },
+  { route: '/ocs/balances', targetRoute: '/ocs/balances', dynamicParameters: [], labelKey: 'nav_ocs_balances', icon: Wallet, group: 'business', visible: true },
   { route: '/ocs/balances/:imsi', targetRoute: '/ocs/balances/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_dashboard', icon: FileText },
-  { route: '/ocs/contracts', targetRoute: '/ocs/contracts', dynamicParameters: [], labelKey: 'nav_ocs_contracts', icon: Users, group: 'business', sidebarSection: 'charging', visible: true },
+  { route: '/ocs/contracts', targetRoute: '/ocs/contracts', dynamicParameters: [], labelKey: 'nav_ocs_contracts', icon: Users, group: 'business', visible: true },
   { route: '/ocs/contracts/:imsi', targetRoute: '/ocs/contracts/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/ocs/dashboard', targetRoute: '/ocs/dashboard', dynamicParameters: [], labelKey: 'nav_ocs_dashboard', icon: LayoutDashboard },
   { route: '/ocs/sessions', targetRoute: '/ocs/sessions', dynamicParameters: [], labelKey: 'nav_ocs_sessions', icon: Activity },
   { route: '/ocs/subscribers', targetRoute: '/ocs/subscribers', dynamicParameters: [], labelKey: 'nav_ocs_subscribers', icon: Users },
-  { route: '/ocs/tariffs', targetRoute: '/ocs/tariffs', dynamicParameters: [], labelKey: 'nav_ocs_tariffs', icon: CreditCard, group: 'business', sidebarSection: 'charging', visible: true },
+  { route: '/ocs/tariffs', targetRoute: '/ocs/tariffs', dynamicParameters: [], labelKey: 'nav_ocs_tariffs', icon: CreditCard, group: 'business', visible: true },
   { route: '/ocs/tariffs/:planId', targetRoute: '/ocs/tariffs/:planId', dynamicParameters: ['planId'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/ocs/usage', targetRoute: '/ocs/usage', dynamicParameters: [], labelKey: 'nav_ocs_usage', icon: Gauge },
   { route: '/profile', targetRoute: '/profile', dynamicParameters: [], labelKey: 'nav_profile', icon: FileText, group: 'business', visible: true },
@@ -148,9 +147,7 @@ const PLATFORM_CHILD_ORDER = ['/system-health', '/users', '/logs', '/knowledge']
  * Grouped sidebar model derived from the current navigation authority.
  *
  * Four first-level entries: the dashboard plus business, network and platform
- * domains. Domain groups keep one expansion level; their children carry an
- * optional section token so the sidebar can render the OCS and observability
- * captions without introducing a second collapsible level.
+ * domains. Domain groups keep one expansion level and a flat child list.
  *
  * A group is only produced when at least one of its routes is visible for the
  * given role, so unauthorised groups never reach the presentation layer. The
