@@ -15,7 +15,7 @@ import { useRead } from '../../lib/api/use-read';
 import { getBlob } from '../../lib/api/read-client';
 import { MutationApiError, deleteJson, postJson, putJson } from '../../lib/api/mutation-client';
 import { buildProfileApplyRequest } from '../subscribers/mutation-contract';
-import { useAppParam, useAppRouter } from '../../lib/ui-compat/router';
+import { useAppParam, useAppRouter, useAppSearchParam } from '../../lib/ui-compat/router';
 import { hasPermission } from '../../lib/permissions';
 import PageHeader from '../../components/ui/PageHeader';
 import { ErrorState } from '../../components/ui/StatePanel';
@@ -97,7 +97,8 @@ export function ProfileDetailPage() {
   const [forceDeleteCount, setForceDeleteCount] = useState<number | null>(null);
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<ProfileVersionDetail | null>(null);
-  const [discardTarget, setDiscardTarget] = useState<'leave' | 'cancel' | null>(null);
+  const [discardTarget, setDiscardTarget] = useState<'leave' | 'cancel' | 'restore' | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<ProfileVersionDetail | null>(null);
   const [isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded] = useState(false);
   const [newlyAddedSliceIndex, setNewlyAddedSliceIndex] = useState<number | null>(null);
   const [expandedSlices, setExpandedSlices] = useState<number[]>([0]);
@@ -114,6 +115,16 @@ export function ProfileDetailPage() {
     if (!profile || isEditing) return;
     setDraft(createDraftFromProfile(profile, profileName || ''));
   }, [profile, isEditing, profileName]);
+
+  /* Creating navigates from /profile/new to /profile/:name, which remounts the
+   * page and drops component state, so the confirmation travels as a query
+   * flag instead of local notice state. */
+  const createdFlag = useAppSearchParam('created');
+  useEffect(() => {
+    if (!createdFlag || isCreate || !profileName) return;
+    setNotice({ type: 'success', text: t('prof_msg_created') });
+    router.replace(`/profile/${encodeURIComponent(profileName)}`);
+  }, [createdFlag, isCreate, profileName, router, t]);
 
   const planId = String(draft.ocsDefaults.planId || '').trim();
   const ratingsPath = planId ? `/api/ratings?planId=${encodeURIComponent(planId)}` : null;
@@ -248,7 +259,7 @@ export function ProfileDetailPage() {
       setNotice({ type: 'success', text: committedAsNoEffect ? t('prof_msg_no_effect') : t('prof_msg_saved') });
       await globalMutate('/api/profiles');
       if (isCreate) {
-        router.replace(`/profile/${encodeURIComponent(targetName)}`);
+        router.replace(`/profile/${encodeURIComponent(targetName)}?created=1`);
         return;
       }
       await mutateDetail();
@@ -316,6 +327,17 @@ export function ProfileDetailPage() {
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  /* A restore rewrites the live template, so an in-progress draft would be
+   * discarded by it. Ask first, then let the operator confirm the restore. */
+  const requestRestore = (target: ProfileVersionDetail) => {
+    if (hasUnsavedChanges) {
+      setPendingRestore(target);
+      setDiscardTarget('restore');
+      return;
+    }
+    setRestoreTarget(target);
   };
 
   const executeRestore = async () => {
@@ -728,9 +750,18 @@ export function ProfileDetailPage() {
               router.push('/profile');
               return;
             }
+            if (action === 'restore') {
+              resetDraftAndExit();
+              setRestoreTarget(pendingRestore);
+              setPendingRestore(null);
+              return;
+            }
             resetDraftAndExit();
           }}
-          onCancel={() => setDiscardTarget(null)}
+          onCancel={() => {
+            setDiscardTarget(null);
+            setPendingRestore(null);
+          }}
         />
       )}
 
@@ -834,7 +865,7 @@ export function ProfileDetailPage() {
               error={versionsError}
               canRestore={canRestore}
               onRefresh={() => { void mutateVersions(); }}
-              onRestore={setRestoreTarget}
+              onRestore={requestRestore}
             />
           )}
         </>

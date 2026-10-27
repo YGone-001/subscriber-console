@@ -163,6 +163,61 @@ test('an unchanged template save reports no effect instead of claiming a save', 
   assert.match(zh, /prof_msg_no_effect:/);
 });
 
+/* A restore rewrites the live template; it must not silently eat an in-progress
+ * draft, and the create confirmation must survive the route change. */
+test('a restore asks before discarding unsaved template edits', () => {
+  const source = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(source, /const requestRestore = \(target: ProfileVersionDetail\) => \{/);
+  assert.match(source, /setPendingRestore\(target\)/);
+  assert.match(source, /setDiscardTarget\('restore'\)/);
+  assert.match(source, /onRestore=\{requestRestore\}/);
+  assert.ok(!source.includes('onRestore={setRestoreTarget}'), 'the ungated restore entry point is retired');
+});
+
+test('the create confirmation travels as a query flag across the route change', () => {
+  const source = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(source, /useAppSearchParam\('created'\)/);
+  assert.match(source, /t\('prof_msg_created'\)/);
+  assert.match(source, /\?created=1`/);
+});
+
+// Contract registration: every wired template operation must be declared.
+test('the template mutation and read contracts list clone, drift precheck and export', () => {
+  const mutations = JSON.parse(read('../mutation-contract.json')) as Array<{
+    route: string;
+    operations?: Array<{ request: string }>;
+    preflightOperations?: string[];
+  }>;
+  const detail = mutations.find((entry) => entry.route === '/profile/:name');
+  assert.ok(detail, 'the detail route owns a mutation contract entry');
+  assert.ok(
+    (detail?.operations ?? []).some((op) => op.request === 'POST /api/profiles/{name}/clone'),
+    'clone is a governed write and must be contracted',
+  );
+  assert.ok(
+    (detail?.preflightOperations ?? []).includes('POST /api/profiles/{name}/drift-precheck'),
+    'the drift probe is a semantic read and must be contracted as preflight',
+  );
+
+  const requests = JSON.parse(read('../mutation-request-contract.json')) as Array<{
+    path: string;
+    responseSemantics: string;
+  }>;
+  const clone = requests.find((entry) => entry.path === '/api/profiles/{name}/clone');
+  assert.ok(clone && clone.responseSemantics === 'mutation-result', 'clone carries a request contract');
+  const drift = requests.find((entry) => entry.path === '/api/profiles/{name}/drift-precheck');
+  assert.ok(drift && drift.responseSemantics === 'preflight-result', 'the drift probe is never a mutation result');
+
+  const reads = JSON.parse(read('../read-contract.json')) as Array<{ route: string; readEndpoints: string[] }>;
+  assert.ok(
+    (reads.find((entry) => entry.route === '/profile/:name')?.readEndpoints ?? []).includes('GET /api/profiles/{name}/export'),
+    'export is a read and belongs to the detail route',
+  );
+  const subscriberReads = reads.find((entry) => entry.route === '/subscribers')?.readEndpoints ?? [];
+  assert.ok(subscriberReads.includes('GET /api/profiles'), 'the subscriber page reads the template list');
+  assert.ok(subscriberReads.includes('GET /api/profiles/{name}'), 'the create form reads one template');
+});
+
 test('creating a template is one governed write, not a default followed by an update', () => {
   const source = read('../src/features/profiles/ProfileDetailPage.tsx');
   assert.match(source, /await postJson\('\/api\/profiles', \{ \.\.\.payload, name: targetName \}\)/);

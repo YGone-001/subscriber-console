@@ -176,6 +176,7 @@ export const zh: Record<string, string> = {
     prof_err_save: "保存失败",
     prof_err_revision_conflict: "该模板在你打开后已被他人修改。你的编辑仍保留在表单中，请重新加载模板后再应用。",
     prof_msg_saved: "模板已保存。",
+    prof_msg_created: "模板已创建。",
     prof_msg_no_effect: "内容未变更，未产生新版本。",
     prof_msg_deleted: "模板已删除。",
     prof_err_load_hint: "未从服务端读取到该模板，因此不显示任何默认值。",
