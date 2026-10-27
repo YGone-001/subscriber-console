@@ -201,6 +201,87 @@ func TestPrepareFrozenSubscriberUpdate_NoEffect(t *testing.T) {
 	}
 }
 
+// TestApplyPayloadMatchesWrittenProjection pins the frozen preview to the document the write path
+// stores: the same projection for sliceList and msisdnList, the same reused embedded identifiers,
+// so saving unchanged content is reported as no effect instead of a change.
+func TestApplyPayloadMatchesWrittenProjection(t *testing.T) {
+	storedSliceID := bson.NewObjectID()
+	storedSessionID := bson.NewObjectID()
+	stored := bson.M{
+		"imsi":   "310260000000001",
+		"msisdn": bson.A{"13800138000"},
+		"slice": bson.A{bson.D{
+			{Key: "_id", Value: storedSliceID},
+			{Key: "sst", Value: int32(1)},
+			{Key: "default_indicator", Value: true},
+			{Key: "session", Value: bson.A{bson.D{
+				{Key: "_id", Value: storedSessionID},
+				{Key: "name", Value: "internet"},
+				{Key: "type", Value: int32(3)},
+			}}},
+		}},
+	}
+
+	payload := UpdatePayload{Sub4G: map[string]any{
+		"sliceList": []any{map[string]any{
+			"sst": int32(1), "default_indicator": true,
+			"session_list": []any{map[string]any{"name": "internet", "type": int32(3)}},
+		}},
+		"msisdnList": []any{map[string]any{"msisdn": "13800138000"}},
+	}}
+	cleaned := cleanPayload(payload)
+
+	preview := applyPayload(stored, cleaned)
+	written := buildXcloudSubscriberFromLegacy("310260000000001", cleaned, stored)
+
+	if stableJSON(SubscriberSafeSnapshot(preview)) != stableJSON(SubscriberSafeSnapshot(written)) {
+		t.Errorf("the frozen preview must equal the written projection:\npreview: %s\nwritten: %s",
+			stableJSON(SubscriberSafeSnapshot(preview)), stableJSON(SubscriberSafeSnapshot(written)))
+	}
+
+	slices := anySliceOrEmpty(preview["slice"])
+	if len(slices) != 1 {
+		t.Fatalf("expected one projected slice, got %d", len(slices))
+	}
+	sliceDoc := toMap(slices[0])
+	if id, ok := sliceDoc["_id"].(bson.ObjectID); !ok || id != storedSliceID {
+		t.Errorf("the preview must reuse the stored slice identifier, got %v", sliceDoc["_id"])
+	}
+	sessions := anySliceOrEmpty(sliceDoc["session"])
+	if len(sessions) != 1 {
+		t.Fatalf("expected one projected session, got %d", len(sessions))
+	}
+	sessionDoc := toMap(sessions[0])
+	if id, ok := sessionDoc["_id"].(bson.ObjectID); !ok || id != storedSessionID {
+		t.Errorf("the preview must reuse the stored session identifier, got %v", sessionDoc["_id"])
+	}
+	if msisdn, ok := preview["msisdn"].([]any); !ok || len(msisdn) != 1 || msisdn[0] != "13800138000" {
+		t.Errorf("the preview must flatten msisdnList like the write path, got %v", preview["msisdn"])
+	}
+
+	// Re-saving the same content is a fixed point, so the governed path reports no effect.
+	lookup := func(_ context.Context, _ string) (bson.M, error) { return preview, nil }
+	_, err := PrepareFrozenSubscriberUpdate(context.Background(), "310260000000001", payload, lookup)
+	if err == nil {
+		t.Fatal("an unchanged sliceList save must report no effect")
+	}
+	govErr, ok := err.(*SubscriberGovernanceError)
+	if !ok || govErr.Code != "SUBSCRIBER_UPDATE_NO_EFFECT" {
+		t.Errorf("expected SUBSCRIBER_UPDATE_NO_EFFECT, got %v", err)
+	}
+
+	// A real content change must still register as an effect.
+	changedPayload := UpdatePayload{Sub4G: map[string]any{
+		"sliceList": []any{map[string]any{
+			"sst": int32(2), "default_indicator": false,
+			"session_list": []any{map[string]any{"name": "ims", "type": int32(1)}},
+		}},
+	}}
+	if _, err := PrepareFrozenSubscriberUpdate(context.Background(), "310260000000001", changedPayload, lookup); err != nil {
+		t.Errorf("a real slice change must not be swallowed as no effect: %v", err)
+	}
+}
+
 func TestExecuteFrozenSubscriberUpdate_Success(t *testing.T) {
 	existing := bson.M{
 		"imsi":                    "310260123456789",

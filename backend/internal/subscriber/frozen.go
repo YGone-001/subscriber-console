@@ -288,13 +288,15 @@ func applyPayload(current bson.M, payload UpdatePayload) bson.M {
 		if ambr, ok := payload.Sub4G["ambr"]; ok && ambr != nil {
 			result["ambr"] = ambr
 		}
-		// Handle slices
+		// Project the complex fields exactly as the write path does, so the frozen preview
+		// describes the document that will actually be stored. Assigning the payload
+		// verbatim made every save carrying sliceList look like a change, archived a
+		// preview that never matched the stored shape, and hid the identifier reuse.
 		if slices, ok := payload.Sub4G["sliceList"]; ok && slices != nil {
-			result["slice"] = slices
+			result["slice"] = convertSlicesFrom(slices, current["slice"])
 		}
-		// Handle msisdn
 		if msisdn, ok := payload.Sub4G["msisdnList"]; ok && msisdn != nil {
-			result["msisdn"] = msisdn
+			result["msisdn"] = convertMsisdnList(msisdn)
 		}
 	}
 
