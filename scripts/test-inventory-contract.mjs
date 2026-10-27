@@ -30,7 +30,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -52,7 +52,7 @@ for (const r of expectedInventoryRoutes) {
 // 2. Go API registrations checks
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 159, `Go registered operations must be exactly 159, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, EXPECTED_GO_REGISTRATIONS, `Go registered operations must be exactly ${EXPECTED_GO_REGISTRATIONS}, got ${goRegistrations.length}`);
 
 const inventoryGoRoutes = goRegistrations.filter((r) => r.includes('/api/inventory'));
 assert.equal(inventoryGoRoutes.length, 6, `Inventory Go registrations must be exactly 6, got ${inventoryGoRoutes.length}`);

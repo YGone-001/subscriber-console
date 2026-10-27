@@ -6,7 +6,7 @@
  * routed at the Nginx edge with no Node fallback:
  *
  * 1. Go API Surface & Inventory Checks (derived from Go router source):
- *    - Go router registers exactly 162 METHOD+PATH operations
+ *    - Go router registers exactly EXPECTED_GO_REGISTRATIONS METHOD+PATH operations
  *    - No duplicate METHOD+PATH registrations
  *    - All 4 authentication routes registered:
  *        POST /api/auth/login

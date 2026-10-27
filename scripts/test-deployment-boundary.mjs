@@ -1379,7 +1379,7 @@ async function main() {
   check('DB-U06', healthzOk && readyzOk, `healthz_status=${healthzRes.status} upstream=${healthzRes.upstream} readyz_status=${readyzRes.status} upstream=${readyzRes.upstream}`);
 
   // =======================================================================
-  // API route execution matrix - all 162 operations
+  // API route execution matrix - every registered operation
   // =======================================================================
 
   log('-- API route execution matrix --');

@@ -6,7 +6,7 @@
  * architecture from primary sources and fails closed on any drift:
  *
  *   - the Go production API surface, derived from the Go registration site
- *     (162 exact METHOD+PATH registrations, zero duplicates), never compared against a
+ *     (the shared frozen count of METHOD+PATH registrations, zero duplicates), never compared against a
  *     historical commit;
  *   - absence of the Next.js business backend (no App Router API tree, no business
  *     server tree, no business MongoDB data plane);
@@ -19,7 +19,7 @@
  *   - retired-surface absence and charging-plane exclusion.
  *
  * The only frozen constants are explicit current contracts: the canonical API surface
- * size (162), the listener addresses, and the compatibility counts. Every observed value
+ * size, the listener addresses, and the compatibility counts. Every observed value
  * is independently derived from source; no chronology-based baseline is used.
  *
  * The real-runtime proofs (real Nginx/Next/Go/Mongo topology, routing ownership,

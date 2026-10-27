@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const ROOT = process.cwd();
 
@@ -280,7 +281,10 @@ for (const pattern of forbiddenInRunbook) {
   );
 }
 
-assert.ok(runbook.includes('GoRegistered = 162'), 'Runbook must document GoRegistered = 162');
+assert.ok(
+  runbook.includes(`GoRegistered = ${EXPECTED_GO_REGISTRATIONS}`),
+  `Runbook must document GoRegistered = ${EXPECTED_GO_REGISTRATIONS}`,
+);
 assert.ok(runbook.includes('Canonical RBAC & Direct Execution'), 'Runbook must document Canonical RBAC & Direct Execution');
 assert.ok(runbook.includes('xcloud_ops.app_audit_logs'), 'Runbook must reference app_audit_logs');
 assert.ok(runbook.includes('app_approvals'), 'Runbook must mention historical app_approvals status');
@@ -319,7 +323,10 @@ assert.ok(agents.includes('Nginx'), 'AGENTS.md must describe the Nginx edge');
 assert.ok(agents.includes('127.0.0.1:18888'), 'AGENTS.md must document the Go upstream 127.0.0.1:18888');
 assert.ok(agents.includes('127.0.0.1:13333') || agents.includes('13333'), 'AGENTS.md must document Vite dev server 127.0.0.1:13333');
 assert.ok(agents.includes('embedded static React SPA') || agents.includes('embedded static SPA'), 'AGENTS.md must document Go embedded SPA hosting');
-assert.ok(agents.includes('162 exact METHOD+PATH registrations'), 'AGENTS.md must document the 162 Go registration authority');
+assert.ok(
+  agents.includes(`${EXPECTED_GO_REGISTRATIONS} exact METHOD+PATH registrations`),
+  `AGENTS.md must document the ${EXPECTED_GO_REGISTRATIONS} exact METHOD+PATH registration authority`,
+);
 assert.ok(agents.includes('Route authority'), 'AGENTS.md must document the derived Go registration authority');
 assert.ok(agents.includes('the derived Go registration set'), 'AGENTS.md must derive route authority from the Go registration set');
 
@@ -362,7 +369,10 @@ assert.ok(!claude.includes('approval review/execute'), 'CLAUDE.md must not conta
 assert.ok(!claude.includes('ACTUALLY_ROUTED = 26`'), 'CLAUDE.md must not contain stale ACTUALLY_ROUTED = 26 in active invariants');
 assert.ok(!/route-owner table/i.test(claude), 'CLAUDE.md must not present a route-owner table as the current architecture');
 assert.ok(claude.includes('Nginx'), 'CLAUDE.md must describe the Nginx edge');
-assert.ok(claude.includes('162 条 Go 注册'), 'CLAUDE.md must document the 162 Go registration authority');
+assert.ok(
+  claude.includes(`${EXPECTED_GO_REGISTRATIONS} 条 Go 注册`),
+  `CLAUDE.md must document the ${EXPECTED_GO_REGISTRATIONS} 条 Go 注册 authority`,
+);
 
 // 6. README.md
 const readmePath = path.join(ROOT, 'README.md');

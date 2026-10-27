@@ -13,14 +13,14 @@
  * 8. Security State Metadata Contract & Leak Prevention
  * 9. User Management Error Mapping (LAST_ACTIVE_ADMIN, etc.)
  * 10. I18n Completeness (EN & ZH parity for new UI concepts)
- * 11. API Inventory & Routing Invariants (GoRegistered=162, retired mutations absent)
+ * 11. API Inventory & Routing Invariants (GoRegistered equals the shared frozen count, retired mutations absent)
  */
 
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { createJiti } from 'jiti';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const jiti = createJiti(import.meta.url, {
   interopDefault: true,
@@ -888,11 +888,11 @@ for (const key of requiredKeys) {
 // ============================================================================
 // 12. API Inventory & Route Authority
 // ============================================================================
-console.log('\n[12] API Inventory & Route Authority (GoRegistered=162)');
+console.log(`\n[12] API Inventory & Route Authority (GoRegistered=${EXPECTED_GO_REGISTRATIONS})`);
 
 const { keys: goRegistrations, duplicates: goRegistrationDuplicates } = deriveGoRegistrations();
 
-verify('Go router registers exactly 162 METHOD+PATH operations with zero duplicates', () => {
+verify(`Go router registers exactly ${EXPECTED_GO_REGISTRATIONS} METHOD+PATH operations with zero duplicates`, () => {
   assert.deepEqual(
     goRegistrationDuplicates,
     [],
@@ -900,8 +900,8 @@ verify('Go router registers exactly 162 METHOD+PATH operations with zero duplica
   );
   assert.equal(
     goRegistrations.length,
-    162,
-    `Go registered operation count must be 162, got ${goRegistrations.length}`
+    EXPECTED_GO_REGISTRATIONS,
+    `Go registered operation count must be ${EXPECTED_GO_REGISTRATIONS}, got ${goRegistrations.length}`
   );
 });
 
