@@ -304,6 +304,7 @@ test('credential display is driven by the server-stated condition, not a client 
   const view = read('../src/features/profiles/components/ProfileViewMode.tsx');
   assert.match(view, /credentialDisplay\(authData\.k, 'k'\)/);
   assert.match(view, /credentialState\[field\] === 'configured' \? t\("credential_withheld"\)/);
+  assert.match(view, /isWithheldPlaceholder\(rawAuth\?\.\[field\]\)/);
 });
 
 /* Withheld material and unconfigured material are two different facts, and the
@@ -324,6 +325,23 @@ test('the diff reports the stated condition of withheld material', () => {
   // A reader who can see the material gets a shortened value, never the key.
   const visible = buildProfileVersionDiff(BASE_PROFILE, BASE_PROFILE, LABELS);
   assert.equal(row(visible, 'auth', 'k').versionValue, '0011…eeff');
+});
+
+/* Responses from a server that predates the stated-condition projection can
+ * still carry the retired placeholder; nothing may render or store it as a key. */
+test('the retired placeholder is never treated as a credential value', () => {
+  const draft = createDraftFromProfile(
+    { ...BASE_PROFILE, auth: { k: '[MASKED]', opc: '[MASKED]', amf: '8000' } },
+    'template',
+  );
+  assert.equal(draft.auth.k, '');
+  assert.equal(draft.auth.opValue, '');
+  assert.ok(!JSON.stringify(buildProfilePayload(draft, 'template', false)).includes('[MASKED]'));
+
+  const staleVersion = { ...BASE_PROFILE, auth: { k: '[MASKED]', opc: BASE_PROFILE.auth.opc } };
+  const sections = buildProfileVersionDiff(staleVersion, BASE_PROFILE, LABELS);
+  assert.equal(row(sections, 'auth', 'k').versionValue, LABELS.withheld);
+  assert.equal(row(sections, 'auth', 'opc').versionValue, 'ffee…1100');
 });
 
 const VALID_AUTH = { k: 'a'.repeat(32), opValue: 'b'.repeat(32), amf: '8000' };

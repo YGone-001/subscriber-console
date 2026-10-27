@@ -3,6 +3,7 @@
  * state, and back to a payload, without inventing values it does not carry.
  */
 import { formatBytes, formatEvents, parseBytes, parseEvents } from '../../lib/unitParser';
+import { isWithheldPlaceholder } from '../../types/credential';
 import type { ProfileAmbrSide } from './profile-types';
 
 export type { ProfileAmbrSide };
@@ -18,6 +19,15 @@ export type ProfileDraft = {
 };
 
 export const OCS_EDITABLE_KEYS = ['planId', 'trafficTotal', 'trafficBalance', 'smsTotal', 'smsBalance'] as const;
+
+/*
+ * The retired placeholder from an older credential projection is not material;
+ * the form must not hold it as if it were a key the operator could keep.
+ */
+function readableCredential(value: unknown): string {
+  if (isWithheldPlaceholder(value)) return '';
+  return typeof value === 'string' ? value : '';
+}
 
 export const PROFILE_SECTION_FIELDS = [
   { key: 'title', labelKey: 'prof_title' },
@@ -50,9 +60,11 @@ export function createDraftFromProfile(profile: any, fallbackTitle: string): Pro
 
   if (profile.auth) {
     draft.usimType = profile.auth.op ? 'op' : 'opc';
+    /* A placeholder inherited from an older projection is not a key: the form
+     * starts empty rather than carrying something that could be saved back. */
     draft.auth = {
-      k: profile.auth.k || '',
-      opValue: profile.auth.opc || profile.auth.op || '',
+      k: readableCredential(profile.auth.k),
+      opValue: readableCredential(profile.auth.opc || profile.auth.op),
       amf: profile.auth.amf || '',
     };
   }

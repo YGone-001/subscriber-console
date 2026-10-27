@@ -843,6 +843,7 @@ export function ProfileDetailPage() {
               t={t}
               authData={draft.auth}
               credentialState={profile?.auth?.credentialState ?? null}
+              rawAuth={profile?.auth ?? null}
               usimType={draft.usimType}
               ocsDefaults={draft.ocsDefaults}
               tariffPlanList={plansData?.plans ?? []}

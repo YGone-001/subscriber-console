@@ -6,8 +6,9 @@
 import { Users, Shield, Signal, Gauge, Server, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import { AMBR_UNITS, getAmbrString, typeLabel } from '../../subscribers/components/subscriber/utils';
 import { ratingTypeLabel, ratingUnitLabel } from '../profile-format';
+import { isWithheldPlaceholder } from '../../../types/credential';
 
-export default function ProfileViewMode({ t, authData, credentialState, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats, statsUnavailable }: any) {
+export default function ProfileViewMode({ t, authData, credentialState, rawAuth, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats, statsUnavailable }: any) {
   const planId = String(ocsDefaults.planId || ocsDefaults.plan_id || '');
   const selectedPlan = Array.isArray(tariffPlanList)
     ? tariffPlanList.find((plan: any) => plan.plan_id === planId)
@@ -16,6 +17,9 @@ export default function ProfileViewMode({ t, authData, credentialState, usimType
   /* The server states the condition of material this reader may not see:
    * withheld is not the same as absent, and neither is rendered as a value. */
   const credentialDisplay = (value: string, field: 'k' | 'op' | 'opc') => {
+    /* The draft drops a retired placeholder before display, so the stored block
+     * is what still says "this key exists, you just may not see it". */
+    if (isWithheldPlaceholder(rawAuth?.[field])) return t("credential_withheld");
     if (credentialState?.visibility !== 'masked') return value || notConfigured;
     return credentialState[field] === 'configured' ? t("credential_withheld") : notConfigured;
   };

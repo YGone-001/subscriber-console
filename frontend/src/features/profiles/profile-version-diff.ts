@@ -5,6 +5,7 @@
  */
 import { formatBytes, formatEvents } from '../../lib/unitParser';
 import { formatAmbrSide } from './profile-format';
+import { isWithheldPlaceholder } from '../../types/credential';
 
 export type ProfileDiffLabels = {
   notConfigured: string;
@@ -82,6 +83,7 @@ function credentialCell(auth: unknown, field: 'k' | 'op' | 'opc', labels: Profil
   const record = asRecord(auth);
   const state = asRecord(record.credentialState);
   const value = typeof record[field] === 'string' ? record[field] as string : '';
+  if (isWithheldPlaceholder(value)) return labels.withheld;
   if (state.visibility === 'masked') {
     return state[field] === 'configured' ? labels.withheld : labels.notConfigured;
   }
