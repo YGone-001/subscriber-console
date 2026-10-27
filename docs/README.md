@@ -39,6 +39,7 @@ Canonical frontend SPA source     -> frontend/src/
 ## Architecture
 
 - [System architecture](architecture/system-architecture.md)
+- [Production topology](architecture/production-topology.md) - edge contract, single-process request path, frontend build-and-embed chain and the redeploy acceptance evidence.
 - [Inventory resource model](architecture/inventory-resource-model.md)
 - [Topology dependency model](architecture/topology-dependency-model.md)
 - [NF discovery foundation](architecture/nf-discovery.md)
