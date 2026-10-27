@@ -29,7 +29,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS, MUTATION_CENSUS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -300,8 +300,10 @@ const businessReqContract = JSON.parse(readFileSync(resolve(frontend, 'mutation-
 const operationalContract = JSON.parse(readFileSync(resolve(frontend, 'operational-contract.json'), 'utf8'));
 
 const businessUniqueEndpoints = new Set(businessContract.flatMap((entry) => entry.operations).map((op) => op.request));
-assert.equal(businessUniqueEndpoints.size, 33, `business mutation endpoints must remain 33, got ${businessUniqueEndpoints.size}`);
-assert.equal(businessReqContract.length, 31, `business request contracts must remain 31, got ${businessReqContract.length}`);
+assert.equal(businessUniqueEndpoints.size, MUTATION_CENSUS.uniqueEndpoints,
+  `business mutation endpoints must remain ${MUTATION_CENSUS.uniqueEndpoints}, got ${businessUniqueEndpoints.size}`);
+assert.equal(businessReqContract.length, MUTATION_CENSUS.requestContracts,
+  `business request contracts must remain ${MUTATION_CENSUS.requestContracts}, got ${businessReqContract.length}`);
 const operationalUniqueEndpoints = new Set(operationalContract.flatMap((entry) => entry.operations).map((op) => op.request));
 assert.equal(operationalUniqueEndpoints.size, 9, `operational endpoints must remain 9, got ${operationalUniqueEndpoints.size}`);
 

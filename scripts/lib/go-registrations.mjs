@@ -96,3 +96,13 @@ export function toInventoryPath(pattern) {
  * cross-checks.
  */
 export const EXPECTED_GO_REGISTRATIONS = 162;
+
+/**
+ * The frozen business mutation census: unique METHOD+PATH mutation endpoints declared by
+ * `frontend/mutation-contract.json`, and the number of request-contract entries in
+ * `frontend/mutation-request-contract.json`. Three gates compare the contract against these same
+ * two numbers, so they live here once: when the business surface grows, re-anchor them in this one
+ * place after confirming the added endpoints are intended, exactly as EXPECTED_GO_REGISTRATIONS is
+ * updated together with the AGENTS.md / CLAUDE.md totals.
+ */
+export const MUTATION_CENSUS = Object.freeze({ uniqueEndpoints: 34, requestContracts: 33 });

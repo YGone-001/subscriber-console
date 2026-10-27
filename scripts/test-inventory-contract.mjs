@@ -8,9 +8,9 @@
  * - Inventory API registrations = 6
  * - Inventory reads = 3
  * - Inventory mutations = 3
- * - Business mutation endpoints = 29 (unchanged)
- * - Business request contracts = 31 (unchanged)
- * - Operational endpoints = 4 (unchanged)
+ * - Business mutation and request contract censuses (asserted below against
+ *   frontend/mutation-contract.json and frontend/mutation-request-contract.json)
+ * - Operational contract endpoints (asserted below against operational-contract.json)
  * - Inventory authorization = core.read / core.configure
  * - Inventory hard-delete endpoint = 0
  * - Inventory request contract schema & semantic validation
@@ -30,7 +30,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS, MUTATION_CENSUS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -302,7 +302,8 @@ assert.ok(
   [...businessUniqueEndpoints].every((endpoint) => !endpoint.startsWith('/api/inventory')),
   'inventory endpoints must not appear in the business mutation contract',
 );
-assert.equal(businessReqContract.length, 31, `business request contracts must remain 31, got ${businessReqContract.length}`);
+assert.equal(businessReqContract.length, MUTATION_CENSUS.requestContracts,
+  `business request contracts must remain ${MUTATION_CENSUS.requestContracts}, got ${businessReqContract.length}`);
 
 const operationalOps = operationalContract.flatMap((entry) => entry.operations);
 const operationalUniqueEndpoints = new Set(operationalOps.map((op) => op.request));
