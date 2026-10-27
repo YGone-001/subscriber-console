@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -17,6 +18,25 @@ type Repository struct {
 	profiles    *mongo.Collection
 	versions    *mongo.Collection
 	subscribers *mongo.Collection
+
+	// statsMu guards the short-lived snapshot of the subscriber counters that
+	// feeds the template list. That aggregation visits every subscriber document,
+	// so serving it from the cache for one bounded window keeps list latency flat
+	// as the subscriber population grows instead of paying a full scan per read.
+	statsMu    sync.Mutex
+	statsCache *subscriberStatsSnapshot
+}
+
+// subscriberStatsTTL bounds how long a cached counter snapshot may answer the
+// template list. It is a display-only figure; the delete guard and the
+// per-profile stats read never consume the snapshot, so no governance decision
+// is ever taken on cached data.
+const subscriberStatsTTL = 30 * time.Second
+
+// subscriberStatsSnapshot is one observed result of profileSubscriberCounts.
+type subscriberStatsSnapshot struct {
+	counts    map[string]profileSubscriberStats
+	expiresAt time.Time
 }
 
 // NewRepository creates a new profile Repository.
@@ -44,7 +64,7 @@ func (r *Repository) ListProfiles(ctx context.Context) ([]ProfileListItem, Profi
 		return nil, ProfileSummary{}, err
 	}
 
-	statsMap, statsErr := r.profileSubscriberCounts(ctx)
+	statsMap, statsErr := r.cachedSubscriberCounts(ctx, r.profileSubscriberCounts)
 	completeness := SubscriberStatsComplete
 	if statsErr != nil {
 		statsMap = map[string]profileSubscriberStats{}
@@ -418,6 +438,38 @@ func (r *Repository) profileSubscriberCounts(ctx context.Context) (map[string]pr
 		}
 	}
 	return statsMap, nil
+}
+
+// cachedSubscriberCounts serves the template-list counters from the snapshot,
+// refreshing it at most once per subscriberStatsTTL. Holding statsMu across the
+// refresh also coalesces concurrent list reads into a single aggregation. The
+// returned map is read-only for callers.
+func (r *Repository) cachedSubscriberCounts(
+	ctx context.Context,
+	fetch func(context.Context) (map[string]profileSubscriberStats, error),
+) (map[string]profileSubscriberStats, error) {
+	r.statsMu.Lock()
+	defer r.statsMu.Unlock()
+
+	if r.statsCache != nil && time.Now().Before(r.statsCache.expiresAt) {
+		return r.statsCache.counts, nil
+	}
+
+	counts, err := fetch(ctx)
+	if err != nil {
+		// A failed aggregation is reported to the caller, which degrades the list
+		// to subscriberStatsCompleteness=unavailable. It is not replayed for the
+		// whole window: one blip in the account store must not blank the counters
+		// until the TTL would have expired.
+		r.statsCache = nil
+		return nil, err
+	}
+
+	r.statsCache = &subscriberStatsSnapshot{
+		counts:    counts,
+		expiresAt: time.Now().Add(subscriberStatsTTL),
+	}
+	return counts, nil
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
