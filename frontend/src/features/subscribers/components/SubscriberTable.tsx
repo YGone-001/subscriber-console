@@ -311,7 +311,15 @@ export function SubscriberTable(props: SubscriberTableProps) {
                 <td data-label={t("subscriber_user_column")} data-column-priority="essential">
                   <div className="subscriber-identity-cell">
                     <div className="imsi-text-container">
-                      <button type="button" className="imsi-link" onClick={() => handleOpenView(sub.imsi)}>{sub.imsi}</button>
+                      <button
+                        type="button"
+                        className="imsi-link"
+                        onClick={() => handleOpenView(sub.imsi)}
+                        title={t("sub_action_view")}
+                        aria-label={`${t("sub_action_view")}: ${sub.imsi}`}
+                      >
+                        {sub.imsi}
+                      </button>
                       <button
                         type="button"
                         className={copiedImsi === sub.imsi ? "copy-btn copied" : "copy-btn"}

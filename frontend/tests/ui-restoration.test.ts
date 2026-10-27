@@ -49,6 +49,17 @@ test('subscriber row action menu stays inside the viewport and flips above the l
   assert.match(tableSource, /window\.addEventListener\("scroll", closeOnViewportChange, true\)/);
 });
 
+/*
+ * The IMSI link is the detail entry point for every role, so it must name its
+ * purpose; the extra row actions stay writer-only, and an absent column is an
+ * honest signal rather than something to paper over with a duplicate control.
+ */
+test('the subscriber row opens detail through one named control for every role', () => {
+  const tableSource = read('../src/features/subscribers/components/SubscriberTable.tsx');
+  assert.match(tableSource, /className="imsi-link"[\s\S]{0,240}aria-label=\{`\$\{t\("sub_action_view"\)\}: \$\{sub\.imsi\}`\}/);
+  assert.match(tableSource, /\{canEditSubscribers && <th className="actions-col"/);
+});
+
 test('sidebar groups expose the restored navigation hierarchy for an administrator', () => {
   const groups = getSidebarGroups('admin');
   const keys = groups.map((group) => group.key);
