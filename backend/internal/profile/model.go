@@ -113,6 +113,11 @@ type ProfileCapabilities struct {
 	CanWrite             bool   `json:"canWrite"`
 	CanRestore           bool   `json:"canRestore"`
 	CredentialVisibility string `json:"credentialVisibility"`
+	// CanEditCredentials states the coupling outright: writing auth material
+	// into a template requires both the template write permission and the
+	// subscriber write permission that makes the material visible, so no client
+	// has to infer it from a role table.
+	CanEditCredentials bool `json:"canEditCredentials"`
 }
 
 // ProfileAccessRestrictionMeta is the 3GPP access-restriction vocabulary.

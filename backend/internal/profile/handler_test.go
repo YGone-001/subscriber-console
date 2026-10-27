@@ -2947,3 +2947,49 @@ func TestProfileRestoreCapabilityDenialKeepsResponseShape(t *testing.T) {
 		t.Errorf("the historical denial code must be preserved, got %s", w.Body.String())
 	}
 }
+
+// Writing credential material needs both the template write permission and the
+// subscriber write permission that makes the material visible. Meta states the
+// coupling so no client has to derive it from a role table.
+func TestProfileMetaReportsCredentialEditability(t *testing.T) {
+	cases := []struct {
+		role           string
+		canWrite       bool
+		wantCanEdit    bool
+		wantVisibility string
+	}{
+		{role: "admin", canWrite: true, wantCanEdit: true, wantVisibility: "plaintext"},
+		{role: "operator", canWrite: true, wantCanEdit: true, wantVisibility: "plaintext"},
+		{role: "viewer", canWrite: false, wantCanEdit: false, wantVisibility: "masked"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.role, func(t *testing.T) {
+			repo := newMockRepository()
+			handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+			principal := &auth.Principal{Username: tc.role, Role: tc.role, NormalizedRole: tc.role}
+
+			req := httptest.NewRequest("GET", "/api/profiles/meta", nil)
+			req = req.WithContext(auth.ContextWithPrincipal(req.Context(), principal))
+			w := httptest.NewRecorder()
+			handler.Meta(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+			}
+			var resp ProfileMetaResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("failed to unmarshal meta: %v", err)
+			}
+			if resp.Capabilities.CanWrite != tc.canWrite {
+				t.Errorf("canWrite: expected %v, got %v", tc.canWrite, resp.Capabilities.CanWrite)
+			}
+			if resp.Capabilities.CanEditCredentials != tc.wantCanEdit {
+				t.Errorf("canEditCredentials: expected %v, got %v", tc.wantCanEdit, resp.Capabilities.CanEditCredentials)
+			}
+			if resp.Capabilities.CredentialVisibility != tc.wantVisibility {
+				t.Errorf("credentialVisibility: expected %q, got %q", tc.wantVisibility, resp.Capabilities.CredentialVisibility)
+			}
+		})
+	}
+}

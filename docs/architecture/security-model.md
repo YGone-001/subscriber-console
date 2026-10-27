@@ -85,6 +85,13 @@ contract: writing through its result mutates nothing the response marshals. A
 regression test replays the driver's own BSON round-trip, so an assumption about
 the decoded shape fails in the suite instead of passing against a hand-built map.
 
+`GET /api/profiles/meta` also serves `canEditCredentials`, the conjunction of
+`profiles.write` and `subscribers.write`. The coupling used to be implicit — it
+held only because the canonical role table happens to grant both — so the server
+now states it. When the bit is false the template editor keeps the credential
+block read-only and the update payload omits `auth` entirely, which leaves the
+stored material untouched rather than writing back the `[MASKED]` placeholder.
+
 The masking sentinel `[MASKED]` is never valid write input: `PUT /api/profiles/{name}`
 rejects it inside `auth.k` / `auth.op` / `auth.opc` with 400
 `INVALID_PROFILE_UPDATE`. Echoing a read projection back would store the sentinel as

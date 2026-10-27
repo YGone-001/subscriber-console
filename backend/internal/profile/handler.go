@@ -210,15 +210,18 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 
 	_, canRestore := auth.CapabilityDecision(p, "profile_rollback")
 	credentialVisibility := "masked"
-	if auth.HasPermission(p, "subscribers.write") {
+	plaintext := auth.HasPermission(p, "subscribers.write")
+	if plaintext {
 		credentialVisibility = "plaintext"
 	}
+	canWrite := auth.HasPermission(p, "profiles.write")
 
 	response.JSON(w, http.StatusOK, ProfileMetaResponse{
 		Capabilities: ProfileCapabilities{
-			CanWrite:             auth.HasPermission(p, "profiles.write"),
+			CanWrite:             canWrite,
 			CanRestore:           canRestore,
 			CredentialVisibility: credentialVisibility,
+			CanEditCredentials:   canWrite && plaintext,
 		},
 		AccessRestriction: ProfileAccessRestrictionMeta{
 			Unrestricted: 0,
