@@ -50,6 +50,7 @@ import { SignJWT } from 'jose';
 import { deriveGoRegistrations, classifyGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 import { findListener, inspectProcess } from './lib/local-runtime.mjs';
 import { resolveGoToolchain } from './lib/project-paths.mjs';
+import { knowledgeSandbox } from './lib/go-backend.mjs';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -1148,6 +1149,7 @@ async function main() {
     MONGODB_XCLOUD_DB: 'xcloud',
     MONGODB_APP_DB: 'xcloud_ops',
     JWT_SECRET,
+    KNOWLEDGE_UPLOAD_DIR: knowledgeSandbox(),
   };
   delete goEnv.HTTP_ADDR;
   const goAddrFromEnv = process.env.DEPLOYMENT_GO_PORT ? `127.0.0.1:${GO_PORT}` : null;

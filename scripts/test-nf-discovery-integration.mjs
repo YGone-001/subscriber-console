@@ -28,6 +28,7 @@ import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
 import bcrypt from 'bcryptjs';
 import { loadEnv } from './lib/load-env.mjs';
+import { knowledgeSandbox, waitForGoServer } from './lib/go-backend.mjs';
 
 loadEnv(process.cwd());
 
@@ -319,24 +320,13 @@ async function main() {
         MONGODB_XCLOUD_DB: xcloudDbName,
         MONGODB_APP_DB: appDbName,
         JWT_SECRET: JWT_SECRET_STRING,
+        KNOWLEDGE_UPLOAD_DIR: knowledgeSandbox(),
         DISCOVERY_ALLOWED_TARGETS: `127.0.0.1:${mockPort},127.0.0.11:${mockPort}`,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    let goReady = false;
-    for (let i = 0; i < 60; i++) {
-      try {
-        const res = await fetch(`http://127.0.0.1:${goPort}/healthz`);
-        if (res.ok) {
-          goReady = true;
-          break;
-        }
-      } catch {
-        await new Promise((r) => setTimeout(r, 200));
-      }
-    }
-    if (!goReady) throw new Error('Go server failed to start on ' + goPort);
+    await waitForGoServer(goProc, goPort);
 
     const adminToken = await makeToken('admin1', 'admin');
     const operatorToken = await makeToken('operator1', 'operator');

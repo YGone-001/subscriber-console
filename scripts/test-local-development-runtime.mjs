@@ -38,6 +38,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveGoToolchain } from './lib/project-paths.mjs';
+import { knowledgeSandbox } from './lib/go-backend.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -140,6 +141,7 @@ function loadEnv() {
     }
   }
   if (!env.JWT_SECRET) env.JWT_SECRET = 'ci-only-placeholder-secret-with-at-least-32-bytes';
+  if (!env.KNOWLEDGE_UPLOAD_DIR) env.KNOWLEDGE_UPLOAD_DIR = knowledgeSandbox();
   delete env.HTTP_ADDR;
   return env;
 }

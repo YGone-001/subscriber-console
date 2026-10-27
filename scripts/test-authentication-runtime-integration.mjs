@@ -44,6 +44,7 @@ import { MongoClient } from 'mongodb';
 import { loadEnv } from './lib/load-env.mjs';
 import bcrypt from 'bcryptjs';
 import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
+import { knowledgeSandbox, waitForGoServer } from './lib/go-backend.mjs';
 
 loadEnv(process.cwd());
 
@@ -232,22 +233,12 @@ async function main() {
       MONGODB_XCLOUD_DB: xcloudDbName,
       MONGODB_APP_DB: appDbName,
       JWT_SECRET: JWT_SECRET_STRING,
+      KNOWLEDGE_UPLOAD_DIR: knowledgeSandbox(),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  let goReady = false;
-  for (let i = 0; i < 60; i++) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${goPort}/healthz`);
-      if (res.ok) {
-        goReady = true;
-        break;
-      }
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  assert(goReady, 'Go backend server failed to become ready');
+  await waitForGoServer(goProc, goPort);
   const goBaseUrl = `http://127.0.0.1:${goPort}`;
   process.env.GO_BACKEND_URL = goBaseUrl;
 

@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync, spawn } from 'node:child_process';
 import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
+import { knowledgeSandbox, waitForGoServer } from './lib/go-backend.mjs';
 
 function rawHttpGet(host, port, rawPath) {
   return new Promise((resolve, reject) => {
@@ -117,7 +118,6 @@ async function main() {
   const goPort = await getAvailablePort();
   const baseUrl = `http://127.0.0.1:${goPort}`;
 
-  let goStderr = '';
   goProc = spawn(binPath, [], {
     cwd: backendDir,
     env: {
@@ -127,26 +127,13 @@ async function main() {
       MONGODB_XCLOUD_DB: xcloudDbName,
       MONGODB_APP_DB: appDbName,
       JWT_SECRET: JWT_SECRET_STRING,
+      KNOWLEDGE_UPLOAD_DIR: knowledgeSandbox(),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  goProc.stderr.on('data', (chunk) => {
-    goStderr += chunk.toString();
-  });
 
   // Wait for server readiness
-  let ready = false;
-  for (let i = 0; i < 60; i++) {
-    try {
-      const res = await fetch(`${baseUrl}/healthz`);
-      if (res.ok) {
-        ready = true;
-        break;
-      }
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  assert.ok(ready, `Go backend server failed to become ready: ${goStderr}`);
+  await waitForGoServer(goProc, goPort);
 
   // 8. Real HTTP requests verification
 
