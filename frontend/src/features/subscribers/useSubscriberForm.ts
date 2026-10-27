@@ -11,6 +11,7 @@ import { deleteJson, MutationApiError, postJson, putJson } from '../../lib/api/m
 import { buildSubscriberCreateRequest } from './mutation-contract';
 import { ONBOARDING_TEMPLATE, isRecommendedOnboardingPlan } from './onboarding-template';
 import type { Auth4GData } from '../../types/subscriber';
+import { resolveUsimType } from '../../types/credential';
 
 type ApiRecord = Record<string, any>;
 
@@ -270,8 +271,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       if (data.profile) {
         const p = data.profile;
         if (p.auth) {
-          if (p.auth.op) setUsimType("op");
-          else if (p.auth.opc) setUsimType("opc");
+          if (p.auth.op || p.auth.opc || p.auth.credentialState) setUsimType(resolveUsimType(p.auth));
           setAuth4GData(prev => ({
             ...prev,
             k: p.auth.k || prev.k,
@@ -330,7 +330,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           }
         }
         if (data.auth4G) {
-          const detectedType = data.auth4G.op ? "op" : "opc";
+          const detectedType = resolveUsimType(data.auth4G);
           setUsimType(detectedType);
           setAuth4GData({
             k: data.auth4G.k || "",

@@ -35,6 +35,7 @@ import {
   type ProfileDraft,
 } from './profile-draft';
 import { findProfileDraftIssue, type ProfileDraftIssue } from './profile-validation';
+import { resolveTemplateImpact } from './profile-format';
 import { buildProfileVersionDiff } from './profile-version-diff';
 import type {
   ProfileDetailResponse,
@@ -94,7 +95,7 @@ export function ProfileDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [forceDeleteCount, setForceDeleteCount] = useState<number | null>(null);
+  const [forceDeleteCount, setForceDeleteCount] = useState<number | 'unknown' | null>(null);
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<ProfileVersionDetail | null>(null);
   const [discardTarget, setDiscardTarget] = useState<'leave' | 'cancel' | 'restore' | null>(null);
@@ -149,8 +150,10 @@ export function ProfileDetailPage() {
   const canApplyTemplates = hasPermission(user, 'subscribers.write');
   const accessBits = meta?.accessRestriction.bits ?? null;
 
-  const impactedSubscribers = detail?.stats?.totalSubscribers ?? 0;
-  const statsUnavailable = detail?.statsCompleteness === 'unavailable';
+  const statsUnavailable = detail?.statsCompleteness === 'unavailable' || !detail?.stats;
+  /* A failed attribution read is unknown, not zero: the write confirmations say
+   * so instead of reporting a count that never came from anywhere. */
+  const impact = resolveTemplateImpact(detail?.stats?.totalSubscribers, !statsUnavailable);
   /* The counter the page loaded with; every write preconditions on it so a
    * concurrent edit surfaces as a conflict instead of a silent overwrite. */
   const storedRevision = typeof profile?.revision === 'number' ? profile.revision : null;
@@ -333,7 +336,7 @@ export function ProfileDetailPage() {
         && (err.code === 'PROFILE_IN_USE' || /in use by/i.test(message));
       if (conflict) {
         const parsed = Number(message.match(/(\d+)/)?.[1] ?? 0);
-        setForceDeleteCount(parsed > 0 ? parsed : (impactedSubscribers || 1));
+        setForceDeleteCount(parsed > 0 ? parsed : (impact.kind === 'known' && impact.count > 0 ? impact.count : 'unknown'));
         return;
       }
       setError(message);
@@ -613,7 +616,9 @@ export function ProfileDetailPage() {
         <ConfirmActionPanel
           tone="danger"
           title={t('prof_del_in_use_title', { name: profileName || '' })}
-          message={t('prof_del_in_use_desc', { count: forceDeleteCount, name: profileName || '' })}
+          message={forceDeleteCount === 'unknown'
+            ? t('prof_del_in_use_unknown_desc', { name: profileName || '' })
+            : t('prof_del_in_use_desc', { count: forceDeleteCount ?? 0, name: profileName || '' })}
           confirmLabel={t('prof_btn_force_delete')}
           cancelLabel={t('cancel')}
           isWorking={isDeleting}
@@ -624,9 +629,11 @@ export function ProfileDetailPage() {
 
       {isSaveConfirmOpen && (
         <ConfirmActionPanel
-          tone={impactedSubscribers > 0 ? 'warning' : 'info'}
+          tone={impact.kind === 'known' && impact.count === 0 ? 'info' : 'warning'}
           title={t('prof_change_confirm_title')}
-          message={t('prof_change_confirm_desc', { count: impactedSubscribers })}
+          message={impact.kind === 'unknown'
+            ? t('prof_change_confirm_desc_unknown')
+            : t('prof_change_confirm_desc', { count: impact.count })}
           confirmLabel={t('prof_change_confirm_btn')}
           cancelLabel={t('cancel')}
           isWorking={isSaving}

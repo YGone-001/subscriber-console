@@ -4,8 +4,8 @@
  * Adaptations: "use client" dropped; `@/` aliases and CSS-module imports repointed for the Vite runtime.
  */
 import { Users, Shield, Signal, Gauge, Server, Lock, ChevronDown, ChevronUp } from "lucide-react";
-import { AMBR_UNITS, getAmbrString, typeLabel } from '../../subscribers/components/subscriber/utils';
-import { ratingTypeLabel, ratingUnitLabel } from '../profile-format';
+import { getAmbrString, typeLabel } from '../../subscribers/components/subscriber/utils';
+import { ambrSideView, mbrSideText, ratingTypeLabel, ratingUnitLabel } from '../profile-format';
 import { isWithheldPlaceholder } from '../../../types/credential';
 
 export default function ProfileViewMode({ t, authData, credentialState, rawAuth, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats, statsUnavailable }: any) {
@@ -23,19 +23,10 @@ export default function ProfileViewMode({ t, authData, credentialState, rawAuth,
     if (credentialState?.visibility !== 'masked') return value || notConfigured;
     return credentialState[field] === 'configured' ? t("credential_withheld") : notConfigured;
   };
-  const ambrSide = (side: any) => {
-    const value = Number(side?.value);
-    if (!Number.isFinite(value)) return { text: notConfigured, unit: '' };
-    const unit = AMBR_UNITS.find(u => u.val === (side?.unit ?? 1))?.label || '';
-    return { text: String(value), unit };
-  };
+  const ambrSide = (side: any) => ambrSideView(side, notConfigured);
   const downlinkAmbr = ambrSide(ueAmbr?.downlink);
   const uplinkAmbr = ambrSide(ueAmbr?.uplink);
-  const mbrSide = (side: any) => {
-    if (side?.value === undefined || side?.value === null) return t("prof_pcc_not_set");
-    const unit = AMBR_UNITS.find(u => u.val === (side?.unit ?? 1))?.label || '';
-    return `${side.value} ${unit}`.trim();
-  };
+  const mbrSide = (side: any) => mbrSideText(side, t("prof_pcc_not_set"));
 
   return (
     <div className="animate-fade-in profile-container">

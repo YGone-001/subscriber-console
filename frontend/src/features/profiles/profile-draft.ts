@@ -3,7 +3,7 @@
  * state, and back to a payload, without inventing values it does not carry.
  */
 import { formatBytes, formatEvents, parseBytes, parseEvents } from '../../lib/unitParser';
-import { isWithheldPlaceholder } from '../../types/credential';
+import { isWithheldPlaceholder, resolveUsimType } from '../../types/credential';
 import type { ProfileAmbrSide } from './profile-types';
 
 export type { ProfileAmbrSide };
@@ -59,7 +59,7 @@ export function createDraftFromProfile(profile: any, fallbackTitle: string): Pro
   draft.title = profile.title || fallbackTitle || '';
 
   if (profile.auth) {
-    draft.usimType = profile.auth.op ? 'op' : 'opc';
+    draft.usimType = resolveUsimType(profile.auth);
     /* A placeholder inherited from an older projection is not a key: the form
      * starts empty rather than carrying something that could be saved back. */
     draft.auth = {

@@ -43,6 +43,47 @@ export function ambrSelectUnit(unit: unknown): number | '' {
   return index;
 }
 
+/* The unit's display form, with no invented default: an absent or unresolvable
+ * unit reads as no unit at all rather than as Kbps. */
+export function ambrUnitLabel(unit: unknown): string {
+  const index = ambrSelectUnit(unit);
+  return index === '' ? '' : AMBR_UNIT_LABELS[index] ?? '';
+}
+
+export type AmbrSideView = { text: string; unit: string };
+
+export function ambrSideView(side: unknown, notConfigured: string): AmbrSideView {
+  const record = typeof side === 'object' && side !== null ? side as Record<string, unknown> : null;
+  const value = record === null ? null : toFiniteNumber(record.value);
+  if (value === null) return { text: notConfigured, unit: '' };
+  return { text: String(value), unit: ambrUnitLabel(record?.unit) };
+}
+
+export function mbrSideText(side: unknown, notSet: string): string {
+  const record = typeof side === 'object' && side !== null ? side as Record<string, unknown> : null;
+  if (record === null || record.value === undefined || record.value === null) return notSet;
+  const value = toFiniteNumber(record.value);
+  if (value === null) return notSet;
+  return `${value} ${ambrUnitLabel(record.unit)}`.trim();
+}
+
+export type TemplateImpact = { kind: 'unknown' } | { kind: 'known'; count: number };
+
+/*
+ * An attribution read that failed is not "zero linked users". A confirmation in
+ * front of a write has to say it cannot tell, instead of reporting a count that
+ * never came from anywhere.
+ */
+export function resolveTemplateImpact(
+  count: number | null | undefined,
+  statsAvailable: boolean,
+): TemplateImpact {
+  if (!statsAvailable || typeof count !== 'number' || !Number.isFinite(count)) {
+    return { kind: 'unknown' };
+  }
+  return { kind: 'known', count };
+}
+
 export function formatAmbrSide(side: unknown, fallback: string): string {
   if (typeof side !== 'object' || side === null) return fallback;
   const record = side as Record<string, unknown>;

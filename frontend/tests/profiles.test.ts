@@ -26,7 +26,16 @@ import {
   profileFilterFromParam,
   profileFilterToParam,
 } from '../src/features/profiles/profile-list-model';
-import { ambrSelectUnit, formatAmbrPair, formatAmbrPairCompact } from '../src/features/profiles/profile-format';
+import {
+  ambrSelectUnit,
+  ambrSideView,
+  ambrUnitLabel,
+  formatAmbrPair,
+  formatAmbrPairCompact,
+  mbrSideText,
+  resolveTemplateImpact,
+} from '../src/features/profiles/profile-format';
+import { resolveUsimType } from '../src/types/credential';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -342,6 +351,58 @@ test('the retired placeholder is never treated as a credential value', () => {
   const sections = buildProfileVersionDiff(staleVersion, BASE_PROFILE, LABELS);
   assert.equal(row(sections, 'auth', 'k').versionValue, LABELS.withheld);
   assert.equal(row(sections, 'auth', 'opc').versionValue, 'ffee…1100');
+});
+
+/* Which OP variant a document carries is a property of the credential block, so
+ * a reader who cannot see the values must still get the right label. */
+test('the USIM variant comes from the stated condition, not from the value', () => {
+  assert.equal(resolveUsimType({
+    credentialState: { visibility: 'masked', k: 'configured', op: 'configured', opc: 'not_configured' },
+  }), 'op');
+  assert.equal(resolveUsimType({
+    credentialState: { visibility: 'masked', k: 'configured', op: 'not_configured', opc: 'configured' },
+  }), 'opc');
+  // Older responses carry no state, so the value decides, as before.
+  assert.equal(resolveUsimType({ op: 'aabb' }), 'op');
+  assert.equal(resolveUsimType({ opc: 'aabb' }), 'opc');
+  assert.equal(resolveUsimType(undefined), 'opc');
+
+  const draft = createDraftFromProfile({
+    title: 'template',
+    auth: { amf: '8000', credentialState: { visibility: 'masked', k: 'configured', op: 'configured', opc: 'not_configured' } },
+  }, 'template');
+  assert.equal(draft.usimType, 'op');
+  assert.equal(draft.auth.opValue, '', 'a withheld value stays empty in the form');
+});
+
+/* An absent unit is reported as no unit. Resolving it to an index would display
+ * and persist a value nobody stored, and bps (index 0) is a legal choice. */
+test('an absent AMBR unit is never resolved to a default', () => {
+  assert.equal(ambrUnitLabel(0), 'bps');
+  assert.equal(ambrUnitLabel(2), 'Mbps');
+  assert.equal(ambrUnitLabel(undefined), '');
+  assert.equal(ambrUnitLabel(9), '');
+  assert.deepEqual(ambrSideView({ value: 100 }, 'N'), { text: '100', unit: '' });
+  assert.deepEqual(ambrSideView({ value: 100, unit: 2 }, 'N'), { text: '100', unit: 'Mbps' });
+  assert.deepEqual(ambrSideView(undefined, 'N'), { text: 'N', unit: '' });
+  assert.equal(mbrSideText({ value: 512, unit: 0 }, 'N'), '512 bps');
+  assert.equal(mbrSideText({ value: 512 }, 'N'), '512');
+  assert.equal(mbrSideText({}, 'N'), 'N');
+});
+
+/* A failed attribution read is unknown, not zero — the confirmations in front of
+ * a write must not turn it into a count. */
+test('an unavailable impact is reported as unknown rather than zero', () => {
+  assert.deepEqual(resolveTemplateImpact(7, true), { kind: 'known', count: 7 });
+  assert.deepEqual(resolveTemplateImpact(0, true), { kind: 'known', count: 0 });
+  assert.deepEqual(resolveTemplateImpact(0, false), { kind: 'unknown' });
+  assert.deepEqual(resolveTemplateImpact(undefined, true), { kind: 'unknown' });
+  assert.deepEqual(resolveTemplateImpact(null, true), { kind: 'unknown' });
+
+  const page = read('../src/features/profiles/ProfileDetailPage.tsx');
+  assert.match(page, /prof_change_confirm_desc_unknown/);
+  assert.match(page, /prof_del_in_use_unknown_desc/);
+  assert.ok(!/impactedSubscribers \|\| 1/.test(page), 'the force-delete fallback must not invent one subscriber');
 });
 
 const VALID_AUTH = { k: 'a'.repeat(32), opValue: 'b'.repeat(32), amf: '8000' };
