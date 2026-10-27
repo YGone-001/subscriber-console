@@ -39,13 +39,13 @@ import { fileURLToPath } from 'node:url';
 import {
   classifyGoRegistrations,
   deriveGoRegistrations,
+  EXPECTED_GO_REGISTRATIONS,
 } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (p) => relative(root, p).replaceAll('\\', '/');
 
 // --- Current production contracts ----------------------------------------------------
-const EXPECTED_GO_REGISTRATIONS = 162;
 const EXPECTED_GO_LISTENER = '127.0.0.1:18888';
 const EXPECTED_CANONICAL_API = 33;
 const EXPECTED_LEGACY_ALIASES = 2;

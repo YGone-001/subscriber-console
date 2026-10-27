@@ -40,7 +40,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // API surface is byte-identical to this baseline, so the cleanup is provably a
 // non-functional change.
 const NORMALIZATION_BASELINE_SHA = '43f2947d70590507a29837bdea36d2ecaffdfaa5';
-const EXPECTED_GO_REGISTRATIONS = 136;
 const EXPECTED_INVENTORY_ROUTES = new Set([
   'GET /api/inventory/meta',
   'GET /api/inventory/resources',
@@ -60,6 +59,8 @@ const EXPECTED_TOPOLOGY_ROUTES = new Set([
   'POST /api/topology/edges',
   'PUT /api/topology/edges/{edgeId}',
   'POST /api/topology/edges/{edgeId}/retire',
+  // Read-only runtime projection: observed nodes plus the reconciled ledger.
+  'GET /api/topology/live',
 ]);
 // Discovery adds exactly twelve read-only observation registrations.
 const EXPECTED_DISCOVERY_ROUTES = new Set([
@@ -89,6 +90,9 @@ const EXPECTED_NF_HEALTH_ROUTES = new Set([
   'POST /api/nf-health/targets',
   'PUT /api/nf-health/targets/{targetId}',
   'POST /api/nf-health/targets/{targetId}/collect',
+  // The controlled-interface read: declared SBI/PFCP/SIP/Diameter endpoints of a
+  // target, resolved from Inventory and Topology. Read-only, owns no write.
+  'GET /api/nf-health/interfaces',
 ]);
 // Runtime discovery adds exactly five registrations: two read projections and
 // three governed mutations (manual scan, bootstrap preview, bootstrap apply).
@@ -121,14 +125,70 @@ const EXPECTED_OPERATIONS_ROUTES = new Set([
   'GET /api/operations/summary',
   'GET /api/operations/resources',
 ]);
-const EXPECTED_ADDED_ROUTE_COUNT =
-  EXPECTED_INVENTORY_ROUTES.size +
-  EXPECTED_TOPOLOGY_ROUTES.size +
-  EXPECTED_DISCOVERY_ROUTES.size +
-  EXPECTED_NF_HEALTH_ROUTES.size +
-  EXPECTED_RUNTIME_ROUTES.size +
-  EXPECTED_NF_ALERT_ROUTES.size +
-  EXPECTED_OPERATIONS_ROUTES.size;
+// The template surface gained four registrations after normalization: the
+// authoritative meta vocabulary, the governed clone, the semantic drift probe and
+// the download-only export.
+const EXPECTED_PROFILE_EXTENSION_ROUTES = new Set([
+  'GET /api/profiles/meta',
+  'POST /api/profiles/{name}/clone',
+  'POST /api/profiles/{name}/drift-precheck',
+  'GET /api/profiles/{name}/export',
+]);
+// Online-subscriber observation: one read projection, no write owner.
+const EXPECTED_UE_INFO_ROUTES = new Set([
+  'GET /api/ue-info',
+]);
+// Knowledge base: entry CRUD, the search vocabulary and attachment transfer.
+const EXPECTED_KNOWLEDGE_ROUTES = new Set([
+  'GET /api/knowledge/meta',
+  'GET /api/knowledge/entries',
+  'GET /api/knowledge/entries/{entryId}',
+  'POST /api/knowledge/entries',
+  'PUT /api/knowledge/entries/{entryId}',
+  'DELETE /api/knowledge/entries/{entryId}',
+  'GET /api/knowledge/files/{fileId}',
+  'POST /api/knowledge/files',
+]);
+// NF log sources plus the live stream.
+const EXPECTED_NF_LOGS_ROUTES = new Set([
+  'GET /api/nf-logs/sources',
+  'GET /api/nf-logs/stream',
+]);
+// NF notification channels, escalations and the delivery log.
+const EXPECTED_NF_NOTIFICATIONS_ROUTES = new Set([
+  'GET /api/nf-notifications/channels',
+  'POST /api/nf-notifications/channels',
+  'PUT /api/nf-notifications/channels/{channelId}',
+  'DELETE /api/nf-notifications/channels/{channelId}',
+  'GET /api/nf-notifications/escalations',
+  'POST /api/nf-notifications/escalations',
+  'PUT /api/nf-notifications/escalations/{escalationId}',
+  'DELETE /api/nf-notifications/escalations/{escalationId}',
+  'GET /api/nf-notifications/deliveries',
+]);
+
+/*
+ * Every post-normalization registration, in one place. The membership check and
+ * the count are both derived from this union, so a new feature set can no longer
+ * be added to one and forgotten in the other — which is how this gate drifted
+ * behind the surface it was meant to pin. The total is never a literal either: it
+ * is the frozen baseline plus the declared additions.
+ */
+const ALLOWED_ADDED_ROUTES = new Set([
+  ...EXPECTED_INVENTORY_ROUTES,
+  ...EXPECTED_TOPOLOGY_ROUTES,
+  ...EXPECTED_DISCOVERY_ROUTES,
+  ...EXPECTED_NF_HEALTH_ROUTES,
+  ...EXPECTED_RUNTIME_ROUTES,
+  ...EXPECTED_NF_ALERT_ROUTES,
+  ...EXPECTED_OPERATIONS_ROUTES,
+  ...EXPECTED_PROFILE_EXTENSION_ROUTES,
+  ...EXPECTED_UE_INFO_ROUTES,
+  ...EXPECTED_KNOWLEDGE_ROUTES,
+  ...EXPECTED_NF_LOGS_ROUTES,
+  ...EXPECTED_NF_NOTIFICATIONS_ROUTES,
+]);
+const EXPECTED_ADDED_ROUTE_COUNT = ALLOWED_ADDED_ROUTES.size;
 
 // The synthetic unknown-route probe. Test-only: it must never become a production
 // Go registration.
@@ -568,10 +628,10 @@ function fail(msg) {
 
 if (baselineError) fail(`baseline derivation failed: ${baselineError}`);
 if (beforeKeys.size !== 84) fail(`go_routes_before=${beforeKeys.size}`);
-if (afterKeys.size !== EXPECTED_GO_REGISTRATIONS) fail(`go_routes_after=${afterKeys.size}`);
-const unexpectedAdditions = addedKeys.filter(
-  (k) => !EXPECTED_INVENTORY_ROUTES.has(k) && !EXPECTED_TOPOLOGY_ROUTES.has(k) && !EXPECTED_DISCOVERY_ROUTES.has(k) && !EXPECTED_NF_HEALTH_ROUTES.has(k) && !EXPECTED_RUNTIME_ROUTES.has(k) && !EXPECTED_NF_ALERT_ROUTES.has(k) && !EXPECTED_OPERATIONS_ROUTES.has(k),
-);
+if (afterKeys.size !== beforeKeys.size + EXPECTED_ADDED_ROUTE_COUNT) {
+  fail(`go_routes_after=${afterKeys.size} expected=${beforeKeys.size + EXPECTED_ADDED_ROUTE_COUNT}`);
+}
+const unexpectedAdditions = addedKeys.filter((k) => !ALLOWED_ADDED_ROUTES.has(k));
 if (unexpectedAdditions.length !== 0) fail(`unexpected_go_routes_added=${unexpectedAdditions.join(', ')}`);
 if (addedKeys.length !== EXPECTED_ADDED_ROUTE_COUNT) fail(`go_routes_added=${addedKeys.length} expected=${EXPECTED_ADDED_ROUTE_COUNT}`);
 if (removedKeys.length !== 0) fail(`go_routes_removed=${removedKeys.length}`);

@@ -47,7 +47,7 @@ import bcrypt from 'bcryptjs';
 import { MongoClient, ObjectId } from 'mongodb';
 import { SignJWT } from 'jose';
 
-import { deriveGoRegistrations, classifyGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, classifyGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 import { findListener, inspectProcess } from './lib/local-runtime.mjs';
 import { resolveGoToolchain } from './lib/project-paths.mjs';
 
@@ -58,9 +58,6 @@ import { resolveGoToolchain } from './lib/project-paths.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FRONTEND = join(ROOT, 'frontend');
 const BACKEND = join(ROOT, 'backend');
-
-/** Canonical production API surface size (asserted against the derived set). */
-const EXPECTED_GO_REGISTRATIONS = 162;
 
 const NEXT_PORT = Number(process.env.DEPLOYMENT_NEXT_PORT || 13333);
 const GO_PORT = Number(process.env.DEPLOYMENT_GO_PORT || 18888);

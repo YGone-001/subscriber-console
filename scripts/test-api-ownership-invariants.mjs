@@ -36,7 +36,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations, classifyGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, classifyGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const selfPath = resolve(root, 'scripts/test-api-ownership-invariants.mjs');
@@ -52,10 +52,6 @@ const frontendPackagePath = resolve(root, 'frontend/package.json');
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'];
 const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
-
-// Frozen final canonical production API surface size. The set itself is always derived
-// from the Go registration site; this number only asserts the derived total.
-const EXPECTED_GO_REGISTRATIONS = 162;
 
 // ---------------------------------------------------------------------------
 // Invariant bookkeeping

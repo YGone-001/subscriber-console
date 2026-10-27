@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -29,7 +29,6 @@ const ARCHITECTURE_BASELINE_SHA = '11471af9d93fd4345f8d85a60f5c3fdfe821d93b';
 const BRAND_ASSET = 'frontend/public/images/xCloud_picture.png';
 const BRAND_ASSET_BLOB = 'aaaa520147353d4f20127c58d9e9a8f3baf37695';
 const EXPECTED_ROUTES = 41;
-const EXPECTED_GO_REGISTRATIONS = 159;
 const MANIFEST = 'docs/architecture/frontend-ui-restoration.md';
 
 function walk(dir, predicate, files = []) {

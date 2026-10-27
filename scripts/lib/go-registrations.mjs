@@ -86,3 +86,13 @@ export function classifyGoRegistrations(keys) {
 export function toInventoryPath(pattern) {
   return pattern.replace(/\{(\w+)\}/g, ':$1');
 }
+
+/**
+ * The single frozen count of production METHOD+PATH registrations the gate suite
+ * asserts against. Five gates check this same surface, so it lives here once:
+ * duplicated literals drifted independently and left one gate red after an
+ * unrelated feature landed. A change to the Go surface updates this number once,
+ * together with the AGENTS.md / CLAUDE.md totals that `test-agent-docs-parity`
+ * cross-checks.
+ */
+export const EXPECTED_GO_REGISTRATIONS = 162;

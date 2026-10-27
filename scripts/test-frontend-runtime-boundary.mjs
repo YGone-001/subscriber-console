@@ -18,14 +18,12 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontendRoot = resolve(root, 'frontend');
 const srcRoot = resolve(frontendRoot, 'src');
 const packagePath = resolve(frontendRoot, 'package.json');
-
-const EXPECTED_GO_REGISTRATIONS = 162;
 
 function walk(dir, predicate, files = []) {
   if (!existsSync(dir)) return files;
