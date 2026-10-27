@@ -291,6 +291,14 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	// auth4G projection.
 	projectCredentialState(profile, auth.HasPermission(p, "subscribers.write"))
 
+	// Templates written before the write counter existed carry no revision at
+	// all, which left a client holding nothing to precondition on: its save was
+	// unconditionally last-write-wins. Projecting the counter as a number keeps
+	// the detail consistent with versions' current.revision and makes the
+	// compare-and-swap guard live from the first edit, without touching the
+	// stored document.
+	profile["revision"] = profileRevision(profile)
+
 	stats, err := h.repo.GetProfileStats(r.Context(), name)
 	if err != nil {
 		// The template itself was read fine; only the attribution failed. Keep

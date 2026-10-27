@@ -1694,6 +1694,45 @@ func TestProfileGetKeepsPlaintextForSubscriberWriter(t *testing.T) {
 	}
 }
 
+// Templates written before the write counter existed carry no revision, and a
+// client that reads one is handed nothing to precondition on: its save becomes
+// an unconditional overwrite. The detail projection normalises the counter to a
+// number so every reader can guard its write.
+func TestProfileGetProjectsANumericRevision(t *testing.T) {
+	repo := newMockRepository()
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	repo.profiles["legacy"] = bson.M{"name": "legacy", "title": "legacy"}
+	repo.profiles["counted"] = bson.M{"name": "counted", "revision": int64(7)}
+
+	detail := func(name string) map[string]any {
+		t.Helper()
+		writer := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/api/profiles/"+name, nil)
+		req = req.WithContext(auth.ContextWithPrincipal(req.Context(), &auth.Principal{
+			Username: "op1", Role: "operator", NormalizedRole: "operator",
+		}))
+		req.SetPathValue("name", name)
+		handler.Get(writer, req)
+		if writer.Code != http.StatusOK {
+			t.Fatalf("detail %s: status %d: %s", name, writer.Code, writer.Body.String())
+		}
+		var resp struct {
+			Profile map[string]any `json:"profile"`
+		}
+		if err := json.Unmarshal(writer.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode detail %s: %v", name, err)
+		}
+		return resp.Profile
+	}
+
+	if got := detail("legacy")["revision"]; got != float64(0) {
+		t.Errorf("a pre-counter template must still hand the client a precondition value, got %#v", got)
+	}
+	if got := detail("counted")["revision"]; got != float64(7) {
+		t.Errorf("the stored counter must project as a number, got %#v", got)
+	}
+}
+
 func TestVersionsDetailBranchWithholdsSnapshotCredentials(t *testing.T) {
 	repo := newMockRepository()
 	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
@@ -2216,6 +2255,36 @@ func TestProfileUpdateHonoursTheRevisionPrecondition(t *testing.T) {
 	malformed := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/rev", map[string]any{"title": "x", "expectedRevision": "3"}, writer, pathValues)
 	if malformed.Code != http.StatusBadRequest {
 		t.Errorf("a non-numeric precondition must be refused, got %d", malformed.Code)
+	}
+}
+
+// Zero is a precondition like any other value, so the revision the detail
+// projection hands out for a pre-counter template already guards the first
+// write instead of leaving that document blind.
+func TestZeroPreconditionGuardsAPreCounterTemplate(t *testing.T) {
+	actor := &auth.Principal{Username: "testuser", Role: "super_admin", NormalizedRole: "admin"}
+	repo := newMockRepository()
+	repo.profiles["unnumbered"] = bson.M{"name": "unnumbered", "title": "theirs"}
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+	handler.UseUserRepository(activeUserRepoFor(actor))
+	pathValues := map[string]string{"name": "unnumbered"}
+
+	saved := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/unnumbered",
+		map[string]any{"title": "mine", "expectedRevision": float64(0)}, actor, pathValues)
+	if saved.Code != http.StatusOK {
+		t.Fatalf("zero must match a pre-counter document, got %d: %s", saved.Code, saved.Body.String())
+	}
+	if got := repo.profiles["unnumbered"]["revision"]; got != int64(1) {
+		t.Errorf("the first guarded write lands the counter at 1, got %v", got)
+	}
+
+	stale := doProfileRequest(t, handler.Update, "PUT", "/api/profiles/unnumbered",
+		map[string]any{"title": "blind", "expectedRevision": float64(0)}, actor, pathValues)
+	if stale.Code != http.StatusConflict {
+		t.Fatalf("a client still holding the pre-counter view must conflict, got %d: %s", stale.Code, stale.Body.String())
+	}
+	if repo.profiles["unnumbered"]["title"] != "mine" {
+		t.Error("a conflicted save must not overwrite")
 	}
 }
 

@@ -129,8 +129,11 @@ an existing odd-named template remains reachable.
 ## Template Write Concurrency and Actor Revalidation
 
 Every `app_profiles` document carries a monotonic `revision` counter (created at
-1, advanced by each update and restore) and the read endpoints project it
-unchanged. `PUT /api/profiles/{name}` and
+1, advanced by each update and restore). The read endpoints project it as a
+number, and a document written before the counter existed projects `0` rather
+than omitting the key, so every client is handed a value to precondition on
+instead of being limited to an unconditional overwrite; the read path never
+rewrites the stored document. `PUT /api/profiles/{name}` and
 `DELETE /api/profiles/{name}?expectedRevision=` accept an optional precondition:
 a mismatch returns `409 PROFILE_REVISION_CONFLICT` with
 `currentRevision` and `committed: false` and performs no write. An absent
