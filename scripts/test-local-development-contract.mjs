@@ -16,6 +16,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,7 +97,7 @@ console.log('local_dev_next_runtime_present=false');
 console.log('local_dev_port_13334_active=false');
 console.log('local_dev_next_on_13333_active=false');
 console.log('local_dev_nginx_required=0');
-console.log('local_access_go_routes=136');
+console.log(`local_access_go_routes=${EXPECTED_GO_REGISTRATIONS}`);
 console.log('local_access_next_api_rewrites=0');
 console.log('local_access_next_api_handlers=0');
 console.log('local_access_next_reverse_proxy=0');

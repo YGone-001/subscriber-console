@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const backend = join(root, 'backend');
@@ -38,7 +38,7 @@ function readAll(dir) {
 // 1. Route surface -----------------------------------------------------------
 const registrations = deriveGoRegistrations(root);
 assert.equal(registrations.duplicates.length, 0, `duplicate registrations: ${registrations.duplicates}`);
-assert.equal(registrations.keys.length, 159, `Go registrations must be 159, got ${registrations.keys.length}`);
+assert.equal(registrations.keys.length, EXPECTED_GO_REGISTRATIONS, `Go registrations must be ${EXPECTED_GO_REGISTRATIONS}, got ${registrations.keys.length}`);
 
 const runtimeRoutes = registrations.keys.filter((key) => key.includes('/api/runtime'));
 assert.deepEqual(
@@ -54,7 +54,7 @@ assert.deepEqual(
   `unexpected runtime route set: ${runtimeRoutes.join(', ')}`,
 );
 console.log('runtime_registrations=6');
-console.log('go_registration_count=159');
+console.log(`go_registration_count=${registrations.keys.length}`);
 
 // 2. SPA routes unchanged ----------------------------------------------------
 const routeContract = JSON.parse(read(join(root, 'frontend/route-contract.json')));
@@ -176,8 +176,14 @@ for (const topic of ['24', '26', 'stopped', 'permission_denied', 'not_detected',
 }
 const agents = read(join(root, 'AGENTS.md'));
 const claude = read(join(root, 'CLAUDE.md'));
-assert.ok(agents.includes('159'), 'AGENTS.md must document the 159 registration authority');
-assert.ok(claude.includes('159'), 'CLAUDE.md must document the 159 registration authority');
+assert.ok(
+  agents.includes(`${EXPECTED_GO_REGISTRATIONS} exact METHOD+PATH registrations`),
+  `AGENTS.md must document the ${EXPECTED_GO_REGISTRATIONS} exact METHOD+PATH registration authority`,
+);
+assert.ok(
+  claude.includes(`${EXPECTED_GO_REGISTRATIONS} 条 Go 注册`),
+  `CLAUDE.md must document the ${EXPECTED_GO_REGISTRATIONS} 条 Go 注册 authority`,
+);
 assert.ok(
   agents.includes('docs/architecture/runtime-discovery.md'),
   'AGENTS.md must reference the runtime discovery document',

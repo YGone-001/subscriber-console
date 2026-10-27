@@ -26,6 +26,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 import net from 'node:net';
 import path from 'node:path';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
@@ -642,7 +643,7 @@ async function main() {
     console.log('topology_api_read_count=5');
     console.log('topology_api_mutation_count=3');
     console.log('topology_api_total_count=8');
-    console.log('go_registration_count=159');
+    console.log(`go_registration_count=${EXPECTED_GO_REGISTRATIONS}`);
     console.log('frontend_route_count=41');
     console.log('topology_read_permission=core.read');
     console.log('topology_write_permission=core.configure');

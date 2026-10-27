@@ -6,7 +6,7 @@
  * 1. Tariff Plan Governance (CRUD, enable, disable, clone, operations, DIRECT/APPROVAL)
  * 2. Contract Subscriber Governance (Create, change-tariff, suspend, resume, terminate, DIRECT/APPROVAL)
  * 3. Balance Governance (Direct adjustment, approval adjustment, CAS conflict, reset disabled across 6 roles, detail read)
- * 4. System Invariants (GoRegistered = 136, single-writer production ownership, charging plane boundary)
+ * 4. System Invariants (Go registration surface equals the shared frozen count, single-writer production ownership, charging plane boundary)
  */
 
 import assert from 'node:assert/strict';
@@ -17,7 +17,7 @@ import { execSync, spawn } from 'node:child_process';
 import { MongoClient, Long } from 'mongodb';
 import { loadEnv } from './lib/load-env.mjs';
 import { SignJWT } from 'jose';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 loadEnv(process.cwd());
 
@@ -554,9 +554,9 @@ try {
   // ══════════════════════════════════════════════════════════════════
   console.log('\n4. System Invariants & Production Ownership Integrity');
 
-  // 4.1 Go registration surface (single source of truth) must be strictly 136 operations
+  // 4.1 Go registration surface (single source of truth) must equal the shared frozen count
   const { keys: goRegistrations, duplicates: duplicateRegistrations } = deriveGoRegistrations();
-  assert.equal(goRegistrations.length, 136, `Go registration surface must be exactly 136, found ${goRegistrations.length}`);
+  assert.equal(goRegistrations.length, EXPECTED_GO_REGISTRATIONS, `Go registration surface must be exactly ${EXPECTED_GO_REGISTRATIONS}, found ${goRegistrations.length}`);
   recordCheck('invariants.go_registration_surface_strictly_97');
 
   // 4.2 Every production operation is a unique Go-owned "METHOD /path" registration

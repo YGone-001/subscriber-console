@@ -6,7 +6,7 @@
  * - Total SPA route count = 41
  * - Discovery frontend routes = 2
  * - Discovery Go registrations = 12 (7 reads, 5 mutations)
- * - Go registrations = 136 (97 -> 119 -> 135 -> 136 intentional extensions)
+ * - Go registrations match the shared frozen count in scripts/lib/go-registrations.mjs
  * - Discovery reads use core.read, mutations use core.configure
  * - Discovery hard-delete endpoint = 0
  * - No generic URL-fetch, remote-shell or NF control endpoint exists
@@ -29,7 +29,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -52,7 +52,7 @@ assert.deepEqual(detailRoute.dynamicParameters, ['sourceId'], 'discovery detail 
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 159, `Go registered operations must be exactly 159, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, EXPECTED_GO_REGISTRATIONS, `Go registered operations must be exactly ${EXPECTED_GO_REGISTRATIONS}, got ${goRegistrations.length}`);
 
 const discoveryGoRoutes = goRegistrations.filter((r) => r.includes('/api/discovery'));
 assert.equal(discoveryGoRoutes.length, 12, `Discovery Go registrations must be exactly 12, got ${discoveryGoRoutes.length}`);
@@ -257,7 +257,7 @@ expectReject(() => {
 
 console.log('discovery_frontend_routes=2');
 console.log('discovery_go_registrations=12');
-console.log('go_registration_count=159');
+console.log(`go_registration_count=${goRegistrations.length}`);
 console.log('discovery_collections=3');
 console.log('discovery_security_findings=0');
 console.log('discovery_product_name_tokens=0');

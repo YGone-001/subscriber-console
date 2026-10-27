@@ -43,7 +43,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { MongoClient } from 'mongodb';
 import { loadEnv } from './lib/load-env.mjs';
 import bcrypt from 'bcryptjs';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 loadEnv(process.cwd());
 
@@ -145,8 +145,8 @@ async function main() {
   const goKeys = registrations.keys;
   const goKeySet = new Set(goKeys);
 
-  verify('Go router registers exactly 162 METHOD+PATH operations', () => {
-    assert.equal(goKeys.length, 162, `Expected 162 registrations, found ${goKeys.length}`);
+  verify(`Go router registers exactly ${EXPECTED_GO_REGISTRATIONS} METHOD+PATH operations`, () => {
+    assert.equal(goKeys.length, EXPECTED_GO_REGISTRATIONS, `Expected ${EXPECTED_GO_REGISTRATIONS} registrations, found ${goKeys.length}`);
   });
 
   verify('No duplicate METHOD+PATH registrations in Go router sources', () => {

@@ -32,6 +32,7 @@ import { execSync, spawn } from 'node:child_process';
 import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
 import { loadEnv } from './lib/load-env.mjs';
+import { EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 import bcrypt from 'bcryptjs';
 
 loadEnv(process.cwd());
@@ -781,7 +782,7 @@ async function main() {
     console.log('inventory_api_read_count=3');
     console.log('inventory_api_mutation_count=3');
     console.log('inventory_api_total_count=6');
-    console.log('inventory_go_registration_count=136');
+    console.log(`inventory_go_registration_count=${EXPECTED_GO_REGISTRATIONS}`);
     console.log('inventory_frontend_route_count=3');
     console.log('frontend_total_route_count=41');
     console.log('inventory_read_permission=core.read');

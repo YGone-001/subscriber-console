@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const frontend = join(root, 'frontend', 'src');
@@ -54,6 +54,6 @@ for (const forbidden of ['app_approvals', 'approval_required', 'AUDIT_UNAVAILABL
 // The Go router registration site is the authoritative API surface.
 const { keys: goRegistrations, duplicates } = deriveGoRegistrations(root);
 assert.deepEqual(duplicates, [], 'Go router must not register a METHOD+PATH twice');
-assert.equal(goRegistrations.length, 162, `Go registered operations must be exactly 162, found ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, EXPECTED_GO_REGISTRATIONS, `Go registered operations must be exactly ${EXPECTED_GO_REGISTRATIONS}, found ${goRegistrations.length}`);
 
-console.log('Direct operations contract passed: governance surfaces removed; GoRegistered=162.');
+console.log(`Direct operations contract passed: governance surfaces removed; GoRegistered=${EXPECTED_GO_REGISTRATIONS}.`);

@@ -5,7 +5,7 @@
  * Verifies:
  * 1. All six canonical User Management routes present in the Go registration site
  * 2. Six retired compatibility mutation methods absent
- * 3. Exactly 136 Go registrations with zero duplicates
+ * 3. The derived Go registration set equals the shared frozen count, with zero duplicates
  * 4. Frontend API client uses dedicated canonical endpoints
  * 5. Go backend registers all six canonical routes
  * 6. No frontend owner-specific branching
@@ -15,7 +15,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 
@@ -69,8 +69,8 @@ for (const route of retiredMutations) {
   });
 }
 
-verify('Go registrations = 136', () => {
-  assert.equal(goRegistrations.length, 136, `found ${goRegistrations.length}`);
+verify(`Go registrations = ${EXPECTED_GO_REGISTRATIONS}`, () => {
+  assert.equal(goRegistrations.length, EXPECTED_GO_REGISTRATIONS, `found ${goRegistrations.length}`);
 });
 
 verify('no duplicate METHOD+PATH registrations', () => {
@@ -183,4 +183,4 @@ verify('frontend API client never exposes passwordHash', () => {
 
 // -- Summary -----------------------------------------------------------------
 console.log(`\nAll ${passed} user management integration checks passed.`);
-console.log('GoRegistered=136 duplicates=0');
+console.log(`GoRegistered=${goRegistrations.length} duplicates=${goDuplicates.length}`);
