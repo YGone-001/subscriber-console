@@ -27,7 +27,7 @@ import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
 import { toTariffDetailViewModel, type TariffPlanViewModel } from '../../../features/ocs/ocs-view-models';
 import { downloadTariffPlanExport } from '../../../features/ocs/ocs-export';
-import { formatOcsBytes, formatOcsSeconds, formatOcsTime } from '../../../features/ocs/ocs-format';
+import { formatOcsBytes, formatOcsRuleQuota, formatOcsSeconds, formatOcsTime } from '../../../features/ocs/ocs-format';
 import { asArray, asNumber, asRecord, asString } from '../../../lib/api/envelope';
 
 interface OcsTariffDetailProps {
@@ -290,7 +290,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
                     <td data-label={t('ocs_tariff_rule_col_apn')} data-column-priority="important" className="ocs-mono">{rule.apn}</td>
                     <td data-label={t('ocs_tariff_rule_col_charging')} data-column-priority="supplementary">{rule.chargingType}</td>
                     <td data-label={t('ocs_tariff_rule_col_unit')} data-column-priority="supplementary">{rule.unit}</td>
-                    <td data-label={t('ocs_tariff_rule_col_quota')} data-column-priority="important" className="ocs-mono">{formatOcsBytes(rule.quotaPerGrant)}</td>
+                    <td data-label={t('ocs_tariff_rule_col_quota')} data-column-priority="important" className="ocs-mono">{formatOcsRuleQuota(rule.quotaPerGrant, rule.unit)}</td>
                     <td data-label={t('ocs_tariff_rule_col_validity')} data-column-priority="supplementary" className="ocs-mono">{formatOcsSeconds(rule.validityTime)}</td>
                     <td data-label={t('ocs_tariff_rule_col_priority')} data-column-priority="supplementary" className="ocs-mono">{rule.priority ?? '\u2014'}</td>
                     <td data-label={t('ocs_tariff_rule_col_status')} data-column-priority="essential"><OcsStatusBadge status={rule.status} /></td>

@@ -219,19 +219,24 @@ export default function OcsTariffGovernancePanel() {
 
   const controls = (
     <OcsToolbar
-      actions={canWrite ? (
-        <button
-          type="button"
-          className="ocs-btn ocs-btn-primary"
-          onClick={() => {
-            setSelectedPlanForEdit(null);
-            setModalOpen(true);
-          }}
-        >
-          <Plus size={16} aria-hidden="true" />
-          <span>{t('ocs_tariff_create')}</span>
-        </button>
-      ) : null}
+      actions={(
+        <>
+          <OcsResetFilters active={filtersActive} onReset={reset} label={t('ocs_filters_reset')} />
+          {canWrite && (
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-primary"
+              onClick={() => {
+                setSelectedPlanForEdit(null);
+                setModalOpen(true);
+              }}
+            >
+              <Plus size={16} aria-hidden="true" />
+              <span>{t('ocs_tariff_create')}</span>
+            </button>
+          )}
+        </>
+      )}
     >
       <OcsSearchField
         value={state.q}
@@ -249,7 +254,6 @@ export default function OcsTariffGovernancePanel() {
           { value: 'disabled', label: t('ocs_status_disabled') },
         ]}
       />
-      <OcsResetFilters active={filtersActive} onReset={reset} label={t('ocs_filters_reset')} />
     </OcsToolbar>
   );
 

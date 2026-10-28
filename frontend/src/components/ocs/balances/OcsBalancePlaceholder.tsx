@@ -227,7 +227,7 @@ export default function OcsBalancePlaceholder() {
             />
             <th data-column-priority="important">{t('ocs_filter_plan')}</th>
             <SortableTableHeader
-              label={t('ocs_col_data_available')}
+              label={t('ocs_balance_total_available')}
               active={sort === 'data_available'}
               direction={order}
               icon={<OcsSortIcon active={sort === 'data_available'} direction={order} />}
@@ -285,7 +285,7 @@ export default function OcsBalancePlaceholder() {
                       )
                       : '\u2014'}
                   </td>
-                  <td data-label={t('ocs_col_data_available')} data-column-priority="essential" className="ocs-mono">{formatOcsBytes(record.data.available)}</td>
+                  <td data-label={t('ocs_balance_total_available')} data-column-priority="essential" className="ocs-mono">{formatOcsBytes(record.data.available)}</td>
                   <td data-label={t('ocs_col_voice_avail')} data-column-priority="important" className="ocs-mono">
                     {record.voice.available === null ? '\u2014' : `${record.voice.available}s`}
                   </td>

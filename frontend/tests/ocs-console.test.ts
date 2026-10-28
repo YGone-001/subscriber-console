@@ -16,6 +16,7 @@ import OcsInvariantBadge from '../src/components/ocs/common/OcsInvariantBadge';
 import OcsDetailState from '../src/components/ocs/common/OcsDetailState';
 import {
   formatOcsBytes,
+  formatOcsRuleQuota,
   formatOcsSeconds,
   pageCountFor,
   sanitizeImsiInput,
@@ -94,6 +95,15 @@ test('a balance record without an available figure keeps it null instead of coer
   assert.equal(records.length, 1);
   assert.equal(records[0].data.available, null);
   assert.equal(records[0].invariants.data, null);
+});
+
+test('a rating-rule quota is formatted in the unit the rule declares', () => {
+  assert.equal(formatOcsRuleQuota(10485760, 'octets'), '10 MB');
+  assert.equal(formatOcsRuleQuota(60, 'seconds'), '60s');
+  assert.equal(formatOcsRuleQuota(1, 'events'), '1');
+  assert.equal(formatOcsRuleQuota(0, 'octets'), '0 B');
+  assert.equal(formatOcsRuleQuota(null, 'octets'), '\u2014');
+  assert.equal(formatOcsRuleQuota(5, 'messages'), '5 messages', 'an unknown unit is shown verbatim');
 });
 
 test('the adjustment trail projects the operation log without inventing fields', () => {

@@ -37,6 +37,25 @@ export function formatOcsNumber(value: number | null | undefined): string {
   return Number(value).toLocaleString();
 }
 
+/**
+ * A rating-rule quota in the unit the rule declares.
+ *
+ * Rule quotas are not all byte counts: a voice rule counts seconds and an SMS
+ * rule counts events. Formatting every quota as bytes printed "60 B" for a
+ * 60-second allowance, which is a wrong measurement rather than a cosmetic
+ * choice. Unknown units keep the numeric value and the declared unit verbatim.
+ */
+export function formatOcsRuleQuota(value: number | null | undefined, unit: string | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return OCS_EMPTY;
+  const normalized = (unit ?? '').trim().toLowerCase();
+  if (normalized === 'seconds' || normalized === 'second' || normalized === 's') return `${value}s`;
+  if (normalized === 'events' || normalized === 'event') return String(value);
+  if (normalized === '' || normalized === 'octets' || normalized === 'bytes' || normalized === 'byte') {
+    return formatOcsBytes(value);
+  }
+  return `${value} ${unit}`;
+}
+
 /** ISO timestamp rendered in the operator's locale, or the em dash. */
 export function formatOcsTime(value: string | null | undefined): string {
   if (!value) return OCS_EMPTY;
