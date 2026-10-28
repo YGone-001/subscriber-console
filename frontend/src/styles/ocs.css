@@ -1544,3 +1544,143 @@
   font-family: var(--font-mono, monospace);
   font-size: var(--ref-font-size-data-relaxed);
 }
+
+/* ---------------------------------------------------------------------------
+ * OCS console optimization layer.
+ *
+ * Additive rules only: every selector below is new, so the forward-ported
+ * historical vocabulary above keeps its original meaning and geometry.
+ *
+ * The detail-state panel exists because the three detail pages previously
+ * collapsed "not found", "denied", "failed" and "still loading" into one empty
+ * div, which told the operator nothing about what to do next.
+ * ------------------------------------------------------------------------- */
+
+.ocs-toolbar-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.ocs-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.ocs-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.ocs-filter-label {
+  font-size: var(--ref-font-size-caption);
+  color: var(--text-secondary);
+}
+
+.ocs-filter-field .ocs-select {
+  min-width: 10rem;
+}
+
+.ocs-imsi-cell-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ocs-status-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.ocs-default-badge {
+  font-size: var(--ref-font-size-caption);
+  color: var(--text-secondary);
+  border: 1px solid var(--surface-border);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+
+.ocs-invariant-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: var(--ref-font-size-caption);
+  font-weight: 600;
+}
+
+.ocs-invariant-ok {
+  background: var(--status-success-soft);
+  color: var(--status-success);
+}
+
+.ocs-invariant-broken {
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+}
+
+.ocs-invariant-unknown {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.ocs-detail-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-soft-panel);
+}
+
+.ocs-detail-state[data-state="error"] {
+  color: var(--status-danger);
+}
+
+.ocs-detail-state[data-state="forbidden"] {
+  color: var(--status-warning);
+}
+
+.ocs-detail-state-detail {
+  font-size: var(--ref-font-size-caption);
+  color: var(--text-muted);
+  max-width: 48ch;
+  word-break: break-word;
+}
+
+.ocs-dialog-copy {
+  margin: 0 0 1rem;
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-body-small);
+}
+
+.ocs-form-hint {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: var(--ref-font-size-caption);
+  color: var(--text-secondary);
+}
+
+.ocs-form-hint-error {
+  color: var(--status-danger);
+}
+
+.ocs-detail-section-full {
+  grid-column: 1 / -1;
+}
+
+.ocs-detail-hint {
+  margin: 0 0 0.75rem;
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-body-small);
+}

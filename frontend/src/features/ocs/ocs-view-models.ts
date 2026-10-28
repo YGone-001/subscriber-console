@@ -75,6 +75,35 @@ export type OcsPageViewModel = {
   totalPages: number | null;
 };
 
+/**
+ * The `summary` block the balance list envelope already carries. It describes
+ * the whole collection, not the current page, so the KPI strip can state totals
+ * without a second request. Missing fields stay `null` rather than becoming 0.
+ */
+export type OcsBalanceSummaryViewModel = {
+  totalSubscribers: number | null;
+  totalDataAllocated: number | null;
+  totalDataUsed: number | null;
+  totalDataAvailable: number | null;
+};
+
+export const EMPTY_BALANCE_SUMMARY: OcsBalanceSummaryViewModel = {
+  totalSubscribers: null,
+  totalDataAllocated: null,
+  totalDataUsed: null,
+  totalDataAvailable: null,
+};
+
+export function toBalanceSummaryViewModel(payload: unknown): OcsBalanceSummaryViewModel {
+  const summary = asRecord(asRecord(payload).summary);
+  if (!summary) return { ...EMPTY_BALANCE_SUMMARY };
+  return {
+    totalSubscribers: field(summary, 'totalSubscribers', asNumber) ?? field(summary, 'total_subscribers', asNumber),
+    totalDataAllocated: field(summary, 'totalDataAllocated', asNumber) ?? field(summary, 'total_data_allocated', asNumber),
+    totalDataUsed: field(summary, 'totalDataUsed', asNumber) ?? field(summary, 'total_data_used', asNumber),
+    totalDataAvailable: field(summary, 'totalDataAvailable', asNumber) ?? field(summary, 'total_data_available', asNumber),
+  };
+}
 export type TariffPlanViewModel = {
   planId: string | null;
   name: string | null;
