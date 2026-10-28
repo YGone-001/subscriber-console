@@ -56,6 +56,8 @@ export type OcsBalanceViewModel = {
   invariants: OcsInvariants;
   createdAt: string | null;
   updatedAt: string | null;
+  cycleStartAt: string | null;
+  cycleResetAt: string | null;
 };
 
 export type OcsContractViewModel = {
@@ -104,20 +106,25 @@ export function toBalanceSummaryViewModel(payload: unknown): OcsBalanceSummaryVi
     totalDataAvailable: field(summary, 'totalDataAvailable', asNumber) ?? field(summary, 'total_data_available', asNumber),
   };
 }
+
+/*
+ * `version`, `created_by` and `updated_by` are deliberately absent: the tariff
+ * plan projection (`PlanSummary` in the Go repository) never emits them, so the
+ * historical "version" and "updated by" table columns could only ever render the
+ * fallback `v1` / an em dash. Projecting fields that do not exist is worse than
+ * not projecting them at all.
+ */
 export type TariffPlanViewModel = {
   planId: string | null;
   name: string | null;
   description: string | null;
   status: string | null;
-  version: number | null;
   quotaPerGrant: number | null;
   validityTime: number | null;
   volumeThreshold: number | null;
   rulesCount: number | null;
   subscriberCount: number | null;
   isDefault: boolean | null;
-  createdBy: string | null;
-  updatedBy: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -173,6 +180,8 @@ export function toBalanceViewModel(payload: unknown): OcsBalanceViewModel | null
     },
     createdAt: field(record, 'created_at', asTimestamp) ?? field(record, 'createdAt', asTimestamp),
     updatedAt: field(record, 'updated_at', asTimestamp) ?? field(record, 'updatedAt', asTimestamp),
+    cycleStartAt: field(record, 'cycle_start_at', asTimestamp) ?? field(record, 'cycleStartAt', asTimestamp),
+    cycleResetAt: field(record, 'cycle_reset_at', asTimestamp) ?? field(record, 'cycleResetAt', asTimestamp),
   };
 }
 
@@ -234,15 +243,12 @@ export function toTariffPlanViewModel(payload: unknown): TariffPlanViewModel | n
     name: field(record, 'name', asText),
     description: field(record, 'description', asString),
     status: field(record, 'status', asText),
-    version: field(record, 'version', asNumber),
     quotaPerGrant: field(record, 'quota_per_grant', asNumber) ?? field(record, 'quotaPerGrant', asNumber),
     validityTime: field(record, 'validity_time', asNumber) ?? field(record, 'validityTime', asNumber),
     volumeThreshold: field(record, 'volume_threshold', asNumber) ?? field(record, 'volumeThreshold', asNumber),
     rulesCount: field(record, 'rulesCount', asNumber) ?? field(record, 'rules_count', asNumber),
     subscriberCount: field(record, 'subscriberCount', asNumber) ?? field(record, 'subscriber_count', asNumber),
     isDefault: field(record, 'isDefault', asBoolean) ?? field(record, 'is_default', asBoolean),
-    createdBy: field(record, 'created_by', asText) ?? field(record, 'createdBy', asText),
-    updatedBy: field(record, 'updated_by', asText) ?? field(record, 'updatedBy', asText),
     createdAt: field(record, 'created_at', asTimestamp) ?? field(record, 'createdAt', asTimestamp),
     updatedAt: field(record, 'updated_at', asTimestamp) ?? field(record, 'updatedAt', asTimestamp),
   };

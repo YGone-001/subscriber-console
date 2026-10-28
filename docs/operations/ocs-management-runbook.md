@@ -87,7 +87,32 @@ Target Collection: `xcloud.ocs_tariff_plans`
 4. **Clone Plan**:
    - `POST /api/tariff-plans/{planId}/clone` creates a duplicate template with a new `target_plan_id`.
 5. **Delete Plan**:
-   - `DELETE /api/tariff-plans/{planId}`. Removes the plan if no active contracts reference it.
+   - `DELETE /api/tariff-plans/{planId}` removes the plan document. The API only
+     protects the default plan (`DEFAULT_TARIFF_PLAN_PROTECTED`); it does not
+     verify contract references, so a plan still bound to contracts can be
+     removed through the API and leave a dangling `plan_id`.
+   - The console therefore refuses the delete while `subscriberCount > 0` and
+     states the bound count on the control. Unbind or migrate the contracts
+     first.
+
+### 3.3 Console Surface (`/ocs/tariffs`)
+- List: search by plan id/name, status filter, sortable columns, and a KPI strip
+  over the whole collection. Filters, sort and paging are carried in the URL, so
+  a refresh or a bookmark restores the same view.
+- List columns report the identifiers the API actually emits: plan id, name,
+  status (plus a `default` marker), rule count, data quota, validity window, bound
+  contract count and last update. The historical "version" and "updated by"
+  columns were removed because the plan projection never supplies them.
+- Row actions: view, export JSON, edit, enable/disable, clone (the target id is
+  requested, not generated), delete (guarded as above).
+- Detail page: quota fields, the rating rule inventory with detected conflicts,
+  the bound contracts (bounded read), and the governance history from
+  `GET /api/tariff-plans/{planId}/operations`.
+- **Rule maintenance is read-only here.** Rule create/update/toggle/delete,
+  plan import and plan migration are disabled by policy and answer with
+  `OCS_TARIFF_RULE_*_NOT_SUPPORTED` / `OCS_PLAN_MIGRATION_NOT_SUPPORTED`. The
+  dry-run preview `GET /api/tariff-plans/{planId}/migrate` remains available and
+  writes nothing.
 
 ---
 
@@ -117,6 +142,25 @@ Target Collection: `xcloud.ocs_subscribers`
 5. **Contract Termination**:
    - Submit `DELETE /api/ocs/subscribers/{imsi}`.
    - Moves contract to `terminated` or removes record after balance reconciliation.
+   - A terminated contract is terminal in the console: suspend, resume, tariff
+     reassignment and terminate are all hidden for that row, because
+     `POST /resume` would otherwise move the record back to `active`.
+
+### 4.3 Console Surface (`/ocs/contracts`)
+- KPI strip: all / active / suspended / terminated. `total` comes from the list
+  envelope; the per-status counts come from bounded `limit=1` reads, so they
+  describe the collection rather than the current page.
+- Filters: IMSI (digits only) and status, plus a tariff-plan filter. Sort, page
+  and page size live in the URL.
+- The pager derives its page count from `total`. The list envelope's `totalPages`
+  is `floor(total/limit) + 1`, which advertises a trailing empty page whenever the
+  total is an exact multiple of the page size.
+- Tariff reassignment lists active plans plus the contract's current plan, and
+  shows each plan's quota. A disabled plan is never offered: the API rejects it
+  with `OCS_TARIFF_DISABLED`.
+- Detail page: identity, billing (plan name, quota, status), timestamps, and the
+  same lifecycle actions with confirmation. A missing identifier renders the
+  "not found" state; it never falls back to a neighbouring record.
 
 ---
 
@@ -134,18 +178,34 @@ For all balances in `ocs_balances`, the following conservation equations must ho
 
 ### 5.2 Balance Adjustment Procedure
 To adjust quota for a subscriber:
-1. Navigate to `/ocs/balances` and locate the subscriber by IMSI.
-2. Click **Adjust Balance** (or open detail page `/ocs/balances/[imsi]`).
-3. Specify:
-   - `delta_bytes` (positive to add quota, negative to reduce quota)
-   - `delta_voice_seconds`
-   - `delta_sms_count`
-   - `expected_version` (CAS version precondition)
-   - `reason` (audit trail explanation)
+1. Navigate to `/ocs/balances` and locate the subscriber by IMSI (digits only),
+   optionally filtering by status or tariff plan.
+2. Click **Adjust Balance** (or open the detail page `/ocs/balances/{imsi}` and
+   use the header action).
+3. Specify one bucket (`data` | `voice` | `sms`), one operation
+   (`credit` | `debit`), the amount in the chosen unit, a required `reason`
+   (max 200 characters) and an optional `ticketId` (max 100 characters). The
+   console sends the record's `version` as the CAS precondition.
 4. Execution:
    - **admin**: Direct authorized adjustment.
    - **operator**: Direct authorized adjustment.
    - **viewer**: Denied with HTTP 403.
+5. A concurrent write answers `BALANCE_PRECONDITION_CHANGED`; refetch the record
+   and retry. A broken conservation invariant blocks the write with
+   `BALANCE_INVARIANT_VIOLATION`, which is why the invariant state is shown in
+   both the list and the detail page.
+
+### 5.2.1 Console Surface (`/ocs/balances`)
+- KPI strip: account count, data allocated, data used and data available, read
+  from the `summary` block of the list envelope (collection-wide, not per page).
+- Filters: IMSI (digits only), status and tariff plan; sortable IMSI / available
+  data / last update. Page, filters and sort live in the URL.
+- The table shows the plan name, the three available buckets, the money balance,
+  the conservation-invariant badge and the last update. A value the API did not
+  report renders as an em dash, never as `0`.
+- The detail page reads `GET /api/ocs/balances/{imsi}` (exact record), shows the
+  billing cycle window, the record version and the links to the charging contract
+  and the subscriber record.
 
 ### 5.3 Permanent Reset Prohibition
 > [!CAUTION]
