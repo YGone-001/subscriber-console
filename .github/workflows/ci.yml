@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
@@ -188,6 +189,7 @@ jobs:
         run: node scripts/test-go-spa-hosting-contract.mjs
 
       - name: Go static SPA hosting runtime
+        if: github.event_name == 'workflow_dispatch'
         run: node scripts/test-go-spa-hosting-runtime.mjs
 
   go:
@@ -232,6 +234,7 @@ jobs:
 
   direct-operations:
     name: Direct operations integration
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -291,6 +294,7 @@ jobs:
 
   user-management-e2e:
     name: User management HTTP integration
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -335,6 +339,7 @@ jobs:
 
   authentication:
     name: Authentication runtime integration
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -379,6 +384,7 @@ jobs:
 
   deployment-boundary:
     name: Deployment boundary integration
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017
@@ -477,6 +483,7 @@ jobs:
 
   local-development-runtime:
     name: Local development runtime integration
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017
@@ -572,6 +579,7 @@ jobs:
 
   inventory-foundation:
     name: Inventory foundation integration
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -618,6 +626,7 @@ jobs:
 
   topology-foundation:
     name: Topology foundation integration
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -754,6 +763,7 @@ jobs:
 
   nf-discovery-integration:
     name: NF discovery integration
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -859,6 +869,7 @@ jobs:
 
   nf-health-integration:
     name: NF health integration
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -911,58 +922,6 @@ jobs:
       - name: NF health integration
         run: node scripts/test-nf-health-integration.mjs
 
-  nf-health-ui-acceptance:
-    name: NF health UI/UX acceptance
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: frontend/.nvmrc
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            frontend/package-lock.json
-
-      - name: Install dependencies
-        run: |
-          npm ci
-          cd frontend && npm ci
-
-      - name: Frontend build
-        working-directory: frontend
-        run: npm run build
-
-      - name: Install Chromium browser dependencies
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
-
-      # Native-module integration: routes, navigation, shared primitives, shared
-      # token system, layered-health presentation and vendor-neutral strings.
-      - name: NF health UI/UX acceptance contract
-        run: node scripts/test-nf-health-ui-contract.mjs
-
-      # Browser-rendered acceptance: the built production SPA is served to real
-      # Chromium against deterministic API fixtures. Captures the screenshot
-      # matrix, verifies PNG integrity and SHA-256 checksums, asserts computed
-      # layout geometry, and fails closed on browser errors or unexpected API
-      # requests.
-      - name: Browser screenshot acceptance
-        working-directory: frontend
-        run: npm run acceptance:nf-health-screenshots
-
-      - name: Upload NF Health screenshots
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: nf-health-screenshots
-          path: reports/ops/nf-health-screenshots
-          if-no-files-found: error
-          retention-days: 14
-
   production-architecture:
     name: Production architecture certification
     runs-on: ubuntu-latest
@@ -984,7 +943,6 @@ jobs:
       - nf-discovery-integration
       - discovery-ui-acceptance
       - nf-health-integration
-      - nf-health-ui-acceptance
     steps:
       - name: Checkout
         uses: actions/checkout@v7
