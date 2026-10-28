@@ -44,6 +44,46 @@ import { resolveUsimType } from '../src/types/credential';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
+/* One seam table for the template stylesheet. CSS Modules localize at the import
+ * boundary but keep the written selector names inside the file, so the layout
+ * contracts below stay meaningful; what would silently rot is the pairing between
+ * a component and the token it expects. Each token is asserted once against the
+ * sheet and once against its consumer, so a rename has to be made in this one
+ * table rather than in five scattered reads. */
+const PROFILE_STYLESHEET = '../src/styles/profile.css';
+const STYLE_SEAMS = [
+  { token: 'profile-col-template', consumer: '../src/features/profiles/ProfilesPage.tsx' },
+  { token: 'profile-chip', consumer: '../src/features/profiles/ProfilesPage.tsx' },
+  { token: 'profile-chip-neutral', consumer: '../src/features/profiles/ProfilesPage.tsx' },
+  { token: 'profile-metric-detail', consumer: '../src/features/profiles/ProfilesPage.tsx' },
+  { token: 'profile-anchor-flash', consumer: '../src/features/profiles/ProfileDetailPage.tsx' },
+] as const;
+
+/* Whole tokens only. A substring test accepts "profile-metric-detail-moved" as
+ * evidence that the page still applies "profile-metric-detail", and a pairing
+ * check that passes on a renamed token is worthless. */
+function declaresSelector(css: string, token: string): boolean {
+  return new RegExp(`\\.${token}(?![-\\w])`).test(css);
+}
+
+function appliesToken(source: string, token: string): boolean {
+  for (const quoted of source.matchAll(/["']([^"'\n]+)["']/g)) {
+    if (quoted[1].trim().split(/[\s,]+/).includes(token)) return true;
+  }
+  return false;
+}
+
+test('every template stylesheet seam names one token its consumer applies', () => {
+  const css = read(PROFILE_STYLESHEET);
+  for (const seam of STYLE_SEAMS) {
+    assert.ok(declaresSelector(css, seam.token), `${seam.token} must be declared by ${PROFILE_STYLESHEET}`);
+    assert.ok(
+      appliesToken(read(seam.consumer), seam.token),
+      `${seam.consumer} must apply ${seam.token}; the two sides move together or the styling silently vanishes`,
+    );
+  }
+});
+
 const LABELS: ProfileDiffLabels = {
   notConfigured: 'NOT_CONFIGURED',
   sliceUnit: 'slices',
@@ -609,9 +649,12 @@ test('the compact AMBR pair drops the direction words the column heading already
 
 test('the template table pins its column grid so the identifier cannot be starved', () => {
   const page = read('../src/features/profiles/ProfilesPage.tsx');
-  const css = read('../src/styles/profile.css');
+  const css = read(PROFILE_STYLESHEET);
   assert.match(page, /<colgroup>/);
-  assert.match(page, /profile-col-template/);
+  /* One declared col per column, whatever it is named: a missing <col> quietly
+   * takes the fixed layout's guarantee away from that column. */
+  const columnCount = (page.match(/<col\b/g) ?? []).length;
+  assert.equal(columnCount, 7, `the grid must declare one col per column, got ${columnCount}`);
   assert.match(css, /\.profile-governance-table \{[^}]*table-layout: fixed/);
   assert.match(css, /\.profile-col-template \{ width: 20%/);
   assert.match(page, /formatAmbrPairCompact\(/);
@@ -628,7 +671,7 @@ test('the template filter row wraps instead of scrolling chips out of reach', ()
 });
 
 test('the column grid follows the responsive hiding of supplementary columns', () => {
-  const css = read('../src/styles/profile.css');
+  const css = read(PROFILE_STYLESHEET);
   /* The shared rule hides supplementary columns at 980px; the surviving columns
    * must absorb their share or the fixed grid leaves dead space. */
   assert.match(css, /@media \(max-width: 980px\) \{[\s\S]*?\.profile-col-ambr,\s*\.profile-col-owner \{ width: 0; \}/);
@@ -638,7 +681,7 @@ test('the column grid follows the responsive hiding of supplementary columns', (
 test('the aggregate breakdown wraps through an opt-in class instead of editing the shared strip', () => {
   const strip = read('../src/components/ui/MetricStrip.tsx');
   const page = read('../src/features/profiles/ProfilesPage.tsx');
-  const css = read('../src/styles/profile.css');
+  const css = read(PROFILE_STYLESHEET);
   assert.match(strip, /detailClassName\?: string/);
   assert.match(strip, /detailClass\(item, styles\.metricDetail\)/);
   assert.match(page, /detailClassName: "profile-metric-detail"/);
@@ -670,7 +713,9 @@ test('the version history sits below the workspace and starts collapsed', () => 
   assert.ok(contentIndex > 0 && historyIndex > contentIndex, 'the history card must follow the template content');
   assert.match(card, /const \[open, setOpen\] = useState\(false\)/);
   assert.match(card, /aria-controls="psec-versions-body"/);
-  assert.match(card, /\{open && \(\s*<div className="dash-card-body pm-card-body" id="psec-versions-body"/);
+  /* The controlled element must carry the id the toggle names; its class is
+   * styling and may move, the wiring may not. */
+  assert.match(card, /\{open && \(\s*<div[^>]*id="psec-versions-body"/);
 });
 
 test('the template workspace offers a jump target per section', () => {
@@ -703,8 +748,11 @@ test('a save with no pending change is not offered', () => {
 test('the access restriction column keeps absent, zero and restricted apart', () => {
   const page = read('../src/features/profiles/ProfilesPage.tsx');
   assert.match(page, /access === 0\s*\?\s*t\("prof_access_unrestricted"\)\s*:\s*t\("prof_access_limited"\)/);
+  /* The neutral state must keep the base chip styling as well as its own modifier.
+   * A pairing like this is the one thing the seam table cannot express, so this is
+   * the documented line to move if the sheet is ever localized into a module. */
   assert.match(page, /profile-chip profile-chip-neutral/);
-  assert.match(read('../src/styles/profile.css'), /\.profile-chip-neutral \{/);
+  assert.match(read(PROFILE_STYLESHEET), /\.profile-chip-neutral \{/);
   /* The two-state wording that read as "restriction present" is retired. */
   for (const file of ['../src/lib/locales/en.ts', '../src/lib/locales/zh.ts']) {
     const source = read(file);
@@ -843,8 +891,11 @@ test('the hierarchy rail describes the draft shape and jumps into it', () => {
   assert.match(editMode, /<ProfileHierarchyRail slices=\{slices\} onJump=\{jumpToAnchor\} \/>/);
   /* A collapsed slice owns its sessions, so the jump must expand it first. */
   assert.match(detailPage, /setExpandedSlices\(\(current\) => \(current\.includes\(index\) \? current : \[\.\.\.current, index\]\)\)/);
-  assert.match(detailPage, /el\.classList\.add\('profile-anchor-flash'\)/);
-  assert.match(read('../src/styles/profile.css'), /\.profile-anchor-flash \{/);
+  /* The jump must flash the arrived section and then clean the class up, or every
+   * later render shows a section that looks freshly jumped to. Which token it
+   * flashes is pinned once, in the seam table, against the sheet that defines it. */
+  assert.match(detailPage, /el\.classList\.add\(/);
+  assert.match(detailPage, /el\.classList\.remove\(/);
 });
 
 test('bps is a selectable unit and the resolver never invents one', () => {

@@ -146,33 +146,39 @@ test('the retired placeholder is normalised to withheld at render', () => {
 /* --------------------------------------------------------- OP variant -- */
 
 /* The label the operator reads is the one item the subscriber form also trusts,
- * and a read-only role receives no value to derive it from. */
+ * and a read-only role receives no value to derive it from. The assertions name
+ * the rendered text, not the class carrying it, so they keep holding whether the
+ * styling lives in a global sheet or in a CSS module. */
 test('an OP-based template labels the field OP for a reader who cannot see it', () => {
   const markup = renderView({
     credentialState: masked({ k: 'configured', op: 'configured' }),
     usimType: resolveUsimType({ credentialState: masked({ k: 'configured', op: 'configured' }) }),
   });
-  assert.match(markup, /class="label-muted">OP</);
-  assert.doesNotMatch(markup, /class="label-muted">OPc</);
+  assert.match(markup, />OP<\/div>/);
+  assert.doesNotMatch(markup, />OPc<\/div>/);
 });
 
 test('an OPc-based template keeps the OPc label', () => {
   const state = masked({ k: 'configured', opc: 'configured' });
   const markup = renderView({ credentialState: state, usimType: resolveUsimType({ credentialState: state }) });
-  assert.match(markup, /class="label-muted">OPc</);
+  assert.match(markup, />OPc<\/div>/);
 });
 
 /* -------------------------------------------------------------- AMBR -- */
 
+const AMBR_UNITS = ['bps', 'Kbps', 'Mbps', 'Gbps'];
+
 test('a stored AMBR without a unit renders the number alone, not a guessed unit', () => {
   const card = networkSection(renderView({ ueAmbr: { downlink: { value: 100 }, uplink: { value: 50 } } }));
-  assert.ok(!card.includes('class="ambr-unit"'), 'no unit was stored, so none may be displayed');
+  for (const unit of AMBR_UNITS) {
+    assert.ok(!card.includes(unit), `no unit was stored, so ${unit} may not be displayed`);
+  }
   assert.ok(card.includes('100') && card.includes('50'), 'both stored values must survive');
 });
 
 test('bps is a real unit and must render even though its index is zero', () => {
   const card = networkSection(renderView({ ueAmbr: { downlink: { value: 1024, unit: 0 } } }));
-  assert.match(card, /class="ambr-unit">bps</);
+  assert.ok(card.includes('bps'), 'the stored bps unit must display, not be dropped as a falsy index');
 });
 
 test('a missing UE-AMBR is reported as unconfigured in both directions', () => {
@@ -183,16 +189,16 @@ test('a missing UE-AMBR is reported as unconfigured in both directions', () => {
 /* ----------------------------------------------------------- absence -- */
 
 test('failed attribution renders unavailable, never a screenful of zeroes', () => {
-  const markup = renderView({ backendStats: null, statsUnavailable: true });
-  assert.ok(markup.includes(zh.prof_stats_unavailable), 'the attribution failure must be stated');
-  assert.doesNotMatch(markup, /class="value-mono value-mono-primary">0</);
+  const card = between(renderView({ backendStats: null, statsUnavailable: true }), 'psec-stats', 'psec-security');
+  assert.ok(card.includes(zh.prof_stats_unavailable), 'the attribution failure must be stated');
+  assert.ok(!card.includes('>0<'), 'a failed read must not be dressed up as zero users');
 });
 
 test('successful attribution renders the counts it received', () => {
   const card = between(renderView({
     backendStats: { totalSubscribers: 3, activeSubscribers: 2, suspendedSubscribers: 1, sampleImsis: ['460020000000001'] },
   }), 'psec-stats', 'psec-security');
-  assert.ok(card.includes('value-mono-primary">3<'), 'the total must render');
+  assert.ok(card.includes('>3<'), 'the total must render');
   assert.ok(card.includes('>2<'), 'the active count must render');
   assert.ok(card.includes('460020000000001'), 'the sample IMSIs must render when supplied');
   assert.ok(!card.includes(zh.prof_stats_unavailable), 'a complete read must not claim failure');
