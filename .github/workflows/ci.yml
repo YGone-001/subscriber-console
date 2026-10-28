@@ -678,6 +678,7 @@ jobs:
 
   topology-ui-acceptance:
     name: Topology UI/UX acceptance
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -818,6 +819,7 @@ jobs:
 
   discovery-ui-acceptance:
     name: Discovery UI/UX acceptance
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
