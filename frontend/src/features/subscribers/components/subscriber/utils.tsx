@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { Copy, Check, Eye, EyeOff } from "lucide-react";
 import { useI18n } from '../../../../providers/I18nProvider';
+import { copyText } from '../../../../lib/clipboard';
 
 export const AMBR_UNITS = [
   { label: 'bps', val: 0 }, { label: 'Kbps', val: 1 }, { label: 'Mbps', val: 2 }, { label: 'Gbps', val: 3 }, { label: 'Tbps', val: 4 }
@@ -38,9 +39,9 @@ export const MaskedValue = ({
     return () => window.clearTimeout(timer);
   }, [revealed]);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!value || !revealed) return;
-    navigator.clipboard.writeText(value);
+    if (!(await copyText(value))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

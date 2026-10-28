@@ -18,6 +18,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
 import { ChevronRight, Home, Clock, Copy, Check, RotateCw, Trash2, ExternalLink } from 'lucide-react';
 import { getBreadcrumbs, canAccessNavigationRoute, getNavigationRoute, resolveNavigationRoute } from '../../lib/navigation';
+import { copyText } from '../../lib/clipboard';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 
@@ -136,13 +137,9 @@ export function NavigationBreadcrumbs() {
   }, [isAuthLoading, user]);
 
   const handleCopyLink = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* Clipboard access can be denied; the copy affordance simply stays idle. */
-    }
+    if (!(await copyText(window.location.href))) return;
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }, []);
 
   const handleRefresh = useCallback(() => {

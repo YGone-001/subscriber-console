@@ -8,6 +8,7 @@
 import { ArrowRight, Check, Copy, Eye, Pencil, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../../../providers/I18nProvider';
+import { copyText } from '../../../lib/clipboard';
 import type { ResourceProjection, TopologyEdge } from '../topology-types';
 import { RELATIONSHIP_PRESENTATION } from '../topology-types';
 import { edgeInterfaceNames } from '../interface-catalog';
@@ -44,12 +45,9 @@ function CopyIdButton({ value }: { value: string }) {
       aria-label={`${t('topology_copy_id')}: ${value}`}
       onClick={async (event) => {
         event.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(value);
+        if (await copyText(value)) {
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
-        } catch {
-          /* Clipboard access can be denied; the identifier stays visible. */
         }
       }}
     >

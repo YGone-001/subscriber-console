@@ -35,6 +35,7 @@ import { SubscriberFilters, type SubscriberPlanOption } from './components/Subsc
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
+import { copyText } from '../../lib/clipboard';
 import { useRead } from '../../lib/api/use-read';
 import { deleteJson, postJson } from '../../lib/api/mutation-client';
 import { buildProfileApplyRequest } from './mutation-contract';
@@ -386,13 +387,9 @@ export function SubscribersPage() {
 
   const handleCopyImsi = async (imsi: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(imsi);
-      setCopiedImsi(imsi);
-      window.setTimeout(() => setCopiedImsi((current) => (current === imsi ? null : current)), 1400);
-    } catch {
-      /* Clipboard access can be denied; the affordance simply stays idle. */
-    }
+    if (!(await copyText(imsi))) return;
+    setCopiedImsi(imsi);
+    window.setTimeout(() => setCopiedImsi((current) => (current === imsi ? null : current)), 1400);
   };
 
   const renderSortIcon = (field: string) => {

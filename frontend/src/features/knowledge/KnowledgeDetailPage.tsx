@@ -8,26 +8,13 @@ import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
+import { copyText } from '../../lib/clipboard';
 import { MarkdownContent } from './components/MarkdownContent';
 import { attachmentUrl, deleteEntry, isKnowledgeListKey } from './knowledge-api';
 import { knowledgeErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize, isImage } from './knowledge-format';
 import type { KnowledgeEntry } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
-
-/** Copy without the Clipboard API, which is unavailable on plain-HTTP origins. */
-function copyWithSelection(text: string): void {
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand('copy');
-  document.body.removeChild(textarea);
-  if (!copied) throw new Error('copy failed');
-}
 
 export function KnowledgeDetailPage() {
   const { entryId } = useParams<{ entryId: string }>();
@@ -85,22 +72,7 @@ export function KnowledgeDetailPage() {
 
   const copySolution = async () => {
     if (!data) return;
-    const text = data.solution ?? '';
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        copyWithSelection(text);
-      }
-      flashCopyState('copied');
-    } catch {
-      try {
-        copyWithSelection(text);
-        flashCopyState('copied');
-      } catch {
-        flashCopyState('failed');
-      }
-    }
+    flashCopyState((await copyText(data.solution ?? '')) ? 'copied' : 'failed');
   };
 
   if (isLoading) {

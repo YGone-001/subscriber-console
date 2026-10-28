@@ -13,6 +13,7 @@ import SubscriberEditMode from '../features/subscribers/components/subscriber/Su
 import TrafficAdjustmentModal from './TrafficAdjustmentModal';
 import { useSubscriberForm } from '../features/subscribers/useSubscriberForm';
 import { parseBytes } from '../lib/unitParser';
+import { copyText } from '../lib/clipboard';
 import { OperationNotice } from './ui/OperationFeedback';
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from './ui/UnsavedChangesGuard';
 import { Dialog } from './ui/Dialog';
@@ -72,9 +73,9 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
     && initialDraftRef.current !== null
     && initialDraftRef.current !== draftSignature, [draftSignature, isEditing]);
   const unsavedGuard = useUnsavedChangesGuard(checkUnsavedChanges, onClose);
-  const handleCopyImsi = () => {
+  const handleCopyImsi = async () => {
     if (!imsi) return;
-    navigator.clipboard.writeText(imsi);
+    if (!(await copyText(imsi))) return;
     setIsImsiCopied(true);
     setTimeout(() => setIsImsiCopied(false), 2000);
   };
