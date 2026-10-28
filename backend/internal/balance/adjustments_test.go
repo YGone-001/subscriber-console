@@ -80,12 +80,13 @@ func TestHandler_Adjustments_HonoursRateLimit(t *testing.T) {
 
 func TestMapAdjustmentDoc_ProjectsMetadataWithoutLeakingTheRecord(t *testing.T) {
 	doc := bson.M{
-		"_id":       "adj-1",
-		"timestamp": "2026-10-01T08:00:00.000Z",
-		"action":    "BALANCE_ADJUST",
-		"result":    "success",
-		"reason":    "goodwill credit",
-		"actor":     bson.M{"username": "op1", "role": "operator"},
+		"_id":          "adj-1",
+		"timestamp":    "2026-10-01T08:00:00.000Z",
+		"action":       "BALANCE_ADJUST",
+		"result":       "success",
+		"reason":       "goodwill credit",
+		"actor":        "op1",
+		"actorContext": bson.M{"username": "op1", "role": "operator"},
 		"metadata": bson.M{
 			"bucket":        "data",
 			"operation":     "credit",
@@ -128,8 +129,9 @@ func TestMapAdjustmentDoc_SurvivesMissingNestedDocuments(t *testing.T) {
 
 func TestMapAdjustmentDoc_AcceptsBsonDSubdocuments(t *testing.T) {
 	doc := bson.M{
-		"_id":   "adj-3",
-		"actor": bson.D{{Key: "username", Value: "op2"}, {Key: "role", Value: "admin"}},
+		"_id":          "adj-3",
+		"actor":        "op2",
+		"actorContext": bson.D{{Key: "username", Value: "op2"}, {Key: "role", Value: "admin"}},
 		"metadata": bson.D{
 			{Key: "bucket", Value: "sms"},
 			{Key: "operation", Value: "debit"},
@@ -144,5 +146,16 @@ func TestMapAdjustmentDoc_AcceptsBsonDSubdocuments(t *testing.T) {
 	}
 	if record.Amount == nil || *record.Amount != 5 {
 		t.Fatalf("amount = %v", record.Amount)
+	}
+}
+
+func TestMapAdjustmentDoc_FallsBackToActorContextWhenDisplayNameIsAbsent(t *testing.T) {
+	record := mapAdjustmentDoc(bson.M{
+		"_id":          "adj-4",
+		"actorContext": bson.M{"username": "op3", "role": "viewer"},
+	})
+
+	if record.Actor != "op3" || record.Role != "viewer" {
+		t.Fatalf("actor = %q/%q", record.Actor, record.Role)
 	}
 }

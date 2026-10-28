@@ -262,9 +262,20 @@ func mapAdjustmentDoc(doc bson.M) AdjustmentRecord {
 		BeforeVersion: numericInt64Ptr(meta, "beforeVersion"),
 		AfterVersion:  numericInt64Ptr(meta, "afterVersion"),
 	}
-	if actor := nestedDoc(doc["actor"]); actor != nil {
-		record.Actor = strWithDefault(actor, "username", "")
-		record.Role = strWithDefault(actor, "role", "")
+	/* The persisted record keeps the actor display name in `actor` (a string) and
+	 * the structured identity in `actorContext`. Reading only the string loses the
+	 * role; reading only the context loses legacy records that predate it. */
+	record.Actor = strWithDefault(doc, "actor", "")
+	if actorContext := nestedDoc(doc["actorContext"]); actorContext != nil {
+		if record.Actor == "" {
+			record.Actor = strWithDefault(actorContext, "username", "")
+		}
+		record.Role = strWithDefault(actorContext, "role", "")
+	} else if nestedActor := nestedDoc(doc["actor"]); nestedActor != nil {
+		if record.Actor == "" {
+			record.Actor = strWithDefault(nestedActor, "username", "")
+		}
+		record.Role = strWithDefault(nestedActor, "role", "")
 	}
 	return record
 }
