@@ -40,6 +40,11 @@ const flag = (name, envName, fallback) => args.get(name) ?? process.env[envName]
  */
 const PROJECT = PROJECT_ROOT;
 const BASE = flag('base', 'UI_A11Y_BASE', 'http://localhost:13333');
+/* The session cookie belongs to whatever host the suite was pointed at. Pinning it
+ * to `localhost` silently left the browser unauthenticated whenever the run used
+ * another name (127.0.0.1, a LAN address), and every route then "passed" its audit
+ * against the login page while the keyboard walkthrough found no shell to open. */
+const AUTH_HOST = new URL(BASE).hostname;
 const CHROME = requireChromeExecutable(resolveChromeExecutable({ argument: args.get('chrome') }));
 const CDP_PORT = Number(flag('cdp-port', 'UI_A11Y_CDP_PORT', 9338));
 /*
@@ -253,9 +258,9 @@ async function main() {
   const setAuthCookie = async (present) => {
     if (!TOKEN) return;
     if (present) {
-      await client.send('Network.setCookie', { name: 'auth_token', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax' });
+      await client.send('Network.setCookie', { name: 'auth_token', value: TOKEN, domain: AUTH_HOST, path: '/', httpOnly: true, sameSite: 'Lax' });
     } else {
-      await client.send('Network.deleteCookies', { name: 'auth_token', domain: 'localhost', path: '/' });
+      await client.send('Network.deleteCookies', { name: 'auth_token', domain: AUTH_HOST, path: '/' });
     }
   };
 

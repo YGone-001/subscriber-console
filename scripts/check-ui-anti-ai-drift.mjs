@@ -49,6 +49,7 @@ const SANCTIONED = [
   { file: 'styles/globals.css', selector: '.loading-row', property: 'linear-gradient', reason: 'loading shimmer' },
   { file: 'styles/analytics.css', selector: '.analytics-sparkline-placeholder', property: 'linear-gradient', reason: 'chart placeholder shimmer' },
   { file: 'styles/modules/ConsolePrimitives.module.css', selector: '.pageHeader::before', property: 'linear-gradient', reason: 'page-header status rail (named situation marker)' },
+  { file: 'styles/modules/architecture.module.css', selector: '.legendMarkAmbiguous', property: 'linear-gradient', reason: 'ambiguity legend marker: half-filled swatch encoding a partial state, not decoration' },
   { file: 'styles/command-palette.css', selector: '.cp-overlay', property: 'backdrop-filter', reason: 'overlay scrim, blur 4px' },
   { file: 'styles/shell.css', selector: '.cp-overlay', property: 'backdrop-filter', reason: 'overlay scrim, blur 4px' },
   { file: 'styles/shell.css', selector: '.sidebar-mobile-backdrop', property: 'backdrop-filter', reason: 'overlay scrim, blur 2px' },
