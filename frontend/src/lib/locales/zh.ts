@@ -1569,6 +1569,8 @@ export const zh: Record<string, string> = {
     ocs_bucket_sms: "短信",
     ocs_adjust_credit: "增加",
     ocs_adjust_debit: "扣减",
+    ocs_adjust_result_success: "成功",
+    ocs_adjust_result_failure: "失败",
     ocs_balance_view_contract: "查看计费合约",
     ocs_contract_view_balance: "查看余额",
     ocs_balance_view_subscriber: "查看订阅用户",

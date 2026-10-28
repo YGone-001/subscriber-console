@@ -202,7 +202,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
 
       <div className="ocs-detail-grid">
         <div className="ocs-detail-section">
-          <h3><Users size={16} aria-hidden="true" /> {t('ocs_contract_detail_identity')}</h3>
+          <h2><Users size={16} aria-hidden="true" /> {t('ocs_contract_detail_identity')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">IMSI</span>
@@ -216,7 +216,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
         </div>
 
         <div className="ocs-detail-section">
-          <h3><FileText size={16} aria-hidden="true" /> {t('ocs_contract_detail_billing')}</h3>
+          <h2><FileText size={16} aria-hidden="true" /> {t('ocs_contract_detail_billing')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_contract_col_tariff')}</span>
@@ -238,7 +238,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
         </div>
 
         <div className="ocs-detail-section">
-          <h3><FileText size={16} aria-hidden="true" /> {t('ocs_tariff_detail_history')}</h3>
+          <h2><FileText size={16} aria-hidden="true" /> {t('ocs_tariff_detail_history')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_contract_col_created')}</span>
@@ -260,7 +260,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
         labelledBy="contract-detail-tariff-title"
       >
         <div className="ocs-dialog-header">
-          <h3 id="contract-detail-tariff-title">{t('ocs_sub_action_change_tariff')}</h3>
+          <h2 id="contract-detail-tariff-title">{t('ocs_sub_action_change_tariff')}</h2>
         </div>
         <div className="ocs-form-group">
           <label htmlFor="contract-detail-tariff" className="ocs-form-label">{t('ocs_filter_plan')}</label>

@@ -1570,6 +1570,8 @@ export const en: Record<string, string> = {
     ocs_bucket_sms: "SMS",
     ocs_adjust_credit: "Credit",
     ocs_adjust_debit: "Debit",
+    ocs_adjust_result_success: "Success",
+    ocs_adjust_result_failure: "Failed",
     ocs_balance_view_contract: "View charging contract",
     ocs_contract_view_balance: "View balance",
     ocs_balance_view_subscriber: "View subscriber",

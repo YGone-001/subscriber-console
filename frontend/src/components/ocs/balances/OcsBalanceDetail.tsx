@@ -80,6 +80,12 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
     return `${operation} ${bucket} ${amount}`;
   };
 
+  const resultLabel = (result: string | null): string => {
+    if (result === 'success') return t('ocs_adjust_result_success');
+    if (result === 'failure' || result === 'failed') return t('ocs_adjust_result_failure');
+    return result || '\u2014';
+  };
+
   if (loading && !balance) {
     return (
       <div className="ocs-container">
@@ -143,7 +149,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
 
       <div className="ocs-detail-grid">
         <div className="ocs-detail-section">
-          <h3><Database size={16} aria-hidden="true" /> {t('ocs_balance_data_bucket')}</h3>
+          <h2><Database size={16} aria-hidden="true" /> {t('ocs_balance_data_bucket')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_detail_data_total')}</span>
@@ -169,7 +175,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
         </div>
 
         <div className="ocs-detail-section">
-          <h3><Phone size={16} aria-hidden="true" /> {t('ocs_balance_voice_bucket')}</h3>
+          <h2><Phone size={16} aria-hidden="true" /> {t('ocs_balance_voice_bucket')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_col_voice_alloc')}</span>
@@ -191,7 +197,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
         </div>
 
         <div className="ocs-detail-section">
-          <h3><MessageSquare size={16} aria-hidden="true" /> {t('ocs_balance_sms_bucket')}</h3>
+          <h2><MessageSquare size={16} aria-hidden="true" /> {t('ocs_balance_sms_bucket')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_col_sms_alloc')}</span>
@@ -213,7 +219,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
         </div>
 
         <div className="ocs-detail-section">
-          <h3><ShieldCheck size={16} aria-hidden="true" /> {t('ocs_balance_governance_info')}</h3>
+          <h2><ShieldCheck size={16} aria-hidden="true" /> {t('ocs_balance_governance_info')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_balance_account_status')}</span>
@@ -235,7 +241,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
         </div>
 
         <div className="ocs-detail-section">
-          <h3><Wallet size={16} aria-hidden="true" /> {t('ocs_balance_cycle')}</h3>
+          <h2><Wallet size={16} aria-hidden="true" /> {t('ocs_balance_cycle')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_balance_cycle_start')}</span>
@@ -254,7 +260,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
       </div>
 
       <section className="ocs-detail-section ocs-detail-section-full">
-        <h3><History size={16} aria-hidden="true" /> {t('ocs_adjustments_title')}</h3>
+        <h2><History size={16} aria-hidden="true" /> {t('ocs_adjustments_title')}</h2>
         <p className="ocs-detail-hint">{t('ocs_adjustments_note')}</p>
         {adjustments.length === 0 ? (
           <p className="ocs-empty">{t('ocs_adjustments_empty')}</p>
@@ -288,7 +294,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
                       {adjustment.reason || '\u2014'}
                     </td>
                     <td data-label={t('ocs_adjustments_col_result')} data-column-priority="supplementary">
-                      {adjustment.result || '\u2014'}
+                      {resultLabel(adjustment.result)}
                     </td>
                     <td data-label={t('ocs_balance_version')} data-column-priority="supplementary" className="ocs-mono">
                       {adjustment.beforeVersion === null || adjustment.afterVersion === null

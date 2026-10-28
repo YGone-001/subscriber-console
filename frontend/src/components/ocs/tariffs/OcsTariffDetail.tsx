@@ -196,7 +196,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
 
       <div className="ocs-detail-grid">
         <div className="ocs-detail-section">
-          <h3><FileText size={16} aria-hidden="true" /> {t('ocs_tariff_detail_basic')}</h3>
+          <h2><FileText size={16} aria-hidden="true" /> {t('ocs_tariff_detail_basic')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_tariff_col_plan_id')}</span>
@@ -223,7 +223,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
         </div>
 
         <div className="ocs-detail-section">
-          <h3><ListChecks size={16} aria-hidden="true" /> {t('ocs_tariff_detail_quota')}</h3>
+          <h2><ListChecks size={16} aria-hidden="true" /> {t('ocs_tariff_detail_quota')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_tariff_detail_data_quota')}</span>
@@ -245,7 +245,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
         </div>
 
         <div className="ocs-detail-section">
-          <h3><Users size={16} aria-hidden="true" /> {t('ocs_tariff_bound_title')}</h3>
+          <h2><Users size={16} aria-hidden="true" /> {t('ocs_tariff_bound_title')}</h2>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_tariff_detail_bound_count')}</span>
@@ -259,7 +259,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
       </div>
 
       <section className="ocs-detail-section ocs-detail-section-full">
-        <h3><ListChecks size={16} aria-hidden="true" /> {t('ocs_tariff_rules_title')}</h3>
+        <h2><ListChecks size={16} aria-hidden="true" /> {t('ocs_tariff_rules_title')}</h2>
         {conflicts.length > 0 && (
           <div className="ocs-feedback-error ocs-feedback-spaced" role="alert">
             <span>{t('ocs_tariff_rule_conflicts', { count: conflicts.length })}</span>
@@ -303,7 +303,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
       </section>
 
       <section className="ocs-detail-section ocs-detail-section-full">
-        <h3><Users size={16} aria-hidden="true" /> {t('ocs_tariff_bound_title')}</h3>
+        <h2><Users size={16} aria-hidden="true" /> {t('ocs_tariff_bound_title')}</h2>
         {boundRows.length === 0 ? (
           <p className="ocs-empty">{t('ocs_tariff_bound_empty')}</p>
         ) : (
@@ -339,7 +339,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
       </section>
 
       <section className="ocs-detail-section ocs-detail-section-full">
-        <h3><History size={16} aria-hidden="true" /> {t('ocs_tariff_history_title')}</h3>
+        <h2><History size={16} aria-hidden="true" /> {t('ocs_tariff_history_title')}</h2>
         {history.length === 0 ? (
           <p className="ocs-empty">{t('ocs_tariff_history_empty')}</p>
         ) : (

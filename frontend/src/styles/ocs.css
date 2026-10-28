@@ -971,6 +971,7 @@
   padding: 1.25rem;
 }
 
+.ocs-detail-section h2,
 .ocs-detail-section h3 {
   display: flex;
   align-items: center;
