@@ -32,7 +32,7 @@ func (r *Repository) FindSubscriberByImsi(ctx context.Context, imsi string) (bso
 // Authentication material is not supplied, so the document keeps the server's default security
 // block. Callers that have operator-supplied credentials use CreateSubscriberWithAuthentication.
 func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string, planId *string, msisdn *string) (bson.M, error) {
-	return r.createSubscriber(ctx, imsi, planId, msisdn, nil)
+	return r.createSubscriber(ctx, imsi, planId, msisdn, nil, "")
 }
 
 // CreateSubscriberWithAuthentication creates a new subscriber, provisioning operator-supplied
@@ -42,10 +42,26 @@ func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string
 // subscriber is never persisted with default credentials that a second write then has to replace.
 // A nil auth preserves the default-authentication behaviour exactly.
 func (r *Repository) CreateSubscriberWithAuthentication(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial) (bson.M, error) {
-	return r.createSubscriber(ctx, imsi, planId, msisdn, auth)
+	return r.createSubscriber(ctx, imsi, planId, msisdn, auth, "")
 }
 
-func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial) (bson.M, error) {
+// CreateSubscriberWithAuthenticationAndProfile creates a new subscriber exactly like
+// CreateSubscriberWithAuthentication and additionally records the template the record was
+// created from.
+//
+// The binding is the same fact the governed apply writes: `webui_meta.profile_name`, the field
+// the attribution filter, the template statistics and the drift probe read. Creating a subscriber
+// from a template without it produced a record that looked template-shaped but was invisible to
+// the template that produced it. An empty profileName keeps the unbound behaviour.
+//
+// Only the binding is written here. The create body carries no content fields, so callers that
+// want the template's AMBR, slices or access restriction still send them on the follow-up update,
+// which never touches the binding.
+func (r *Repository) CreateSubscriberWithAuthenticationAndProfile(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial, profileName string) (bson.M, error) {
+	return r.createSubscriber(ctx, imsi, planId, msisdn, auth, profileName)
+}
+
+func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial, profileName string) (bson.M, error) {
 	// Check if subscriber already exists
 	existing, err := r.FindSubscriberByImsi(ctx, imsi)
 	if err != nil {
@@ -93,6 +109,15 @@ func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *
 	// Apply operator-supplied authentication material before the first and only write, so the
 	// document is correct the moment it exists. A nil receiver leaves the defaults untouched.
 	auth.ApplyTo(doc)
+
+	// Record the template binding in the same single write, mirroring the metadata the governed
+	// apply writes. A record created from a template is a template-governed record from birth.
+	if profileName != "" {
+		doc["webui_meta"] = bson.M{
+			"profile_name": profileName,
+			"updated_at":   bson.NewDateTimeFromTime(time.Now()),
+		}
+	}
 
 	// Insert subscriber
 	_, err = r.subscribers.InsertOne(ctx, doc)
@@ -1255,7 +1280,7 @@ func (r *Repository) CreateSubscriberBatchCreateOnly(
 	profileData := r.loadProfileData(ctx, frozen.Profile.RequestedName)
 
 	for _, imsi := range frozen.ExpectedAbsentImsis {
-		doc := buildBatchSubscriberDoc(imsi, profileData)
+		doc := buildBatchSubscriberDoc(imsi, frozen.Profile.RequestedName, profileData)
 
 		_, err := r.subscribers.InsertOne(ctx, doc)
 		if err != nil {

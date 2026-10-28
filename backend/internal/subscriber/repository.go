@@ -138,18 +138,6 @@ func extractWebuiMeta(doc bson.M) map[string]any {
 	return nil
 }
 
-// extractProfileName extracts profile_name from webui_meta.
-func extractProfileName(doc bson.M) string {
-	meta := extractWebuiMeta(doc)
-	if meta == nil {
-		return ""
-	}
-	if name, ok := meta["profile_name"].(string); ok {
-		return name
-	}
-	return ""
-}
-
 // normalizeTraffic computes traffic totals from balance doc fields.
 func normalizeTraffic(dataTotal, dataUsed, dataAvailable any) TrafficSnapshot {
 	balance := numericInt64(dataAvailable)
@@ -372,7 +360,10 @@ func toSubscriberRow(
 		BalanceThreshold: balanceThreshold,
 		ARD:              ard,
 		PLMN:             plmn,
-		Profile:          extractProfileName(xcloudDoc),
+		// One binding authority. A narrower reader that saw only
+		// webui_meta.profile_name used to project this field, so a row could
+		// disagree with the template that counted the same subscriber.
+		Profile:          GetProfileName(xcloudDoc),
 		Policy:           planID,
 		PolicyName:       planName,
 		PolicyStatus:     planStatus,
@@ -530,28 +521,55 @@ func matchesFilters(row SubscriberRow, filters SubscriberListFilters) bool {
 	return true
 }
 
-// buildSummary computes aggregate summary from all rows (before filtering).
-func buildSummary(rows []SubscriberSummary, allRows []SubscriberRow) SubscriberSummary {
-	s := SubscriberSummary{}
+// buildFacetSummary counts the status cards of the current result set.
+//
+// A card is a switch preview, not a second total: each number is computed with
+// that card's own facet omitted, so it answers "how many would this view show if
+// I picked this card instead". Concretely, with the balance facet set to "low",
+// the Low Balance card equals the result size while the Active and Restricted
+// cards still describe the same result. Selecting a card never makes the other
+// cards contradict the pagination total, and the Total card is exactly that
+// total.
+//
+// Facets without a card (contract, tariff plan) always apply, because no card can
+// switch them.
+func buildFacetSummary(allRows []SubscriberRow, filters SubscriberListFilters) SubscriberSummary {
+	accessNeutral := filters
+	accessNeutral.Status = "all"
+	balanceNeutral := filters
+	balanceNeutral.BalanceStatus = "all"
+	provisioningNeutral := filters
+	provisioningNeutral.Provisioning = "all"
+
+	summary := SubscriberSummary{}
 	for _, row := range allRows {
-		s.Total++
-		if row.Status == "Active" {
-			s.Active++
+		if matchesFilters(row, filters) {
+			summary.Total++
 		}
-		if row.Status == "Suspended" || row.Status == "Partial Restricted" {
-			s.Restricted++
+
+		if matchesFilters(row, accessNeutral) {
+			switch row.Status {
+			case "Active":
+				summary.Active++
+			case "Suspended", "Partial Restricted":
+				summary.Restricted++
+			}
 		}
-		if isLowTraffic(row) {
-			s.LowTraffic++
+
+		if matchesFilters(row, balanceNeutral) {
+			if isLowBalance(row) {
+				summary.LowBalance++
+			}
+			if isLowTraffic(row) {
+				summary.LowTraffic++
+			}
 		}
-		if isLowBalance(row) {
-			s.LowBalance++
-		}
-		if isUnprovisioned(row) {
-			s.Unprovisioned++
+
+		if matchesFilters(row, provisioningNeutral) && isUnprovisioned(row) {
+			summary.Unprovisioned++
 		}
 	}
-	return s
+	return summary
 }
 
 // --- List IMSIs (detail=false) ---
@@ -712,8 +730,10 @@ func (r *Repository) ListSubscriberRowsFiltered(ctx context.Context, page, limit
 		)
 	}
 
-	// Compute summary before filtering
-	summary := buildSummary(nil, rows)
+	// Count the status cards over the same row set the filters act on. The Total
+	// card is the result size, so the strip and the pagination footer can never
+	// disagree.
+	summary := buildFacetSummary(rows, filters)
 
 	// Apply additive filters
 	filtered := make([]SubscriberRow, 0, len(rows))
@@ -1158,7 +1178,7 @@ func xcloudToLegacyState(doc bson.M) *LegacySubscriberState {
 		"ambr":                    normalizeLegacyAmbr(doc["ambr"]),
 		"msisdnList":              legacyMsisdnList(doc["msisdn"]),
 		"network_access_mode":     nullishOrValue(doc, "network_access_mode", int64(0)),
-		"profile_name":            legacyProfileName(doc["webui_meta"]),
+		"profile_name":            GetProfileName(doc),
 		"sliceList":               sliceList,
 	}
 
@@ -1283,14 +1303,10 @@ func nodeAsString(v any, fallback string) string {
 	return fallback
 }
 
-// legacyProfileName mirrors `doc.webui_meta?.profile_name || ”`.
-func legacyProfileName(webuiMeta any) any {
-	m, ok := asStringAnyMap(webuiMeta)
-	if !ok {
-		return ""
-	}
-	return jsOrValue(m["profile_name"], "")
-}
+// The detail projection reads the binding through GetProfileName, the same
+// authority the attribution filter and the list rows use. A narrower reader that
+// only saw webui_meta.profile_name used to live here, and it made a record bound
+// through a legacy field look unbound on its own detail page.
 
 // legacyMsisdnList mirrors `(doc.msisdn || []).map((msisdn) => ({ msisdn }))`.
 func legacyMsisdnList(v any) []any {

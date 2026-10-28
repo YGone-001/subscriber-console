@@ -366,3 +366,40 @@ func TestListProfilesProjectsContentAndCompleteness(t *testing.T) {
 		t.Errorf("expected downlink AMBR 100, got %+v", found.AMBR)
 	}
 }
+
+// The metric strip describes the platform, not the page: a page size of one must
+// not change what "templates without billing" reports, or the card and its
+// neighbours would describe different populations.
+func TestListProfilesSummaryCountsTheWholeCollectionWhilePaging(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := profileTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	documents := []bson.M{
+		{"name": "billing_a", "title": "Billing A", "ocsDefaults": bson.M{"planId": "plan_default_10gb"}},
+		{"name": "billing_b", "title": "Billing B"},
+		{"name": "billing_c", "title": "Billing C"},
+	}
+	for _, document := range documents {
+		if _, err := repo.profiles.InsertOne(ctx, document); err != nil {
+			t.Fatalf("insert profile: %v", err)
+		}
+	}
+
+	page, err := repo.ListProfiles(ctx, ProfileListRequest{Limit: 1})
+	if err != nil {
+		t.Fatalf("list profiles: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("page items = %d, want 1", len(page.Items))
+	}
+	if page.Summary.TotalProfiles != 3 {
+		t.Errorf("summary totalProfiles = %d, want 3", page.Summary.TotalProfiles)
+	}
+	if page.Summary.ProfilesWithoutBilling != 2 {
+		t.Errorf("summary profilesWithoutBilling = %d, want 2 (whole collection)", page.Summary.ProfilesWithoutBilling)
+	}
+}

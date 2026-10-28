@@ -295,15 +295,20 @@ func ComputeBatchCreateFingerprint(
 
 // buildBatchSubscriberDoc builds a subscriber document for batch creation.
 // Uses profile auth/material or zero-key batch defaults.
-// Access restriction = 32, network access mode = 0.
-func buildBatchSubscriberDoc(imsi string, profileData map[string]any) bson.M {
+//
+// Two facts come from the template rather than the batch defaults: the 3GPP
+// access-restriction bitmask it declares, and the binding metadata that makes the
+// created record template-governed. Writing the batch default over an explicit
+// template value dropped part of the template, and writing no binding produced
+// subscribers no template could see.
+func buildBatchSubscriberDoc(imsi string, profileName string, profileData map[string]any) bson.M {
 	// Build auth from profile or zero-key defaults
 	auth := buildBatchAuth(profileData)
 	ambr := buildBatchAmbr(profileData)
 	slices := buildBatchSlices(profileData)
 	realm := epcRealmFromImsi(imsi)
 
-	return bson.M{
+	doc := bson.M{
 		"__v":                      0,
 		"schema_version":           1,
 		"imsi":                     imsi,
@@ -320,6 +325,50 @@ func buildBatchSubscriberDoc(imsi string, profileData map[string]any) bson.M {
 		"mme_realm":                realm["mme_realm"],
 		"mme_timestamp":            time.Now().UnixMicro(),
 		"purge_flag":               false,
+	}
+
+	// An absent template value keeps the batch default; an explicit 0 (unrestricted)
+	// is a value, not an absence, and must survive.
+	if restriction, declared := profileAccessRestriction(profileData); declared {
+		doc["access_restriction_data"] = restriction
+	}
+
+	// A binding is only recorded for a template that is actually present, so a
+	// template deleted between preparation and execution cannot leave a dangling
+	// reference behind.
+	if profileName != "" && profileData != nil {
+		doc["webui_meta"] = bson.M{
+			"profile_name": profileName,
+			"updated_at":   bson.NewDateTimeFromTime(time.Now()),
+		}
+	}
+
+	return doc
+}
+
+// profileAccessRestriction reads the access-restriction bitmask a template
+// declares, distinguishing "not declared" from an explicit zero.
+func profileAccessRestriction(profileData map[string]any) (int64, bool) {
+	if profileData == nil {
+		return 0, false
+	}
+	raw, present := profileData["access_restriction_data"]
+	if !present || raw == nil {
+		return 0, false
+	}
+	switch value := raw.(type) {
+	case int:
+		return int64(value), true
+	case int32:
+		return int64(value), true
+	case int64:
+		return value, true
+	case float32:
+		return int64(value), true
+	case float64:
+		return int64(value), true
+	default:
+		return 0, false
 	}
 }
 
@@ -846,7 +895,7 @@ func ExecuteFrozenSubscriberBatchCreate(
 	}
 
 	for _, imsi := range frozen.ExpectedAbsentImsis {
-		doc := buildBatchSubscriberDoc(imsi, profileData)
+		doc := buildBatchSubscriberDoc(imsi, frozen.Profile.RequestedName, profileData)
 
 		_, err := repo.subscribers.InsertOne(ctx, doc)
 		if err != nil {

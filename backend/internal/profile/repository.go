@@ -413,6 +413,9 @@ func (r *Repository) ListProfiles(ctx context.Context, request ProfileListReques
 		if p.SubscriberCount == 0 {
 			summary.UnassignedProfiles++
 		}
+		if !p.OCSDefaultsConfigured {
+			summary.ProfilesWithoutBilling++
+		}
 	}
 
 	matched := make([]ProfileListItem, 0, len(profiles))

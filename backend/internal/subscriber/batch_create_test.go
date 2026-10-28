@@ -453,8 +453,53 @@ func TestComputeBatchCreateFingerprint_DifferentInputs(t *testing.T) {
 
 // --- Batch Subscriber Doc Tests ---
 
+/* A record created from a template is template-governed: it carries the binding
+ * metadata the attribution filter reads, and the template's explicit access
+ * restriction rather than the batch default. */
+func TestBuildBatchSubscriberDoc_BindsTemplateAndKeepsItsAccessRestriction(t *testing.T) {
+	profile := map[string]any{
+		"name":                    "tpl_a",
+		"access_restriction_data": 0,
+	}
+	doc := buildBatchSubscriberDoc("417001234567890", "tpl_a", profile)
+
+	meta, ok := doc["webui_meta"].(bson.M)
+	if !ok || meta == nil {
+		t.Fatal("a template-created record must record its binding")
+	}
+	if meta["profile_name"] != "tpl_a" {
+		t.Errorf("profile_name = %v, want tpl_a", meta["profile_name"])
+	}
+	if doc["access_restriction_data"] != int64(0) {
+		t.Errorf("ard = %v, want the template's explicit 0", doc["access_restriction_data"])
+	}
+}
+
+/* An absent template value keeps the batch default; the binding still applies. */
+func TestBuildBatchSubscriberDoc_KeepsBatchDefaultWhenTemplateDeclaresNoRestriction(t *testing.T) {
+	doc := buildBatchSubscriberDoc("417001234567890", "tpl_a", map[string]any{"name": "tpl_a"})
+	if doc["access_restriction_data"] != batchDefaultAccessRestrict {
+		t.Errorf("ard = %v, want batch default %d", doc["access_restriction_data"], batchDefaultAccessRestrict)
+	}
+	if meta, ok := doc["webui_meta"].(bson.M); !ok || meta["profile_name"] != "tpl_a" {
+		t.Errorf("binding = %v, want tpl_a", doc["webui_meta"])
+	}
+}
+
+/* A template that vanished between preparation and execution must not leave a
+ * dangling binding behind. */
+func TestBuildBatchSubscriberDoc_NoBindingForAbsentTemplate(t *testing.T) {
+	doc := buildBatchSubscriberDoc("417001234567890", "tpl_gone", nil)
+	if _, present := doc["webui_meta"]; present {
+		t.Fatalf("binding = %v, want no binding for an absent template", doc["webui_meta"])
+	}
+	if doc["access_restriction_data"] != batchDefaultAccessRestrict {
+		t.Errorf("ard = %v, want batch default", doc["access_restriction_data"])
+	}
+}
+
 func TestBuildBatchSubscriberDoc_DefaultProfile(t *testing.T) {
-	doc := buildBatchSubscriberDoc("417001234567890", nil)
+	doc := buildBatchSubscriberDoc("417001234567890", "", nil)
 	if doc["imsi"] != "417001234567890" {
 		t.Errorf("imsi = %v, want 417001234567890", doc["imsi"])
 	}
@@ -472,7 +517,7 @@ func TestBuildBatchSubscriberDoc_DefaultProfile(t *testing.T) {
 }
 
 func TestBuildBatchSubscriberDoc_EpcRealm(t *testing.T) {
-	doc := buildBatchSubscriberDoc("417001234567890", nil)
+	doc := buildBatchSubscriberDoc("417001234567890", "", nil)
 	mmeHost, ok := doc["mme_host"].(string)
 	if !ok || mmeHost == "" {
 		t.Fatal("mme_host should be set")

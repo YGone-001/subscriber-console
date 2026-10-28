@@ -102,6 +102,21 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A named template must exist before anything is written: a binding to a template
+	// that is not there is a dangling reference no template surface could resolve.
+	profileName := strings.TrimSpace(body.ProfileName)
+	if profileName != "" {
+		profile, err := h.repo.FindProfileByName(r.Context(), profileName)
+		if err != nil {
+			response.InternalError(w)
+			return
+		}
+		if profile == nil {
+			response.Error(w, http.StatusNotFound, "User template not found", "PROFILE_NOT_FOUND")
+			return
+		}
+	}
+
 	// Evaluate governance with fresh role
 	result := EvaluateOperation(OpCreate, fresh.NormalizedRole)
 	if !isExecutable(result) {
@@ -117,7 +132,7 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create subscriber (governance is DIRECT for CREATE for all authorized roles)
-	created, err := h.repo.CreateSubscriberWithAuthentication(r.Context(), imsi, body.ResolvedPlanId(), msisdn, auth)
+	created, err := h.repo.CreateSubscriberWithAuthenticationAndProfile(r.Context(), imsi, body.ResolvedPlanId(), msisdn, auth, profileName)
 	if err != nil {
 		h.handleCreateError(w, err)
 		return
@@ -470,6 +485,13 @@ type CreateSubscriberBody struct {
 	// and then narrowed by ParseCreateAuthenticationMaterial, so an unknown nested field is
 	// rejected rather than silently persisted.
 	Auth4G map[string]any `json:"auth4G,omitempty"`
+	// ProfileName optionally records the user template this record is created from.
+	// It becomes `webui_meta.profile_name`, the binding the attribution filter, the
+	// template statistics and the drift probe read. The create body carries no
+	// content fields, so a caller that wants the template's AMBR, slices or access
+	// restriction still sends them on the follow-up update, which never rewrites the
+	// binding.
+	ProfileName string `json:"profileName,omitempty"`
 }
 
 // ResolvedPlanId returns planId || plan_id (Node precedence).
@@ -526,6 +548,14 @@ func (h *WriteHandler) BatchCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Load profile data for preparation
 	profileData := h.repo.loadProfileData(r.Context(), payload.ProfileName)
+
+	// A named template must exist. Creating a range of subscribers with silent
+	// defaults because the template vanished is the worst possible answer: the
+	// operator sees a success and the records carry content nobody chose.
+	if strings.TrimSpace(payload.ProfileName) != "" && profileData == nil {
+		response.Error(w, http.StatusNotFound, "User template not found", "PROFILE_NOT_FOUND")
+		return
+	}
 
 	// Validate tariff plan exists and is active
 	if payload.PlanId != "" {

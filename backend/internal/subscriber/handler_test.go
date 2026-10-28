@@ -392,15 +392,17 @@ func TestLegacyStateRoundTripsIntoUpdateValidation(t *testing.T) {
 	}
 }
 
-// TestSummaryPreFilter verifies that summary is computed from ALL matching rows
-// before status filtering, while total is the post-filter count.
-// This matches Node behavior: summary = pre-filter, total = post-filter.
-func TestSummaryPreFilter(t *testing.T) {
+// TestSummaryFacetCounts pins the status-strip contract: the Total card is the
+// result size, and every other card is a switch preview counted with its own
+// facet omitted. The previous contract counted every card over the search set
+// only, so a filtered view showed a card total that contradicted the pagination
+// footer.
+func TestSummaryFacetCounts(t *testing.T) {
 	provisioned := SubscriberProvisioning{Contract: true, Balance: true, TariffPlan: true}
 	rows := []SubscriberRow{
 		{IMSI: "460000000000001", Status: "Active", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: provisioned},
 		{IMSI: "460000000000002", Status: "Suspended", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: provisioned},
-		{IMSI: "460000000000003", Status: "Active", Traffic: TrafficSnapshot{Balance: 0}, Provisioning: provisioned}, // low traffic
+		{IMSI: "460000000000003", Status: "Active", Traffic: TrafficSnapshot{Balance: 0}, Provisioning: provisioned}, // exhausted
 		{IMSI: "460000000000004", Status: "Active", Traffic: TrafficSnapshot{Balance: 200}, Provisioning: provisioned},
 		{IMSI: "460000000000005", Status: "Active"}, // no OCS records: unprovisioned, not low traffic
 		{
@@ -409,36 +411,39 @@ func TestSummaryPreFilter(t *testing.T) {
 		},
 	}
 
-	// Summary is computed from ALL rows (pre-filter)
-	summary := buildSummary(nil, rows)
-	if summary.Total != 6 {
-		t.Errorf("summary.Total = %d, want 6 (pre-filter)", summary.Total)
+	// No filters: every card describes the whole set.
+	unfiltered := buildFacetSummary(rows, SubscriberListFilters{})
+	if unfiltered.Total != 6 || unfiltered.Active != 5 || unfiltered.Restricted != 1 {
+		t.Fatalf("unfiltered status cards = %+v, want total 6 / active 5 / restricted 1", unfiltered)
 	}
-	if summary.Active != 5 {
-		t.Errorf("summary.Active = %d, want 5 (pre-filter)", summary.Active)
-	}
-	if summary.Restricted != 1 {
-		t.Errorf("summary.Restricted = %d, want 1 (pre-filter)", summary.Restricted)
-	}
-	if summary.LowTraffic != 1 {
-		t.Errorf("summary.LowTraffic = %d, want 1 (pre-filter)", summary.LowTraffic)
-	}
-	if summary.LowBalance != 1 {
-		t.Errorf("summary.LowBalance = %d, want 1 (pre-filter)", summary.LowBalance)
-	}
-	if summary.Unprovisioned != 1 {
-		t.Errorf("summary.Unprovisioned = %d, want 1 (pre-filter)", summary.Unprovisioned)
+	if unfiltered.LowTraffic != 1 || unfiltered.LowBalance != 1 || unfiltered.Unprovisioned != 1 {
+		t.Fatalf("unfiltered balance cards = %+v, want exhausted 1 / low 1 / unprovisioned 1", unfiltered)
 	}
 
-	// After filtering to "active" only, total = 3 (post-filter)
-	filtered := make([]SubscriberRow, 0)
-	for _, row := range rows {
-		if matchesStatusFilter(row, "active") {
-			filtered = append(filtered, row)
-		}
+	// Access filtered to active: the Access card equals the result size, and the
+	// Restricted card still answers "how many would I get by switching".
+	activeOnly := buildFacetSummary(rows, SubscriberListFilters{Status: "active"})
+	if activeOnly.Total != 5 {
+		t.Errorf("active view total = %d, want 5", activeOnly.Total)
 	}
-	if len(filtered) != 5 {
-		t.Errorf("filtered count = %d, want 5 (post-filter active)", len(filtered))
+	if activeOnly.Active != 5 {
+		t.Errorf("active card = %d, want 5 (it is the current selection)", activeOnly.Active)
+	}
+	if activeOnly.Restricted != 1 {
+		t.Errorf("restricted card = %d, want 1 (switch preview)", activeOnly.Restricted)
+	}
+
+	// Balance filtered to low: the Low Balance card equals the result size, and the
+	// access cards describe that same result.
+	lowOnly := buildFacetSummary(rows, SubscriberListFilters{BalanceStatus: balanceStateLow})
+	if lowOnly.Total != 1 || lowOnly.LowBalance != 1 {
+		t.Errorf("low view = %+v, want total 1 and low balance 1", lowOnly)
+	}
+	if lowOnly.Active != 1 || lowOnly.Restricted != 0 {
+		t.Errorf("low view access cards = active %d / restricted %d, want 1 / 0", lowOnly.Active, lowOnly.Restricted)
+	}
+	if lowOnly.Unprovisioned != 0 {
+		t.Errorf("low view unprovisioned = %d, want 0", lowOnly.Unprovisioned)
 	}
 }
 
@@ -848,6 +853,34 @@ func TestToSubscriberRowProvisioningSignals(t *testing.T) {
 	}
 	if isLowTraffic(orphan) {
 		t.Fatal("orphan row must not be treated as low traffic")
+	}
+}
+
+// A row must report the same binding the attribution filter matches, whichever
+// field the document records it in. The projection used to read only
+// webui_meta.profile_name, so a legacy-bound subscriber looked unbound in the
+// list while the template that counted it listed it as linked.
+func TestSubscriberRowProjectsEveryBindingField(t *testing.T) {
+	cases := []struct {
+		field string
+		doc   bson.M
+		want  string
+	}{
+		{"webui_meta.profile_name", bson.M{"imsi": "460000000000001", "webui_meta": bson.M{"profile_name": "tpl_a"}}, "tpl_a"},
+		{"webui_meta.profile", bson.M{"imsi": "460000000000001", "webui_meta": bson.M{"profile": "tpl_b"}}, "tpl_b"},
+		{"profile_name", bson.M{"imsi": "460000000000001", "profile_name": "tpl_c"}, "tpl_c"},
+		{"profile", bson.M{"imsi": "460000000000001", "profile": "tpl_d"}, "tpl_d"},
+	}
+	for _, testCase := range cases {
+		row := toSubscriberRow(testCase.doc, nil, nil, nil)
+		if row.Profile != testCase.want {
+			t.Fatalf("row bound through %s reports Profile=%q, want %q", testCase.field, row.Profile, testCase.want)
+		}
+	}
+
+	unbound := toSubscriberRow(bson.M{"imsi": "460000000000002"}, nil, nil, nil)
+	if unbound.Profile != "" {
+		t.Fatalf("an unbound subscriber must report an empty binding, got %q", unbound.Profile)
 	}
 }
 

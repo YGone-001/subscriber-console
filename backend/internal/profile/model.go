@@ -58,6 +58,10 @@ type ProfileSummary struct {
 	SuspendedSubscribers     int `json:"suspendedSubscribers"`
 	RestrictedSubscribers    int `json:"restrictedSubscribers"`
 	UnassignedProfiles       int `json:"unassignedProfiles"`
+	// ProfilesWithoutBilling counts templates that declare no OCS defaults. Like
+	// every other figure in this summary it describes the whole collection rather
+	// than the page, so the metric strip cannot change meaning while paging.
+	ProfilesWithoutBilling int `json:"profilesWithoutBilling"`
 	// SubscriberStatsCompleteness reports whether the subscriber counter
 	// aggregation ran. Unavailable counts must be presented as unavailable,
 	// never as zero.
