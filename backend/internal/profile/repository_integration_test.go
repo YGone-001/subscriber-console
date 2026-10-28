@@ -331,10 +331,11 @@ func TestListProfilesProjectsContentAndCompleteness(t *testing.T) {
 		t.Fatalf("insert profile: %v", err)
 	}
 
-	profiles, summary, err := repo.ListProfiles(ctx, ProfileListOrder{})
+	listPage, err := repo.ListProfiles(ctx, ProfileListRequest{})
 	if err != nil {
 		t.Fatalf("list profiles: %v", err)
 	}
+	profiles, summary := listPage.Items, listPage.Summary
 	if summary.SubscriberStatsCompleteness != SubscriberStatsComplete {
 		t.Errorf("expected completeness %q, got %q", SubscriberStatsComplete, summary.SubscriberStatsCompleteness)
 	}

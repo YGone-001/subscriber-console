@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -60,7 +61,7 @@ func exportFilename(name string) string {
 
 // ProfileReader defines the read interface for profile data.
 type ProfileReader interface {
-	ListProfiles(ctx context.Context, order ProfileListOrder) ([]ProfileListItem, ProfileSummary, error)
+	ListProfiles(ctx context.Context, request ProfileListRequest) (ProfileListPage, error)
 	GetProfile(ctx context.Context, name string) (bson.M, error)
 	GetProfileVersion(ctx context.Context, profileName, versionId string) (bson.M, error)
 	GetProfileStats(ctx context.Context, name string) (ProfileStats, error)
@@ -191,8 +192,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only sort and order are read; every other query parameter stays ignored,
-	// as it has been, so a client cannot be newly refused for input this
+	// Only the list's own parameters are read; every other query parameter stays
+	// ignored, as it has been, so a client cannot be newly refused for input this
 	// endpoint always tolerated.
 	query := r.URL.Query()
 	order, orderErr := parseProfileListOrder(query.Get("sort"), query.Get("order"))
@@ -200,17 +201,43 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, orderErr.Error(), "INVALID_QUERY_PARAMETER")
 		return
 	}
+	limit, limitErr := parseProfileListLimit(query.Get("limit"))
+	if limitErr != nil {
+		response.BadRequest(w, limitErr.Error(), "INVALID_QUERY_PARAMETER")
+		return
+	}
+	billing, billingErr := parseProfileBillingFilter(query.Get("billing"))
+	if billingErr != nil {
+		response.BadRequest(w, billingErr.Error(), "INVALID_QUERY_PARAMETER")
+		return
+	}
 
-	profiles, summary, err := h.repo.ListProfiles(r.Context(), order)
+	page, err := h.repo.ListProfiles(r.Context(), ProfileListRequest{
+		Order:   order,
+		Limit:   limit,
+		Cursor:  query.Get("cursor"),
+		Query:   query.Get("q"),
+		Billing: billing,
+	})
 	if err != nil {
+		if errors.Is(err, ErrInvalidProfileCursor) {
+			response.BadRequest(w, "cursor does not belong to this ranking", "INVALID_QUERY_PARAMETER")
+			return
+		}
 		response.InternalError(w)
 		return
 	}
 
-	response.JSON(w, http.StatusOK, ProfileListResponse{
-		Profiles: profiles,
-		Summary:  summary,
-	})
+	listResponse := ProfileListResponse{
+		Profiles: page.Items,
+		Summary:  page.Summary,
+		HasMore:  page.HasMore,
+	}
+	if page.NextCursor != "" {
+		next := page.NextCursor
+		listResponse.NextCursor = &next
+	}
+	response.JSON(w, http.StatusOK, listResponse)
 }
 
 // Meta handles GET /api/profiles/meta.

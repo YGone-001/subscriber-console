@@ -2,8 +2,11 @@ package profile
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,10 +57,30 @@ func NewRepository(profiles, versions, subscribers *mongo.Collection) *Repositor
 // ranking with another one, and an ordered list reads as a truthful claim.
 const (
 	ProfileSortName            = "name"
+	ProfileSortTitle           = "title"
+	ProfileSortCreatedAt       = "createdAt"
 	ProfileSortUpdatedAt       = "updatedAt"
 	ProfileSortSubscriberCount = "subscriberCount"
 	ProfileSortSliceCount      = "sliceCount"
+	ProfileSortSessionCount    = "sessionCount"
+	ProfileSortPccRuleCount    = "pccRuleCount"
 )
+
+// Closed vocabulary for the billing filter; anything else is a client mistake.
+const (
+	ProfileBillingConfigured = "configured"
+	ProfileBillingMissing    = "missing"
+	ProfileBillingUnlinked   = "unlinked"
+)
+
+// profileListMaxLimit bounds one page. There is no default page size on the
+// server: a request without `limit` still receives the whole (filtered) list, so
+// clients that predate pagination keep their response unchanged.
+const profileListMaxLimit = 200
+
+// ErrInvalidProfileCursor reports a cursor that does not belong to the requested
+// ranking, so the handler can refuse instead of resuming at an arbitrary row.
+var ErrInvalidProfileCursor = fmt.Errorf("invalid cursor")
 
 // ProfileListOrder is the requested row order for the template list. Its zero
 // value is the historical order - name ascending - so a request that names no
@@ -65,6 +88,25 @@ const (
 type ProfileListOrder struct {
 	Field string
 	Desc  bool
+}
+
+// ProfileListRequest is everything the list read may vary by. An empty request is
+// the historical one: every template, name ascending, no cursor.
+type ProfileListRequest struct {
+	Order   ProfileListOrder
+	Limit   int    // 0 = unbounded
+	Cursor  string // opaque keyset from a previous page
+	Query   string // lowercase name/title contains
+	Billing string // "", configured, missing, unlinked
+}
+
+// ProfileListPage carries one page plus the summary of the whole (filtered)
+// collection, so a paginated client never has to infer totals from the page.
+type ProfileListPage struct {
+	Items      []ProfileListItem
+	Summary    ProfileSummary
+	NextCursor string
+	HasMore    bool
 }
 
 // parseProfileListOrder resolves the sort and order parameters. Absent or empty
@@ -78,55 +120,197 @@ func parseProfileListOrder(sortRaw, orderRaw string) (ProfileListOrder, error) {
 		field = ProfileSortName
 	}
 	switch field {
-	case ProfileSortName, ProfileSortUpdatedAt, ProfileSortSubscriberCount, ProfileSortSliceCount:
+	case ProfileSortName, ProfileSortTitle, ProfileSortCreatedAt, ProfileSortUpdatedAt,
+		ProfileSortSubscriberCount, ProfileSortSliceCount, ProfileSortSessionCount, ProfileSortPccRuleCount:
 	default:
-		return ProfileListOrder{}, fmt.Errorf("sort must be name, updatedAt, subscriberCount or sliceCount")
+		return ProfileListOrder{}, fmt.Errorf(
+			"sort must be name, title, createdAt, updatedAt, subscriberCount, sliceCount, sessionCount or pccRuleCount")
 	}
 
 	direction := strings.TrimSpace(orderRaw)
 	if direction != "" && direction != "asc" && direction != "desc" {
 		return ProfileListOrder{}, fmt.Errorf("order must be asc or desc")
 	}
-	desc := field != ProfileSortName
+	desc := field != ProfileSortName && field != ProfileSortTitle
 	if direction != "" {
 		desc = direction == "desc"
 	}
 	return ProfileListOrder{Field: field, Desc: desc}, nil
 }
 
-// sortProfileItems applies the resolved order to the projected rows. The name
-// always settles ties, so two templates with the same counter keep one stable
-// sequence across requests.
+// parseProfileListLimit reads the optional page size. Absent means "the whole
+// filtered list", which is what every client written before pagination expects.
+func parseProfileListLimit(raw string) (int, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return 0, nil
+	}
+	value, err := strconv.Atoi(trimmed)
+	if err != nil || value < 1 || value > profileListMaxLimit {
+		return 0, fmt.Errorf("limit must be an integer between 1 and %d", profileListMaxLimit)
+	}
+	return value, nil
+}
+
+// parseProfileBillingFilter validates the billing facet.
+func parseProfileBillingFilter(raw string) (string, error) {
+	switch value := strings.TrimSpace(raw); value {
+	case "", ProfileBillingConfigured, ProfileBillingMissing, ProfileBillingUnlinked:
+		return value, nil
+	default:
+		return "", fmt.Errorf("billing must be configured, missing or unlinked")
+	}
+}
+
+// profileCursor is the position of the last row a client received: the sort value
+// plus the name that settles ties.
+type profileCursor struct {
+	Field string `json:"f"`
+	Desc  bool   `json:"d"`
+	Value string `json:"v"`
+	Name  string `json:"n"`
+}
+
+func encodeProfileCursor(order ProfileListOrder, item ProfileListItem) string {
+	payload, err := json.Marshal(profileCursor{
+		Field: order.Field,
+		Desc:  order.Desc,
+		Value: profileSortValue(order.Field, item),
+		Name:  item.Name,
+	})
+	if err != nil {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(payload)
+}
+
+func decodeProfileCursor(order ProfileListOrder, raw string) (profileCursor, error) {
+	payload, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(raw))
+	if err != nil {
+		return profileCursor{}, ErrInvalidProfileCursor
+	}
+	var cursor profileCursor
+	if err := json.Unmarshal(payload, &cursor); err != nil {
+		return profileCursor{}, ErrInvalidProfileCursor
+	}
+	// A cursor is only meaningful inside the ranking it was issued for.
+	if cursor.Field != order.Field || cursor.Desc != order.Desc || cursor.Name == "" {
+		return profileCursor{}, ErrInvalidProfileCursor
+	}
+	if cursor.Value == "" && order.Field != ProfileSortCreatedAt && order.Field != ProfileSortUpdatedAt {
+		return profileCursor{}, ErrInvalidProfileCursor
+	}
+	return cursor, nil
+}
+
+// afterCursor reports whether item sits strictly past the cursor in this ranking.
+func afterCursor(order ProfileListOrder, cursor profileCursor, item ProfileListItem) bool {
+	comparison := compareProfileField(order.Field, item, cursor.Value)
+	if order.Desc {
+		comparison = -comparison
+	}
+	if comparison != 0 {
+		return comparison > 0
+	}
+	return item.Name > cursor.Name
+}
+
+// matchesProfileRequest applies the asked-for facets to a projected row. The
+// console used to filter these on the client over the whole list; paging means the
+// server has to own the predicate, and it is the same one.
+func matchesProfileRequest(request ProfileListRequest, item ProfileListItem) bool {
+	if query := strings.ToLower(strings.TrimSpace(request.Query)); query != "" {
+		if !strings.Contains(strings.ToLower(item.Name), query) &&
+			!strings.Contains(strings.ToLower(item.Title), query) {
+			return false
+		}
+	}
+	switch request.Billing {
+	case ProfileBillingConfigured:
+		return item.OCSDefaultsConfigured
+	case ProfileBillingMissing:
+		return !item.OCSDefaultsConfigured
+	case ProfileBillingUnlinked:
+		return item.SubscriberCount == 0
+	default:
+		return true
+	}
+}
+
+// profileSortValue renders the ranking value of one row. The cursor stores the
+// same textual form, so a resumed page compares exactly what the first page did.
+func profileSortValue(field string, item ProfileListItem) string {
+	switch field {
+	case ProfileSortName:
+		return item.Name
+	case ProfileSortTitle:
+		return item.Title
+	case ProfileSortCreatedAt:
+		return asSortableText(item.CreatedAt)
+	case ProfileSortUpdatedAt:
+		return asSortableText(item.UpdatedAt)
+	case ProfileSortSubscriberCount:
+		return strconv.Itoa(item.SubscriberCount)
+	case ProfileSortSessionCount:
+		return strconv.Itoa(item.SessionCount)
+	case ProfileSortPccRuleCount:
+		return strconv.Itoa(item.PccRuleCount)
+	default:
+		return strconv.Itoa(item.SliceCount)
+	}
+}
+
+// compareProfileField compares one row against a stored ranking value.
+func compareProfileField(field string, item ProfileListItem, value string) int {
+	switch field {
+	case ProfileSortSubscriberCount, ProfileSortSliceCount, ProfileSortSessionCount, ProfileSortPccRuleCount:
+		left, leftErr := strconv.Atoi(profileSortValue(field, item))
+		right, rightErr := strconv.Atoi(value)
+		if leftErr != nil || rightErr != nil {
+			return 0
+		}
+		return compareInts(left, right)
+	default:
+		return strings.Compare(profileSortValue(field, item), value)
+	}
+}
+
+func profileFieldPresent(field string, item ProfileListItem) bool {
+	switch field {
+	case ProfileSortCreatedAt:
+		return optionalStringPresent(item.CreatedAt)
+	case ProfileSortUpdatedAt:
+		return optionalStringPresent(item.UpdatedAt)
+	default:
+		return true
+	}
+}
+
+// compareProfileItems orders two rows in the requested ranking. A row without the
+// compared date is reported last in either direction - absence is not the oldest
+// value - and the name always settles ties.
+func compareProfileItems(order ProfileListOrder, left, right ProfileListItem) int {
+	leftPresent, rightPresent := profileFieldPresent(order.Field, left), profileFieldPresent(order.Field, right)
+	if leftPresent != rightPresent {
+		if leftPresent {
+			return -1
+		}
+		return 1
+	}
+	comparison := compareProfileField(order.Field, left, profileSortValue(order.Field, right))
+	if order.Desc {
+		comparison = -comparison
+	}
+	if comparison != 0 {
+		return comparison
+	}
+	return strings.Compare(left.Name, right.Name)
+}
+
+// sortProfileItems applies the resolved order to the projected rows.
 func sortProfileItems(items []ProfileListItem, order ProfileListOrder) {
 	sort.SliceStable(items, func(i, j int) bool {
-		left, right := items[i], items[j]
-		if order.Field == ProfileSortUpdatedAt {
-			// A template with no read date is not "the oldest one": absence is
-			// reported last in either direction rather than as a zero value.
-			leftHas := optionalStringPresent(left.UpdatedAt)
-			rightHas := optionalStringPresent(right.UpdatedAt)
-			if leftHas != rightHas {
-				return leftHas
-			}
-		}
-		comparison := 0
-		switch order.Field {
-		case ProfileSortUpdatedAt:
-			comparison = strings.Compare(asSortableText(left.UpdatedAt), asSortableText(right.UpdatedAt))
-		case ProfileSortSubscriberCount:
-			comparison = compareInts(left.SubscriberCount, right.SubscriberCount)
-		case ProfileSortSliceCount:
-			comparison = compareInts(left.SliceCount, right.SliceCount)
-		default:
-			comparison = strings.Compare(left.Name, right.Name)
-		}
-		if order.Desc {
-			comparison = -comparison
-		}
-		if comparison != 0 {
-			return comparison < 0
-		}
-		return left.Name < right.Name
+		return compareProfileItems(order, items[i], items[j]) < 0
 	})
 }
 
@@ -152,25 +336,36 @@ func compareInts(left, right int) int {
 	}
 }
 
-// ListProfiles returns all profiles with global summary.
-func (r *Repository) ListProfiles(ctx context.Context, order ProfileListOrder) ([]ProfileListItem, ProfileSummary, error) {
+// ListProfiles returns one page of templates plus the summary of the whole
+// collection. An unrequested page (no limit, no cursor) is the historical
+// response: every template in name order.
+func (r *Repository) ListProfiles(ctx context.Context, request ProfileListRequest) (ProfileListPage, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	cursor, err := r.profiles.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "name", Value: 1}}))
 	if err != nil {
-		return nil, ProfileSummary{}, err
+		return ProfileListPage{}, err
 	}
 	defer cursor.Close(ctx)
 
 	var rawDocs []bson.M
 	if err := cursor.All(ctx, &rawDocs); err != nil {
-		return nil, ProfileSummary{}, err
+		return ProfileListPage{}, err
 	}
 
+	// A ranking by the subscriber counter cannot ride the short-lived snapshot: the
+	// page would then be ordered by a value the response no longer shows. The live
+	// aggregation is one full pass and is only paid when that ranking is asked for.
 	statsMap, statsErr := r.cachedSubscriberCounts(ctx, r.profileSubscriberCounts)
+	if request.Order.Field == ProfileSortSubscriberCount {
+		statsMap, statsErr = r.profileSubscriberCounts(ctx)
+	}
 	completeness := SubscriberStatsComplete
 	if statsErr != nil {
+		if request.Order.Field == ProfileSortSubscriberCount {
+			return ProfileListPage{}, statsErr
+		}
 		statsMap = map[string]profileSubscriberStats{}
 		completeness = SubscriberStatsUnavailable
 	}
@@ -204,10 +399,8 @@ func (r *Repository) ListProfiles(ctx context.Context, order ProfileListOrder) (
 		})
 	}
 
-	sortProfileItems(profiles, order)
-
-	// Summary mirrors Node summarizeProfiles(): derived from the profile list
-	// so both response sections stay consistent.
+	// Summary mirrors Node summarizeProfiles(): derived from the whole collection,
+	// so the metric strip keeps describing the platform rather than the page.
 	summary := ProfileSummary{
 		TotalProfiles:               len(profiles),
 		SubscriberStatsCompleteness: completeness,
@@ -222,7 +415,40 @@ func (r *Repository) ListProfiles(ctx context.Context, order ProfileListOrder) (
 		}
 	}
 
-	return profiles, summary, nil
+	matched := make([]ProfileListItem, 0, len(profiles))
+	for _, item := range profiles {
+		if matchesProfileRequest(request, item) {
+			matched = append(matched, item)
+		}
+	}
+	sortProfileItems(matched, request.Order)
+
+	page := matched
+	if strings.TrimSpace(request.Cursor) != "" {
+		position, cursorErr := decodeProfileCursor(request.Order, request.Cursor)
+		if cursorErr != nil {
+			return ProfileListPage{}, cursorErr
+		}
+		start := len(matched)
+		for index, item := range matched {
+			if afterCursor(request.Order, position, item) {
+				start = index
+				break
+			}
+		}
+		page = matched[start:]
+	}
+
+	pageResult := ProfileListPage{Items: page, Summary: summary}
+	if request.Limit > 0 && len(page) > request.Limit {
+		pageResult.Items = page[:request.Limit]
+		pageResult.HasMore = true
+		pageResult.NextCursor = encodeProfileCursor(request.Order, pageResult.Items[len(pageResult.Items)-1])
+	}
+	if pageResult.Items == nil {
+		pageResult.Items = make([]ProfileListItem, 0)
+	}
+	return pageResult, nil
 }
 
 // GetProfile returns a single profile by name, or nil if not found.

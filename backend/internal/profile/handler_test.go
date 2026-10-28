@@ -37,8 +37,9 @@ type mockRepository struct {
 	// listItems overrides the rows ListProfiles returns, and lastListOrder
 	// records the order it was asked for, so the list read can be pinned without
 	// a live collection.
-	listItems     []ProfileListItem
-	lastListOrder ProfileListOrder
+	listItems       []ProfileListItem
+	lastListOrder   ProfileListOrder
+	lastListRequest ProfileListRequest
 }
 
 func newMockRepository() *mockRepository {
@@ -109,8 +110,9 @@ func (m *mockRepository) CountSubscribersByProfile(ctx context.Context, profileN
 	return m.subscribers[profileName], nil
 }
 
-func (m *mockRepository) ListProfiles(ctx context.Context, order ProfileListOrder) ([]ProfileListItem, ProfileSummary, error) {
-	m.lastListOrder = order
+func (m *mockRepository) ListProfiles(ctx context.Context, request ProfileListRequest) (ProfileListPage, error) {
+	m.lastListOrder = request.Order
+	m.lastListRequest = request
 	items := m.listItems
 	if items == nil {
 		items = make([]ProfileListItem, 0)
@@ -120,10 +122,34 @@ func (m *mockRepository) ListProfiles(ctx context.Context, order ProfileListOrde
 			})
 		}
 	}
-	sorted := make([]ProfileListItem, len(items))
-	copy(sorted, items)
-	sortProfileItems(sorted, order)
-	return sorted, ProfileSummary{}, nil
+	matched := make([]ProfileListItem, 0, len(items))
+	for _, item := range items {
+		if matchesProfileRequest(request, item) {
+			matched = append(matched, item)
+		}
+	}
+	sortProfileItems(matched, request.Order)
+	page := ProfileListPage{Items: matched, Summary: ProfileSummary{TotalProfiles: len(items)}}
+	if strings.TrimSpace(request.Cursor) != "" {
+		position, err := decodeProfileCursor(request.Order, request.Cursor)
+		if err != nil {
+			return ProfileListPage{}, err
+		}
+		start := len(matched)
+		for index, item := range matched {
+			if afterCursor(request.Order, position, item) {
+				start = index
+				break
+			}
+		}
+		page.Items = matched[start:]
+	}
+	if request.Limit > 0 && len(page.Items) > request.Limit {
+		page.Items = page.Items[:request.Limit]
+		page.HasMore = true
+		page.NextCursor = encodeProfileCursor(request.Order, page.Items[len(page.Items)-1])
+	}
+	return page, nil
 }
 
 func (m *mockRepository) GetProfile(ctx context.Context, name string) (bson.M, error) {
@@ -3308,4 +3334,77 @@ func TestProfileListResolvesAndValidatesTheOrder(t *testing.T) {
 			t.Fatalf("status %d: %s", writer.Code, writer.Body.String())
 		}
 	})
+}
+
+/* The list pages over HTTP: the cursor continues the same ranking, the facets
+ * narrow it, and an unpaginated request still answers exactly as before. */
+func TestProfileListPagesAndFiltersOverHTTP(t *testing.T) {
+	principal := &auth.Principal{Username: "op1", Role: "operator", NormalizedRole: "operator"}
+	repo := newMockRepository()
+	repo.listItems = []ProfileListItem{
+		{Name: "alpha", OCSDefaultsConfigured: true},
+		{Name: "beta"},
+		{Name: "gamma", OCSDefaultsConfigured: true},
+		{Name: "delta", OCSDefaultsConfigured: true},
+	}
+	handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+
+	type listPage struct {
+		Profiles   []ProfileListItem `json:"profiles"`
+		NextCursor *string           `json:"nextCursor"`
+		HasMore    bool              `json:"hasMore"`
+	}
+	fetch := func(target string) *httptest.ResponseRecorder {
+		t.Helper()
+		writer := doProfileRequest(t, handler.List, "GET", target, nil, principal, nil)
+		if writer.Code != http.StatusOK {
+			t.Fatalf("%s: status %d: %s", target, writer.Code, writer.Body.String())
+		}
+		return writer
+	}
+	decode := func(writer *httptest.ResponseRecorder) listPage {
+		t.Helper()
+		var body listPage
+		if err := json.Unmarshal(writer.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return body
+	}
+
+	whole := decode(fetch("/api/profiles"))
+	if len(whole.Profiles) != 4 || whole.HasMore || whole.NextCursor != nil {
+		t.Fatalf("an unpaginated request must answer with the whole list: %+v", whole)
+	}
+
+	first := decode(fetch("/api/profiles?limit=2&billing=configured"))
+	if repo.lastListRequest.Limit != 2 || repo.lastListRequest.Billing != ProfileBillingConfigured {
+		t.Errorf("request: %+v", repo.lastListRequest)
+	}
+	if got := []string{first.Profiles[0].Name, first.Profiles[1].Name}; !reflect.DeepEqual(got, []string{"alpha", "delta"}) {
+		t.Fatalf("page one: %v", got)
+	}
+	if !first.HasMore || first.NextCursor == nil {
+		t.Fatalf("page one must announce more: %+v", first)
+	}
+
+	second := decode(fetch("/api/profiles?limit=2&billing=configured&cursor=" + *first.NextCursor))
+	if len(second.Profiles) != 1 || second.Profiles[0].Name != "gamma" {
+		t.Fatalf("page two: %v", names(second.Profiles))
+	}
+	if second.HasMore || second.NextCursor != nil {
+		t.Fatalf("the last page must not announce more: %+v", second)
+	}
+
+	for _, target := range []string{"/api/profiles?limit=0", "/api/profiles?billing=bogus", "/api/profiles?cursor=zzz"} {
+		writer := doProfileRequest(t, handler.List, "GET", target, nil, principal, nil)
+		if writer.Code != http.StatusBadRequest {
+			t.Errorf("%s: expected 400, got %d", target, writer.Code)
+			continue
+		}
+		var body map[string]string
+		_ = json.Unmarshal(writer.Body.Bytes(), &body)
+		if body["code"] != "INVALID_QUERY_PARAMETER" {
+			t.Errorf("%s: code %v", target, body)
+		}
+	}
 }

@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -123,4 +124,77 @@ func TestSortProfileItemsIsDeterministic(t *testing.T) {
 			t.Fatalf("repeated sorting diverged: %v vs %v", names(first), names(again))
 		}
 	}
+}
+
+/* The page size and the billing facet are closed vocabularies: a typo must not be
+ * answered with a differently shaped page. */
+func TestParseProfileListLimitAndBilling(t *testing.T) {
+	if got, err := parseProfileListLimit(""); err != nil || got != 0 {
+		t.Errorf("an absent limit must stay unbounded, got %d err %v", got, err)
+	}
+	if got, err := parseProfileListLimit("50"); err != nil || got != 50 {
+		t.Errorf("limit 50: got %d err %v", got, err)
+	}
+	for _, bad := range []string{"0", "-3", "201", "ten"} {
+		if _, err := parseProfileListLimit(bad); err == nil {
+			t.Errorf("limit %q must be refused", bad)
+		}
+	}
+	for _, good := range []string{"", ProfileBillingConfigured, ProfileBillingMissing, ProfileBillingUnlinked} {
+		if _, err := parseProfileBillingFilter(good); err != nil {
+			t.Errorf("billing %q must be accepted: %v", good, err)
+		}
+	}
+	if _, err := parseProfileBillingFilter("bogus"); err == nil {
+		t.Error("an unknown billing facet must be refused")
+	}
+}
+
+/* A cursor only means something inside the ranking it came from. */
+func TestProfileCursorRoundTripsInsideItsRanking(t *testing.T) {
+	order := ProfileListOrder{Field: ProfileSortSliceCount, Desc: true}
+	cursor := encodeProfileCursor(order, ProfileListItem{Name: "beta", SliceCount: 3})
+	if cursor == "" {
+		t.Fatal("a cursor must encode")
+	}
+	decoded, err := decodeProfileCursor(order, cursor)
+	if err != nil || decoded.Value != "3" || decoded.Name != "beta" {
+		t.Fatalf("decoded %+v err %v", decoded, err)
+	}
+	if _, err := decodeProfileCursor(ProfileListOrder{Field: ProfileSortName}, cursor); !errors.Is(err, ErrInvalidProfileCursor) {
+		t.Errorf("a cursor from another ranking must be refused, got %v", err)
+	}
+	if _, err := decodeProfileCursor(order, "not-a-cursor"); !errors.Is(err, ErrInvalidProfileCursor) {
+		t.Errorf("garbage must be refused, got %v", err)
+	}
+}
+
+func TestProfileListFacetsMatchTheClientPredicates(t *testing.T) {
+	rows := []ProfileListItem{
+		{Name: "gold", Title: "Gold 5G", OCSDefaultsConfigured: true, SubscriberCount: 3},
+		{Name: "silver", Title: "Silver", OCSDefaultsConfigured: false, SubscriberCount: 0},
+	}
+	byQuery := filterForTest(rows, ProfileListRequest{Query: "gold"})
+	if len(byQuery) != 1 || byQuery[0].Name != "gold" {
+		t.Errorf("query must match name or title, got %v", names(byQuery))
+	}
+	if got := filterForTest(rows, ProfileListRequest{Billing: ProfileBillingConfigured}); len(got) != 1 || got[0].Name != "gold" {
+		t.Errorf("configured facet: %v", names(got))
+	}
+	if got := filterForTest(rows, ProfileListRequest{Billing: ProfileBillingMissing}); len(got) != 1 || got[0].Name != "silver" {
+		t.Errorf("missing facet: %v", names(got))
+	}
+	if got := filterForTest(rows, ProfileListRequest{Billing: ProfileBillingUnlinked}); len(got) != 1 || got[0].Name != "silver" {
+		t.Errorf("unlinked facet: %v", names(got))
+	}
+}
+
+func filterForTest(rows []ProfileListItem, request ProfileListRequest) []ProfileListItem {
+	out := make([]ProfileListItem, 0, len(rows))
+	for _, row := range rows {
+		if matchesProfileRequest(request, row) {
+			out = append(out, row)
+		}
+	}
+	return out
 }

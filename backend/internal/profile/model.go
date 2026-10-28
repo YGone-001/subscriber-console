@@ -4,6 +4,10 @@ package profile
 type ProfileListResponse struct {
 	Profiles []ProfileListItem `json:"profiles"`
 	Summary  ProfileSummary    `json:"summary"`
+	// Pagination is additive: an unpaginated request answers with the whole list,
+	// hasMore=false and a null cursor, exactly as before the fields existed.
+	NextCursor *string `json:"nextCursor"`
+	HasMore    bool    `json:"hasMore"`
 }
 
 // ProfileListItem matches Node ProfileListItem from listProfiles().
