@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"regexp"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -38,7 +39,10 @@ func (r *Repository) ListBalances(ctx context.Context, opts BalanceQueryOptions)
 
 	filter := bson.M{}
 	if opts.IMSI != "" {
-		filter["imsi"] = bson.M{"$regex": opts.IMSI, "$options": "i"}
+		/* Escape the needle: the client sends an IMSI, not a pattern. A literal
+		 * fragment keeps the historical substring lookup while a metacharacter can
+		 * no longer widen the match or fail the query with an invalid regex. */
+		filter["imsi"] = bson.M{"$regex": regexp.QuoteMeta(opts.IMSI), "$options": "i"}
 	}
 	if opts.PlanID != "" {
 		filter["plan_id"] = opts.PlanID

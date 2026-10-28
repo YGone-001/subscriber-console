@@ -1,21 +1,21 @@
 /*
- * Forward-ported from the historical xCloud UI (reference commit 2c40903):
- * frontend/src/components/ocs/balances/AdjustBalanceModal.tsx
+ * Governed balance adjustment (`POST /api/ocs/balances/{imsi}/adjust`).
  *
- * Adaptations: "use client" dropped; `@/` aliases replaced with relative imports;
- * the raw `fetch` replaced by the current mutation client, so the 409
- * precondition conflict and the 502 backend-unreachable code arrive through the
- * shared error contract instead of being re-parsed from the response body.
+ * The request body is unchanged apart from an optional `version` precondition
+ * that the endpoint has always accepted and the UI never sent. Sending it turns
+ * a concurrent write into a deterministic `BALANCE_PRECONDITION_CHANGED` instead
+ * of a last-writer-wins update on a bucket another operator just changed.
  *
- * The request body is unchanged: `{ operation, bucket, amount, reason, ticketId }`
- * to `POST /api/ocs/balances/{imsi}/adjust`. Balance reset stays unavailable:
- * this surface never calls `/reset`.
+ * Two honesty fixes ride along: an unknown bucket balance renders as an em dash
+ * rather than `0`, and the "stale record" path asks the owning page to refetch
+ * instead of reloading the whole browser tab.
  */
 import { useState } from 'react';
 import { AlertCircle, RefreshCw, X } from 'lucide-react';
 import { useI18n } from '../../../providers/I18nProvider';
 import { postJson } from '../../../lib/api/mutation-client';
 import { formatBytes } from '../../../lib/unitParser';
+import { formatOcsBytes } from '../../../features/ocs/ocs-format';
 
 interface AdjustBalanceModalProps {
   isOpen: boolean;
@@ -24,6 +24,10 @@ interface AdjustBalanceModalProps {
   dataAvailable: number | null;
   voiceAvailable: number | null;
   smsAvailable: number | null;
+  /** CAS precondition from the record the dialog was opened for. */
+  version?: number | null;
+  /** Refetch the owning surface after a stale precondition. */
+  onRefresh?: () => void;
   onSuccess: (result: { outcome: string; message: string }) => void;
 }
 
@@ -37,6 +41,8 @@ export default function AdjustBalanceModal({
   dataAvailable,
   voiceAvailable,
   smsAvailable,
+  version,
+  onRefresh,
   onSuccess,
 }: AdjustBalanceModalProps) {
   const { t } = useI18n();
@@ -96,7 +102,7 @@ export default function AdjustBalanceModal({
 
     setSubmitting(true);
     try {
-      const result = await postJson<{ outcome?: string }>(
+      const result = await postJson<{ outcome?: string; message?: string }>(
         `/api/ocs/balances/${encodeURIComponent(imsi)}/adjust`,
         {
           operation,
@@ -104,6 +110,7 @@ export default function AdjustBalanceModal({
           amount: calculatedAmount,
           reason: reason.trim(),
           ticketId: ticketId.trim() || undefined,
+          version: typeof version === 'number' ? version : undefined,
         },
       );
 
@@ -144,7 +151,7 @@ export default function AdjustBalanceModal({
             onClick={onClose}
             aria-label={t('close')}
           >
-            <X size={18} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
@@ -153,26 +160,26 @@ export default function AdjustBalanceModal({
             IMSI: <strong className="ocs-mono">{imsi}</strong>
           </span>
           <div className="ocs-balance-modal-imsi-note">
-            {t('ocs_col_data_available')}: {formatBytes(dataAvailable ?? 0)} |{' '}
-            {t('ocs_col_voice_avail')}: {voiceAvailable ?? 0}s |{' '}
-            {t('ocs_col_sms_avail')}: {smsAvailable ?? 0}
+            {t('ocs_col_data_available')}: {formatOcsBytes(dataAvailable)} |{' '}
+            {t('ocs_col_voice_avail')}: {voiceAvailable === null ? '\u2014' : `${voiceAvailable}s`} |{' '}
+            {t('ocs_col_sms_avail')}: {smsAvailable === null ? '\u2014' : smsAvailable}
           </div>
         </div>
 
         {error && (
-          <div className="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row">
-            <AlertCircle size={16} />
+          <div className="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row" role="alert">
+            <AlertCircle size={16} aria-hidden="true" />
             <span>{error}</span>
-            {casConflict && (
+            {casConflict && onRefresh && (
               <button
                 type="button"
                 className="ocs-btn ocs-btn-secondary ocs-btn-compact-auto"
                 onClick={() => {
                   onClose();
-                  window.location.reload();
+                  onRefresh();
                 }}
               >
-                <RefreshCw size={12} /> {t('refresh')}
+                <RefreshCw size={12} aria-hidden="true" /> {t('refresh')}
               </button>
             )}
           </div>
@@ -229,7 +236,7 @@ export default function AdjustBalanceModal({
                 >
                   <option value="GB">GB</option>
                   <option value="MB">MB</option>
-                  <option value="Bytes">Bytes</option>
+                  <option value="Bytes">{t('ocs_unit_bytes')}</option>
                 </select>
               )}
               {bucket === 'voice' && (
@@ -251,7 +258,7 @@ export default function AdjustBalanceModal({
             </div>
             {calculatedAmount > 0 && bucket === 'data' && dataUnit !== 'Bytes' && (
               <span className="ocs-amount-hint">
-                = {calculatedAmount.toLocaleString()} Bytes ({formatBytes(calculatedAmount)})
+                = {calculatedAmount.toLocaleString()} {t('ocs_unit_bytes')} ({formatBytes(calculatedAmount)})
               </span>
             )}
           </div>
@@ -264,7 +271,7 @@ export default function AdjustBalanceModal({
               maxLength={200}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="e.g. Customer quota compensation"
+              placeholder={t('ocs_balance_reason_ph')}
               required
             />
           </div>
@@ -278,7 +285,7 @@ export default function AdjustBalanceModal({
               className="ocs-form-input"
               value={ticketId}
               onChange={(event) => setTicketId(event.target.value)}
-              placeholder="e.g. INC100234"
+              placeholder={t('ocs_balance_ticket_ph')}
             />
           </div>
 

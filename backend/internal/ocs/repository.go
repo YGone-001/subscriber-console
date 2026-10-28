@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"regexp"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -429,7 +430,10 @@ func (r *Repository) ListSubscribers(ctx context.Context, opts SubscriberQueryOp
 
 	filter := bson.M{}
 	if opts.IMSI != "" {
-		filter["imsi"] = bson.M{"$regex": opts.IMSI, "$options": "i"}
+		/* Escape the needle: the client sends an IMSI, not a pattern. A literal
+		 * fragment keeps the historical substring lookup while a metacharacter can
+		 * no longer widen the match or fail the query with an invalid regex. */
+		filter["imsi"] = bson.M{"$regex": regexp.QuoteMeta(opts.IMSI), "$options": "i"}
 	}
 	if opts.PlanID != "" {
 		filter["plan_id"] = opts.PlanID
@@ -464,23 +468,15 @@ func (r *Repository) ListSubscribers(ctx context.Context, opts SubscriberQueryOp
 
 	records := make([]SubscriberRecord, 0, len(rawDocs))
 	for _, doc := range rawDocs {
-		records = append(records, SubscriberRecord{
-			ID:        docID(doc),
-			IMSI:      strWithDefault(doc, "imsi", ""),
-			MSISDN:    strWithDefault(doc, "msisdn", ""),
-			Status:    strWithDefault(doc, "status", "active"),
-			PlanID:    strWithDefault(doc, "plan_id", ""),
-			CreatedAt: timeStr(doc, "created_at"),
-			UpdatedAt: timeStr(doc, "updated_at"),
-		})
+		records = append(records, mapSubscriberRecord(doc))
 	}
 	if records == nil {
 		records = []SubscriberRecord{}
 	}
 
-	totalPages := int(totalCount)/limit + 1
-	if totalPages < 1 {
-		totalPages = 1
+	totalPages := int(totalCount) / limit
+	if int(totalCount)%limit != 0 || totalPages == 0 {
+		totalPages++
 	}
 
 	return SubscriberListResponse{
@@ -491,6 +487,18 @@ func (r *Repository) ListSubscribers(ctx context.Context, opts SubscriberQueryOp
 		Limit:      limit,
 		TotalPages: totalPages,
 	}, nil
+}
+
+func mapSubscriberRecord(doc bson.M) SubscriberRecord {
+	return SubscriberRecord{
+		ID:        docID(doc),
+		IMSI:      strWithDefault(doc, "imsi", ""),
+		MSISDN:    strWithDefault(doc, "msisdn", ""),
+		Status:    strWithDefault(doc, "status", "active"),
+		PlanID:    strWithDefault(doc, "plan_id", ""),
+		CreatedAt: timeStr(doc, "created_at"),
+		UpdatedAt: timeStr(doc, "updated_at"),
+	}
 }
 
 // ── Query option types ──────────────────────────────────────────────────────
