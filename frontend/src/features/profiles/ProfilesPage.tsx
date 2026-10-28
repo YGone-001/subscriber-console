@@ -17,6 +17,7 @@ import { SortableTableHeader } from '../../components/ui/SortableTableHeader';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useRead } from '../../lib/api/use-read';
+import { getJson } from '../../lib/api/read-client';
 import { useAppRouter } from '../../lib/ui-compat/router';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { formatAmbrPairCompact } from './profile-format';
@@ -24,9 +25,9 @@ import {
   countProfilesWithoutBilling,
   DEFAULT_PROFILE_SORT_FIELD,
   defaultProfileSortDirection,
-  filterProfileList,
   linkedSubscriberCount,
   nextProfileSort,
+  PROFILE_LIST_PAGE_SIZE,
   profileDirectionFromParam,
   profileFilterFromParam,
   profileFilterToParam,
@@ -75,9 +76,6 @@ export function ProfilesPage() {
   const { t, formatDateTime } = useI18n();
   const router = useAppRouter();
   const { url, sortField, sortDirection, applySort } = useProfilesListOrder();
-  const { data, isLoading, error, mutate } = useRead<ProfilesResponse>(
-    profilesListReadUrl(sortField, sortDirection),
-  );
   const { user } = useAuth();
   const canEditTemplates = hasPermission(user, 'profiles.write');
 
@@ -85,18 +83,62 @@ export function ProfilesPage() {
   const listFilter = profileFilterFromParam(url.filters.billing);
   const [searchInput, setSearchInput] = useState(searchQuery);
 
+  /* The server owns the ranking and the facets, so the read key carries them; the
+   * page only appends what it is handed, because filtering locally over a page
+   * would hide matches the page never received. */
+  const listUrl = useMemo(() => profilesListReadUrl({
+    field: sortField,
+    direction: sortDirection,
+    query: searchQuery,
+    billing: url.filters.billing ?? '',
+    limit: PROFILE_LIST_PAGE_SIZE,
+  }), [sortField, sortDirection, searchQuery, url.filters.billing]);
+  const { data, isLoading, error, mutate } = useRead<ProfilesResponse>(listUrl);
+
+  const [extraPages, setExtraPages] = useState<{ rows: ProfileListItem[]; nextCursor: string | null }[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   useEffect(() => {
     setSearchInput(searchQuery);
   }, [searchQuery]);
 
-  const profiles = useMemo(() => data?.profiles ?? [], [data?.profiles]);
+  useEffect(() => {
+    /* A new ranking or filter restarts the sequence; the cursor belonged to the
+     * previous one. */
+    setExtraPages([]);
+  }, [listUrl]);
+
+  const profiles = useMemo(
+    () => [...(data?.profiles ?? []), ...extraPages.flatMap((page) => page.rows)],
+    [data?.profiles, extraPages],
+  );
   const backendSummary = data?.summary;
   const statsUnavailable = backendSummary?.subscriberStatsCompleteness === 'unavailable';
 
-  const filteredProfiles = useMemo(
-    () => filterProfileList(profiles, searchQuery, listFilter),
-    [listFilter, profiles, searchQuery],
-  );
+  const lastExtraPage = extraPages[extraPages.length - 1];
+  const nextCursor = lastExtraPage ? lastExtraPage.nextCursor : (data?.nextCursor ?? null);
+  const hasMore = lastExtraPage ? Boolean(lastExtraPage.nextCursor) : Boolean(data?.hasMore);
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await getJson<ProfilesResponse>(profilesListReadUrl({
+        field: sortField,
+        direction: sortDirection,
+        query: searchQuery,
+        billing: url.filters.billing ?? '',
+        limit: PROFILE_LIST_PAGE_SIZE,
+        cursor: nextCursor,
+      }));
+      setExtraPages((current) => [...current, {
+        rows: page.profiles ?? [],
+        nextCursor: page.nextCursor ?? null,
+      }]);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const renderSortIcon = (field: ProfileSortField) => {
     if (field !== sortField) return <ArrowUpDown size={14} className="sort-icon muted" />;
@@ -320,7 +362,7 @@ export function ProfilesPage() {
             onRetry={() => { void mutate(); }}
           />
         </div>
-      ) : filteredProfiles.length === 0 ? (
+      ) : profiles.length === 0 ? (
         <div className={`dash-card ${styles.profileTableState}`}>
           <EmptyState
             icon={<Boxes size={48} />}
@@ -381,10 +423,17 @@ export function ProfilesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredProfiles.map((profile) => renderProfileRow(profile))}
+                {profiles.map((profile) => renderProfileRow(profile))}
               </tbody>
             </table>
           </div>
+          {hasMore && (
+            <div className={styles.profileTableState}>
+              <button type="button" className="btn btn-outline" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? t("loading") : t("prof_load_more")}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

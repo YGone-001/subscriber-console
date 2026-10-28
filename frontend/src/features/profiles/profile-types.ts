@@ -71,6 +71,9 @@ export type ProfileGlobalSummary = {
 export type ProfilesResponse = {
   profiles: ProfileListItem[];
   summary?: ProfileGlobalSummary;
+  /** Keyset cursor for the next page; null on the last page. */
+  nextCursor?: string | null;
+  hasMore?: boolean;
 };
 
 export type ProfileVersionSummary = {

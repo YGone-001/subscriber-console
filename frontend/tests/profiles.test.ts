@@ -965,20 +965,34 @@ test('template editors resolve units through the shared select, not a local defa
  * defined. backend/internal/profile/repository_list_order_test.go pins the same
  * table on the serving side. */
 test('the template list order round-trips through the URL', () => {
-  assert.equal(profilesListReadUrl('name', 'asc'), '/api/profiles');
-  assert.equal(profilesListReadUrl('name', 'desc'), '/api/profiles?order=desc');
-  assert.equal(profilesListReadUrl('updatedAt', 'desc'), '/api/profiles?sort=updatedAt');
-  assert.equal(profilesListReadUrl('updatedAt', 'asc'), '/api/profiles?sort=updatedAt&order=asc');
-  assert.equal(profilesListReadUrl('sliceCount', 'desc'), '/api/profiles?sort=sliceCount');
-  assert.equal(profilesListReadUrl('subscriberCount', 'asc'), '/api/profiles?sort=subscriberCount&order=asc');
+  const url = (field: Parameters<typeof defaultProfileSortDirection>[0], direction: 'asc' | 'desc') =>
+    profilesListReadUrl({ field, direction });
+  assert.equal(url('name', 'asc'), '/api/profiles');
+  assert.equal(url('name', 'desc'), '/api/profiles?order=desc');
+  assert.equal(url('title', 'asc'), '/api/profiles?sort=title');
+  assert.equal(url('updatedAt', 'desc'), '/api/profiles?sort=updatedAt');
+  assert.equal(url('updatedAt', 'asc'), '/api/profiles?sort=updatedAt&order=asc');
+  assert.equal(url('subscriberCount', 'asc'), '/api/profiles?sort=subscriberCount&order=asc');
+
+  /* The facets and the page travel with the read, because the server owns them. */
+  assert.equal(
+    profilesListReadUrl({ field: 'name', direction: 'asc', query: ' gold ', billing: 'configured', limit: 50 }),
+    '/api/profiles?q=gold&billing=configured&limit=50',
+  );
+  assert.equal(
+    profilesListReadUrl({ field: 'name', direction: 'asc', limit: 50, cursor: 'abc' }),
+    '/api/profiles?limit=50&cursor=abc',
+  );
 
   assert.equal(profileSortFromParam(undefined), 'name');
   assert.equal(profileSortFromParam('riskScore'), 'name');
-  assert.equal(profileSortFromParam('subscriberCount'), 'subscriberCount');
+  assert.equal(profileSortFromParam('sessionCount'), 'sessionCount');
   assert.equal(profileDirectionFromParam('sideways'), null);
   assert.equal(profileDirectionFromParam('asc'), 'asc');
   assert.equal(defaultProfileSortDirection('name'), 'asc');
+  assert.equal(defaultProfileSortDirection('title'), 'asc');
   assert.equal(defaultProfileSortDirection('updatedAt'), 'desc');
+  assert.equal(defaultProfileSortDirection('pccRuleCount'), 'desc');
 });
 
 /* The arrow the operator reads must be the order the server answered with, so a
@@ -994,7 +1008,7 @@ test('a header click flips its column or starts a new one from its default', () 
 test('the template list carries its order in the URL, the read key and the header', () => {
   const page = read('../src/features/profiles/ProfilesPage.tsx');
   assert.match(page, /const PROFILE_URL_KEYS = \['q', 'billing', 'sort', 'order'\] as const;/);
-  assert.match(page, /profilesListReadUrl\(\s*sortField,\s*sortDirection\s*\)/);
+  assert.match(page, /profilesListReadUrl\(\{/);
   assert.match(page, /url\.setFilters\(isDefault \? \{ sort: '', order: '' \} : \{ sort: next\.field, order: next\.direction \}\)/);
   for (const field of ['name', 'sliceCount', 'subscriberCount', 'updatedAt']) {
     assert.match(page, new RegExp(`applySort\\('${field}'\\)`), `the ${field} column must be sortable`);

@@ -73,17 +73,27 @@ export function countProfilesWithoutBilling(entries: ProfileListEntry[]): number
  * not recognise (parseProfileListOrder in backend/internal/profile/repository.go).
  * These are the fields a reader may ask for; anything else is a client mistake, not
  * a reason to answer with a different ranking. */
-export const PROFILE_SORT_FIELDS = ['name', 'updatedAt', 'subscriberCount', 'sliceCount'] as const;
+export const PROFILE_SORT_FIELDS = [
+  'name',
+  'title',
+  'createdAt',
+  'updatedAt',
+  'subscriberCount',
+  'sliceCount',
+  'sessionCount',
+  'pccRuleCount',
+] as const;
 export type ProfileSortField = (typeof PROFILE_SORT_FIELDS)[number];
 export type ProfileSortDirection = 'asc' | 'desc';
 
 export const DEFAULT_PROFILE_SORT_FIELD: ProfileSortField = 'name';
+export const PROFILE_LIST_PAGE_SIZE = 50;
 
-/* A name ranking reads alphabetically first, a recency or volume ranking reads
- * highest-first. The server resolves the same default when `order` is absent, and
- * the page needs it to decide what the first click on a column means. */
+/* A name or title ranking reads alphabetically first, a date or counter ranking
+ * reads highest-first. The server resolves the same default when `order` is absent,
+ * and the page needs it to decide what the first click on a column means. */
 export function defaultProfileSortDirection(field: ProfileSortField): ProfileSortDirection {
-  return field === 'name' ? 'asc' : 'desc';
+  return field === 'name' || field === 'title' ? 'asc' : 'desc';
 }
 
 export function profileSortFromParam(value: string | undefined): ProfileSortField {
@@ -96,17 +106,29 @@ export function profileDirectionFromParam(value: string | undefined): ProfileSor
   return value === 'asc' || value === 'desc' ? value : null;
 }
 
-/* Only a non-default choice goes on the wire, so the untouched view keeps the one
- * read key it has always had and stays a cache hit. */
-export function profilesListReadUrl(
-  field: ProfileSortField,
-  direction: ProfileSortDirection,
-): string {
+export interface ProfilesListQuery {
+  field: ProfileSortField;
+  direction: ProfileSortDirection;
+  query?: string;
+  billing?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+/* Only non-default choices go on the wire, so the untouched view keeps the read
+ * key it has always had. The filter facets travel with the page because the server
+ * owns them: filtering a page on the client would hide matches it never received. */
+export function profilesListReadUrl(input: ProfilesListQuery): string {
   const params = new URLSearchParams();
-  if (field !== DEFAULT_PROFILE_SORT_FIELD) params.set('sort', field);
-  if (direction !== defaultProfileSortDirection(field)) params.set('order', direction);
-  const query = params.toString();
-  return query ? `/api/profiles?${query}` : '/api/profiles';
+  if (input.field !== DEFAULT_PROFILE_SORT_FIELD) params.set('sort', input.field);
+  if (input.direction !== defaultProfileSortDirection(input.field)) params.set('order', input.direction);
+  const query = (input.query ?? '').trim();
+  if (query) params.set('q', query);
+  if (input.billing) params.set('billing', input.billing);
+  if (input.limit) params.set('limit', String(input.limit));
+  if (input.cursor) params.set('cursor', input.cursor);
+  const search = params.toString();
+  return search ? `/api/profiles?${search}` : '/api/profiles';
 }
 
 /* The same column flips; a new column starts from its own default direction. */

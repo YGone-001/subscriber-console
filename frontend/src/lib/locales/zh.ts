@@ -287,6 +287,7 @@ export const zh: Record<string, string> = {
     prof_governance_impacted: "关联用户",
     prof_governance_not_modified: "暂无变更记录",
     prof_governance_no_owner: "暂无修改人记录",
+    prof_load_more: "加载更多",
     prof_table_template: "模板",
     prof_table_content: "内容摘要",
     prof_table_linked_users: "关联用户",

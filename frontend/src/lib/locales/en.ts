@@ -287,6 +287,7 @@ export const en: Record<string, string> = {
     prof_governance_impacted: "Linked Users",
     prof_governance_not_modified: "Not modified",
     prof_governance_no_owner: "No modifier recorded",
+    prof_load_more: "Load more",
     prof_table_template: "Template",
     prof_table_content: "Content",
     prof_table_linked_users: "Linked Users",
