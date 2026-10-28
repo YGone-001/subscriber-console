@@ -122,8 +122,9 @@ jobs:
       # current React/Vite + Go runtime: shell component structure, header and sidebar
       # composition, command palette, tab bar, breadcrumbs, theme and language switches,
       # user menu, notification presentation, restored brand asset, dashboard
-      # presentation, Inventory visual integration, stylesheet architecture, Next
-      # absence, frozen route count (28) and frozen Go registration count (119).
+      # presentation, Inventory visual integration, stylesheet architecture and Next
+      # absence. The route and registration counts are derived by the harness; they are
+      # never restated here, because a comment cannot fail and a duplicate literal drifts.
       - name: Frontend UI restoration contract
         run: node scripts/test-ui-restoration-contract.mjs
 
@@ -709,9 +710,10 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      # Contract and security evidence: two Topology routes, seven Topology APIs,
-      # 32 canonical routes, 119 Go registrations, request-contract exactness with
-      # negative sentinels, and no raw fetch / absolute URL / retry / executor.
+      # Contract and security evidence: the Topology routes, the Topology APIs, the
+      # canonical SPA route set, the derived Go registration set, request-contract
+      # exactness with negative sentinels, and no raw fetch / absolute URL / retry /
+      # executor. Counts are derived by the harness rather than restated here.
       - name: Topology contract and security evidence
         run: node scripts/test-topology-contract.mjs
 
@@ -804,8 +806,8 @@ jobs:
           npm ci
           cd frontend && npm ci
 
-      # Deterministic contract and security evidence for the 12 discovery APIs,
-      # 2 SPA routes, 119 Go registrations, 3 collections and vendor-neutral
+      # Deterministic contract and security evidence for the discovery APIs, the SPA
+      # routes, the derived Go registration set, the collections and the vendor-neutral
       # adapter vocabulary. No live registry is contacted.
       - name: NF discovery contract and security evidence
         run: node scripts/test-nf-discovery-contract.mjs
@@ -927,6 +929,11 @@ jobs:
   production-architecture:
     name: Production architecture certification
     runs-on: ubuntu-latest
+    # The certification harness is pure source analysis: it needs no database, no
+    # nginx and no build. `needs` therefore must not gate it on the lab jobs, which
+    # only run on a manual dispatch - without `always()` a skipped dependency also
+    # skips this job, so the strongest gate would never execute on a push.
+    if: always()
     needs:
       - frontend
       - ui-restoration

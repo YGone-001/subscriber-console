@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -38,7 +39,8 @@ function check(id, ok, detail) {
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
 const topologyRoutes = routes.filter((entry) => entry.route.startsWith('/topology'));
 check('TOP-UI-01', topologyRoutes.length === 2, `topology_routes=${topologyRoutes.length}`);
-check('TOP-UI-02', routes.length === 41, `frontend_route_count=${routes.length}`);
+const routeCount = assertSpaRouteContract(routes);
+check('TOP-UI-02', routeCount === routes.length, `frontend_route_count=${routeCount}`);
 check(
   'TOP-UI-03',
   topologyRoutes.some((r) => r.route === '/topology') && topologyRoutes.some((r) => r.route === '/topology/:resourceId'),

@@ -5,6 +5,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const spa = resolve(root, 'frontend');
@@ -48,7 +49,7 @@ const isExistingSource = (value) => {
 };
 
 // 1. Verify Route Inventory
-assert.equal(routes.length, 41, 'route contract must contain 41 routes');
+assertSpaRouteContract(routes);
 
 const systemHealthRoute = routes.find((r) => r.route === '/system-health');
 assert.ok(systemHealthRoute, 'system-health route must be present in route contract');

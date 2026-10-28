@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deriveGoRegistrations } from './lib/go-registrations.mjs';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -139,12 +140,17 @@ const jwtRuntime = countMatches(sourceText, /jose|jsonwebtoken/g);
 const authCookieAccess = countMatches(sourceText, /document\.cookie|auth_token/g);
 const trustedIdentityHeaders = countMatches(sourceText, /X-User|X-Role|X-Permissions/g);
 
-assert.equal(routes.length, 41, 'route contract must contain 41 routes');
+assertSpaRouteContract(routes);
 for (const [from, to] of Object.entries(expectedRedirects)) assert.match(redirects, new RegExp(`'${from}': '${to}'`));
 assert.equal(Object.keys(expectedRedirects).length, 9);
-assert.equal(contracts.length, 39);
-assert.equal(modeCount('read'), 30);
-assert.equal(modeCount('redirect'), 9);
+/*
+ * Entry counts are coverage, and coverage is already proven structurally:
+ * `missingRoutes` walks every route in the SPA contract, `unknownRoutes` rejects
+ * an entry for a route that does not exist, `duplicateRoutes` rejects a route
+ * described twice, and every redirect entry must match its declared target. A
+ * restated total would only mean editing one more number whenever a route gains
+ * a reader.
+ */
 for (const [key, value] of Object.entries(validation)) assert.equal(value, 0, `contract validation failed: ${key}=${value}`);
 assert.equal(legacyParityContractPresent, 0, 'legacy parity contract must be absent');
 assert.equal(legacyPluralContractPresent, 0, 'legacy plural contract must be absent');

@@ -166,6 +166,13 @@ const EXPECTED_NF_NOTIFICATIONS_ROUTES = new Set([
   'DELETE /api/nf-notifications/escalations/{escalationId}',
   'GET /api/nf-notifications/deliveries',
 ]);
+// OCS management-plane reads added after normalization: the exact contract
+// lookup and the balance adjustment trail. Both stay inside the frozen
+// management plane, and both are reads.
+const EXPECTED_OCS_EXTENSION_ROUTES = new Set([
+  'GET /api/ocs/subscribers/{imsi}',
+  'GET /api/ocs/balances/{imsi}/adjustments',
+]);
 
 /*
  * Every post-normalization registration, in one place. The membership check and
@@ -187,6 +194,7 @@ const ALLOWED_ADDED_ROUTES = new Set([
   ...EXPECTED_KNOWLEDGE_ROUTES,
   ...EXPECTED_NF_LOGS_ROUTES,
   ...EXPECTED_NF_NOTIFICATIONS_ROUTES,
+  ...EXPECTED_OCS_EXTENSION_ROUTES,
 ]);
 const EXPECTED_ADDED_ROUTE_COUNT = ALLOWED_ADDED_ROUTES.size;
 

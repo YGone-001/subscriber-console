@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -28,7 +29,6 @@ const HISTORICAL_UI_REFERENCE_SHA = '2c40903fea1e56650736ee862e3ddab33d9f64fc';
 const ARCHITECTURE_BASELINE_SHA = '11471af9d93fd4345f8d85a60f5c3fdfe821d93b';
 const BRAND_ASSET = 'frontend/public/images/xCloud_picture.png';
 const BRAND_ASSET_BLOB = 'aaaa520147353d4f20127c58d9e9a8f3baf37695';
-const EXPECTED_ROUTES = 41;
 const MANIFEST = 'docs/architecture/frontend-ui-restoration.md';
 
 function walk(dir, predicate, files = []) {
@@ -71,7 +71,7 @@ const declaredDependencies = { ...(packageJson.dependencies ?? {}), ...(packageJ
 const goRegistrations = deriveGoRegistrations(root);
 
 // 1. Fixed reference points and frozen counts.
-check('UI-01', routes.length === EXPECTED_ROUTES, `frontend_route_count=${routes.length} expected=${EXPECTED_ROUTES}`);
+check('UI-01', assertSpaRouteContract(routes) === routes.length, `frontend_route_count=${routes.length}`);
 check('UI-02', goRegistrations.keys.length === EXPECTED_GO_REGISTRATIONS, `go_registrations=${goRegistrations.keys.length} expected=${EXPECTED_GO_REGISTRATIONS}`);
 
 // 2. Next runtime must stay absent.

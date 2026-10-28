@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -36,7 +37,8 @@ function check(id, ok, detail) {
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
 const discoveryRoutes = routes.filter((entry) => entry.route.startsWith('/discovery'));
 check('DISC-UI-01', discoveryRoutes.length === 2, `discovery_routes=${discoveryRoutes.length}`);
-check('DISC-UI-02', routes.length === 41, `frontend_route_count=${routes.length}`);
+const routeCount = assertSpaRouteContract(routes);
+check('DISC-UI-02', routeCount === routes.length, `frontend_route_count=${routeCount}`);
 check(
   'DISC-UI-03',
   discoveryRoutes.some((r) => r.route === '/discovery') && discoveryRoutes.some((r) => r.route === '/discovery/sources/:sourceId'),

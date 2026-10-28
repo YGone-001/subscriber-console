@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -22,7 +23,7 @@ const sourceText = walk(source).filter((file) => /\.(ts|tsx)$/.test(file)).map((
 const routerSource = readFileSync(resolve(source, 'router/router.tsx'), 'utf8');
 const navigationSource = readFileSync(resolve(source, 'lib/navigation.ts'), 'utf8');
 
-assert.equal(routes.length, 41, 'route contract must contain every current page route');
+const routeCount = assertSpaRouteContract(routes);
 assert.match(routerSource, /APP_ROUTES\.filter/);
 assert.ok(!routerSource.includes('MigrationPendingPage'), 'router must not render MigrationPendingPage');
 assert.ok(!navigationSource.includes('migration-routes.json'), 'navigation source must not import migration-routes.json');
@@ -47,8 +48,8 @@ assert.ok(existsSync(resolve(source, 'providers/AppProviders.tsx')));
 assert.match(sourceText, /XCLOUD_THEME_PREFERENCE/);
 assert.match(sourceText, /XCLOUD_LANGUAGE_PREFERENCE/);
 
-console.log('frontend_shell_route_count=41');
-console.log('frontend_shell_routes=41');
+console.log(`frontend_shell_route_count=${routeCount}`);
+console.log(`frontend_shell_routes=${routeCount}`);
 console.log('frontend_shell_next_imports=0');
 console.log('frontend_shell_direct_go_urls=0');
 console.log('frontend_shell_jwt_runtime=0');

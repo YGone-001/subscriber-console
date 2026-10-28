@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontendRoot = resolve(root, 'frontend');
@@ -34,7 +35,7 @@ for (const entry of inventory) {
   routesSeen.add(entry.route);
 }
 
-assert.equal(inventory.length, 41, 'canonical route contract must contain exactly 41 routes');
+assertSpaRouteContract(inventory);
 
 const packageJson = JSON.parse(readFileSync(resolve(frontendRoot, 'package.json'), 'utf8'));
 assert.equal(packageJson.name, 'subscriber-console-frontend', 'frontend package name must be subscriber-console-frontend');

@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -58,13 +59,13 @@ console.log(`go_registration_count=${registrations.keys.length}`);
 
 // 2. SPA routes unchanged ----------------------------------------------------
 const routeContract = JSON.parse(read(join(root, 'frontend/route-contract.json')));
-assert.equal(routeContract.length, 41, `SPA route count must stay 41, got ${routeContract.length}`);
+const routeCount = assertSpaRouteContract(routeContract);
 assert.equal(
   routeContract.filter((entry) => entry.route.startsWith('/nf-health')).length,
   2,
   'NF Health SPA routes must stay 2',
 );
-console.log('spa_route_count=41');
+console.log(`spa_route_count=${routeCount}`);
 
 // 3. NF Health API surface unchanged ----------------------------------------
 const nfHealthRoutes = registrations.keys.filter((key) => key.includes('/api/nf-health'));

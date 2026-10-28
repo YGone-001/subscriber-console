@@ -5,6 +5,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deriveGoRegistrations, MUTATION_CENSUS } from './lib/go-registrations.mjs';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const spa = resolve(root, 'frontend');
@@ -519,7 +520,7 @@ const importPrecheckExecuteConsistency = (
 const trafficAdjustResponseSemantics = passedTests.has('traffic adjustment: classified as routing-acknowledgement, never mutation-result') ? 'PASS' : 'FAIL';
 
 // Verify Route Inventory
-assert.equal(routes.length, 41, 'route contract must contain 41 routes');
+assertSpaRouteContract(routes);
 
 // Verify Contract Checks
 assert.equal(contracts.length, 13);

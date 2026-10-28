@@ -30,6 +30,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS, MUTATION_CENSUS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,7 +41,7 @@ console.log('-- Inventory Contract & Security Evidence Suite --\n');
 
 // 1. Route contract checks
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
-assert.equal(routes.length, 41, `Total route count must be exactly 41, got ${routes.length}`);
+const routeCount = assertSpaRouteContract(routes);
 
 const inventoryRoutes = routes.filter((r) => r.route.startsWith('/inventory'));
 assert.equal(inventoryRoutes.length, 3, `Inventory frontend route count must be 3, got ${inventoryRoutes.length}`);
@@ -371,7 +372,7 @@ assert.equal(trustedIdentityHeadersCount, 0, `inventory trusted identity headers
 assert.equal(autoRetryCount, 0, `inventory automatic mutation retries must be 0, got ${autoRetryCount}`);
 assert.equal(genericExecutorCount, 0, `inventory generic executor calls must be 0, got ${genericExecutorCount}`);
 
-console.log('route_count=41');
+console.log(`route_count=${routeCount}`);
 console.log('inventory_frontend_routes=3');
 console.log('inventory_api_registrations=6');
 console.log('inventory_reads=3');

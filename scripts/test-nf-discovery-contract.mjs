@@ -29,6 +29,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,7 +40,7 @@ console.log('-- NF Discovery Contract & Security Evidence Suite --\n');
 
 // 1. Route contract
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
-assert.equal(routes.length, 41, `Total route count must be exactly 41, got ${routes.length}`);
+const routeCount = assertSpaRouteContract(routes);
 
 const discoveryRoutes = routes.filter((r) => r.route.startsWith('/discovery'));
 assert.equal(discoveryRoutes.length, 2, `Discovery frontend route count must be 2, got ${discoveryRoutes.length}`);

@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSpaRouteContract } from './lib/spa-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -36,7 +37,8 @@ function check(id, ok, detail) {
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
 const healthRoutes = routes.filter((entry) => entry.route.startsWith('/nf-health'));
 check('NFH-UI-01', healthRoutes.length === 2, `nf_health_routes=${healthRoutes.length}`);
-check('NFH-UI-02', routes.length === 41, `frontend_route_count=${routes.length}`);
+const routeCount = assertSpaRouteContract(routes);
+check('NFH-UI-02', routeCount === routes.length, `frontend_route_count=${routeCount}`);
 check(
   'NFH-UI-03',
   healthRoutes.some((r) => r.route === '/nf-health') && healthRoutes.some((r) => r.route === '/nf-health/:targetId'),
