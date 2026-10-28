@@ -512,7 +512,6 @@
 .card-margin-top { margin-top: 1.5rem; }
 .grid-2-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
 .col-span-all { grid-column: 1 / -1; }
-.mb-3 { margin-bottom: 0.75rem; }
 .grid-gap-small { display: grid; gap: 0.5rem; }
 .tariff-rule-row {
   display: grid;
@@ -531,20 +530,14 @@
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-control);
 }
-.ambr-label {
+/* The shared .ambr-label belongs to the subscriber sheet, where it carries a bottom
+ * margin this card does not want; keeping a private name stops the two surfaces
+ * from silently restyling each other. */
+.profile-ambr-label {
   color: var(--text-secondary);
   font-size: var(--ref-font-size-body-compact);
   text-transform: uppercase;
   font-weight: 600;
-}
-.ambr-value {
-  color: var(--text-main);
-  font-size: var(--ref-font-size-title);
-  font-weight: 600;
-}
-.ambr-unit {
-  font-size: var(--ref-font-size-body);
-  color: var(--text-muted);
 }
 .flex-between-center { display: flex; justify-content: space-between; align-items: center; }
 .flex-center-gap { display: flex; align-items: center; gap: 0.5rem; }
@@ -559,9 +552,6 @@
   align-items: center;
   gap: 0.5rem;
 }
-.section-title-margin-0 {
-  margin: 0;
-}
 .slice-header {
   padding: 1.5rem 2rem;
   border-bottom: 1px solid var(--surface-border);
@@ -569,7 +559,6 @@
   align-items: center;
   gap: 1.5rem;
 }
-.slice-idx { font-size: var(--ref-font-size-heading); font-weight: 600; color: var(--primary); }
 .slice-tags {
   display: flex;
   gap: 1rem;
@@ -579,7 +568,7 @@
 }
 .slice-tag-sst { font-weight: 600; }
 .slice-tag-sd { color: var(--text-secondary); }
-.p-1 { padding: 1rem; }
+.profile-view-pad { padding: 1rem; }
 .table-default { width: 100%; border-collapse: collapse; font-size: var(--ref-font-size-body-emphasis); }
 .table-header-row { text-align: left; border-bottom: 1px solid var(--surface-border); }
 .table-cell-pad { padding: 1rem; }
@@ -596,7 +585,6 @@
   border: 1px solid var(--surface-border);
 }
 .pcc-rule-title { font-weight: 600; color: var(--primary); margin-bottom: 0.2rem; }
-.pcc-rule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .text-muted-label { color: var(--text-muted); }
 .col-span-2 { grid-column: span 2; }
 .empty-state {
@@ -612,106 +600,7 @@
   padding: 2rem;
 }
 
-/* ProfileEditMode specific */
-.edit-card-margin { margin-top: 1rem; }
-.grid-2-col-gap-1-5 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-.tariff-rule-row-edit {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-compact);
-  background: var(--surface-hover);
-  font-family: monospace;
-  font-size: var(--ref-font-size-body-support);
-}
-.flex-gap-0-75 { display: flex; gap: 0.75rem; }
-.w-120 { width: 120px; flex-shrink: 0; }
-.flex-1 { flex: 1; }
-.font-mono { font-family: monospace; }
-.font-mono-lg { font-family: monospace; font-size: var(--ref-font-size-heading-sm); }
-.danger-asterisk { color: var(--danger); margin-right: 0.25rem; }
-.access-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1rem;
-}
-.access-label {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-control);
-  background: var(--surface);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.access-label-checked {
-  border-color: var(--primary);
-  background: var(--selection-soft);
-}
-.access-text {
-  font-size: var(--ref-font-size-body-support);
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-.access-text-checked {
-  font-weight: 600;
-  color: var(--primary);
-}
-.access-actions {
-  margin-top: 1.5rem;
-  display: flex;
-  gap: 1rem;
-  border-top: 1px solid var(--surface-border);
-  padding-top: 1.5rem;
-}
-.btn-clear-restrictions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 1rem;
-  font-size: var(--ref-font-size-body-compact);
-  color: var(--success);
-  border-color: var(--success);
-  background: transparent;
-}
-.btn-suspend-restrictions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 1rem;
-  font-size: var(--ref-font-size-body-compact);
-  color: var(--danger);
-  border-color: var(--danger);
-  background: transparent;
-}
-.slice-edit-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-.btn-add-slice {
-  padding: 0.5rem 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  border-radius: var(--ref-radius-pill);
-}
-.empty-state-edit {
-  text-align: center;
-  padding: 4rem;
-  color: var(--text-muted);
-  background-color: var(--surface-hover);
-  border: 1px dashed var(--surface-border);
-  border-radius: var(--ref-radius-control);
-}
-
 /* ProfileEditMode refactored classes */
-.form-asterisk { color: var(--danger); margin-right: 0.25rem; }
 .input-mono-large { font-family: monospace; font-size: var(--ref-font-size-heading-sm); }
 .input-mono { font-family: monospace; }
 .op-type-container { display: flex; gap: 0.75rem; }
@@ -720,7 +609,6 @@
 .card-margin-top-sm { margin-top: 1rem; }
 .grid-2-col-sm { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 .label-secondary { color: var(--text-secondary); }
-.text-muted { color: var(--text-muted); }
 .bg-hover { background: var(--surface-hover); }
 .access-restriction-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
 .access-restriction-label {
@@ -744,11 +632,14 @@
   border-top: 1px solid var(--surface-border);
   padding-top: 1.5rem;
 }
-.btn-access-clear {
+/* The subscriber sheet owns the shared .btn-access-clear/.btn-access-suspend, which
+ * colour the button but leave its layout to .btn-access-action. This card has no
+ * such base class, so it carries its own full skin under private names. */
+.profile-btn-access-clear {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 1rem;
   font-size: var(--ref-font-size-body-compact); color: var(--success); border-color: var(--success); background: transparent;
 }
-.btn-access-suspend {
+.profile-btn-access-suspend {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 1rem;
   font-size: var(--ref-font-size-body-compact); color: var(--danger); border-color: var(--danger); background: transparent;
 }

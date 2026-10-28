@@ -139,13 +139,13 @@ export default function ProfileViewMode({ t, authData, credentialState, rawAuth,
         </div>
         <div className="dash-card-body flex-gap-large">
           <div className="ambr-card">
-            <div className="ambr-label">{t("sub_dl")}</div>
+            <div className="profile-ambr-label">{t("sub_dl")}</div>
             <div className={downlinkAmbr.unit ? "ambr-value" : "ambr-value text-muted-label"}>
               {downlinkAmbr.text} {downlinkAmbr.unit && <span className="ambr-unit">{downlinkAmbr.unit}</span>}
             </div>
           </div>
           <div className="ambr-card">
-            <div className="ambr-label">{t("sub_ul")}</div>
+            <div className="profile-ambr-label">{t("sub_ul")}</div>
             <div className={uplinkAmbr.unit ? "ambr-value" : "ambr-value text-muted-label"}>
               {uplinkAmbr.text} {uplinkAmbr.unit && <span className="ambr-unit">{uplinkAmbr.unit}</span>}
             </div>
@@ -197,7 +197,7 @@ export default function ProfileViewMode({ t, authData, credentialState, rawAuth,
               </div>
               {slice.default_indicator && <span className="pill pill-enabled">{t("sub_default_nssai")}</span>}
             </div>
-            <div className="p-1">
+            <div className="profile-view-pad">
               <table className="table-default">
                 <caption className="sr-only">{t("sub_slices_core")} · {t("slice_idx", { idx: sIdx + 1 })}</caption>
                 <thead>

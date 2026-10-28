@@ -279,10 +279,10 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
               })}
             </div>
             <div className="access-restriction-actions">
-              <button className="btn btn-outline btn-access-clear" onClick={() => setAccessRestriction(0)}>
+              <button className="btn btn-outline profile-btn-access-clear" onClick={() => setAccessRestriction(0)}>
                 {t("sub_btn_clear_restrictions")}
               </button>
-              <button className="btn btn-outline btn-access-suspend" onClick={() => setAccessRestriction(255)}>
+              <button className="btn btn-outline profile-btn-access-suspend" onClick={() => setAccessRestriction(255)}>
                 {t("sub_btn_suspend_restrictions")}
               </button>
             </div>
