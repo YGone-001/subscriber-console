@@ -331,7 +331,7 @@ func TestListProfilesProjectsContentAndCompleteness(t *testing.T) {
 		t.Fatalf("insert profile: %v", err)
 	}
 
-	profiles, summary, err := repo.ListProfiles(ctx)
+	profiles, summary, err := repo.ListProfiles(ctx, ProfileListOrder{})
 	if err != nil {
 		t.Fatalf("list profiles: %v", err)
 	}

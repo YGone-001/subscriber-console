@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -48,8 +49,111 @@ func NewRepository(profiles, versions, subscribers *mongo.Collection) *Repositor
 	}
 }
 
+// The template list may be ordered by any of these projected fields. The set is
+// closed on purpose: a silently ignored spelling would answer a request for one
+// ranking with another one, and an ordered list reads as a truthful claim.
+const (
+	ProfileSortName            = "name"
+	ProfileSortUpdatedAt       = "updatedAt"
+	ProfileSortSubscriberCount = "subscriberCount"
+	ProfileSortSliceCount      = "sliceCount"
+)
+
+// ProfileListOrder is the requested row order for the template list. Its zero
+// value is the historical order - name ascending - so a request that names no
+// order yields exactly the rows clients have always received.
+type ProfileListOrder struct {
+	Field string
+	Desc  bool
+}
+
+// parseProfileListOrder resolves the sort and order parameters. Absent or empty
+// input yields the historical order; an unrecognised value is reported so the
+// handler can refuse instead of guessing. A recency or volume ranking is asked
+// highest-first by default, a name ranking alphabetically, and an explicit
+// order always wins.
+func parseProfileListOrder(sortRaw, orderRaw string) (ProfileListOrder, error) {
+	field := strings.TrimSpace(sortRaw)
+	if field == "" {
+		field = ProfileSortName
+	}
+	switch field {
+	case ProfileSortName, ProfileSortUpdatedAt, ProfileSortSubscriberCount, ProfileSortSliceCount:
+	default:
+		return ProfileListOrder{}, fmt.Errorf("sort must be name, updatedAt, subscriberCount or sliceCount")
+	}
+
+	direction := strings.TrimSpace(orderRaw)
+	if direction != "" && direction != "asc" && direction != "desc" {
+		return ProfileListOrder{}, fmt.Errorf("order must be asc or desc")
+	}
+	desc := field != ProfileSortName
+	if direction != "" {
+		desc = direction == "desc"
+	}
+	return ProfileListOrder{Field: field, Desc: desc}, nil
+}
+
+// sortProfileItems applies the resolved order to the projected rows. The name
+// always settles ties, so two templates with the same counter keep one stable
+// sequence across requests.
+func sortProfileItems(items []ProfileListItem, order ProfileListOrder) {
+	sort.SliceStable(items, func(i, j int) bool {
+		left, right := items[i], items[j]
+		if order.Field == ProfileSortUpdatedAt {
+			// A template with no read date is not "the oldest one": absence is
+			// reported last in either direction rather than as a zero value.
+			leftHas := optionalStringPresent(left.UpdatedAt)
+			rightHas := optionalStringPresent(right.UpdatedAt)
+			if leftHas != rightHas {
+				return leftHas
+			}
+		}
+		comparison := 0
+		switch order.Field {
+		case ProfileSortUpdatedAt:
+			comparison = strings.Compare(asSortableText(left.UpdatedAt), asSortableText(right.UpdatedAt))
+		case ProfileSortSubscriberCount:
+			comparison = compareInts(left.SubscriberCount, right.SubscriberCount)
+		case ProfileSortSliceCount:
+			comparison = compareInts(left.SliceCount, right.SliceCount)
+		default:
+			comparison = strings.Compare(left.Name, right.Name)
+		}
+		if order.Desc {
+			comparison = -comparison
+		}
+		if comparison != 0 {
+			return comparison < 0
+		}
+		return left.Name < right.Name
+	})
+}
+
+func asSortableText(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return ""
+}
+
+func optionalStringPresent(value any) bool {
+	return asSortableText(value) != ""
+}
+
+func compareInts(left, right int) int {
+	switch {
+	case left < right:
+		return -1
+	case left > right:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // ListProfiles returns all profiles with global summary.
-func (r *Repository) ListProfiles(ctx context.Context) ([]ProfileListItem, ProfileSummary, error) {
+func (r *Repository) ListProfiles(ctx context.Context, order ProfileListOrder) ([]ProfileListItem, ProfileSummary, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -99,6 +203,8 @@ func (r *Repository) ListProfiles(ctx context.Context) ([]ProfileListItem, Profi
 			AMBR:                  profileAMBR(doc),
 		})
 	}
+
+	sortProfileItems(profiles, order)
 
 	// Summary mirrors Node summarizeProfiles(): derived from the profile list
 	// so both response sections stay consistent.

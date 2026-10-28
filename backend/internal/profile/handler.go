@@ -60,7 +60,7 @@ func exportFilename(name string) string {
 
 // ProfileReader defines the read interface for profile data.
 type ProfileReader interface {
-	ListProfiles(ctx context.Context) ([]ProfileListItem, ProfileSummary, error)
+	ListProfiles(ctx context.Context, order ProfileListOrder) ([]ProfileListItem, ProfileSummary, error)
 	GetProfile(ctx context.Context, name string) (bson.M, error)
 	GetProfileVersion(ctx context.Context, profileName, versionId string) (bson.M, error)
 	GetProfileStats(ctx context.Context, name string) (ProfileStats, error)
@@ -191,7 +191,17 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profiles, summary, err := h.repo.ListProfiles(r.Context())
+	// Only sort and order are read; every other query parameter stays ignored,
+	// as it has been, so a client cannot be newly refused for input this
+	// endpoint always tolerated.
+	query := r.URL.Query()
+	order, orderErr := parseProfileListOrder(query.Get("sort"), query.Get("order"))
+	if orderErr != nil {
+		response.BadRequest(w, orderErr.Error(), "INVALID_QUERY_PARAMETER")
+		return
+	}
+
+	profiles, summary, err := h.repo.ListProfiles(r.Context(), order)
 	if err != nil {
 		response.InternalError(w)
 		return

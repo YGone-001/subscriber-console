@@ -10,9 +10,10 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../providers/I18nProvider';
-import { Boxes, Eye, Gauge, Link2Off, Pencil, Plus, Users } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Boxes, Eye, Gauge, Link2Off, Pencil, Plus, Users } from 'lucide-react';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
+import { SortableTableHeader } from '../../components/ui/SortableTableHeader';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useRead } from '../../lib/api/use-read';
@@ -21,11 +22,18 @@ import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { formatAmbrPairCompact } from './profile-format';
 import {
   countProfilesWithoutBilling,
+  DEFAULT_PROFILE_SORT_FIELD,
+  defaultProfileSortDirection,
   filterProfileList,
   linkedSubscriberCount,
+  nextProfileSort,
+  profileDirectionFromParam,
   profileFilterFromParam,
   profileFilterToParam,
+  profilesListReadUrl,
+  profileSortFromParam,
   type ProfileListFilter,
+  type ProfileSortField,
 } from './profile-list-model';
 import type { ProfileListItem, ProfilesResponse } from './profile-types';
 
@@ -39,16 +47,39 @@ const FILTER_LABEL_KEYS: Record<ProfileListFilter, string> = {
   withoutBilling: 'prof_filter_without_billing',
   unassigned: 'prof_filter_unassigned',
 };
-const PROFILE_URL_KEYS = ['q', 'billing'] as const;
+const PROFILE_URL_KEYS = ['q', 'billing', 'sort', 'order'] as const;
+
+/* The ranking lives in the URL, so the read key, the header arrows and a shared
+ * link describe the same order. Both parameters are written together: a
+ * half-updated query would point its arrow at a ranking the server never answered
+ * with. Returning to name ascending clears both, keeping the plain link tidy and
+ * the default read cached under one key. */
+function useProfilesListOrder() {
+  const url = useOperationsUrlState({ keys: PROFILE_URL_KEYS });
+  const sortField = profileSortFromParam(url.filters.sort);
+  const sortDirection = profileDirectionFromParam(url.filters.order)
+    ?? defaultProfileSortDirection(sortField);
+
+  const applySort = (target: ProfileSortField) => {
+    const next = nextProfileSort({ field: sortField, direction: sortDirection }, target);
+    const isDefault = next.field === DEFAULT_PROFILE_SORT_FIELD
+      && next.direction === defaultProfileSortDirection(next.field);
+    url.setFilters(isDefault ? { sort: '', order: '' } : { sort: next.field, order: next.direction });
+  };
+
+  return { url, sortField, sortDirection, applySort };
+}
 
 export function ProfilesPage() {
   const { t, formatDateTime } = useI18n();
   const router = useAppRouter();
-  const { data, isLoading, error, mutate } = useRead<ProfilesResponse>('/api/profiles');
+  const { url, sortField, sortDirection, applySort } = useProfilesListOrder();
+  const { data, isLoading, error, mutate } = useRead<ProfilesResponse>(
+    profilesListReadUrl(sortField, sortDirection),
+  );
   const { user } = useAuth();
   const canEditTemplates = hasPermission(user, 'profiles.write');
 
-  const url = useOperationsUrlState({ keys: PROFILE_URL_KEYS });
   const searchQuery = url.filters.q ?? '';
   const listFilter = profileFilterFromParam(url.filters.billing);
   const [searchInput, setSearchInput] = useState(searchQuery);
@@ -65,6 +96,13 @@ export function ProfilesPage() {
     () => filterProfileList(profiles, searchQuery, listFilter),
     [listFilter, profiles, searchQuery],
   );
+
+  const renderSortIcon = (field: ProfileSortField) => {
+    if (field !== sortField) return <ArrowUpDown size={14} className="sort-icon muted" />;
+    return sortDirection === 'asc'
+      ? <ArrowUp size={14} className="sort-icon active" />
+      : <ArrowDown size={14} className="sort-icon active" />;
+  };
 
   const metrics = useMemo(() => {
     const total = backendSummary?.totalProfiles ?? profiles.length;
@@ -305,12 +343,39 @@ export function ProfilesPage() {
               </colgroup>
               <thead>
                 <tr>
-                  <th data-column-priority="essential">{t("prof_table_template")}</th>
-                  <th data-column-priority="essential">{t("prof_table_content")}</th>
-                  <th data-column-priority="important" className="profile-table-number">{t("prof_table_linked_users")}</th>
+                  <SortableTableHeader
+                    label={t("prof_table_template")}
+                    active={sortField === 'name'}
+                    direction={sortDirection}
+                    icon={renderSortIcon('name')}
+                    onSort={() => applySort('name')}
+                  />
+                  <SortableTableHeader
+                    label={t("prof_table_content")}
+                    active={sortField === 'sliceCount'}
+                    direction={sortDirection}
+                    icon={renderSortIcon('sliceCount')}
+                    onSort={() => applySort('sliceCount')}
+                    priority="important"
+                  />
+                  <SortableTableHeader
+                    label={t("prof_table_linked_users")}
+                    active={sortField === 'subscriberCount'}
+                    direction={sortDirection}
+                    icon={renderSortIcon('subscriberCount')}
+                    onSort={() => applySort('subscriberCount')}
+                    priority="important"
+                    className="profile-table-number"
+                  />
                   <th data-column-priority="supplementary">{t("prof_table_ambr")}</th>
                   <th data-column-priority="supplementary">{t("prof_table_modified_by")}</th>
-                  <th data-column-priority="essential">{t("prof_table_updated")}</th>
+                  <SortableTableHeader
+                    label={t("prof_table_updated")}
+                    active={sortField === 'updatedAt'}
+                    direction={sortDirection}
+                    icon={renderSortIcon('updatedAt')}
+                    onSort={() => applySort('updatedAt')}
+                  />
                   <th data-column-priority="essential" className="profile-table-actions-heading">{t("actions")}</th>
                 </tr>
               </thead>

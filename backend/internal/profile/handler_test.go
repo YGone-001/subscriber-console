@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -33,6 +34,11 @@ type mockRepository struct {
 	// driftDocs and driftErr back the bounded subscriber reads of the probe.
 	driftDocs []bson.M
 	driftErr  error
+	// listItems overrides the rows ListProfiles returns, and lastListOrder
+	// records the order it was asked for, so the list read can be pinned without
+	// a live collection.
+	listItems     []ProfileListItem
+	lastListOrder ProfileListOrder
 }
 
 func newMockRepository() *mockRepository {
@@ -103,14 +109,21 @@ func (m *mockRepository) CountSubscribersByProfile(ctx context.Context, profileN
 	return m.subscribers[profileName], nil
 }
 
-func (m *mockRepository) ListProfiles(ctx context.Context) ([]ProfileListItem, ProfileSummary, error) {
-	items := make([]ProfileListItem, 0)
-	for _, p := range m.profiles {
-		items = append(items, ProfileListItem{
-			Name: p["name"].(string),
-		})
+func (m *mockRepository) ListProfiles(ctx context.Context, order ProfileListOrder) ([]ProfileListItem, ProfileSummary, error) {
+	m.lastListOrder = order
+	items := m.listItems
+	if items == nil {
+		items = make([]ProfileListItem, 0)
+		for _, p := range m.profiles {
+			items = append(items, ProfileListItem{
+				Name: p["name"].(string),
+			})
+		}
 	}
-	return items, ProfileSummary{}, nil
+	sorted := make([]ProfileListItem, len(items))
+	copy(sorted, items)
+	sortProfileItems(sorted, order)
+	return sorted, ProfileSummary{}, nil
 }
 
 func (m *mockRepository) GetProfile(ctx context.Context, name string) (bson.M, error) {
@@ -3194,4 +3207,105 @@ func TestProfileMetaReportsCredentialEditability(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The list read resolves its order before consulting storage and refuses an
+// unrecognised ranking instead of answering with a different one.
+func TestProfileListResolvesAndValidatesTheOrder(t *testing.T) {
+	principal := &auth.Principal{Username: "op1", Role: "operator", NormalizedRole: "operator"}
+	rows := []ProfileListItem{
+		{Name: "beta", SubscriberCount: 9},
+		{Name: "alpha", SubscriberCount: 2},
+	}
+
+	orderedList := func(t *testing.T, target string) (*mockRepository, *httptest.ResponseRecorder) {
+		t.Helper()
+		repo := newMockRepository()
+		repo.listItems = rows
+		handler := NewHandler(repo, &mockLimiter{}, &mockAuditWriter{})
+		writer := doProfileRequest(t, handler.List, "GET", target, nil, principal, nil)
+		return repo, writer
+	}
+
+	profileNames := func(t *testing.T, writer *httptest.ResponseRecorder) []string {
+		t.Helper()
+		var resp ProfileListResponse
+		if err := json.Unmarshal(writer.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode the list: %v", err)
+		}
+		got := make([]string, 0, len(resp.Profiles))
+		for _, item := range resp.Profiles {
+			got = append(got, item.Name)
+		}
+		return got
+	}
+
+	t.Run("absent parameters keep the historical order", func(t *testing.T) {
+		repo, writer := orderedList(t, "/api/profiles")
+		if writer.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", writer.Code, writer.Body.String())
+		}
+		if repo.lastListOrder != (ProfileListOrder{Field: ProfileSortName}) {
+			t.Errorf("the default order must be the historical one, got %+v", repo.lastListOrder)
+		}
+		if got := profileNames(t, writer); !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
+			t.Errorf("rows: got %v want [alpha beta]", got)
+		}
+	})
+
+	t.Run("an acknowledged ranking reorders the rows", func(t *testing.T) {
+		repo, writer := orderedList(t, "/api/profiles?sort=subscriberCount")
+		if writer.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", writer.Code, writer.Body.String())
+		}
+		if repo.lastListOrder != (ProfileListOrder{Field: ProfileSortSubscriberCount, Desc: true}) {
+			t.Errorf("a volume ranking must default to busiest-first, got %+v", repo.lastListOrder)
+		}
+		if got := profileNames(t, writer); !reflect.DeepEqual(got, []string{"beta", "alpha"}) {
+			t.Errorf("rows: got %v want [beta alpha]", got)
+		}
+	})
+
+	t.Run("an explicit direction overrides the field default", func(t *testing.T) {
+		repo, writer := orderedList(t, "/api/profiles?sort=subscriberCount&order=asc")
+		if writer.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", writer.Code, writer.Body.String())
+		}
+		if repo.lastListOrder.Desc {
+			t.Errorf("order=asc must win, got %+v", repo.lastListOrder)
+		}
+		if got := profileNames(t, writer); !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
+			t.Errorf("rows: got %v want [alpha beta]", got)
+		}
+	})
+
+	// A typo must not be answered with a ranking the operator did not ask for:
+	// an ordered list is a claim, and a silently substituted claim is wrong data.
+	for _, target := range []string{"/api/profiles?sort=riskScore", "/api/profiles?sort=name&order=sideways"} {
+		t.Run("refuses "+target, func(t *testing.T) {
+			repo, writer := orderedList(t, target)
+			if writer.Code != http.StatusBadRequest {
+				t.Fatalf("status %d: %s", writer.Code, writer.Body.String())
+			}
+			var body map[string]string
+			if err := json.Unmarshal(writer.Body.Bytes(), &body); err != nil {
+				t.Fatalf("failed to decode the refusal: %v", err)
+			}
+			if body["code"] != "INVALID_QUERY_PARAMETER" {
+				t.Errorf("error code: %v", body)
+			}
+			if repo.lastListOrder != (ProfileListOrder{}) {
+				t.Errorf("a refused request must not reach storage with an order, got %+v", repo.lastListOrder)
+			}
+		})
+	}
+
+	// Anything the endpoint never read must stay tolerated, so no client that
+	// sends an unrelated parameter is newly broken.
+	t.Run("unrelated parameters stay ignored", func(t *testing.T) {
+		_, writer := orderedList(t, "/api/profiles?utm_source=console")
+		if writer.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", writer.Code, writer.Body.String())
+		}
+	})
 }

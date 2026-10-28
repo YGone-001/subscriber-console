@@ -68,3 +68,54 @@ export function filterProfileList<T extends ProfileListEntry>(
 export function countProfilesWithoutBilling(entries: ProfileListEntry[]): number {
   return entries.filter((entry) => entry.ocsDefaultsConfigured !== true).length;
 }
+
+/* The server owns the ordering of the template list and refuses a spelling it does
+ * not recognise (parseProfileListOrder in backend/internal/profile/repository.go).
+ * These are the fields a reader may ask for; anything else is a client mistake, not
+ * a reason to answer with a different ranking. */
+export const PROFILE_SORT_FIELDS = ['name', 'updatedAt', 'subscriberCount', 'sliceCount'] as const;
+export type ProfileSortField = (typeof PROFILE_SORT_FIELDS)[number];
+export type ProfileSortDirection = 'asc' | 'desc';
+
+export const DEFAULT_PROFILE_SORT_FIELD: ProfileSortField = 'name';
+
+/* A name ranking reads alphabetically first, a recency or volume ranking reads
+ * highest-first. The server resolves the same default when `order` is absent, and
+ * the page needs it to decide what the first click on a column means. */
+export function defaultProfileSortDirection(field: ProfileSortField): ProfileSortDirection {
+  return field === 'name' ? 'asc' : 'desc';
+}
+
+export function profileSortFromParam(value: string | undefined): ProfileSortField {
+  return (PROFILE_SORT_FIELDS as readonly string[]).includes(value ?? '')
+    ? (value as ProfileSortField)
+    : DEFAULT_PROFILE_SORT_FIELD;
+}
+
+export function profileDirectionFromParam(value: string | undefined): ProfileSortDirection | null {
+  return value === 'asc' || value === 'desc' ? value : null;
+}
+
+/* Only a non-default choice goes on the wire, so the untouched view keeps the one
+ * read key it has always had and stays a cache hit. */
+export function profilesListReadUrl(
+  field: ProfileSortField,
+  direction: ProfileSortDirection,
+): string {
+  const params = new URLSearchParams();
+  if (field !== DEFAULT_PROFILE_SORT_FIELD) params.set('sort', field);
+  if (direction !== defaultProfileSortDirection(field)) params.set('order', direction);
+  const query = params.toString();
+  return query ? `/api/profiles?${query}` : '/api/profiles';
+}
+
+/* The same column flips; a new column starts from its own default direction. */
+export function nextProfileSort(
+  current: { field: ProfileSortField; direction: ProfileSortDirection },
+  target: ProfileSortField,
+): { field: ProfileSortField; direction: ProfileSortDirection } {
+  if (current.field !== target) {
+    return { field: target, direction: defaultProfileSortDirection(target) };
+  }
+  return { field: target, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+}
