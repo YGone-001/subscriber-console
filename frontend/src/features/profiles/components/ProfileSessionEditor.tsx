@@ -8,6 +8,7 @@ import { useI18n } from '../../../providers/I18nProvider';
 import { Trash2, Network, Plus } from "lucide-react";
 import ProfilePccRuleEditor from './ProfilePccRuleEditor';
 import { imsSessionPreset, isImsDnn, pccQosPreset, sessionQosPreset, STANDARD_QOS_INDEX_OPTIONS } from '../../../lib/imsQosPresets.js';
+import styles from '../../../styles/modules/profile.module.css';
 
 const AMBR_UNITS = [
   { label: 'bps', val: 0 }, { label: 'Kbps', val: 1 }, { label: 'Mbps', val: 2 }, { label: 'Gbps', val: 3 }, { label: 'Tbps', val: 4 }
@@ -136,22 +137,22 @@ export default function ProfileSessionEditor({ session, anchorId, onChange, onDe
   };
 
   return (
-    <div id={anchorId} className="session-editor-card">
-      <div className="session-editor-header">
-        <div className="session-editor-content">
-          <div className="session-grid-4">
+    <div id={anchorId} className={styles.sessionEditorCard}>
+      <div className={styles.sessionEditorHeader}>
+        <div className={styles.sessionEditorContent}>
+          <div className={styles.sessionGrid4}>
             <div>
-              <label className="form-label session-label">{t("sess_name")}</label>
+              <label className={`form-label ${styles.sessionLabel}`}>{t("sess_name")}</label>
               <input type="text" className="form-input" value={session.name || ""} onChange={e => handleNameChange(e.target.value)} placeholder={t("sess_name_ph")} />
             </div>
             <div>
-              <label className="form-label session-label">{t("sess_type")}</label>
+              <label className={`form-label ${styles.sessionLabel}`}>{t("sess_type")}</label>
               <select className="form-input" value={session.type || 3} onChange={e => updateField(["type"], Number(e.target.value))}>
                 {SESSION_TYPES.map(t => <option key={t.val} value={t.val}>{t.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="form-label session-label">{t("sess_qos")}</label>
+              <label className={`form-label ${styles.sessionLabel}`}>{t("sess_qos")}</label>
               <select
                 className="form-input"
                 value={session.qos?._5qi ?? ""}
@@ -162,7 +163,7 @@ export default function ProfileSessionEditor({ session, anchorId, onChange, onDe
               </select>
             </div>
             <div>
-              <label className="form-label session-label">{t("sess_arp_level")}</label>
+              <label className={`form-label ${styles.sessionLabel}`}>{t("sess_arp_level")}</label>
               <select
                 className="form-input"
                 value={session.qos?.arp?.priorityLevel ?? ""}
@@ -174,9 +175,9 @@ export default function ProfileSessionEditor({ session, anchorId, onChange, onDe
             </div>
           </div>
 
-          <div className="session-grid-2">
+          <div className={styles.sessionGrid2}>
             <div>
-              <label className="form-label session-label">{t("sess_ambr_dl")}</label>
+              <label className={`form-label ${styles.sessionLabel}`}>{t("sess_ambr_dl")}</label>
               <div className="input-composite">
                 <input type="number" value={session.ambr?.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={e => updateField(["ambr", "downlink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
                 <select value={session.ambr?.downlink?.unit || 2} onChange={e => updateField(["ambr", "downlink", "unit"], Number(e.target.value))}>
@@ -185,7 +186,7 @@ export default function ProfileSessionEditor({ session, anchorId, onChange, onDe
               </div>
             </div>
             <div>
-              <label className="form-label session-label">{t("sess_ambr_ul")}</label>
+              <label className={`form-label ${styles.sessionLabel}`}>{t("sess_ambr_ul")}</label>
               <div className="input-composite">
                 <input type="number" value={session.ambr?.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={e => updateField(["ambr", "uplink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
                 <select value={session.ambr?.uplink?.unit || 2} onChange={e => updateField(["ambr", "uplink", "unit"], Number(e.target.value))}>
@@ -194,7 +195,7 @@ export default function ProfileSessionEditor({ session, anchorId, onChange, onDe
               </div>
             </div>
             <div>
-              <label className="form-label session-label">{t("sess_ipv4")}</label>
+              <label className={`form-label ${styles.sessionLabel}`}>{t("sess_ipv4")}</label>
               <input
                 type="text"
                 className="form-input"
@@ -211,7 +212,7 @@ export default function ProfileSessionEditor({ session, anchorId, onChange, onDe
               />
             </div>
             <div>
-              <label className="form-label session-label">{t("sess_ipv6")}</label>
+              <label className={`form-label ${styles.sessionLabel}`}>{t("sess_ipv6")}</label>
               <input
                 type="text"
                 className="form-input"
@@ -222,24 +223,24 @@ export default function ProfileSessionEditor({ session, anchorId, onChange, onDe
             </div>
           </div>
         </div>
-        <button className="btn-icon text-danger session-del-btn" onClick={onDelete} title={t("sess_remove")}>
+        <button className={`btn-icon text-danger ${styles.sessionDelBtn}`} onClick={onDelete} title={t("sess_remove")}>
           <Trash2 size={20}/>
         </button>
       </div>
 
       {/* Level 3: PCC Rules */}
-      <div className="session-pcc-section">
-        <div className="session-pcc-header">
-          <h5 className="session-pcc-title">
+      <div className={styles.sessionPccSection}>
+        <div className={styles.sessionPccHeader}>
+          <h5 className={styles.sessionPccTitle}>
             <Network size={16}/> {t("sess_pcc_rules")}
           </h5>
-          <button className="btn-icon session-add-pcc-btn" onClick={handleAddPccRule}>
+          <button className={`btn-icon ${styles.sessionAddPccBtn}`} onClick={handleAddPccRule}>
             <Plus size={16}/> {t("sess_add_pcc")}
           </button>
         </div>
 
         {(session.pcc_rule?.length ?? 0) > 0 ? (
-          <div className="session-pcc-list">
+          <div className={styles.sessionPccList}>
             {session.pcc_rule?.map((rule: PccRuleForm, pccIdx: number) => (
               <ProfilePccRuleEditor
                 key={pccIdx}
@@ -252,7 +253,7 @@ export default function ProfileSessionEditor({ session, anchorId, onChange, onDe
             ))}
           </div>
         ) : (
-          <div className="session-pcc-empty">
+          <div className={styles.sessionPccEmpty}>
             {t("sess_no_pcc")}
           </div>
         )}

@@ -8,6 +8,7 @@ import { useI18n } from '../../../providers/I18nProvider';
 import { X } from "lucide-react";
 import { pccQosPreset } from '../../../lib/imsQosPresets.js';
 import { AmbrUnitSelect } from './AmbrUnitSelect';
+import styles from '../../../styles/modules/profile.module.css';
 
 interface ProfilePccRuleEditorProps {
   rule: {
@@ -61,35 +62,35 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, anchorId, onChan
 
   return (
     <div id={anchorId} className="pcc-rule-box">
-      <div className="pcc-rule-header">
-        <span className="pcc-rule-idx-title">
+      <div className={styles.pccRuleHeader}>
+        <span className={styles.pccRuleIdxTitle}>
           {t("slice_rule_idx", { idx: ruleIndex + 1 })}
         </span>
-        <button className="btn-icon text-danger pcc-rule-delete-btn" onClick={onDelete} title={t("pcc_delete_rule")}>
+        <button className={`btn-icon text-danger ${styles.pccRuleDeleteBtn}`} onClick={onDelete} title={t("pcc_delete_rule")}>
           <X size={16}/>
         </button>
       </div>
 
-      <div className="pcc-rule-form-grid">
+      <div className={styles.pccRuleFormGrid}>
         <div>
-          <label className="form-label pcc-rule-label">{t("pcc_qos_idx")}</label>
+          <label className={`form-label ${styles.pccRuleLabel}`}>{t("pcc_qos_idx")}</label>
           <input type="number" className="form-input" value={rule.qos?._5qi ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => e.target.value === "" ? updateField(["qos", "_5qi"], undefined) : handleQciChange(Number(e.target.value))} />
         </div>
         <div>
-          <label className="form-label pcc-rule-label">{t("pcc_arp")}</label>
+          <label className={`form-label ${styles.pccRuleLabel}`}>{t("pcc_arp")}</label>
           <input type="number" className="form-input" value={rule.qos?.arp?.priorityLevel ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "arp", "priorityLevel"], e.target.value === "" ? undefined : Number(e.target.value))} />
         </div>
         <div/>
 
         <div>
-          <label className="form-label pcc-rule-label">{t("pcc_mbr_dl")}</label>
+          <label className={`form-label ${styles.pccRuleLabel}`}>{t("pcc_mbr_dl")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.mbr?.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "mbr", "downlink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
             <AmbrUnitSelect unit={rule.qos?.mbr?.downlink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => updateField(["qos", "mbr", "downlink", "unit"], value)} />
           </div>
         </div>
         <div>
-          <label className="form-label pcc-rule-label">{t("pcc_mbr_ul")}</label>
+          <label className={`form-label ${styles.pccRuleLabel}`}>{t("pcc_mbr_ul")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.mbr?.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "mbr", "uplink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
             <AmbrUnitSelect unit={rule.qos?.mbr?.uplink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => updateField(["qos", "mbr", "uplink", "unit"], value)} />
@@ -98,14 +99,14 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, anchorId, onChan
         <div/>
 
         <div>
-          <label className="form-label pcc-rule-label">{t("pcc_gbr_dl")}</label>
+          <label className={`form-label ${styles.pccRuleLabel}`}>{t("pcc_gbr_dl")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.gbr?.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "gbr", "downlink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
             <AmbrUnitSelect unit={rule.qos?.gbr?.downlink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => updateField(["qos", "gbr", "downlink", "unit"], value)} />
           </div>
         </div>
         <div>
-          <label className="form-label pcc-rule-label">{t("pcc_gbr_ul")}</label>
+          <label className={`form-label ${styles.pccRuleLabel}`}>{t("pcc_gbr_ul")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.gbr?.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "gbr", "uplink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
             <AmbrUnitSelect unit={rule.qos?.gbr?.uplink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => updateField(["qos", "gbr", "uplink", "unit"], value)} />

@@ -1,3 +1,5 @@
+import styles from '../../../styles/modules/profile.module.css';
+
 /*
  * Section jump bar for the template workspace.
  *
@@ -12,12 +14,12 @@ export default function ProfileSectionNav({ sections, label, onJump }: {
   onJump: (id: string) => void;
 }) {
   return (
-    <nav className="profile-section-nav" aria-label={label}>
+    <nav className={styles.profileSectionNav} aria-label={label}>
       {sections.map((section) => (
         <button
           key={section.id}
           type="button"
-          className="btn btn-outline profile-section-nav-btn"
+          className={`btn btn-outline ${styles.profileSectionNavBtn}`}
           onClick={() => onJump(section.id)}
         >
           {section.label}

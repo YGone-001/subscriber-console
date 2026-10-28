@@ -8,6 +8,7 @@ import { useI18n } from '../../../providers/I18nProvider';
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import ProfileSessionEditor from './ProfileSessionEditor';
 import { sessionQosPreset } from '../../../lib/imsQosPresets.js';
+import styles from '../../../styles/modules/profile.module.css';
 
 interface ProfileSliceEditorProps {
   slice: SliceForm;
@@ -95,37 +96,37 @@ export default function ProfileSliceEditor({
     <div id={`slice-card-${sliceIndex}`} className={`slice-strip-card ${newlyAdded ? 'flash-animate' : ''}`}>
       {/* Slice Header: SST, SD, Default */}
       <div
-        className={`slice-editor-header ${onToggleExpand ? "slice-card-header" : ""} ${isExpanded ? "slice-editor-header-expanded" : ""}`}
+        className={`${styles.sliceEditorHeader} ${onToggleExpand ? "slice-card-header" : ""} ${isExpanded ? styles.sliceEditorHeaderExpanded : ""}`}
         onClick={handleHeaderClick}
         style={{ cursor: onToggleExpand ? "pointer" : "default" }}
       >
-        <div className="slice-editor-header-content">
-          <div className="slice-editor-idx">{t("slice_idx", { idx: sliceIndex + 1 })}</div>
-          <div className="slice-editor-sst-group">
+        <div className={styles.sliceEditorHeaderContent}>
+          <div className={styles.sliceEditorIdx}>{t("slice_idx", { idx: sliceIndex + 1 })}</div>
+          <div className={styles.sliceEditorSstGroup}>
             {[1,2,3,4].map(val => (
-              <label key={val} className="slice-editor-sst-label">
+              <label key={val} className={styles.sliceEditorSstLabel}>
                 <input type="radio" name={`psst-${sliceIndex}`} checked={slice.sst === val} onChange={() => updateSlice('sst', val)} />
-                <span className="slice-editor-sst-text">SST {val}</span>
+                <span className={styles.sliceEditorSstText}>SST {val}</span>
               </label>
             ))}
           </div>
-          <div className="slice-editor-sd-group">
-            <span className="form-label slice-editor-sd-label">SD:</span>
-            <input type="text" className="form-input slice-editor-sd-input" value={slice.sd || ""} onChange={(e) => updateSlice('sd', e.target.value)} placeholder="000000" />
+          <div className={styles.sliceEditorSdGroup}>
+            <span className={`form-label ${styles.sliceEditorSdLabel}`}>SD:</span>
+            <input type="text" className={`form-input ${styles.sliceEditorSdInput}`} value={slice.sd || ""} onChange={(e) => updateSlice('sd', e.target.value)} placeholder="000000" />
           </div>
-          <label className="slice-editor-default-label">
-            <input type="checkbox" className="slice-editor-default-checkbox" checked={!!slice.default_indicator} onChange={(e) => updateSlice('default_indicator', e.target.checked)} />
-            <span className="slice-editor-default-text">{t("sub_default_nssai")}</span>
+          <label className={styles.sliceEditorDefaultLabel}>
+            <input type="checkbox" className={styles.sliceEditorDefaultCheckbox} checked={!!slice.default_indicator} onChange={(e) => updateSlice('default_indicator', e.target.checked)} />
+            <span className={styles.sliceEditorDefaultText}>{t("sub_default_nssai")}</span>
           </label>
         </div>
 
-        <div className="slice-editor-actions">
+        <div className={styles.sliceEditorActions}>
           <button className="btn-icon text-danger" onClick={(e) => { e.stopPropagation(); onDelete(); }} title={t("slice_delete")}>
             <Trash2 size={20}/>
           </button>
           {onToggleExpand && (
             <>
-              <div className="slice-editor-divider" />
+              <div className={styles.sliceEditorDivider} />
               {isExpanded ? <ChevronUp size={20} color="var(--text-muted)" /> : <ChevronDown size={20} color="var(--text-muted)" />}
             </>
           )}
@@ -134,10 +135,10 @@ export default function ProfileSliceEditor({
 
       {/* Level 2: Sessions inside Slice */}
       <div className={onToggleExpand ? `accordion-content ${isExpanded ? 'expanded' : 'collapsed'}` : ""}>
-        <div className="slice-editor-sessions-container">
-          <div className="slice-editor-sessions-header">
-            <h4 className="slice-editor-sessions-title">{t("slice_sessions_in", { idx: sliceIndex + 1 })}</h4>
-            <button className="btn btn-outline slice-editor-add-session-btn" onClick={handleAddSession}>
+        <div className={styles.sliceEditorSessionsContainer}>
+          <div className={styles.sliceEditorSessionsHeader}>
+            <h4 className={styles.sliceEditorSessionsTitle}>{t("slice_sessions_in", { idx: sliceIndex + 1 })}</h4>
+            <button className={`btn btn-outline ${styles.sliceEditorAddSessionBtn}`} onClick={handleAddSession}>
               <Plus size={16}/> {t("slice_add_session")}
             </button>
           </div>
@@ -155,7 +156,7 @@ export default function ProfileSliceEditor({
               ))}
             </div>
           ) : (
-            <div className="slice-editor-empty-sessions">
+            <div className={styles.sliceEditorEmptySessions}>
               {t("slice_no_sessions_hint")}
             </div>
           )}

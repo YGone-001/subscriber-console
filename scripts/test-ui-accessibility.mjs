@@ -169,10 +169,17 @@ async function main() {
 
   const sourceChecks = [];
   const appCss = fs.readFileSync(path.join(PROJECT, 'frontend', 'src', 'styles', 'app.css'), 'utf8');
-  const styleText = fs.readdirSync(path.join(PROJECT, 'frontend', 'src', 'styles'))
-    .filter((file) => file.endsWith('.css'))
-    .map((file) => fs.readFileSync(path.join(PROJECT, 'frontend', 'src', 'styles', file), 'utf8'))
-    .join('\n');
+  /* Domain layers now live in styles/modules as CSS modules; the contrast and motion
+   * treatments in them are still console-wide promises, so the scan must descend. */
+  const styleFiles = [];
+  (function walkStyles(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walkStyles(full);
+      else if (entry.name.endsWith('.css')) styleFiles.push(full);
+    }
+  })(path.join(PROJECT, 'frontend', 'src', 'styles'));
+  const styleText = styleFiles.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
 
   sourceChecks.push({
     id: 'reduced-motion',

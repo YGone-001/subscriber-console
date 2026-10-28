@@ -104,7 +104,7 @@ classification. No asset is left unreviewed.
 | Profiles page | `frontend/src/app/(dashboard)/profile/page.tsx` | `frontend/src/features/profiles/ProfilesPage.tsx` | ADAPT | Done | Current profile contracts preserved; presentation restored. |
 | Profile modal | `frontend/src/components/ProfileModal.tsx` | `frontend/src/features/profiles/ProfilesPage.tsx` | ADAPT | Done | Visual design retained; request builders unchanged. |
 | Profile editors (PCC / session / slice) | `frontend/src/components/profile/*` | `frontend/src/features/profiles/ProfilesPage.tsx` | ADAPT | Done | Editor presentation folded into the current page structure; no new fields are written. |
-| Profile stylesheet | `frontend/src/app/(dashboard)/profile/profile.css`, `frontend/src/components/profile/profile.css` | `frontend/src/styles/pages.css` | ADAPT | Done | Detail and section patterns ported. |
+| Profile stylesheet | `frontend/src/app/(dashboard)/profile/profile.css`, `frontend/src/components/profile/profile.css` | `frontend/src/styles/modules/profile.module.css` | ADAPT | Done | Detail and section patterns ported, then scoped into a CSS module so the template sheet cannot restyle other surfaces. |
 | OCS pages | `frontend/src/app/(dashboard)/ocs/**` | `frontend/src/features/ocs/**` | ADAPT | Done | Balances, contracts and tariffs keep their current contracts; presentation restored. |
 | OCS shared panels and drawers | `frontend/src/components/ocs/**` | `frontend/src/features/ocs/**` | ADAPT | Done | Table, detail panel, status pill and section header presentation ported. |
 | OCS stylesheet | `frontend/src/app/(dashboard)/ocs/ocs.css` | `frontend/src/styles/pages.css` | ADAPT | Done | Card, table, detail, status pill and metric layouts ported. |

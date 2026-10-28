@@ -8,6 +8,7 @@
  */
 import { useI18n } from '../../../providers/I18nProvider';
 import { typeLabel } from '../../subscribers/components/subscriber/utils';
+import styles from '../../../styles/modules/profile.module.css';
 
 type SessionNode = { name?: string; type?: number; pcc_rule?: unknown[] };
 type SliceNode = { sst?: number; sd?: string; session_list?: SessionNode[] };
@@ -59,17 +60,17 @@ export default function ProfileHierarchyRail({ slices, onJump }: {
   if (entries.length === 0) return null;
 
   return (
-    <nav className="profile-rail" aria-label={t('prof_rail_title')}>
-      <span className="profile-rail-caption">{t('prof_rail_title')}</span>
+    <nav className={styles.profileRail} aria-label={t('prof_rail_title')}>
+      <span className={styles.profileRailCaption}>{t('prof_rail_title')}</span>
       {entries.map((entry) => (
         <button
           key={entry.id}
           type="button"
-          className={`profile-rail-item profile-rail-depth-${entry.depth}`}
+          className={`${styles.profileRailItem} ${entry.depth === 2 ? styles.profileRailDepth2 : styles.profileRailDepth1}`}
           onClick={() => onJump(entry.id)}
         >
-          <span className="profile-rail-label">{entry.label}</span>
-          {entry.hint ? <span className="profile-rail-hint">{entry.hint}</span> : null}
+          <span className={styles.profileRailLabel}>{entry.label}</span>
+          {entry.hint ? <span className={styles.profileRailHint}>{entry.hint}</span> : null}
         </button>
       ))}
     </nav>

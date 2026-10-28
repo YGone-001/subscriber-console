@@ -6,7 +6,7 @@
  * version/restore path stays wired to the contract the backend implements.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   buildProfileVersionDiff,
@@ -44,44 +44,63 @@ import { resolveUsimType } from '../src/types/credential';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
-/* One seam table for the template stylesheet. CSS Modules localize at the import
- * boundary but keep the written selector names inside the file, so the layout
- * contracts below stay meaningful; what would silently rot is the pairing between
- * a component and the token it expects. Each token is asserted once against the
- * sheet and once against its consumer, so a rename has to be made in this one
- * table rather than in five scattered reads. */
-const PROFILE_STYLESHEET = '../src/styles/profile.css';
+/* One seam table for the template stylesheet module. The sheet and its consumers
+ * agree on a set of exported keys; a key renamed on one side only leaves the class
+ * undefined at runtime and the styling silently vanishes, which no type check
+ * catches. Each pair is asserted once here rather than in five scattered reads. */
+const PROFILE_STYLESHEET = '../src/styles/modules/profile.module.css';
 const STYLE_SEAMS = [
-  { token: 'profile-col-template', consumer: '../src/features/profiles/ProfilesPage.tsx' },
-  { token: 'profile-chip', consumer: '../src/features/profiles/ProfilesPage.tsx' },
-  { token: 'profile-chip-neutral', consumer: '../src/features/profiles/ProfilesPage.tsx' },
-  { token: 'profile-metric-detail', consumer: '../src/features/profiles/ProfilesPage.tsx' },
-  { token: 'profile-anchor-flash', consumer: '../src/features/profiles/ProfileDetailPage.tsx' },
+  { key: 'profileColTemplate', consumer: '../src/features/profiles/ProfilesPage.tsx' },
+  { key: 'profileChip', consumer: '../src/features/profiles/ProfilesPage.tsx' },
+  { key: 'profileChipNeutral', consumer: '../src/features/profiles/ProfilesPage.tsx' },
+  { key: 'profileMetricDetail', consumer: '../src/features/profiles/ProfilesPage.tsx' },
+  { key: 'profileAnchorFlash', consumer: '../src/features/profiles/ProfileDetailPage.tsx' },
 ] as const;
 
-/* Whole tokens only. A substring test accepts "profile-metric-detail-moved" as
- * evidence that the page still applies "profile-metric-detail", and a pairing
- * check that passes on a renamed token is worthless. */
-function declaresSelector(css: string, token: string): boolean {
-  return new RegExp(`\\.${token}(?![-\\w])`).test(css);
+/* Whole names only: "profileMetricDetailMoved" must not satisfy a check for
+ * "profileMetricDetail", and a pairing that accepts a renamed key is worthless. */
+function declaresKey(css: string, key: string): boolean {
+  return new RegExp(`\\.${key}(?![-\\w])`).test(css);
 }
 
-function appliesToken(source: string, token: string): boolean {
-  for (const quoted of source.matchAll(/["']([^"'\n]+)["']/g)) {
-    if (quoted[1].trim().split(/[\s,]+/).includes(token)) return true;
-  }
-  return false;
+function appliesKey(source: string, key: string): boolean {
+  return new RegExp(`styles\\.${key}(?!\\w)`).test(source);
 }
 
-test('every template stylesheet seam names one token its consumer applies', () => {
+test('every template stylesheet seam names one key its consumer reads', () => {
   const css = read(PROFILE_STYLESHEET);
   for (const seam of STYLE_SEAMS) {
-    assert.ok(declaresSelector(css, seam.token), `${seam.token} must be declared by ${PROFILE_STYLESHEET}`);
+    assert.ok(declaresKey(css, seam.key), `.${seam.key} must be declared by ${PROFILE_STYLESHEET}`);
     assert.ok(
-      appliesToken(read(seam.consumer), seam.token),
-      `${seam.consumer} must apply ${seam.token}; the two sides move together or the styling silently vanishes`,
+      appliesKey(read(seam.consumer), seam.key),
+      `${seam.consumer} must read styles.${seam.key}; a one-sided rename leaves the element unstyled`,
     );
   }
+});
+
+/* A key the sheet does not export is `undefined` in a production build, so the
+ * element silently loses its styling. The test harness cannot see that: its CSS
+ * stub echoes whatever key is requested, so this cross-check replaces the hashed
+ * build as the authority. */
+test('every module key the template components read is declared by the sheet', () => {
+  const declared = new Set(
+    [...read(PROFILE_STYLESHEET).matchAll(/\.([A-Za-z][A-Za-z0-9]*)/g)].map((match) => match[1]),
+  );
+  const featureDir = new URL('../src/features/profiles/', import.meta.url);
+  const files = [
+    new URL('ProfilesPage.tsx', featureDir),
+    new URL('ProfileDetailPage.tsx', featureDir),
+    ...readdirSync(new URL('components/', featureDir))
+      .filter((name) => name.endsWith('.tsx'))
+      .map((name) => new URL(`components/${name}`, featureDir)),
+  ];
+  const missing: string[] = [];
+  for (const file of files) {
+    for (const match of readFileSync(file, 'utf8').matchAll(/styles\.([A-Za-z0-9_]+)/g)) {
+      if (!declared.has(match[1])) missing.push(`${file.pathname.split('/').pop()}: ${match[1]}`);
+    }
+  }
+  assert.deepEqual(missing, [], 'a key missing from the module renders as undefined in production');
 });
 
 const LABELS: ProfileDiffLabels = {
@@ -655,8 +674,8 @@ test('the template table pins its column grid so the identifier cannot be starve
    * takes the fixed layout's guarantee away from that column. */
   const columnCount = (page.match(/<col\b/g) ?? []).length;
   assert.equal(columnCount, 7, `the grid must declare one col per column, got ${columnCount}`);
-  assert.match(css, /\.profile-governance-table \{[^}]*table-layout: fixed/);
-  assert.match(css, /\.profile-col-template \{ width: 20%/);
+  assert.match(css, /\.profileGovernanceTable \{[^}]*table-layout: fixed/);
+  assert.match(css, /\.profileColTemplate \{ width: 20%/);
   assert.match(page, /formatAmbrPairCompact\(/);
 });
 
@@ -674,8 +693,8 @@ test('the column grid follows the responsive hiding of supplementary columns', (
   const css = read(PROFILE_STYLESHEET);
   /* The shared rule hides supplementary columns at 980px; the surviving columns
    * must absorb their share or the fixed grid leaves dead space. */
-  assert.match(css, /@media \(max-width: 980px\) \{[\s\S]*?\.profile-col-ambr,\s*\.profile-col-owner \{ width: 0; \}/);
-  assert.match(css, /\.profile-col-template \{ width: 20%; \}/);
+  assert.match(css, /@media \(max-width: 980px\) \{[\s\S]*?\.profileColAmbr,\s*\.profileColOwner \{ width: 0; \}/);
+  assert.match(css, /\.profileColTemplate \{ width: 20%; \}/);
 });
 
 test('the aggregate breakdown wraps through an opt-in class instead of editing the shared strip', () => {
@@ -684,8 +703,8 @@ test('the aggregate breakdown wraps through an opt-in class instead of editing t
   const css = read(PROFILE_STYLESHEET);
   assert.match(strip, /detailClassName\?: string/);
   assert.match(strip, /detailClass\(item, styles\.metricDetail\)/);
-  assert.match(page, /detailClassName: "profile-metric-detail"/);
-  assert.match(css, /\.profile-page-container \.profile-metric-detail \{[^}]*white-space: normal/);
+  assert.match(page, /detailClassName: styles\.profileMetricDetail/);
+  assert.match(css, /\.profilePageContainer \.profileMetricDetail \{[^}]*white-space: normal/);
   /* The primitive must keep clipping by default for its other consumers. */
   assert.match(read('../src/styles/modules/ConsolePrimitives.module.css'), /\.metricDetail \{[^}]*white-space: nowrap/);
 });
@@ -748,11 +767,10 @@ test('a save with no pending change is not offered', () => {
 test('the access restriction column keeps absent, zero and restricted apart', () => {
   const page = read('../src/features/profiles/ProfilesPage.tsx');
   assert.match(page, /access === 0\s*\?\s*t\("prof_access_unrestricted"\)\s*:\s*t\("prof_access_limited"\)/);
-  /* The neutral state must keep the base chip styling as well as its own modifier.
-   * A pairing like this is the one thing the seam table cannot express, so this is
-   * the documented line to move if the sheet is ever localized into a module. */
-  assert.match(page, /profile-chip profile-chip-neutral/);
-  assert.match(read(PROFILE_STYLESHEET), /\.profile-chip-neutral \{/);
+  /* The neutral state must keep the base chip styling as well as its own modifier;
+   * a pairing is the one thing the seam table cannot express. */
+  assert.match(page, /\{styles\.profileChip\} \$\{styles\.profileChipNeutral\}/);
+  assert.match(read(PROFILE_STYLESHEET), /\.profileChipNeutral \{/);
   /* The two-state wording that read as "restriction present" is retired. */
   for (const file of ['../src/lib/locales/en.ts', '../src/lib/locales/zh.ts']) {
     const source = read(file);
@@ -868,7 +886,7 @@ test('the shared editors emit the stable anchors the subscriber form already ask
    * produced that id, so the affordance was dead for both consumers. */
   assert.match(subscriberForm, /scrollTo\(`slice-card-\$\{newIdx\}`\)/);
   assert.match(sliceEditor, /id=\{`slice-card-\$\{sliceIndex\}`\}/);
-  assert.match(sessionEditor, /<div id=\{anchorId\} className="session-editor-card"/);
+  assert.match(sessionEditor, /<div id=\{anchorId\} className=\{styles\.sessionEditorCard\}/);
   assert.match(pccEditor, /<div id=\{anchorId\} className="pcc-rule-box"/);
   /* The anchors reach the deeper levels through optional props, so no existing
    * call site has to pass them. */

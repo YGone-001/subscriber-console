@@ -45,6 +45,7 @@ import type {
   RatingsResponse,
   TariffPlansResponse,
 } from './profile-types';
+import styles from '../../styles/modules/profile.module.css';
 
 const VIEW_SECTIONS: Array<{ id: string; labelKey: string }> = [
   { id: 'psec-stats', labelKey: 'prof_change_impacted' },
@@ -188,8 +189,8 @@ export function ProfileDetailPage() {
       const el = document.getElementById(id);
       if (!el) return;
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      el.classList.add('profile-anchor-flash');
-      window.setTimeout(() => el.classList.remove('profile-anchor-flash'), 1600);
+      el.classList.add(styles.profileAnchorFlash);
+      window.setTimeout(() => el.classList.remove(styles.profileAnchorFlash), 1600);
     }, owner ? 90 : 0);
   };
 
@@ -515,8 +516,8 @@ export function ProfileDetailPage() {
   };
 
   return (
-    <div className="container animate-fade-in profile-page-container">
-      <div className="profile-detail-back">
+    <div className={`container animate-fade-in ${styles.profilePageContainer}`}>
+      <div className={styles.profileDetailBack}>
         <button type="button" className="btn btn-outline" onClick={requestLeave}>
           <ArrowLeft size={16} /> {t('back')}
         </button>
@@ -711,7 +712,7 @@ export function ProfileDetailPage() {
           onConfirm={() => { void executeClone(); }}
           onCancel={() => setIsCloneOpen(false)}
         >
-          <div className="profile-clone-fields">
+          <div className={styles.profileCloneFields}>
             <div>
               <label className="form-label" htmlFor="profile-clone-key">{t('prof_clone_key_label')}</label>
               <input
@@ -786,11 +787,11 @@ export function ProfileDetailPage() {
       )}
 
       {isLoading && !isCreate ? (
-        <div className="dash-card profile-table-state">
+        <div className={`dash-card ${styles.profileTableState}`}>
           <LoadingRows columns={4} rows={4} />
         </div>
       ) : detailError && !isCreate ? (
-        <div className="dash-card profile-table-state">
+        <div className={`dash-card ${styles.profileTableState}`}>
           <ErrorState
             title={t('prof_err_load')}
             message={detailError instanceof Error ? detailError.message : String(detailError)}

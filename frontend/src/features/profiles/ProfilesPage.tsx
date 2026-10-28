@@ -39,6 +39,7 @@ import type { ProfileListItem, ProfilesResponse } from './profile-types';
 
 import PageHeader from '../../components/ui/PageHeader';
 import MetricStrip from '../../components/ui/MetricStrip';
+import styles from '../../styles/modules/profile.module.css';
 
 const FILTER_OPTIONS: ProfileListFilter[] = ['all', 'withBilling', 'withoutBilling', 'unassigned'];
 const FILTER_LABEL_KEYS: Record<ProfileListFilter, string> = {
@@ -158,38 +159,38 @@ export function ProfilesPage() {
         <td data-label={t("prof_table_template")} data-column-priority="essential">
           <button
             type="button"
-            className="profile-template-button"
+            className={styles.profileTemplateButton}
             onClick={() => openTemplate(profile.name)}
             aria-label={`${t("prof_view_details")}: ${profile.title || profile.name}`}
           >
-            <span className="profile-template-title">{profile.title || profile.name}</span>
-            <span className="profile-template-key">{profile.name}</span>
+            <span className={styles.profileTemplateTitle}>{profile.title || profile.name}</span>
+            <span className={styles.profileTemplateKey}>{profile.name}</span>
           </button>
         </td>
-        <td data-label={t("prof_table_content")} data-column-priority="essential" className="profile-content-cell">
-          <span className="profile-content-counts">
+        <td data-label={t("prof_table_content")} data-column-priority="essential" className={styles.profileContentCell}>
+          <span className={styles.profileContentCounts}>
             {t("prof_content_slices", { count: profile.sliceCount || 0 })}
             {' · '}
             {t("prof_content_sessions", { count: profile.sessionCount || 0 })}
             {' · '}
             {t("prof_content_pcc", { count: profile.pccRuleCount || 0 })}
           </span>
-          <span className="profile-content-tags">
-            <span className={`profile-chip ${billingConfigured ? "profile-chip-ok" : "profile-chip-missing"}`}>
+          <span className={styles.profileContentTags}>
+            <span className={`${styles.profileChip} ${billingConfigured ? styles.profileChipOk : styles.profileChipMissing}`}>
               {billingConfigured ? t("prof_billing_configured") : t("prof_billing_missing")}
             </span>
-            <span className="profile-chip profile-chip-neutral">
+            <span className={`${styles.profileChip} ${styles.profileChipNeutral}`}>
               {accessLabel}
             </span>
           </span>
         </td>
-        <td data-label={t("prof_table_linked_users")} data-column-priority="important" className="profile-linked-cell">
+        <td data-label={t("prof_table_linked_users")} data-column-priority="important" className={styles.profileLinkedCell}>
           {statsUnavailable ? (
-            <span className="text-muted-label">{t("prof_stats_unavailable")}</span>
+            <span className={styles.textMutedLabel}>{t("prof_stats_unavailable")}</span>
           ) : linked > 0 ? (
             <>
-              <span className="profile-table-data">{linked}</span>
-              <span className="profile-impact-breakdown">
+              <span className={styles.profileTableData}>{linked}</span>
+              <span className={styles.profileImpactBreakdown}>
                 {t("prof_stat_breakdown", {
                   active: profile.activeSubscribers || 0,
                   suspended: profile.suspendedSubscribers || 0,
@@ -198,30 +199,30 @@ export function ProfilesPage() {
               </span>
             </>
           ) : (
-            <span className="text-muted-label">{t("prof_unassigned")}</span>
+            <span className={styles.textMutedLabel}>{t("prof_unassigned")}</span>
           )}
         </td>
         <td data-label={t("prof_table_ambr")} data-column-priority="supplementary">
           {profile.ambr ? (
-            <span className="profile-ambr-cell">
+            <span className={styles.profileAmbrCell}>
               {formatAmbrPairCompact(profile.ambr, t("prof_diff_not_configured"))}
             </span>
           ) : (
-            <span className="text-muted-label">{t("prof_diff_not_configured")}</span>
+            <span className={styles.textMutedLabel}>{t("prof_diff_not_configured")}</span>
           )}
         </td>
-        <td data-label={t("prof_table_modified_by")} data-column-priority="supplementary" className="profile-owner-cell">
+        <td data-label={t("prof_table_modified_by")} data-column-priority="supplementary" className={styles.profileOwnerCell}>
           {profile.updatedBy || t("prof_governance_no_owner")}
         </td>
-        <td data-label={t("prof_table_updated")} data-column-priority="essential" className="profile-date-cell">
+        <td data-label={t("prof_table_updated")} data-column-priority="essential" className={styles.profileDateCell}>
           {profile.updatedAt || profile.createdAt
             ? formatDateTime(profile.updatedAt || profile.createdAt || '')
             : t("prof_governance_not_modified")}
         </td>
-        <td data-label={t("actions")} data-column-priority="essential" className="profile-table-actions">
+        <td data-label={t("actions")} data-column-priority="essential" className={styles.profileTableActions}>
           <button
             type="button"
-            className="profile-row-action"
+            className={styles.profileRowAction}
             onClick={() => openTemplate(profile.name)}
             title={canEditTemplates ? t("edit") : t("prof_view_details")}
             aria-label={`${canEditTemplates ? t("edit") : t("prof_view_details")}: ${profile.title || profile.name}`}
@@ -234,7 +235,7 @@ export function ProfilesPage() {
   };
 
   return (
-    <div className="container animate-fade-in profile-page-container">
+    <div className={`container animate-fade-in ${styles.profilePageContainer}`}>
       <PageHeader
         eyebrow={t("eyebrow_policy_template")}
         icon={<Boxes size={23} />}
@@ -253,7 +254,7 @@ export function ProfilesPage() {
             value: statsUnavailable ? t("prof_stats_unavailable") : metrics.impacted,
             tone: statsUnavailable ? "muted" : "primary",
             detail: statsUnavailable ? undefined : impactBreakdown,
-            detailClassName: "profile-metric-detail",
+            detailClassName: styles.profileMetricDetail,
           },
           {
             key: "unassigned",
@@ -273,7 +274,7 @@ export function ProfilesPage() {
       />
 
       <div className="page-action-bar profile-action-bar">
-        <form className="profile-search-form" role="search" onSubmit={handleSearchSubmit}>
+        <form className={styles.profileSearchForm} role="search" onSubmit={handleSearchSubmit}>
           <input
             type="search"
             className="form-input hover-glass profile-search-input"
@@ -282,7 +283,7 @@ export function ProfilesPage() {
             value={searchInput}
             onChange={event => setSearchInput(event.target.value)}
           />
-          <button type="submit" className="btn btn-outline profile-search-submit">{t("search")}</button>
+          <button type="submit" className={`btn btn-outline ${styles.profileSearchSubmit}`}>{t("search")}</button>
         </form>
         <div className="profile-domain-filters" role="group" aria-label={t("prof_filter_group")}>
           {FILTER_OPTIONS.map(filter => (
@@ -307,11 +308,11 @@ export function ProfilesPage() {
       </div>
 
       {isLoading ? (
-        <div className="dash-card profile-table-state">
+        <div className={`dash-card ${styles.profileTableState}`}>
           <LoadingRows columns={7} rows={4} />
         </div>
       ) : error ? (
-        <div className="dash-card profile-table-state">
+        <div className={`dash-card ${styles.profileTableState}`}>
           <ErrorState
             title={t("prof_err_load")}
             message={error instanceof Error ? error.message : String(error)}
@@ -320,7 +321,7 @@ export function ProfilesPage() {
           />
         </div>
       ) : filteredProfiles.length === 0 ? (
-        <div className="dash-card profile-table-state">
+        <div className={`dash-card ${styles.profileTableState}`}>
           <EmptyState
             icon={<Boxes size={48} />}
             title={hasActiveFilter ? t("prof_no_match") : t("prof_empty_list")}
@@ -328,18 +329,18 @@ export function ProfilesPage() {
           />
         </div>
       ) : (
-        <div className="dash-card profile-table-card">
-          <div className="profile-table-wrap">
-            <table className="profile-governance-table">
+        <div className={`dash-card ${styles.profileTableCard}`}>
+          <div className={styles.profileTableWrap}>
+            <table className={styles.profileGovernanceTable}>
               <caption className="sr-only">{t("prof_governance_title")}</caption>
               <colgroup>
-                <col className="profile-col-template" />
-                <col className="profile-col-content" />
-                <col className="profile-col-linked" />
-                <col className="profile-col-ambr" />
-                <col className="profile-col-owner" />
-                <col className="profile-col-updated" />
-                <col className="profile-col-actions" />
+                <col className={styles.profileColTemplate} />
+                <col className={styles.profileColContent} />
+                <col className={styles.profileColLinked} />
+                <col className={styles.profileColAmbr} />
+                <col className={styles.profileColOwner} />
+                <col className={styles.profileColUpdated} />
+                <col className={styles.profileColActions} />
               </colgroup>
               <thead>
                 <tr>
@@ -365,7 +366,7 @@ export function ProfilesPage() {
                     icon={renderSortIcon('subscriberCount')}
                     onSort={() => applySort('subscriberCount')}
                     priority="important"
-                    className="profile-table-number"
+                    className={styles.profileTableNumber}
                   />
                   <th data-column-priority="supplementary">{t("prof_table_ambr")}</th>
                   <th data-column-priority="supplementary">{t("prof_table_modified_by")}</th>
@@ -376,7 +377,7 @@ export function ProfilesPage() {
                     icon={renderSortIcon('updatedAt')}
                     onSort={() => applySort('updatedAt')}
                   />
-                  <th data-column-priority="essential" className="profile-table-actions-heading">{t("actions")}</th>
+                  <th data-column-priority="essential" className={styles.profileTableActionsHeading}>{t("actions")}</th>
                 </tr>
               </thead>
               <tbody>

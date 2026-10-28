@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { GitCompareArrows, RefreshCw } from 'lucide-react';
 import { postJson } from '../../../lib/api/mutation-client';
+import styles from '../../../styles/modules/profile.module.css';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 
@@ -57,13 +58,13 @@ export function ProfileDriftCard({ t, profileName, onRejected }: {
   const outstanding = (report?.results ?? []).filter((entry) => entry.state !== 'in_sync');
 
   return (
-    <div className="dash-card card-margin-top" id="psec-drift">
-      <div className="dash-card-header flex-between-center">
-        <div className="flex-center-gap">
+    <div className={`dash-card ${styles.cardMarginTop}`} id="psec-drift">
+      <div className={`dash-card-header ${styles.flexBetweenCenter}`}>
+        <div className={styles.flexCenterGap}>
           <GitCompareArrows size={20} color="var(--primary)" />
           <div>
-            <h3 className="card-title">{t('prof_drift_title')}</h3>
-            <p className="profile-drift-desc">{t('prof_drift_desc')}</p>
+            <h3 className={styles.cardTitle}>{t('prof_drift_title')}</h3>
+            <p className={styles.profileDriftDesc}>{t('prof_drift_desc')}</p>
           </div>
         </div>
         <button type="button" className="btn btn-outline" onClick={() => { void probe(); }} disabled={isProbing}>
@@ -72,35 +73,35 @@ export function ProfileDriftCard({ t, profileName, onRejected }: {
       </div>
       {report && (
         <div className="dash-card-body">
-          <div className="profile-drift-tally" role="status">
-            <span className="profile-drift-tally-item profile-drift-ok">
+          <div className={styles.profileDriftTally} role="status">
+            <span className={`${styles.profileDriftTallyItem} ${styles.profileDriftOk}`}>
               {t('prof_drift_in_sync', { count: report.inSync })}
             </span>
-            <span className={`profile-drift-tally-item ${report.changed > 0 ? 'profile-drift-warn' : ''}`}>
+            <span className={`${styles.profileDriftTallyItem} ${report.changed > 0 ? styles.profileDriftWarn : ''}`}>
               {t('prof_drift_changed', { count: report.changed })}
             </span>
-            <span className="profile-drift-tally-item">
+            <span className={styles.profileDriftTallyItem}>
               {t('prof_drift_unknown', { count: report.unknown })}
             </span>
             {report.truncated && (
-              <span className="profile-drift-tally-item profile-drift-warn">{t('prof_drift_truncated')}</span>
+              <span className={`${styles.profileDriftTallyItem} ${styles.profileDriftWarn}`}>{t('prof_drift_truncated')}</span>
             )}
           </div>
           {report.checked === 0 ? (
             /* "all match" would be vacuously true with nothing probed. */
-            <p className="text-muted-label">{t('prof_drift_empty')}</p>
+            <p className={styles.textMutedLabel}>{t('prof_drift_empty')}</p>
           ) : outstanding.length === 0 ? (
-            <p className="text-muted-label">{t('prof_drift_none')}</p>
+            <p className={styles.textMutedLabel}>{t('prof_drift_none')}</p>
           ) : (
-            <ul className="profile-drift-list">
+            <ul className={styles.profileDriftList}>
               {outstanding.map((entry) => (
-                <li key={`${entry.imsi}-${entry.state}`} className="profile-drift-row">
-                  <span className="value-mono">{entry.imsi || t('prof_drift_no_imsi')}</span>
-                  <span className="profile-drift-state">
+                <li key={`${entry.imsi}-${entry.state}`} className={styles.profileDriftRow}>
+                  <span className={styles.valueMono}>{entry.imsi || t('prof_drift_no_imsi')}</span>
+                  <span className={styles.profileDriftState}>
                     {entry.state === 'unknown' ? t('prof_drift_state_unknown') : t('prof_drift_state_changed')}
                   </span>
                   {(entry.changedGroups ?? []).map((group) => (
-                    <span key={group} className="profile-chip profile-chip-neutral">
+                    <span key={group} className={`${styles.profileChip} ${styles.profileChipNeutral}`}>
                       {t(GROUP_LABEL_KEYS[group] ?? 'prof_drift_group_other')}
                     </span>
                   ))}

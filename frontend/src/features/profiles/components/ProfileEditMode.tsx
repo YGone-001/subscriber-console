@@ -10,6 +10,7 @@ import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from '../../../lib
 import { AmbrUnitSelect } from './AmbrUnitSelect';
 import { DEFAULT_ACCESS_RESTRICTION_BITS, accessBitLabel } from '../profile-access';
 import { ratingTypeLabel, ratingUnitLabel } from '../profile-format';
+import styles from '../../../styles/modules/profile.module.css';
 
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
   const {
@@ -46,12 +47,12 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
   };
 
   return (
-    <div className="profile-container">
+    <div className={styles.profileContainer}>
       {/* Profile Title */}
       <div className="dash-card animate-fade-in" id="psec-info">
         <div className="dash-card-header">
           <Pencil size={20} color="var(--primary)" />
-          <h3 className="card-title">{t("prof_sec_info")}</h3>
+          <h3 className={styles.cardTitle}>{t("prof_sec_info")}</h3>
         </div>
         <div className="dash-card-body">
           <div className="quick-grid">
@@ -67,24 +68,24 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
       <div className="dash-card animate-fade-in" id="psec-security">
         <div className="dash-card-header">
           <Shield size={20} color="var(--primary)" />
-          <h3 className="card-title">{t("sec_security_auth")}</h3>
+          <h3 className={styles.cardTitle}>{t("sec_security_auth")}</h3>
         </div>
-        <div className="dash-card-body grid-2-col">
+        <div className={`dash-card-body ${styles.grid2Col}`}>
           {!credentialsEditable && (
-            <div className="col-span-all warning-text">{t("prof_credential_not_editable")}</div>
+            <div className={`${styles.colSpanAll} warning-text`}>{t("prof_credential_not_editable")}</div>
           )}
-          <div className="col-span-all">
+          <div className={styles.colSpanAll}>
             <label className="form-label"><span className="form-asterisk">*</span>{t("sub_key_k")}</label>
-            <input type="text" className="form-input input-mono-large" value={authData.k} disabled={!credentialsEditable} onChange={(e) => setAuthData({...authData, k: e.target.value})} placeholder={t("sub_ph_hex")} />
+            <input type="text" className={`form-input ${styles.inputMonoLarge}`} value={authData.k} disabled={!credentialsEditable} onChange={(e) => setAuthData({...authData, k: e.target.value})} placeholder={t("sub_ph_hex")} />
           </div>
-          <div className="col-span-all">
+          <div className={styles.colSpanAll}>
             <label className="form-label"><span className="form-asterisk">*</span>{t("sub_key_op")} ({usimType === "op" ? "OP" : "OPc"})</label>
-            <div className="op-type-container">
-              <select className="form-input op-type-select" value={usimType} disabled={!credentialsEditable} onChange={(e) => setUsimType(e.target.value as "opc" | "op")}>
+            <div className={styles.opTypeContainer}>
+              <select className={`form-input ${styles.opTypeSelect}`} value={usimType} disabled={!credentialsEditable} onChange={(e) => setUsimType(e.target.value as "opc" | "op")}>
                 <option value="opc">OPc</option>
                 <option value="op">OP</option>
               </select>
-              <input type="text" className="form-input input-mono-large op-type-input" value={authData.opValue} disabled={!credentialsEditable} onChange={(e) => setAuthData({...authData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} />
+              <input type="text" className={`form-input ${styles.inputMonoLarge} ${styles.opTypeInput}`} value={authData.opValue} disabled={!credentialsEditable} onChange={(e) => setAuthData({...authData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} />
             </div>
           </div>
           <div>
@@ -95,16 +96,16 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
       </div>
 
       {/* Edit Mode: Billing Predefined Settings */}
-      <div className="dash-card animate-fade-in card-margin-top-sm" id="psec-ocs-edit">
+      <div className={`dash-card animate-fade-in ${styles.cardMarginTopSm}`} id="psec-ocs-edit">
         <div className="dash-card-header">
           <Gauge size={20} color="var(--primary)" />
-          <h3 className="card-title">{t("sec_billing_config")}</h3>
+          <h3 className={styles.cardTitle}>{t("sec_billing_config")}</h3>
         </div>
-        <div className="dash-card-body grid-2-col-sm">
-          <div className="col-span-all">
+        <div className={`dash-card-body ${styles.grid2ColSm}`}>
+          <div className={styles.colSpanAll}>
             <label className="form-label">{t("sub_360_tariff_plan")}</label>
             <select
-              className="form-input input-mono"
+              className={`form-input ${styles.inputMono}`}
               value={currentPlanId}
               disabled={planSelectDisabled}
               onChange={(e) => setOcsDefaults({ ...ocsDefaults, planId: e.target.value })}
@@ -185,15 +186,15 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
               onChange={(e) => setOcsDefaults({ ...ocsDefaults, smsBalance: e.target.value.replace(/\D/g, "") })}
             />
           </div>
-          <div className="col-span-all">
+          <div className={styles.colSpanAll}>
             <label className="form-label">{t("prof_tariff_rules")}</label>
-            <div className="grid-gap-small">
+            <div className={styles.gridGapSmall}>
               {ratingStatus === 'unavailable' ? (
                 <span className="warning-text">{t("prof_rules_unavailable")}</span>
               ) : !currentPlanId ? (
                 <span className="text-muted">{t("prof_rules_no_plan")}</span>
               ) : ratingList.length > 0 ? ratingList.map((rule: any) => (
-                <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} className="tariff-rule-row bg-hover">
+                <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} className={`${styles.tariffRuleRow} ${styles.bgHover}`}>
                   <span>{rule.apn}</span>
                   <span>RG {rule.rating_group_id}</span>
                   <span>SI {rule.service_identifier}</span>
@@ -210,19 +211,19 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
       <div className="dash-card animate-fade-in" id="psec-network">
         <div className="dash-card-header">
           <Signal size={20} color="var(--primary)" />
-          <h3 className="card-title">{t("sec_global_network")}</h3>
+          <h3 className={styles.cardTitle}>{t("sec_global_network")}</h3>
         </div>
         <div className="dash-card-body">
-          <div className="grid-2-col">
+          <div className={styles.grid2Col}>
             <div>
-              <label className="form-label label-secondary"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_dl")}</label>
+              <label className={`form-label ${styles.labelSecondary}`}><span className="form-asterisk">*</span>{t("sub_lbl_ambr_dl")}</label>
               <div className="input-composite">
                 <input type="number" value={ueAmbr.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => setUeAmbr({...ueAmbr, downlink: { ...ueAmbr.downlink, value: e.target.value === "" ? undefined : Number(e.target.value) }})} />
                 <AmbrUnitSelect unit={ueAmbr.downlink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => setUeAmbr({...ueAmbr, downlink: { ...ueAmbr.downlink, unit: value }})} />
               </div>
             </div>
             <div>
-              <label className="form-label label-secondary"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_ul")}</label>
+              <label className={`form-label ${styles.labelSecondary}`}><span className="form-asterisk">*</span>{t("sub_lbl_ambr_ul")}</label>
               <div className="input-composite">
                 <input type="number" value={ueAmbr.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => setUeAmbr({...ueAmbr, uplink: { ...ueAmbr.uplink, value: e.target.value === "" ? undefined : Number(e.target.value) }})} />
                 <AmbrUnitSelect unit={ueAmbr.uplink?.unit} unsetLabel={t("prof_diff_not_configured")} onChange={(value) => setUeAmbr({...ueAmbr, uplink: { ...ueAmbr.uplink, unit: value }})} />
@@ -233,15 +234,15 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
       </div>
 
       {/* Access Restrictions (3GPP TS 29.272 Bitmask) */}
-      <div className="dash-card animate-fade-in card-margin-top" id="psec-access-restrictions">
-        <div className="dash-card-header flex-between-center">
-          <div className="flex-center-gap">
+      <div className={`dash-card animate-fade-in ${styles.cardMarginTop}`} id="psec-access-restrictions">
+        <div className={`dash-card-header ${styles.flexBetweenCenter}`}>
+          <div className={styles.flexCenterGap}>
             <Lock size={20} color="var(--primary)" />
-            <h3 className="card-title">{t("sec_access_restrict")}</h3>
+            <h3 className={styles.cardTitle}>{t("sec_access_restrict")}</h3>
           </div>
           <button
             type="button"
-            className="btn-icon btn-transparent"
+            className={`btn-icon ${styles.btnTransparent}`}
             onClick={() => setIsAccessRestrictionsExpanded((prev: boolean) => !prev)}
             title={isAccessRestrictionsExpanded ? t("collapse") : t("expand")}
           >
@@ -250,14 +251,14 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
         </div>
         {isAccessRestrictionsExpanded && (
           <div className="dash-card-body">
-            <div className="access-restriction-grid">
+            <div className={styles.accessRestrictionGrid}>
               {bitOptions.map(bit => {
                 const opt = { val: bit.value, label: accessBitLabel(t, bit) };
                 const restriction = typeof accessRestriction === "number" ? accessRestriction : 0;
                 const isLegacySuspended = restriction === 255;
                 const isChecked = (restriction & opt.val) !== 0 || isLegacySuspended;
                 return (
-                  <label key={opt.val} className={`access-restriction-label ${isChecked ? "checked" : "unchecked"}`}>
+                  <label key={opt.val} className={`${styles.accessRestrictionLabel} ${isChecked ? styles.checked : styles.unchecked}`}>
                     <input
                       type="checkbox"
                       className="checkbox-custom"
@@ -273,16 +274,16 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
                         setAccessRestriction(next);
                       }}
                     />
-                    <span className={`access-restriction-text ${isChecked ? "checked" : "unchecked"}`}>{opt.label}</span>
+                    <span className={`${styles.accessRestrictionText} ${isChecked ? styles.checked : styles.unchecked}`}>{opt.label}</span>
                   </label>
                 );
               })}
             </div>
-            <div className="access-restriction-actions">
-              <button className="btn btn-outline profile-btn-access-clear" onClick={() => setAccessRestriction(0)}>
+            <div className={styles.accessRestrictionActions}>
+              <button className={`btn btn-outline ${styles.profileBtnAccessClear}`} onClick={() => setAccessRestriction(0)}>
                 {t("sub_btn_clear_restrictions")}
               </button>
-              <button className="btn btn-outline profile-btn-access-suspend" onClick={() => setAccessRestriction(255)}>
+              <button className={`btn btn-outline ${styles.profileBtnAccessSuspend}`} onClick={() => setAccessRestriction(255)}>
                 {t("sub_btn_suspend_restrictions")}
               </button>
             </div>
@@ -291,9 +292,9 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
       </div>
 
       {/* Level 1: Slices */}
-      <div id="psec-slices" className="pt-1">
-        <div className="flex-between-center section-title-margin">
-          <h3 className="section-title"><Server size={22}/> {t("sub_slices_core")}</h3>
+      <div id="psec-slices" className={styles.pt1}>
+        <div className={`${styles.flexBetweenCenter} ${styles.sectionTitleMargin}`}>
+          <h3 className={styles.sectionTitle}><Server size={22}/> {t("sub_slices_core")}</h3>
           <button className="btn btn-primary btn-add-slice" onClick={addSlice}>
             <Plus size={18}/> {t("sub_add_slice")}
           </button>
@@ -313,7 +314,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
             onDelete={() => removeSlice(sIdx)}
           />
         )) : (
-          <div className="empty-slices-placeholder">
+          <div className={styles.emptySlicesPlaceholder}>
             {t("prof_no_slices_start")} <strong>{t("sub_add_slice")}</strong> {t("sub_to_start")}
           </div>
         )}

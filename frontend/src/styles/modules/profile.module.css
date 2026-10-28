@@ -12,21 +12,21 @@
  * Source: frontend/src/app/(dashboard)/profile/profile.css
  * ------------------------------------------------------------------------- */
 
-.profile-table-card {
+.profileTableCard {
   overflow: hidden;
   padding: 0;
 }
 
-.profile-table-state {
+.profileTableState {
   overflow: hidden;
   padding: 1rem;
 }
 
-.profile-table-wrap {
+.profileTableWrap {
   overflow-x: auto;
 }
 
-.profile-governance-table {
+.profileGovernanceTable {
   width: 100%;
   /* Column widths come from the table's own colgroup, so a long AMBR string can
    * no longer starve the template identifier column. */
@@ -37,12 +37,12 @@
   text-align: left;
 }
 
-.profile-governance-table thead {
+.profileGovernanceTable thead {
   border-bottom: 2px solid var(--surface-border);
   background: var(--surface-hover);
 }
 
-.profile-governance-table th {
+.profileGovernanceTable th {
   padding: 0.85rem 1rem;
   color: var(--text-secondary);
   font-size: var(--ref-font-size-label-strong);
@@ -50,20 +50,20 @@
   overflow-wrap: anywhere;
 }
 
-.profile-governance-table tbody tr {
+.profileGovernanceTable tbody tr {
   border-bottom: 1px solid var(--surface-border);
   transition: background-color var(--duration-fast) var(--ease-smooth);
 }
 
-.profile-governance-table tbody tr:last-child {
+.profileGovernanceTable tbody tr:last-child {
   border-bottom: 0;
 }
 
-.profile-governance-table tbody tr:hover {
+.profileGovernanceTable tbody tr:hover {
   background: var(--surface-hover);
 }
 
-.profile-governance-table td {
+.profileGovernanceTable td {
   min-width: 0;
   padding: 0.9rem 1rem;
   vertical-align: middle;
@@ -71,27 +71,27 @@
 
 /* Fixed column grid: the identifier column keeps a real share of the width no
  * matter how long the AMBR or date strings get. */
-.profile-col-template { width: 20%; }
-.profile-col-content { width: 18%; }
-.profile-col-linked { width: 12%; }
-.profile-col-ambr { width: 17%; }
-.profile-col-owner { width: 10%; }
-.profile-col-updated { width: 15%; }
-.profile-col-actions { width: 8%; }
+.profileColTemplate { width: 20%; }
+.profileColContent { width: 18%; }
+.profileColLinked { width: 12%; }
+.profileColAmbr { width: 17%; }
+.profileColOwner { width: 10%; }
+.profileColUpdated { width: 15%; }
+.profileColActions { width: 8%; }
 
 /* The shared responsive rule hides the supplementary columns at 980px; the
  * surviving columns take over their share instead of leaving dead space. */
 @media (max-width: 980px) {
-  .profile-col-template { width: 27%; }
-  .profile-col-content { width: 25%; }
-  .profile-col-linked { width: 17%; }
-  .profile-col-ambr,
-  .profile-col-owner { width: 0; }
-  .profile-col-updated { width: 20%; }
-  .profile-col-actions { width: 11%; }
+  .profileColTemplate { width: 27%; }
+  .profileColContent { width: 25%; }
+  .profileColLinked { width: 17%; }
+  .profileColAmbr,
+  .profileColOwner { width: 0; }
+  .profileColUpdated { width: 20%; }
+  .profileColActions { width: 11%; }
 }
 
-.profile-template-button {
+.profileTemplateButton {
   min-width: 0;
   max-width: 100%;
   padding: 0;
@@ -104,13 +104,13 @@
   cursor: pointer;
 }
 
-.profile-template-button:focus-visible,
-.profile-row-action:focus-visible {
+.profileTemplateButton:focus-visible,
+.profileRowAction:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
-.profile-template-title {
+.profileTemplateTitle {
   overflow: hidden;
   color: var(--text-main);
   font-weight: 750;
@@ -118,7 +118,7 @@
   white-space: nowrap;
 }
 
-.profile-template-key {
+.profileTemplateKey {
   overflow: hidden;
   color: var(--text-muted);
   font-family: var(--font-data);
@@ -129,21 +129,21 @@
 
 /* The consistency probe answers one question per row, so the IMSI and its
  * differing groups stay on one line at every supported width. */
-.profile-drift-desc {
+.profileDriftDesc {
   margin: 0.25rem 0 0;
   color: var(--text-muted);
   font-size: var(--ref-font-size-label);
   line-height: 1.45;
 }
 
-.profile-drift-tally {
+.profileDriftTally {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
 }
 
-.profile-drift-tally-item {
+.profileDriftTallyItem {
   padding: 0.2rem 0.6rem;
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-pill);
@@ -153,25 +153,25 @@
   font-weight: 750;
 }
 
-.profile-drift-tally-item.profile-drift-ok {
+.profileDriftTallyItem.profileDriftOk {
   border-color: var(--status-success-border);
   color: var(--status-success);
   background: var(--status-success-soft);
 }
 
-.profile-drift-tally-item.profile-drift-warn {
+.profileDriftTallyItem.profileDriftWarn {
   border-color: var(--status-warning-border);
   color: var(--status-warning);
   background: var(--status-warning-soft);
 }
 
-.profile-drift-list {
+.profileDriftList {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.profile-drift-row {
+.profileDriftRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -180,23 +180,23 @@
   border-bottom: 1px solid var(--surface-border);
 }
 
-.profile-drift-row:last-child {
+.profileDriftRow:last-child {
   border-bottom: 0;
 }
 
-.profile-drift-state {
+.profileDriftState {
   color: var(--text-muted);
   font-size: var(--ref-font-size-label);
 }
 
-.profile-clone-fields {
+.profileCloneFields {
   display: grid;
   gap: 0.75rem;
 }
 
 /* The hierarchy rail fits the slice -> session -> PCC tree on one wrapped band;
  * depth is carried by indentation, not by a second colour. */
-.profile-rail {
+.profileRail {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -208,7 +208,7 @@
   background: var(--surface-hover);
 }
 
-.profile-rail-caption {
+.profileRailCaption {
   margin-right: 0.25rem;
   color: var(--text-muted);
   font-size: var(--ref-font-size-label);
@@ -217,7 +217,7 @@
   text-transform: uppercase;
 }
 
-.profile-rail-item {
+.profileRailItem {
   display: inline-flex;
   align-items: baseline;
   gap: 0.35rem;
@@ -231,49 +231,49 @@
   transition: border-color var(--duration-fast) var(--ease-smooth), color var(--duration-fast) var(--ease-smooth);
 }
 
-.profile-rail-item:hover {
+.profileRailItem:hover {
   border-color: var(--primary);
   color: var(--primary);
 }
 
-.profile-rail-item:focus-visible {
+.profileRailItem:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
-.profile-rail-depth-1 { margin-left: 0.75rem; }
-.profile-rail-depth-2 { margin-left: 1.5rem; }
-.profile-rail-label { font-weight: 750; }
+.profileRailDepth1 { margin-left: 0.75rem; }
+.profileRailDepth2 { margin-left: 1.5rem; }
+.profileRailLabel { font-weight: 750; }
 
-.profile-rail-hint {
+.profileRailHint {
   color: var(--text-muted);
   font-size: var(--ref-font-size-caption);
 }
 
-.profile-anchor-flash {
-  animation: profile-anchor-flash 1.6s var(--ease-smooth) 1;
+.profileAnchorFlash {
+  animation: profileAnchorFlash 1.6s var(--ease-smooth) 1;
 }
 
-@keyframes profile-anchor-flash {
+@keyframes profileAnchorFlash {
   0%, 55% { box-shadow: 0 0 0 2px var(--primary); }
   100% { box-shadow: none; }
 }
 
-.profile-detail-back {
+.profileDetailBack {
   margin-bottom: 1rem;
 }
 
-.profile-search-form {
+.profileSearchForm {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.profile-search-submit {
+.profileSearchSubmit {
   white-space: nowrap;
 }
 
-.profile-chip {
+.profileChip {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -285,27 +285,27 @@
   white-space: nowrap;
 }
 
-.profile-chip-ok {
+.profileChipOk {
   border-color: var(--status-success-border);
   color: var(--status-success);
   background: var(--status-success-soft);
 }
 
-.profile-chip-missing {
+.profileChipMissing {
   border-color: var(--status-warning-border);
   color: var(--status-warning);
   background: var(--status-warning-soft);
 }
 
 /* Informational state: the wording carries the meaning, not the colour. */
-.profile-chip-neutral {
+.profileChipNeutral {
   border-color: var(--surface-border);
   color: var(--text-muted);
   background: var(--surface-hover);
 }
 
 /* Section jump bar for the template workspace. */
-.profile-section-nav {
+.profileSectionNav {
   position: sticky;
   top: 0;
   z-index: 2;
@@ -317,7 +317,7 @@
   background: var(--bg);
 }
 
-.profile-section-nav-btn {
+.profileSectionNavBtn {
   min-height: 32px;
   padding: 0.25rem 0.7rem;
   font-size: var(--ref-font-size-label);
@@ -328,43 +328,43 @@
   scroll-margin-top: 9rem;
 }
 
-.profile-content-cell {
+.profileContentCell {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
   max-width: 280px;
 }
 
-.profile-content-counts {
+.profileContentCounts {
   color: var(--text-secondary);
   font-size: var(--ref-font-size-data);
   line-height: 1.45;
 }
 
-.profile-content-tags {
+.profileContentTags {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
 }
 
-.profile-owner-cell {
+.profileOwnerCell {
   white-space: nowrap;
 }
 
 /* The impact breakdown is a sentence, not an identifier: under the fixed column
  * grid it wraps rather than pushing the table past its container. */
-.profile-linked-cell {
+.profileLinkedCell {
   overflow-wrap: anywhere;
 }
 
-.profile-impact-breakdown {
+.profileImpactBreakdown {
   display: block;
   margin-top: 0.2rem;
   color: var(--text-muted);
   font-size: var(--ref-font-size-label);
 }
 
-.profile-ambr-cell {
+.profileAmbrCell {
   font-family: var(--font-data);
   color: var(--text-main);
   font-size: var(--ref-font-size-data);
@@ -374,34 +374,34 @@
 /* The shared metric strip clips its detail line to one row; the template KPI
  * breakdown is a three-part sentence and must stay readable. Two class names
  * keep this above the primitive's own rule regardless of stylesheet order. */
-.profile-page-container .profile-metric-detail {
+.profilePageContainer .profileMetricDetail {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
 }
 
-.profile-table-number {
+.profileTableNumber {
   text-align: center;
 }
 
-.profile-table-data {
+.profileTableData {
   font-family: var(--font-data);
   font-weight: 750;
 }
 
-.profile-owner-cell,
-.profile-date-cell {
+.profileOwnerCell,
+.profileDateCell {
   color: var(--text-muted);
   font-size: var(--ref-font-size-data);
   white-space: nowrap;
 }
 
-.profile-table-actions-heading,
-.profile-table-actions {
+.profileTableActionsHeading,
+.profileTableActions {
   text-align: center;
 }
 
-.profile-row-action {
+.profileRowAction {
   width: 44px;
   height: 44px;
   padding: 0;
@@ -415,41 +415,41 @@
   transition: color var(--duration-fast) var(--ease-smooth), background-color var(--duration-fast) var(--ease-smooth);
 }
 
-.profile-row-action:hover {
+.profileRowAction:hover {
   color: var(--primary-hover);
   background: var(--selection-soft);
 }
 
 @media (max-width: 768px) {
-  .profile-table-card {
+  .profileTableCard {
     border: 0;
     background: transparent;
     box-shadow: none;
   }
 
-  .profile-table-wrap {
+  .profileTableWrap {
     overflow: visible;
   }
 
-  .profile-governance-table,
-  .profile-governance-table tbody {
+  .profileGovernanceTable,
+  .profileGovernanceTable tbody {
     display: grid;
     width: 100%;
   }
 
-  .profile-governance-table {
+  .profileGovernanceTable {
     gap: 0.75rem;
   }
 
-  .profile-governance-table thead {
+  .profileGovernanceTable thead {
     display: none;
   }
 
-  .profile-governance-table tbody {
+  .profileGovernanceTable tbody {
     gap: 0.75rem;
   }
 
-  .profile-governance-table tbody tr {
+  .profileGovernanceTable tbody tr {
     display: grid;
     padding: 0.85rem 1rem;
     border: 1px solid var(--surface-border);
@@ -458,7 +458,7 @@
     box-shadow: var(--shadow-panel);
   }
 
-  .profile-governance-table td {
+  .profileGovernanceTable td {
     display: grid;
     grid-template-columns: minmax(108px, 30%) minmax(0, 1fr);
     align-items: center;
@@ -468,33 +468,33 @@
     text-align: left;
   }
 
-  .profile-governance-table td:last-child {
+  .profileGovernanceTable td:last-child {
     border-bottom: 0;
   }
 
-  .profile-governance-table td[data-label]::before {
+  .profileGovernanceTable td[data-label]::before {
     content: attr(data-label);
     color: var(--text-muted);
     font-size: var(--ref-font-size-label);
     font-weight: 750;
   }
 
-  .profile-template-button,
-  .profile-content-cell {
+  .profileTemplateButton,
+  .profileContentCell {
     max-width: none;
   }
 
-  .profile-table-actions {
+  .profileTableActions {
     justify-items: start;
   }
 }
 
 @media (max-width: 560px) {
-  .profile-governance-table tbody tr {
+  .profileGovernanceTable tbody tr {
     padding: 0.75rem;
   }
 
-  .profile-governance-table td {
+  .profileGovernanceTable td {
     grid-template-columns: minmax(92px, 34%) minmax(0, 1fr);
   }
 }
@@ -503,17 +503,17 @@
  * Source: frontend/src/components/profile/profile.css
  * ------------------------------------------------------------------------- */
 
-.profile-container { padding-bottom: 2rem; }
-.card-title { font-size: var(--ref-font-size-heading); margin: 0; color: var(--text-main); font-weight: 600; }
-.grid-3-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; }
-.label-muted { color: var(--text-muted); font-size: var(--ref-font-size-body-compact); margin-bottom: 0.25rem; }
-.value-mono { font-family: monospace; color: var(--text-main); font-size: var(--ref-font-size-body); }
-.card-margin { margin-top: 1.5rem; margin-bottom: 1.5rem; }
-.card-margin-top { margin-top: 1.5rem; }
-.grid-2-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-.col-span-all { grid-column: 1 / -1; }
-.grid-gap-small { display: grid; gap: 0.5rem; }
-.tariff-rule-row {
+.profileContainer { padding-bottom: 2rem; }
+.cardTitle { font-size: var(--ref-font-size-heading); margin: 0; color: var(--text-main); font-weight: 600; }
+.grid3Col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; }
+.labelMuted { color: var(--text-muted); font-size: var(--ref-font-size-body-compact); margin-bottom: 0.25rem; }
+.valueMono { font-family: monospace; color: var(--text-main); font-size: var(--ref-font-size-body); }
+.cardMargin { margin-top: 1.5rem; margin-bottom: 1.5rem; }
+.cardMarginTop { margin-top: 1.5rem; }
+.grid2Col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.colSpanAll { grid-column: 1 / -1; }
+.gridGapSmall { display: grid; gap: 0.5rem; }
+.tariffRuleRow {
   display: grid;
   grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;
   gap: 1rem;
@@ -523,8 +523,8 @@
   font-family: monospace;
   font-size: var(--ref-font-size-body-support);
 }
-.flex-gap-large { display: flex; gap: 3rem; }
-.ambr-card {
+.flexGapLarge { display: flex; gap: 3rem; }
+.ambrCard {
   flex: 1;
   padding: 1rem;
   border: 1px solid var(--surface-border);
@@ -533,17 +533,17 @@
 /* The shared .ambr-label belongs to the subscriber sheet, where it carries a bottom
  * margin this card does not want; keeping a private name stops the two surfaces
  * from silently restyling each other. */
-.profile-ambr-label {
+.profileAmbrLabel {
   color: var(--text-secondary);
   font-size: var(--ref-font-size-body-compact);
   text-transform: uppercase;
   font-weight: 600;
 }
-.flex-between-center { display: flex; justify-content: space-between; align-items: center; }
-.flex-center-gap { display: flex; align-items: center; gap: 0.5rem; }
-.btn-transparent { background: transparent; border: none; cursor: pointer; }
-.pt-1 { padding-top: 1rem; }
-.section-title {
+.flexBetweenCenter { display: flex; justify-content: space-between; align-items: center; }
+.flexCenterGap { display: flex; align-items: center; gap: 0.5rem; }
+.btnTransparent { background: transparent; border: none; cursor: pointer; }
+.pt1 { padding-top: 1rem; }
+.sectionTitle {
   font-size: var(--ref-font-size-title-sm);
   margin-bottom: 1.5rem;
   color: var(--text-main);
@@ -552,66 +552,66 @@
   align-items: center;
   gap: 0.5rem;
 }
-.slice-header {
+.sliceHeader {
   padding: 1.5rem 2rem;
   border-bottom: 1px solid var(--surface-border);
   display: flex;
   align-items: center;
   gap: 1.5rem;
 }
-.slice-tags {
+.sliceTags {
   display: flex;
   gap: 1rem;
   background: var(--surface-hover);
   padding: 0.5rem 1rem;
   border-radius: var(--ref-radius-compact);
 }
-.slice-tag-sst { font-weight: 600; }
-.slice-tag-sd { color: var(--text-secondary); }
-.profile-view-pad { padding: 1rem; }
-.table-default { width: 100%; border-collapse: collapse; font-size: var(--ref-font-size-body-emphasis); }
-.table-header-row { text-align: left; border-bottom: 1px solid var(--surface-border); }
-.table-cell-pad { padding: 1rem; }
-.table-row-border { border-bottom: 1px solid transparent; }
-.table-cell-main { padding: 1rem; font-weight: 600; color: var(--text-main); }
-.table-cell-sec { padding: 1rem; color: var(--text-secondary); }
-.table-cell-nowrap { padding: 1rem; color: var(--text-secondary); white-space: nowrap; }
-.flex-col-gap { display: flex; flex-direction: column; gap: 0.5rem; }
-.pcc-rule-card {
+.sliceTagSst { font-weight: 600; }
+.sliceTagSd { color: var(--text-secondary); }
+.profileViewPad { padding: 1rem; }
+.tableDefault { width: 100%; border-collapse: collapse; font-size: var(--ref-font-size-body-emphasis); }
+.tableHeaderRow { text-align: left; border-bottom: 1px solid var(--surface-border); }
+.tableCellPad { padding: 1rem; }
+.tableRowBorder { border-bottom: 1px solid transparent; }
+.tableCellMain { padding: 1rem; font-weight: 600; color: var(--text-main); }
+.tableCellSec { padding: 1rem; color: var(--text-secondary); }
+.tableCellNowrap { padding: 1rem; color: var(--text-secondary); white-space: nowrap; }
+.flexColGap { display: flex; flex-direction: column; gap: 0.5rem; }
+.pccRuleCard {
   background: var(--surface-hover);
   padding: 0.5rem 0.75rem;
   border-radius: var(--ref-radius-compact);
   font-size: var(--ref-font-size-relative-compact);
   border: 1px solid var(--surface-border);
 }
-.pcc-rule-title { font-weight: 600; color: var(--primary); margin-bottom: 0.2rem; }
-.text-muted-label { color: var(--text-muted); }
-.col-span-2 { grid-column: span 2; }
-.empty-state {
+.pccRuleTitle { font-weight: 600; color: var(--primary); margin-bottom: 0.2rem; }
+.textMutedLabel { color: var(--text-muted); }
+.colSpan2 { grid-column: span 2; }
+.emptyState {
   text-align: center;
   color: var(--text-muted);
   padding: 3rem;
   border: 1px dashed var(--surface-border);
   border-radius: var(--ref-radius-compact);
 }
-.empty-state-no-border {
+.emptyStateNoBorder {
   text-align: center;
   color: var(--text-muted);
   padding: 2rem;
 }
 
 /* ProfileEditMode refactored classes */
-.input-mono-large { font-family: monospace; font-size: var(--ref-font-size-heading-sm); }
-.input-mono { font-family: monospace; }
-.op-type-container { display: flex; gap: 0.75rem; }
-.op-type-select { width: 120px; flex-shrink: 0; }
-.op-type-input { flex: 1; }
-.card-margin-top-sm { margin-top: 1rem; }
-.grid-2-col-sm { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-.label-secondary { color: var(--text-secondary); }
-.bg-hover { background: var(--surface-hover); }
-.access-restriction-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
-.access-restriction-label {
+.inputMonoLarge { font-family: monospace; font-size: var(--ref-font-size-heading-sm); }
+.inputMono { font-family: monospace; }
+.opTypeContainer { display: flex; gap: 0.75rem; }
+.opTypeSelect { width: 120px; flex-shrink: 0; }
+.opTypeInput { flex: 1; }
+.cardMarginTopSm { margin-top: 1rem; }
+.grid2ColSm { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.labelSecondary { color: var(--text-secondary); }
+.bgHover { background: var(--surface-hover); }
+.accessRestrictionGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.accessRestrictionLabel {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -620,12 +620,12 @@
   cursor: pointer;
   transition: all 0.2s;
 }
-.access-restriction-label.checked { border: 1px solid var(--primary); background: var(--selection-soft); }
-.access-restriction-label.unchecked { border: 1px solid var(--surface-border); background: var(--surface); }
-.access-restriction-text { font-size: var(--ref-font-size-body-support); }
-.access-restriction-text.checked { font-weight: 600; color: var(--primary); }
-.access-restriction-text.unchecked { font-weight: 500; color: var(--text-secondary); }
-.access-restriction-actions {
+.accessRestrictionLabel.checked { border: 1px solid var(--primary); background: var(--selection-soft); }
+.accessRestrictionLabel.unchecked { border: 1px solid var(--surface-border); background: var(--surface); }
+.accessRestrictionText { font-size: var(--ref-font-size-body-support); }
+.accessRestrictionText.checked { font-weight: 600; color: var(--primary); }
+.accessRestrictionText.unchecked { font-weight: 500; color: var(--text-secondary); }
+.accessRestrictionActions {
   margin-top: 1.5rem;
   display: flex;
   gap: 1rem;
@@ -635,16 +635,16 @@
 /* The subscriber sheet owns the shared .btn-access-clear/.btn-access-suspend, which
  * colour the button but leave its layout to .btn-access-action. This card has no
  * such base class, so it carries its own full skin under private names. */
-.profile-btn-access-clear {
+.profileBtnAccessClear {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 1rem;
   font-size: var(--ref-font-size-body-compact); color: var(--success); border-color: var(--success); background: transparent;
 }
-.profile-btn-access-suspend {
+.profileBtnAccessSuspend {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 1rem;
   font-size: var(--ref-font-size-body-compact); color: var(--danger); border-color: var(--danger); background: transparent;
 }
-.section-title-margin { margin-bottom: 1.5rem; }
-.empty-slices-placeholder {
+.sectionTitleMargin { margin-bottom: 1.5rem; }
+.emptySlicesPlaceholder {
   text-align: center;
   padding: 4rem;
   color: var(--text-muted);
@@ -652,56 +652,56 @@
   border: 1px dashed var(--surface-border);
   border-radius: var(--ref-radius-control);
 }
-.tariff-rule-row.bg-hover { background: var(--surface-hover); }
+.tariffRuleRow.bgHover { background: var(--surface-hover); }
 
 /* ProfileSessionEditor classes */
-.session-editor-card {
+.sessionEditorCard {
   margin-top: 1rem;
   padding: 1.5rem;
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-control);
   background: var(--surface);
 }
-.session-editor-header {
+.sessionEditorHeader {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
 }
-.session-editor-content {
+.sessionEditorContent {
   flex: 1;
 }
-.session-grid-4 {
+.sessionGrid4 {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 1.5rem;
 }
-.session-grid-2 {
+.sessionGrid2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
   margin-top: 1rem;
 }
-.session-label {
+.sessionLabel {
   font-size: var(--ref-font-size-body-compact);
   font-weight: 600;
 }
-.session-del-btn {
+.sessionDelBtn {
   padding: 0.4rem;
   background: transparent;
   border-radius: var(--ref-radius-control);
   margin-left: 1rem;
 }
-.session-pcc-section {
+.sessionPccSection {
   margin-top: 1.5rem;
   border-top: 1px solid var(--surface-border);
 }
-.session-pcc-header {
+.sessionPccHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding-top: 1rem;
 }
-.session-pcc-title {
+.sessionPccTitle {
   font-size: var(--ref-font-size-body-support);
   color: var(--text-main);
   font-weight: 600;
@@ -709,15 +709,15 @@
   align-items: center;
   gap: 0.5rem;
 }
-.session-add-pcc-btn {
+.sessionAddPccBtn {
   color: var(--primary);
   font-size: var(--ref-font-size-body-support);
   font-weight: 600;
 }
-.session-pcc-list {
+.sessionPccList {
   padding-left: 1rem;
 }
-.session-pcc-empty {
+.sessionPccEmpty {
   padding: 1.5rem;
   border: 1px dashed var(--surface-border);
   border-radius: var(--ref-radius-compact);
@@ -729,108 +729,108 @@
 }
 
 /* ProfileSliceEditor classes */
-.slice-editor-header {
+.sliceEditorHeader {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   padding: 1.5rem 2rem;
   border-bottom: none;
 }
-.slice-editor-header-expanded {
+.sliceEditorHeaderExpanded {
   border-bottom: 1px solid var(--surface-border);
 }
-.slice-editor-header-content {
+.sliceEditorHeaderContent {
   display: flex;
   gap: 2.5rem;
   flex: 1;
   align-items: center;
   flex-wrap: wrap;
 }
-.slice-editor-idx {
+.sliceEditorIdx {
   font-size: var(--ref-font-size-heading);
   font-weight: 600;
   color: var(--primary);
 }
-.slice-editor-sst-group {
+.sliceEditorSstGroup {
   display: flex;
   gap: 1.5rem;
   background: var(--surface-hover);
   padding: 0.5rem 1rem;
   border-radius: var(--ref-radius-compact);
 }
-.slice-editor-sst-label {
+.sliceEditorSstLabel {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   cursor: pointer;
 }
-.slice-editor-sst-text {
+.sliceEditorSstText {
   font-size: var(--ref-font-size-body);
   font-weight: 500;
   color: var(--text-main);
 }
-.slice-editor-sd-group {
+.sliceEditorSdGroup {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
-.slice-editor-sd-label {
+.sliceEditorSdLabel {
   margin: 0;
 }
-.slice-editor-sd-input {
+.sliceEditorSdInput {
   width: 120px;
   padding: 0.4rem 0.6rem;
 }
-.slice-editor-default-label {
+.sliceEditorDefaultLabel {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
 }
-.slice-editor-default-checkbox {
+.sliceEditorDefaultCheckbox {
   width: 1.2rem;
   height: 1.2rem;
 }
-.slice-editor-default-text {
+.sliceEditorDefaultText {
   font-weight: 500;
   font-size: var(--ref-font-size-body-emphasis);
   color: var(--text-main);
 }
-.slice-editor-actions {
+.sliceEditorActions {
   display: flex;
   gap: 0.5rem;
   align-items: center;
 }
-.slice-editor-divider {
+.sliceEditorDivider {
   width: 1px;
   height: 20px;
   background: var(--surface-border);
   margin: 0 0.5rem;
 }
-.slice-editor-sessions-container {
+.sliceEditorSessionsContainer {
   padding: 1.5rem 2rem;
 }
-.slice-editor-sessions-header {
+.sliceEditorSessionsHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
   padding: 0 0.5rem;
 }
-.slice-editor-sessions-title {
+.sliceEditorSessionsTitle {
   font-size: var(--ref-font-size-body);
   font-weight: 600;
   color: var(--text-secondary);
   margin: 0;
 }
-.slice-editor-add-session-btn {
+.sliceEditorAddSessionBtn {
   padding: 0.4rem 0.8rem;
   font-size: var(--ref-font-size-body-compact);
   display: flex;
   align-items: center;
   gap: 0.3rem;
 }
-.slice-editor-empty-sessions {
+.sliceEditorEmptySessions {
   text-align: center;
   padding: 2rem;
   color: var(--text-muted);
@@ -839,54 +839,54 @@
 }
 
 /* ProfilePccRuleEditor classes */
-.pcc-rule-header {
+.pccRuleHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
 }
-.pcc-rule-idx-title {
+.pccRuleIdxTitle {
   font-size: var(--ref-font-size-body-compact);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-.pcc-rule-delete-btn {
+.pccRuleDeleteBtn {
   padding: 2px;
 }
-.pcc-rule-form-grid {
+.pccRuleFormGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
 }
-.pcc-rule-label {
+.pccRuleLabel {
   font-size: var(--ref-font-size-data);
 }
 
 /* Profile view mode layout helpers. */
-.dash-card.dash-card-spaced {
+:global(.dash-card).dashCardSpaced {
   margin-bottom: 1.5rem;
 }
 
-.value-mono.value-mono-primary {
+.valueMono.valueMonoPrimary {
   font-weight: 600;
   color: var(--primary);
 }
 
-.value-mono.value-mono-success {
+.valueMono.valueMonoSuccess {
   color: var(--success);
 }
 
-.value-mono.value-mono-dim {
+.valueMono.valueMonoDim {
   opacity: 0.85;
 }
 
-.label-muted.label-muted-inline {
+.labelMuted.labelMutedInline {
   margin-right: 0.5rem;
 }
 
-.profile-sample-strip {
+.profileSampleStrip {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--surface-border);
