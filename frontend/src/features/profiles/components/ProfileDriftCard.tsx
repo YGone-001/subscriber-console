@@ -25,7 +25,9 @@ export type ProfileDriftReport = {
   results: ProfileDriftEntry[];
 };
 
-const GROUP_LABEL_KEYS: Record<string, string> = {
+/* The drift groups are a vocabulary, not a rendering detail: the subscriber
+ * detail surface names the same groups when it previews an apply. */
+export const PROFILE_DRIFT_GROUP_LABEL_KEYS: Record<string, string> = {
   security: 'prof_drift_group_security',
   ambr: 'prof_drift_group_ambr',
   slice: 'prof_drift_group_slice',
@@ -102,7 +104,7 @@ export function ProfileDriftCard({ t, profileName, onRejected }: {
                   </span>
                   {(entry.changedGroups ?? []).map((group) => (
                     <span key={group} className={`${styles.profileChip} ${styles.profileChipNeutral}`}>
-                      {t(GROUP_LABEL_KEYS[group] ?? 'prof_drift_group_other')}
+                      {t(PROFILE_DRIFT_GROUP_LABEL_KEYS[group] ?? 'prof_drift_group_other')}
                     </span>
                   ))}
                 </li>

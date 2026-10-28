@@ -302,6 +302,17 @@ test('buildSubscriberCreateRequest omits auth4G entirely when not supplied', () 
   assert.ok(!('auth4G' in req), 'auth4G must be absent so the server keeps its defaults');
 });
 
+/* Creating from a template must record that fact on the create request: the
+ * service writes the binding in the same single write, so the new record is
+ * template-governed from birth rather than invisible to the template list. */
+test('buildSubscriberCreateRequest carries the template binding when one is chosen', () => {
+  const bound = buildSubscriberCreateRequest('001010000000004', { profileName: '  tpl_5g  ' });
+  assert.equal(bound.profileName, 'tpl_5g', 'the binding must be trimmed and sent');
+
+  const unbound = buildSubscriberCreateRequest('001010000000004', { profileName: '   ' });
+  assert.ok(!('profileName' in unbound), 'a blank selection must not bind the record to anything');
+});
+
 test('buildSubscriberCreateRequest rejects invalid authentication material', () => {
   const valid = { k: '00112233445566778899aabbccddeeff', opc: 'aabbccddeeff00112233445566778899', amf: '8000', sqn: 0 };
 

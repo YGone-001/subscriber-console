@@ -861,6 +861,7 @@ export function ProfileDetailPage() {
               isAccessRestrictionsExpanded={isAccessRestrictionsExpanded}
               setIsAccessRestrictionsExpanded={setIsAccessRestrictionsExpanded}
               accessRestriction={draft.accessRestriction}
+              accessBits={accessBits}
               slices={draft.slices}
               backendStats={detail?.stats ?? null}
               statsUnavailable={statsUnavailable}

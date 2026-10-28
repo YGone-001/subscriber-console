@@ -3,7 +3,7 @@
  * frontend/src/hooks/useSubscriberForm.ts
  * Adaptations: "use client" dropped; `@/` aliases and CSS-module imports repointed for the Vite runtime.
  */
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { parseBytes, formatBytes, parseSeconds, formatSeconds, parseEvents, formatEvents } from '../../lib/unitParser';
 import { sessionQosPreset } from '../../lib/imsQosPresets.js';
 import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
@@ -44,8 +44,11 @@ const resolvePlmnFromRecords = (records: any[], value: string) => {
   return prefix5;
 };
 
-export function useSubscriberForm(imsi: string | null, t: any, onClose: () => void, onRefresh: () => void) {
+export function useSubscriberForm(imsi: string | null, t: any, onClose: () => void, onRefresh: () => void, onSaved?: (imsi: string, created: boolean) => void) {
   const [isEditing, setIsEditing] = useState(!imsi);
+  /* Bumped to re-read the record after a draft is discarded, so the form keeps
+   * showing stored values instead of the edits that were just abandoned. */
+  const [reloadToken, setReloadToken] = useState(0);
   const [isLoading, setIsLoading] = useState(!!imsi);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,11 +67,21 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [usimType, setUsimType] = useState<"opc" | "op">("opc");
   const [baseSub4G, setBaseSub4G] = useState<any>({});
   const [msisdn, setMsisdn] = useState("");
+  /* The template this record was provisioned from, as the service reports it.
+   * The detail surface renders it instead of guessing from the draft. */
+  const [profileBinding, setProfileBinding] = useState("");
   const [ueAmbr, setUeAmbr] = useState({ downlink: { unit: 3, value: 1 }, uplink: { unit: 3, value: 1 } });
 
   const [slices, setSlices] = useState<any[]>([]);
   const [accessRestriction, setAccessRestriction] = useState<number>(0);
   const [profileList, setProfileList] = useState<any[]>([]);
+  /* Whether the template catalog has answered, so an unresolved binding is not
+   * reported as a deleted template while the list is still loading. */
+  const [profilesReady, setProfilesReady] = useState(false);
+  /* The template the operator picked for this create. It travels on the create
+   * request so the service records the binding at the same time the record is
+   * born; the follow-up content update never rewrites it. */
+  const [selectedProfileName, setSelectedProfileName] = useState("");
   const [ratingList, setRatingList] = useState<any[]>([]);
   const [tariffPlanList, setTariffPlanList] = useState<TariffPlanOption[]>([]);
   const [ocsPlanId, setOcsPlanId] = useState("");
@@ -189,7 +202,11 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         setProfileList(data.profiles || []);
       } catch {
     /* Best-effort side effect: a failure here must not block the form. */
-  }
+  } finally {
+        /* The catalog answered (or failed): either way a binding can now be
+         * classified instead of being called unresolved forever. */
+        setProfilesReady(true);
+      }
     };
     const fetchTariffPlanList = async () => {
       try {
@@ -270,6 +287,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       const data = await getJson<ApiRecord>(`/api/profiles/${encodeURIComponent(profileName)}`);
       if (data.profile) {
         const p = data.profile;
+        setSelectedProfileName(profileName);
         if (p.auth) {
           if (p.auth.op || p.auth.opc || p.auth.credentialState) setUsimType(resolveUsimType(p.auth));
           setAuth4GData(prev => ({
@@ -316,6 +334,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
 
         if (data.sub4G) {
           setBaseSub4G(data.sub4G);
+          setProfileBinding(String(data.sub4G.profile_name ?? ""));
           if (Array.isArray(data.sub4G.msisdnList) && data.sub4G.msisdnList[0]?.msisdn !== undefined) {
             setMsisdn(String(data.sub4G.msisdnList[0].msisdn));
           } else if (data.ocsImsi?.msisdn) {
@@ -390,7 +409,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       }
     };
     fetchData();
-  }, [imsi, t]);
+  }, [imsi, t, reloadToken]);
 
   useEffect(() => {
     if (isLoading || initialOcsSignatureRef.current !== null) return;
@@ -408,9 +427,30 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr,
   ]);
 
+  /* One definition of "unsaved". The surface asks the form instead of rebuilding
+   * the fingerprint from the state it was handed, so a field added here cannot
+   * silently drop out of the prompt that guards navigation. */
+  const draftSignature = useMemo(() => JSON.stringify({
+    inputImsi, msisdn, auth4GData, usimType, ueAmbr, slices, accessRestriction, ocsPlanId,
+    ocsTrafficTotalStr, ocsTrafficBalanceStr,
+    ocsVoiceTotalStr, ocsVoiceBalanceStr,
+    ocsSmsTotalStr, ocsSmsBalanceStr,
+  }), [
+    inputImsi, msisdn, auth4GData, usimType, ueAmbr, slices, accessRestriction, ocsPlanId,
+    ocsTrafficTotalStr, ocsTrafficBalanceStr,
+    ocsVoiceTotalStr, ocsVoiceBalanceStr,
+    ocsSmsTotalStr, ocsSmsBalanceStr,
+  ]);
+  const draftBaselineRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isLoading && draftBaselineRef.current === null) draftBaselineRef.current = draftSignature;
+  }, [isLoading, draftSignature]);
+  const hasUnsavedChanges = isEditing
+    && draftBaselineRef.current !== null
+    && draftBaselineRef.current !== draftSignature;
+
   const handleDelete = async () => {
     if (!imsi) return;
-    if (!confirm(t("sub_del_confirm", { imsi }))) return;
     try {
       await deleteJson(`/api/subscribers/${encodeURIComponent(imsi)}`);
       onRefresh();
@@ -418,6 +458,17 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : t("sub_err_delete"));
     }
+  };
+
+  /* Leaving edit mode without saving must restore the stored record, not keep the
+   * abandoned edits in the fields: a surface that stayed on the page would
+   * otherwise re-enter edit mode with changes nobody made. */
+  const discardDraft = () => {
+    setError(null);
+    setToastMessage(null);
+    setIsEditing(false);
+    draftBaselineRef.current = null;
+    if (imsi) setReloadToken((token) => token + 1);
   };
 
   const handleSave = async () => {
@@ -477,6 +528,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         try {
           await postJson('/api/subscribers', buildSubscriberCreateRequest(targetImsi, {
             planId: ocsPlanId,
+            profileName: selectedProfileName || undefined,
             auth4G: authPayload,
           }));
           createdInThisAttempt = true;
@@ -566,7 +618,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       }
 
       onRefresh();
-      onClose();
+      if (onSaved) onSaved(targetImsi, !imsi);
+      else onClose();
     } catch (err: any) {
       /*
        * Creating is TWO calls: POST the record, then PUT the full configuration. If the
@@ -640,9 +693,10 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   return {
     state: {
       isEditing, isLoading, isSaving, error, newlyAddedSliceIndex, inputImsi, toastMessage,
+      hasUnsavedChanges,
       inputImsiExists, isCheckingInputImsi, inputMsisdnExists, isCheckingInputMsisdn,
       expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
-      accessRestriction, profileList, ratingList, tariffPlanList, ocsPlanId, ocsPlanStatus, ocsContractStatus, hasOcsContract, hasOcsBalance, ocsRules, ocsPlmn,
+      accessRestriction, profileList, profilesReady, selectedProfileName, profileBinding, ratingList, tariffPlanList, ocsPlanId, ocsPlanStatus, ocsContractStatus, hasOcsContract, hasOcsBalance, ocsRules, ocsPlmn,
       ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr,
       ocsSmsTotalStr, ocsSmsBalanceStr, ocsVolumeThreshold, ocsDataReservedStr
     },
@@ -650,7 +704,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn: handleMsisdnChange, loadFromProfile, setAuth4GData,
       setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
       setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr, setOcsPlanId, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
-      handleSave, scrollTo, clearError: () => setError(null), clearToastMessage: () => setToastMessage(null)
+      handleSave, scrollTo, discardDraft, clearError: () => setError(null), clearToastMessage: () => setToastMessage(null)
     }
   };
 }

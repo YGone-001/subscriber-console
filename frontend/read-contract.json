@@ -236,6 +236,35 @@
     ]
   },
   {
+    "route": "/subscribers/new",
+    "mode": "read",
+    "source": "frontend/src/features/subscribers/SubscriberDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/profiles",
+      "GET /api/ratings",
+      "GET /api/tariff-plans",
+      "GET /api/subscribers"
+    ],
+    "staticReads": [
+      "/data/mcc-mnc-table.json"
+    ]
+  },
+  {
+    "route": "/subscribers/:imsi",
+    "mode": "read",
+    "source": "frontend/src/features/subscribers/SubscriberDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/subscribers/{imsi}",
+      "GET /api/profiles",
+      "GET /api/ratings",
+      "GET /api/tariff-plans",
+      "GET /api/subscribers"
+    ],
+    "staticReads": [
+      "/data/mcc-mnc-table.json"
+    ]
+  },
+  {
     "route": "/system-health",
     "mode": "read",
     "source": "frontend/src/features/system-health/SystemHealthPage.tsx",

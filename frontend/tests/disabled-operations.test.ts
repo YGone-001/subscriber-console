@@ -174,7 +174,7 @@ test('no approval compatibility logic remains on the remediation path', () => {
 
 test('subscriber mutation surfaces use direct-execution language', () => {
   const surfaces = [
-    readFileSync(resolve(srcDir, 'components/SubscriberModal.tsx'), 'utf8'),
+    readFileSync(resolve(srcDir, 'features/subscribers/SubscriberDetailPage.tsx'), 'utf8'),
     readFileSync(resolve(srcDir, 'components/SubscriberBatchUpdateModal.tsx'), 'utf8'),
   ].join('\n');
   assert.doesNotMatch(surfaces, /提交审批|submitted for approval/i, 'subscriber writes must not present a retired approval hand-off');

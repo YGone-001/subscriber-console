@@ -6,10 +6,24 @@
 import { Users, Shield, Signal, Gauge, Server, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import { getAmbrString, typeLabel } from '../../subscribers/components/subscriber/utils';
 import { ambrSideView, mbrSideText, ratingTypeLabel, ratingUnitLabel } from '../profile-format';
+import { DEFAULT_ACCESS_RESTRICTION_BITS, accessBitLabel, type AccessRestrictionBit } from '../profile-access';
 import { isWithheldPlaceholder } from '../../../types/credential';
 import styles from '../../../styles/modules/profile.module.css';
 
-export default function ProfileViewMode({ t, authData, credentialState, rawAuth, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats, statsUnavailable }: any) {
+export default function ProfileViewMode({ t, authData, credentialState, rawAuth, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, accessBits, slices, backendStats, statsUnavailable }: any) {
+  /* The stored value is a 3GPP bitmask. Reading it is a decode, not a number the
+   * operator should have to do in their head, so the same vocabulary the editor
+   * uses is what the view renders. Unknown bits are still reported: a mask this
+   * build does not name is not an empty mask. */
+  const restrictionValue: number | null = typeof accessRestriction === "number" ? accessRestriction : null;
+  const bitOptions: AccessRestrictionBit[] = Array.isArray(accessBits) && accessBits.length > 0
+    ? accessBits
+    : DEFAULT_ACCESS_RESTRICTION_BITS;
+  const activeBits = restrictionValue === null || restrictionValue === 0 || restrictionValue === 255
+    ? []
+    : bitOptions.filter((bit) => (restrictionValue & bit.value) !== 0);
+  const knownMask = activeBits.reduce((mask, bit) => mask | bit.value, 0);
+  const unknownMask = restrictionValue === null ? 0 : restrictionValue & ~knownMask;
   const planId = String(ocsDefaults.planId || ocsDefaults.plan_id || '');
   const selectedPlan = Array.isArray(tariffPlanList)
     ? tariffPlanList.find((plan: any) => plan.plan_id === planId)
@@ -172,15 +186,26 @@ export default function ProfileViewMode({ t, authData, credentialState, rawAuth,
         </div>
         {isAccessRestrictionsExpanded && (
           <div className="dash-card-body">
-            <div className={styles.valueMono}>
-              {typeof accessRestriction !== "number"
-                ? notConfigured
-                : accessRestriction === 0
-                  ? t("prof_diff_access_none")
-                  : accessRestriction === 255
-                    ? t("prof_diff_access_suspended")
-                    : accessRestriction}
-            </div>
+            {restrictionValue === null ? (
+              <div className={styles.valueMono}>{notConfigured}</div>
+            ) : restrictionValue === 0 ? (
+              <div className={styles.valueMono}>{t("prof_diff_access_none")}</div>
+            ) : restrictionValue === 255 ? (
+              <div className={styles.valueMono}>{t("prof_diff_access_suspended")}</div>
+            ) : (
+              <div className={styles.profileContentTags}>
+                {activeBits.map((bit: AccessRestrictionBit) => (
+                  <span key={bit.value} className={`${styles.profileChip} ${styles.profileChipNeutral}`}>
+                    {accessBitLabel(t, bit)}
+                  </span>
+                ))}
+                {unknownMask !== 0 && (
+                  <span className={`${styles.profileChip} ${styles.profileChipNeutral}`}>
+                    {t("prof_access_other_bits", { mask: unknownMask })}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

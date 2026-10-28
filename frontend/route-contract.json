@@ -148,6 +148,16 @@
     "dynamicParameters": []
   },
   {
+    "route": "/subscribers/new",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/subscribers/:imsi",
+    "dynamicParameters": [
+      "imsi"
+    ]
+  },
+  {
     "route": "/system-health",
     "dynamicParameters": []
   },

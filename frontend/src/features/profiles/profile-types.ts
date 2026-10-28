@@ -65,6 +65,9 @@ export type ProfileGlobalSummary = {
   suspendedSubscribers: number;
   restrictedSubscribers: number;
   unassignedProfiles: number;
+  /* Collection-wide count, so the strip keeps describing the platform while the
+   * table pages through it. */
+  profilesWithoutBilling?: number;
   subscriberStatsCompleteness?: 'complete' | 'unavailable';
 };
 

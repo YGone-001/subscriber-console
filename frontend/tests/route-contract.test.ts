@@ -11,8 +11,8 @@ type RouteEntry = {
 
 const routes = JSON.parse(readFileSync(resolve(import.meta.dirname, '../route-contract.json'), 'utf8')) as RouteEntry[];
 
-test('route contract inventory contains all 41 canonical routes', () => {
-  assert.equal(routes.length, 41);
+test('route contract inventory contains all 43 canonical routes', () => {
+  assert.equal(routes.length, 43);
   const routePaths = routes.map((r) => r.route);
   assert.ok(routePaths.includes('/'));
   assert.ok(routePaths.includes('/login'));
@@ -30,6 +30,9 @@ test('route contract inventory contains all 41 canonical routes', () => {
   assert.ok(routePaths.includes('/users'));
   assert.ok(routePaths.includes('/users/:username'));
   assert.ok(routePaths.includes('/users/create'));
+  assert.ok(routePaths.includes('/subscribers'));
+  assert.ok(routePaths.includes('/subscribers/new'));
+  assert.ok(routePaths.includes('/subscribers/:imsi'));
   assert.ok(routePaths.includes('/system-health'));
   assert.ok(routePaths.includes('/knowledge'));
   assert.ok(routePaths.includes('/knowledge/new'));

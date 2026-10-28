@@ -9,6 +9,7 @@ import { COMPATIBILITY_REDIRECTS } from './redirects';
 import { DashboardPage } from '../features/read/ReadPages';
 import { SystemHealthPage } from '../features/system-health/SystemHealthPage';
 import { SubscribersPage } from '../features/subscribers/SubscribersPage';
+import { SubscriberDetailPage } from '../features/subscribers/SubscriberDetailPage';
 import { BalancesPage } from '../features/ocs/balances/BalancesPage';
 import { BalanceDetailPage } from '../features/ocs/balances/BalanceDetailPage';
 import { ContractsPage } from '../features/ocs/contracts/ContractsPage';
@@ -64,6 +65,8 @@ const pages: Record<string, ReactNode> = {
   '/profile/new': <ProfileDetailPage />,
   '/profile/:name': <ProfileDetailPage />,
   '/subscribers': <SubscribersPage />,
+  '/subscribers/new': <SubscriberDetailPage />,
+  '/subscribers/:imsi': <SubscriberDetailPage />,
   '/system-health': <SystemHealthPage />,
   '/users': <UsersPage />,
   '/users/:username': <UserDetailPage />,

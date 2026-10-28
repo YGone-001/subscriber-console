@@ -51,6 +51,8 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/rating/rules', targetRoute: '/rating/rules', dynamicParameters: [], labelKey: 'nav_rating_rules', icon: FileText },
   { route: '/roles', targetRoute: '/roles', dynamicParameters: [], labelKey: 'nav_roles', icon: UserCog },
   { route: '/subscribers', targetRoute: '/subscribers', dynamicParameters: [], labelKey: 'nav_subscriber', icon: Users, group: 'business', visible: true },
+  { route: '/subscribers/new', targetRoute: '/subscribers/new', dynamicParameters: [], labelKey: 'nav_subscriber_new', icon: Users },
+  { route: '/subscribers/:imsi', targetRoute: '/subscribers/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_subscriber', icon: Users },
   { route: '/system-health', targetRoute: '/system-health', dynamicParameters: [], labelKey: 'nav_system_health', icon: Activity, group: 'platform', visible: true },
   { route: '/users', targetRoute: '/users', dynamicParameters: [], labelKey: 'nav_system_users', icon: UserCog, group: 'platform', visible: true, permission: 'users.read' },
   { route: '/users/:username', targetRoute: '/users/:username', dynamicParameters: ['username'], labelKey: 'nav_dashboard', icon: FileText },

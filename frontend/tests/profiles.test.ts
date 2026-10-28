@@ -656,6 +656,46 @@ test('template detail drills down into linked subscribers through the profile fi
   assert.match(subscribersPage, /filterParams\.set\('profile', profileDrillDown\)/);
 });
 
+/* A read that failed is not an empty platform. The page states the failure, and
+ * it never sends a search term the service can only answer with nothing: an
+ * unusable term used to empty the table and zero every counter at once. */
+test('the subscriber list separates a failed read from an empty page', () => {
+  const page = read('../src/features/subscribers/SubscribersPage.tsx');
+  assert.match(page, /error: subscribersError/);
+  assert.match(page, /<ErrorState/);
+  assert.match(page, /onRetry=\{\(\) => \{ void mutateSubscribers\(\); \}\}/);
+  assert.match(
+    page,
+    /const listUnavailable = Boolean\(subscribersError\) && !subscribersData && !isLoading;/,
+  );
+  assert.match(page, /const listReloadFailed = Boolean\(subscribersError\) && Boolean\(subscribersData\)/);
+  assert.ok(!/<EmptyState/.test(page), 'the page must not answer a failed read with its own empty state');
+
+  /* Digits only, bounded to the 15-digit address space. */
+  assert.match(page, /const SEARCH_TERM_PATTERN = \/\^\\d\{1,15\}\$\//);
+  assert.match(page, /const subscriberQuery = isValidSearchTerm\(debouncedSearchQuery\)/);
+  assert.match(page, /lastValidSearchRef\.current = debouncedSearchQuery/);
+  assert.match(page, /t\('sub_search_invalid_hint'\)/);
+});
+
+/* The subscriber record is a route, like every other first-class entity. The
+ * modal carried no address and forced its own notices into a second layer. */
+test('the subscriber detail is a route page, not a modal', () => {
+  const detail = read('../src/features/subscribers/SubscriberDetailPage.tsx');
+  assert.match(detail, /useAppParam\('imsi'\)/);
+  assert.match(detail, /useSubscriberForm\(/);
+  /* Editing is a state of the page, so leaving it restores the stored record. */
+  assert.match(detail, /actions\.discardDraft\(\)/);
+
+  const list = read('../src/features/subscribers/SubscribersPage.tsx');
+  assert.match(list, /router\.push\(`\/subscribers\/\$\{encodeURIComponent\(imsi\)\}`\)/);
+  assert.match(list, /router\.push\('\/subscribers\/new'\)/);
+  assert.ok(!list.includes('SubscriberModal'), 'the list must navigate instead of opening a modal');
+
+  const components = readdirSync(new URL('../src/components', import.meta.url));
+  assert.ok(!components.includes('SubscriberModal.tsx'), 'the retired modal must not come back');
+});
+
 test('the compact AMBR pair drops the direction words the column heading already carries', () => {
   assert.equal(formatAmbrPairCompact(null, 'N/A'), 'N/A');
   assert.equal(formatAmbrPairCompact({ downlink: null, uplink: null }, 'N/A'), 'N/A');

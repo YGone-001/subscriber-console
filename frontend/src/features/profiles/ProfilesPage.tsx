@@ -153,11 +153,16 @@ export function ProfilesPage() {
       ?? profiles.reduce((sum, profile) => sum + linkedSubscriberCount(profile), 0);
     const unassigned = backendSummary?.unassignedProfiles
       ?? profiles.filter((profile) => linkedSubscriberCount(profile) === 0).length;
+    /* The server counts the whole collection. Counting the loaded rows here would
+     * make this card describe the first page while its neighbours describe the
+     * platform. */
+    const withoutBilling = backendSummary?.profilesWithoutBilling
+      ?? countProfilesWithoutBilling(profiles);
     return {
       total,
       impacted,
       unassigned,
-      withoutBilling: countProfilesWithoutBilling(profiles),
+      withoutBilling,
     };
   }, [backendSummary, profiles]);
 

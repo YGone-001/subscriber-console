@@ -18,15 +18,15 @@
  * Everything else — the PLMN longest-prefix resolver, the cross-page selection
  * model, the summary strip, the toolbar, the table and the modals — is unchanged.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ArrowUpDown, Layers } from 'lucide-react';
-import SubscriberModal from '../../components/SubscriberModal';
 import BatchCreateModal from '../../components/BatchCreateModal';
 import SubscriberBatchUpdateModal from '../../components/SubscriberBatchUpdateModal';
 import TrafficAdjustmentModal from '../../components/TrafficAdjustmentModal';
 import { ConfirmActionPanel, OperationNotice } from '../../components/ui/OperationFeedback';
 import { DataTablePagination } from '../../components/ui/DataTablePagination';
+import { ErrorState } from '../../components/ui/StatePanel';
 import PageHeader from '../../components/ui/PageHeader';
 import SubscriberSummaryPanel from './components/SubscriberSummaryPanel';
 import { SubscriberToolbar } from './components/SubscriberToolbar';
@@ -38,6 +38,7 @@ import { hasPermission } from '../../lib/permissions';
 import { copyText } from '../../lib/clipboard';
 import { useRead } from '../../lib/api/use-read';
 import { deleteJson, postJson } from '../../lib/api/mutation-client';
+import { useAppRouter } from '../../lib/ui-compat/router';
 import { buildProfileApplyRequest } from './mutation-contract';
 import type {
   FeedbackState,
@@ -53,6 +54,14 @@ import type {
 
 const SUBSCRIBER_PAGE_SIZES = [10, 20, 50] as const;
 
+/* The service addresses subscribers by a numeric IMSI prefix or a full MSISDN
+ * (at most 15 digits). A term that can never match is not sent at all: the list
+ * would answer with an empty page and every counter would read zero, which
+ * describes an empty platform rather than an unanswered question. */
+const SEARCH_TERM_PATTERN = /^\d{1,15}$/;
+
+const isValidSearchTerm = (term: string) => term === '' || SEARCH_TERM_PATTERN.test(term);
+
 const DEFAULT_FILTERS: SubscriberFilterState = {
   access: 'all',
   contract: 'all',
@@ -64,6 +73,7 @@ const DEFAULT_FILTERS: SubscriberFilterState = {
 export function SubscribersPage() {
   const { t } = useI18n();
   const { user } = useAuth();
+  const router = useAppRouter();
   const canEditSubscribers = hasPermission(user, 'subscribers.write');
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,8 +94,6 @@ export function SubscribersPage() {
   const [filters, setFilters] = useState<SubscriberFilterState>(DEFAULT_FILTERS);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
 
-  const [modalImsi, setModalImsi] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [profileApplyTarget, setProfileApplyTarget] = useState<SubscriberRow | null>(null);
   const [applyProfileName, setApplyProfileName] = useState('');
@@ -120,7 +128,16 @@ export function SubscribersPage() {
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
-  const subscriberQuery = debouncedSearchQuery;
+  /* While the input cannot match anything, the previous valid term stays in
+   * effect: the table keeps the rows it was showing and the toolbar says why. */
+  const lastValidSearchRef = useRef('');
+  useEffect(() => {
+    if (isValidSearchTerm(debouncedSearchQuery)) lastValidSearchRef.current = debouncedSearchQuery;
+  }, [debouncedSearchQuery]);
+  const searchTermInvalid = !isValidSearchTerm(searchQuery.trim());
+  const subscriberQuery = isValidSearchTerm(debouncedSearchQuery)
+    ? debouncedSearchQuery
+    : lastValidSearchRef.current;
   const filterParams = new URLSearchParams({
     detail: 'true',
     page: String(currentPage),
@@ -137,7 +154,16 @@ export function SubscribersPage() {
   if (filters.balance !== 'all') filterParams.set('balanceStatus', filters.balance);
   if (profileDrillDown) filterParams.set('profile', profileDrillDown);
   const subscribersUrl = `/api/subscribers?${filterParams.toString()}`;
-  const { data: subscribersData, isLoading, mutate: mutateSubscribers } = useRead<SubscribersResponse>(subscribersUrl);
+  const { data: subscribersData, isLoading, error: subscribersError, mutate: mutateSubscribers } = useRead<SubscribersResponse>(subscribersUrl);
+
+  /* A failed read is not an empty list. Without a previous page there is nothing
+   * truthful to render, so the table states the failure; with a previous page the
+   * rows stay and the failure is appended instead of replacing them. */
+  const listUnavailable = Boolean(subscribersError) && !subscribersData && !isLoading;
+  const listReloadFailed = Boolean(subscribersError) && Boolean(subscribersData) && !isLoading;
+  const listErrorMessage = subscribersError instanceof Error
+    ? subscribersError.message
+    : String(subscribersError ?? '');
 
   const subscribers = subscribersData?.subscribers || [];
   const totalSubscribers = subscribersData?.total || 0;
@@ -157,14 +183,12 @@ export function SubscribersPage() {
   const canAdjustBalance = hasPermission(user, 'ocs.balance.adjust');
 
   const handleOpenNew = () => {
-    setModalImsi(null);
-    setIsModalOpen(true);
+    router.push('/subscribers/new');
   };
 
   const handleOpenView = (imsi: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setModalImsi(imsi);
-    setIsModalOpen(true);
+    router.push(`/subscribers/${encodeURIComponent(imsi)}`);
   };
 
   const handleDelete = (imsi: string, e?: React.MouseEvent) => {
@@ -364,8 +388,14 @@ export function SubscribersPage() {
     return null;
   })();
 
+  /* The first card is the result size, so it must stop claiming to be a platform
+   * total as soon as any filter narrows the view. */
+  const allCardLabel = subscriberQuery || hasActiveFilters
+    ? t('subscriber_summary_matched')
+    : t('subscriber_summary_total');
+
   const summaryCards = [
-    { key: 'all' as const, label: subscriberQuery ? t('subscriber_summary_matched') : t('subscriber_summary_total'), value: subscriberSummary.total, tone: 'primary' },
+    { key: 'all' as const, label: allCardLabel, value: subscriberSummary.total, tone: 'primary' },
     { key: 'active' as const, label: t('subscriber_summary_active'), value: subscriberSummary.active, tone: 'success' },
     { key: 'restricted' as const, label: t('subscriber_summary_restricted'), value: subscriberSummary.restricted, tone: 'danger' },
     { key: 'lowBalance' as const, label: t('subscriber_summary_low_balance'), value: subscriberSummary.lowBalance ?? 0, tone: 'warning' },
@@ -409,12 +439,15 @@ export function SubscribersPage() {
           description={t('subscriber_subtitle')}
         />
 
-        <SubscriberSummaryPanel
-          summaryCards={summaryCards}
-          activeCard={activeCard}
-          onSelect={handleSummarySelect}
-        />
-
+        {/* A failed read explains itself; five zeroed counters would describe an
+          * empty platform instead of an unanswered request. */}
+        {!listUnavailable && (
+          <SubscriberSummaryPanel
+            summaryCards={summaryCards}
+            activeCard={activeCard}
+            onSelect={handleSummarySelect}
+          />
+        )}
         {/* A page-level notice is modal so a destructive action is explicitly
           * acknowledged. It must not render while a confirm dialog is mounted, or it
           * would portal on top of it and make the dialog's buttons unreachable. */}
@@ -491,6 +524,10 @@ export function SubscribersPage() {
           setIsBatchOpen={setIsBatchOpen}
         />
 
+        {searchTermInvalid && (
+          <p className="warning-text" role="alert">{t('sub_search_invalid_hint')}</p>
+        )}
+
         <SubscriberFilters
           filters={filters}
           planOptions={planOptions}
@@ -508,59 +545,75 @@ export function SubscribersPage() {
         )}
 
         <div className="dash-card shadow table-card">
-          <SubscriberTable
-            isLoading={isLoading}
-            totalSubscribers={totalSubscribers}
-            searchQuery={subscriberQuery}
-            hasActiveFilters={hasActiveFilters}
-            canEditSubscribers={canEditSubscribers}
-            canAdjustBalance={canAdjustBalance}
-            handleOpenNew={handleOpenNew}
-            isAllPageSelected={isAllPageSelected}
-            selectedOnPageCount={selectedOnPageCount}
-            pageImsis={pageImsis}
-            toggleSelectAll={toggleSelectAll}
-            sortField={sortField}
-            sortDirection={sortDirection}
-            handleSort={handleSort}
-            renderSortIcon={renderSortIcon}
-            paginatedSubscribers={paginatedSubscribers}
-            selectedImsis={selectedImsis}
-            setSelectedImsis={setSelectedImsis}
-            copiedImsi={copiedImsi}
-            handleCopyImsi={handleCopyImsi}
-            resolveNetwork={resolveNetwork}
-            formatFullDate={formatFullDate}
-            timeAgo={timeAgo}
-            handleOpenView={handleOpenView}
-            handleDelete={handleDelete}
-            isDeletingSingle={isDeletingSingle}
-            pendingDelete={pendingDelete}
-            activeDropdown={activeDropdown}
-            setActiveDropdown={setActiveDropdown}
-            handleOpenTrafficAdjustment={handleOpenTrafficAdjustment}
-            handleOpenProfileApply={handleOpenProfileApply}
-          />
-          {!isLoading && (
-            <DataTablePagination
-              page={displayPage}
-              pageSize={pageSize}
-              total={totalSubscribers}
-              visibleCount={subscribers.length}
-              totalPages={totalPages}
-              pageSizes={SUBSCRIBER_PAGE_SIZES}
-              labels={{
-                showing: t('showing'),
-                to: t('to'),
-                of: t('of'),
-                entries: t('entries'),
-                previous: t('prev'),
-                next: t('next'),
-                perPage: t('per_page'),
-              }}
-              onPageChange={(next) => setCurrentPage(next)}
-              onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+          {listReloadFailed && (
+            <p className="warning-text" role="alert">{t('sub_err_list_load')} {listErrorMessage}</p>
+          )}
+          {listUnavailable ? (
+            <ErrorState
+              title={t('sub_err_list_load')}
+              message={listErrorMessage}
+              retryLabel={t('retry')}
+              onRetry={() => { void mutateSubscribers(); }}
             />
+          ) : (
+            <>
+              <SubscriberTable
+                isLoading={isLoading}
+                totalSubscribers={totalSubscribers}
+                searchQuery={subscriberQuery}
+                hasActiveFilters={hasActiveFilters}
+                canEditSubscribers={canEditSubscribers}
+                canAdjustBalance={canAdjustBalance}
+                handleOpenNew={handleOpenNew}
+                isAllPageSelected={isAllPageSelected}
+                selectedOnPageCount={selectedOnPageCount}
+                pageImsis={pageImsis}
+                toggleSelectAll={toggleSelectAll}
+                sortField={sortField}
+                sortDirection={sortDirection}
+                handleSort={handleSort}
+                renderSortIcon={renderSortIcon}
+                paginatedSubscribers={paginatedSubscribers}
+                selectedImsis={selectedImsis}
+                setSelectedImsis={setSelectedImsis}
+                copiedImsi={copiedImsi}
+                handleCopyImsi={handleCopyImsi}
+                resolveNetwork={resolveNetwork}
+                formatFullDate={formatFullDate}
+                timeAgo={timeAgo}
+                handleOpenView={handleOpenView}
+                handleDelete={handleDelete}
+                isDeletingSingle={isDeletingSingle}
+                pendingDelete={pendingDelete}
+                activeDropdown={activeDropdown}
+                setActiveDropdown={setActiveDropdown}
+                handleOpenTrafficAdjustment={handleOpenTrafficAdjustment}
+                handleOpenProfileApply={handleOpenProfileApply}
+                profiles={profileList}
+                profilesReady={Boolean(profileData)}
+              />
+              {!isLoading && (
+                <DataTablePagination
+                  page={displayPage}
+                  pageSize={pageSize}
+                  total={totalSubscribers}
+                  visibleCount={subscribers.length}
+                  totalPages={totalPages}
+                  pageSizes={SUBSCRIBER_PAGE_SIZES}
+                  labels={{
+                    showing: t('showing'),
+                    to: t('to'),
+                    of: t('of'),
+                    entries: t('entries'),
+                    previous: t('prev'),
+                    next: t('next'),
+                    perPage: t('per_page'),
+                  }}
+                  onPageChange={(next) => setCurrentPage(next)}
+                  onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                />
+              )}
+            </>
           )}
         </div>
       </div>
@@ -571,14 +624,6 @@ export function SubscribersPage() {
         onSuccess={() => { void mutateSubscribers(); }}
         profileList={profileList}
       />
-
-      {isModalOpen && (
-        <SubscriberModal
-          imsi={modalImsi}
-          onClose={() => setIsModalOpen(false)}
-          onRefresh={() => { void mutateSubscribers(); }}
-        />
-      )}
 
       {trafficAdjustmentTarget && (
         <TrafficAdjustmentModal

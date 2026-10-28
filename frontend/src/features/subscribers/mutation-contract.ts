@@ -167,6 +167,10 @@ export interface SubscriberCreatePayload {
   planId?: string;
   msisdn?: string;
   auth4G?: CreateAuth4G;
+  /* The template this record is created from. The service records it as the same
+   * binding the governed apply writes, so a subscriber created from a template is
+   * template-governed from birth instead of invisible to it. */
+  profileName?: string;
 }
 
 export interface SubscriberUpdatePayload {
@@ -374,7 +378,7 @@ function normalizeCreateHex(value: string, pattern: RegExp, label: string): stri
 
 export function buildSubscriberCreateRequest(
   imsi: string,
-  options?: { planId?: string; msisdn?: string; auth4G?: { k?: string; op?: string; opc?: string; amf?: string; sqn?: number } },
+  options?: { planId?: string; msisdn?: string; profileName?: string; auth4G?: { k?: string; op?: string; opc?: string; amf?: string; sqn?: number } },
 ): SubscriberCreatePayload {
   const trimmedImsi = String(imsi || '').trim();
   if (!trimmedImsi) {
@@ -388,6 +392,9 @@ export function buildSubscriberCreateRequest(
   }
   if (options?.msisdn?.trim()) {
     payload.msisdn = options.msisdn.trim();
+  }
+  if (options?.profileName?.trim()) {
+    payload.profileName = options.profileName.trim();
   }
 
   const raw = options?.auth4G;

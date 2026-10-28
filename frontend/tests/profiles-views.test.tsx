@@ -227,6 +227,22 @@ test('a template without slices renders the empty state instead of a blank table
   assert.ok(markup.includes(zh.prof_no_slices), 'the absence must be stated');
 });
 
+/* The stored value is a 3GPP bitmask: the view decodes it with the same
+ * vocabulary the editor offers, and a bit this build cannot name is still
+ * reported instead of being dropped. */
+test('a restriction bitmask renders as named bits, not as a bare number', () => {
+  /* 23 = E-UTRAN(16) + GAN(4) + GERAN(2) + UTRAN(1). */
+  const card = between(renderView({ accessRestriction: 23 }), 'psec-access-restrictions', 'psec-slices');
+  for (const label of [zh.sub_acc_eutran, zh.sub_acc_gan, zh.sub_acc_geran, zh.sub_acc_utran]) {
+    assert.ok(card.includes(label), `the ${label} bit must be named`);
+  }
+  assert.ok(!card.includes('>23<'), 'the number is not the answer the operator needs');
+
+  const unnamed = between(renderView({ accessRestriction: 512 }), 'psec-access-restrictions', 'psec-slices');
+  assert.ok(unnamed.includes('512'), 'a bit this build does not name must still be reported');
+  assert.ok(unnamed.includes(zh.prof_access_other_bits.replace('{mask}', '512')));
+});
+
 /* ------------------------------------------------------------ locale -- */
 
 /* The stated condition has to survive both bundles, or the English console renders

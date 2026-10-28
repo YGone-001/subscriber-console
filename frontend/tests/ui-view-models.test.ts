@@ -26,6 +26,7 @@ import {
   toTariffDetailViewModel,
   toTariffListViewModel,
 } from '../src/features/ocs/ocs-view-models';
+import { resolveTemplateBinding } from '../src/features/subscribers/subscriber-template-binding';
 
 /* ------------------------------------------------------------ envelopes -- */
 
@@ -163,4 +164,27 @@ test('the tariff list and detail envelopes are unwrapped', () => {
   assert.equal(detail.planId, 'plan_default_10gb');
   assert.equal(detail.isDefault, true);
   assert.equal(detail.subscriberCount, null, 'a missing count stays null rather than 0');
+});
+
+/* ---------------------------------------------- template binding states -- */
+
+/* A binding is a name, not a foreign key. The three states must stay distinct:
+ * "no template", "template deleted" and "catalog still loading". */
+test('a template binding resolves to bound, dangling or unbound', () => {
+  const catalog = [{ name: 'tpl_5g', title: '5G template' }];
+
+  assert.equal(resolveTemplateBinding('', catalog, true).state, 'unbound');
+  assert.equal(resolveTemplateBinding('   ', catalog, true).state, 'unbound');
+  assert.equal(resolveTemplateBinding(null, catalog, true).state, 'unbound');
+
+  const bound = resolveTemplateBinding('tpl_5g', catalog, true);
+  assert.equal(bound.state, 'bound');
+  assert.equal(bound.template?.title, '5G template');
+
+  /* The catalog answered and does not contain the name: the template is gone. */
+  assert.equal(resolveTemplateBinding('tpl_removed', catalog, true).state, 'dangling');
+
+  /* The catalog has not answered yet: do not accuse the binding of being dead. */
+  assert.equal(resolveTemplateBinding('tpl_5g', [], false).state, 'pending');
+  assert.equal(resolveTemplateBinding('tpl_removed', [], false).state, 'pending');
 });

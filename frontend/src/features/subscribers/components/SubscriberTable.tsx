@@ -13,6 +13,7 @@ import { EmptyState, LoadingRows } from '../../../components/ui/OperationFeedbac
 import { SortableTableHeader } from '../../../components/ui/SortableTableHeader';
 import { useAppRouter } from '../../../lib/ui-compat/router';
 import { formatBytes } from '../../../lib/unitParser';
+import { resolveTemplateBinding } from '../subscriber-template-binding';
 import type { SubscriberRow } from '../types';
 
 const ACTION_MENU_WIDTH = 180;
@@ -84,6 +85,10 @@ export interface SubscriberTableProps {
   setActiveDropdown: React.Dispatch<React.SetStateAction<string | null>>;
   handleOpenTrafficAdjustment: (sub: SubscriberRow, e?: React.MouseEvent) => void;
   handleOpenProfileApply: (sub: SubscriberRow) => void;
+  /* The template catalog decides whether a binding still resolves. It is passed
+   * down so a dangling binding is visible instead of rendering as a name. */
+  profiles: Array<{ name: string; title?: string }>;
+  profilesReady: boolean;
 }
 
 function contractStatusLabel(t: (key: string, params?: Record<string, string | number>) => string, value?: string) {
@@ -118,7 +123,7 @@ export function SubscriberTable(props: SubscriberTableProps) {
     selectedImsis, setSelectedImsis, copiedImsi, handleCopyImsi, resolveNetwork,
     formatFullDate, timeAgo, handleOpenView, handleDelete,
     isDeletingSingle, pendingDelete, activeDropdown, setActiveDropdown,
-    handleOpenTrafficAdjustment, handleOpenProfileApply,
+    handleOpenTrafficAdjustment, handleOpenProfileApply, profiles, profilesReady,
   } = props;
 
   useEffect(() => {
@@ -173,7 +178,7 @@ export function SubscriberTable(props: SubscriberTableProps) {
   };
 
   if (isLoading) {
-    return <LoadingRows columns={canEditSubscribers ? 8 : 7} rows={5} />;
+    return <LoadingRows columns={canEditSubscribers ? 9 : 8} rows={5} />;
   }
 
   if (totalSubscribers === 0) {
@@ -242,6 +247,7 @@ export function SubscriberTable(props: SubscriberTableProps) {
             <SortableTableHeader label={t("col_status")} active={sortField === "status"} direction={sortDirection} icon={renderSortIcon("status")} onSort={() => handleSort("status")} />
             <SortableTableHeader label={t("subscriber_user_column")} active={sortField === "imsi"} direction={sortDirection} icon={renderSortIcon("imsi")} onSort={() => handleSort("imsi")} />
             <th data-column-priority="important">{t("sub_contract_status")}</th>
+            <th data-column-priority="important">{t("sub_profile_column")}</th>
             <SortableTableHeader priority="important" label={t("col_policy")} active={sortField === "policy"} direction={sortDirection} icon={renderSortIcon("policy")} onSort={() => handleSort("policy")} />
             <SortableTableHeader label={t("col_traffic")} active={sortField === "usage"} direction={sortDirection} icon={renderSortIcon("usage")} onSort={() => handleSort("usage")} className="usage-column" />
             <SortableTableHeader priority="important" label={t("col_last_active")} active={sortField === "lastActive"} direction={sortDirection} icon={renderSortIcon("lastActive")} onSort={() => handleSort("lastActive")} />
@@ -362,6 +368,41 @@ export function SubscriberTable(props: SubscriberTableProps) {
                       </span>
                     )}
                   </div>
+                </td>
+                <td data-label={t("sub_profile_column")} data-column-priority="important">
+                  {(() => {
+                    const binding = resolveTemplateBinding(
+                      typeof sub.profile === 'string' ? sub.profile : '',
+                      profiles,
+                      profilesReady,
+                    );
+                    if (binding.state === 'unbound') {
+                      return <span className="no-policy">{t("sub_tpl_unbound")}</span>;
+                    }
+                    if (binding.state === 'pending') {
+                      return <span className="policy-text">{binding.name}</span>;
+                    }
+                    if (binding.state === 'dangling') {
+                      return (
+                        <span className="provisioning-warning" title={t("sub_tpl_dangling_hint")}>
+                          <AlertTriangle size={13} /> {t("sub_tpl_dangling")}
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        type="button"
+                        className="imsi-link"
+                        title={binding.name}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          router.push(`/profile/${encodeURIComponent(binding.name)}`);
+                        }}
+                      >
+                        {binding.template?.title || binding.name}
+                      </button>
+                    );
+                  })()}
                 </td>
                 <td data-label={t("col_policy")} data-column-priority="important">
                   {sub.policy ? (
