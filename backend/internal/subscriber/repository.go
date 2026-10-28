@@ -363,10 +363,10 @@ func toSubscriberRow(
 		// One binding authority. A narrower reader that saw only
 		// webui_meta.profile_name used to project this field, so a row could
 		// disagree with the template that counted the same subscriber.
-		Profile:          GetProfileName(xcloudDoc),
-		Policy:           planID,
-		PolicyName:       planName,
-		PolicyStatus:     planStatus,
+		Profile:      GetProfileName(xcloudDoc),
+		Policy:       planID,
+		PolicyName:   planName,
+		PolicyStatus: planStatus,
 		Provisioning: SubscriberProvisioning{
 			Contract:   ocsSubDoc != nil,
 			Balance:    balanceDoc != nil,
