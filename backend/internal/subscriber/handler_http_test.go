@@ -664,7 +664,7 @@ func TestBatchCreate_OperatorDirectPath(t *testing.T) {
 
 	ctx := context.Background()
 	// Insert a profile for loadProfileData
-	_, err := repo.subscribers.Database().Collection("profiles").InsertOne(ctx, bson.M{
+	_, err := repo.profiles.InsertOne(ctx, bson.M{
 		"name":        "test_profile",
 		"profileName": "test_profile",
 		"sub4G": bson.M{
@@ -733,7 +733,7 @@ func TestBatchCreate_SuperAdminDirectPath(t *testing.T) {
 
 	ctx := context.Background()
 	// Insert a profile for loadProfileData
-	_, err := repo.subscribers.Database().Collection("profiles").InsertOne(ctx, bson.M{
+	_, err := repo.profiles.InsertOne(ctx, bson.M{
 		"name":        "test_profile",
 		"profileName": "test_profile",
 		"sub4G": bson.M{
@@ -838,7 +838,7 @@ func TestBatchCreate_RootDirectPath(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	_, err := repo.subscribers.Database().Collection("profiles").InsertOne(ctx, bson.M{
+	_, err := repo.profiles.InsertOne(ctx, bson.M{
 		"name":        "default",
 		"profileName": "default",
 		"sub4G": bson.M{

@@ -42,6 +42,10 @@ func ocsTestRepo(t *testing.T) (*Repository, func()) {
 		ocsSubs:     db.Collection("ocs_subscribers"),
 		ocsBalances: db.Collection("ocs_balances"),
 		tariffPlans: db.Collection("ocs_tariff_plans"),
+		/* The template store is wired the way production wires it: batch creation
+		 * loads the named template from here, and a nil store would silently turn
+		 * every named template into "absent". */
+		profiles: opsDb.Collection("app_profiles"),
 	}
 
 	cleanup := func() {
