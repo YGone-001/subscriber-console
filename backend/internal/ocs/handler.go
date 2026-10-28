@@ -2,21 +2,35 @@ package ocs
 
 import (
 	"net/http"
+	"strings"
 
+	"subscriber/internal/audit"
 	"subscriber/internal/auth"
-	"subscriber/internal/ratelimit"
 	"subscriber/internal/response"
 )
 
 // Handler provides HTTP handlers for OCS read endpoints.
+//
+// The limiter is the package-level RateLimiter (shared with the write handlers),
+// so read handlers can be exercised without a database-backed limiter.
 type Handler struct {
-	repo    *Repository
-	limiter *ratelimit.Limiter
+	repo        *Repository
+	limiter     RateLimiter
+	auditWriter *audit.Writer
 }
 
 // NewHandler creates a new OCS Handler.
-func NewHandler(repo *Repository, limiter *ratelimit.Limiter) *Handler {
+//
+// Kept for compatibility: the original constructor had no denial auditor, and
+// existing call sites keep working unchanged.
+func NewHandler(repo *Repository, limiter RateLimiter) *Handler {
 	return &Handler{repo: repo, limiter: limiter}
+}
+
+// NewHandlerWithAudit creates an OCS read handler that records authorization
+// denials as audit evidence, matching the other governed read surfaces.
+func NewHandlerWithAudit(repo *Repository, limiter RateLimiter, auditWriter *audit.Writer) *Handler {
+	return &Handler{repo: repo, limiter: limiter, auditWriter: auditWriter}
 }
 
 // Balances handles GET /api/ocs/balances
@@ -193,6 +207,49 @@ func (h *Handler) Subscribers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, result)
+}
+
+// GetSubscriber handles GET /api/ocs/subscribers/{imsi}.
+//
+// It answers with exactly the requested contract, which is what allows the
+// console to tell "this contract does not exist" apart from "this identifier was
+// only a prefix of some other contract". A not-found answer is a 404, never a
+// neighbouring record.
+func (h *Handler) GetSubscriber(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "ocs.read", h.auditWriter) {
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "ocs:subscribers:get:"+p.Username, 120, 60) {
+		return
+	}
+
+	imsi := strings.TrimSpace(r.PathValue("imsi"))
+	if !imsiRegex.MatchString(imsi) {
+		response.Error(w, http.StatusBadRequest, "Valid IMSI is required", "OCS_INVALID_IMSI")
+		return
+	}
+
+	record, err := h.repo.GetSubscriberRecord(r.Context(), imsi)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if record == nil {
+		response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"ok":     true,
+		"record": record,
+	})
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ Target Components: Go Backend (:18888, API + embedded static React SPA), Nginx E
 The **OCS Management Plane** governs administrative operations for commercial telecommunication offerings, subscriber billing contracts, and quota balances. It operates strictly separated from the runtime **Charging Plane** (Gy/Ro/CCR/Diameter rating and session management).
 
 ### Operational Invariants
-1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Nginx edge routes `/api` and `/api/*` straight to Go (`GoRegistered = 162`); Go serves UI pages via embedded static React SPA. No fallback backend exists.
+1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Nginx edge routes `/api` and `/api/*` straight to Go (`GoRegistered = 164`); Go serves UI pages via embedded static React SPA. No fallback backend exists.
 2. **Canonical RBAC & Direct Execution**:
    - `admin`: System administration, user management, and direct business mutations.
    - `operator`: Core operational mutations (subscribers, balances, profiles, tariffs, rating) execute directly without approval. No user administration.
@@ -161,6 +161,11 @@ Target Collection: `xcloud.ocs_subscribers`
 - Detail page: identity, billing (plan name, quota, status), timestamps, and the
   same lifecycle actions with confirmation. A missing identifier renders the
   "not found" state; it never falls back to a neighbouring record.
+- The detail page reads one contract by its exact identifier with
+  `GET /api/ocs/subscribers/{imsi}` (`ocs.read`). A malformed identifier answers
+  `400 OCS_INVALID_IMSI`, an absent contract `404 OCS_SUBSCRIBER_NOT_FOUND`;
+  neither path can return a different contract whose IMSI merely contains the
+  requested fragment.
 
 ---
 
@@ -206,6 +211,12 @@ To adjust quota for a subscriber:
 - The detail page reads `GET /api/ocs/balances/{imsi}` (exact record), shows the
   billing cycle window, the record version and the links to the charging contract
   and the subscriber record.
+- The adjustment trail comes from `GET /api/ocs/balances/{imsi}/adjustments`
+  (bounded `page`/`limit`, newest first). It projects the `BALANCE_ADJUST`
+  operation-log records for that account: time, actor, role, result, reason,
+  bucket, operation, amount, ticket id and the before/after version. Readers
+  need `ocs.read`; the record is read-only and never exposes the raw audit
+  document.
 
 ### 5.3 Permanent Reset Prohibition
 > [!CAUTION]
@@ -299,4 +310,4 @@ db.app_audit_logs.find({
 
 The OCS Management Plane is in permanent maintenance mode.  
 No further architectural modifications, new management routes, or Charging Plane couplings are permitted.  
-Production routing invariant `GoRegistered = 162` is strictly maintained.
+Production routing invariant `GoRegistered = 164` is strictly maintained.

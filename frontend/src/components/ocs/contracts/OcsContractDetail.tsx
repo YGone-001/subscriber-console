@@ -26,7 +26,7 @@ import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
 import {
-  toContractListViewModel,
+  toContractViewModel,
   toTariffListViewModel,
   type TariffPlanViewModel,
 } from '../../../features/ocs/ocs-view-models';
@@ -49,12 +49,14 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
   const [tariffDraft, setTariffDraft] = useState('');
 
   const { data, error, isLoading: loading, mutate: refresh } = useRead<unknown>(
-    requested ? `/api/ocs/subscribers?imsi=${encodeURIComponent(requested)}&page=1&limit=50` : null,
+    requested ? `/api/ocs/subscribers/${encodeURIComponent(requested)}` : null,
   );
   const { data: tariffs } = useRead<unknown>('/api/tariff-plans');
 
-  const records = toContractListViewModel(data).records;
-  const contract = records.find((record) => record.imsi === requested) ?? null;
+  /* The endpoint answers with exactly the requested contract, so a missing
+   * identifier can no longer fall back to a neighbouring record whose IMSI
+   * merely contains the same digits. */
+  const contract = toContractViewModel(data);
 
   const plans = useMemo<TariffPlanViewModel[]>(() => toTariffListViewModel(tariffs).records, [tariffs]);
   const planById = useMemo(() => {
@@ -105,7 +107,9 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
     if (status === 403) {
       return <div className="ocs-container"><OcsDetailState kind="forbidden" backTo={backTo} /></div>;
     }
-    if (status === 404) {
+    /* A malformed identifier and an absent contract are the same outcome for the
+     * operator: there is nothing to open at this address. */
+    if (status === 404 || status === 400) {
       return <div className="ocs-container"><OcsDetailState kind="notFound" backTo={backTo} /></div>;
     }
     return (

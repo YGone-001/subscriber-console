@@ -186,6 +186,119 @@ func (r *Repository) GetBalanceByIMSI(ctx context.Context, imsi string) (*Balanc
 	return &rec, nil
 }
 
+// ListAdjustments returns the governed adjustment trail for one balance account.
+//
+// The trail is the operation log, not a second balance store: every successful
+// adjustment writes a BALANCE_ADJUST record whose target is `balance:<imsi>`.
+// Reading it back is what makes a governed write reviewable after the fact.
+//
+// The read is bounded (page/limit) and projects only the fields an operator needs
+// to reconstruct the change; the full audit document is never returned.
+func (r *Repository) ListAdjustments(ctx context.Context, imsi string, page, limit int) (AdjustmentListResponse, error) {
+	response := AdjustmentListResponse{
+		OK:      true,
+		IMSI:    imsi,
+		Page:    max(1, page),
+		Limit:   clampLimit(limit),
+		Records: []AdjustmentRecord{},
+	}
+
+	/* Without an audit collection handle there is no trail to read. That is an
+	 * empty result, not a failure: the balance record itself is still valid. */
+	if r.auditLogs == nil {
+		return response, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"module": "ocs",
+		"action": "BALANCE_ADJUST",
+		"$or": []bson.M{
+			{"targetId": "balance:" + imsi},
+			{"resource.id": imsi},
+		},
+	}
+
+	total, err := r.auditLogs.CountDocuments(ctx, filter)
+	if err != nil {
+		return AdjustmentListResponse{}, err
+	}
+
+	cursor, err := r.auditLogs.Find(ctx, filter, options.Find().
+		SetSort(bson.D{{Key: "timestamp", Value: -1}, {Key: "_id", Value: -1}}).
+		SetSkip(int64((response.Page-1)*response.Limit)).
+		SetLimit(int64(response.Limit)))
+	if err != nil {
+		return AdjustmentListResponse{}, err
+	}
+	defer cursor.Close(ctx)
+
+	var docs []bson.M
+	if err := cursor.All(ctx, &docs); err != nil {
+		return AdjustmentListResponse{}, err
+	}
+
+	for _, doc := range docs {
+		response.Records = append(response.Records, mapAdjustmentDoc(doc))
+	}
+	response.Total = total
+	return response, nil
+}
+
+func mapAdjustmentDoc(doc bson.M) AdjustmentRecord {
+	meta := nestedDoc(doc["metadata"])
+	record := AdjustmentRecord{
+		ID:            docID(doc),
+		CreatedAt:     strWithDefault(doc, "timestamp", ""),
+		Action:        strWithDefault(doc, "action", ""),
+		Result:        strWithDefault(doc, "result", ""),
+		Reason:        strWithDefault(doc, "reason", ""),
+		Bucket:        strWithDefault(meta, "bucket", ""),
+		Operation:     strWithDefault(meta, "operation", ""),
+		TicketID:      strWithDefault(meta, "ticketId", ""),
+		Amount:        numericInt64Ptr(meta, "amount"),
+		BeforeVersion: numericInt64Ptr(meta, "beforeVersion"),
+		AfterVersion:  numericInt64Ptr(meta, "afterVersion"),
+	}
+	if actor := nestedDoc(doc["actor"]); actor != nil {
+		record.Actor = strWithDefault(actor, "username", "")
+		record.Role = strWithDefault(actor, "role", "")
+	}
+	return record
+}
+
+/* nestedDoc accepts the shapes the driver may produce for a subdocument. */
+func nestedDoc(value any) bson.M {
+	switch typed := value.(type) {
+	case bson.M:
+		return typed
+	case map[string]any:
+		return bson.M(typed)
+	case bson.D:
+		converted := make(bson.M, len(typed))
+		for _, element := range typed {
+			converted[element.Key] = element.Value
+		}
+		return converted
+	default:
+		return nil
+	}
+}
+
+func numericInt64Ptr(doc bson.M, key string) *int64 {
+	if doc == nil {
+		return nil
+	}
+	value, ok := doc[key]
+	if !ok || value == nil {
+		return nil
+	}
+	converted := numericInt64(value)
+	return &converted
+}
+
 func (r *Repository) computeBalanceSummary(ctx context.Context) (BalanceSummary, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$group", Value: bson.M{

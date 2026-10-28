@@ -139,7 +139,7 @@ func main() {
 		mc.XCloud.Collection("ocs_subscribers"),
 		mc.XCloud.Collection("ocs_tariff_plans"),
 	)
-	ocsHandler := ocs.NewHandler(ocsRepo, limiter)
+	ocsHandler := ocs.NewHandlerWithAudit(ocsRepo, limiter, auditWriter)
 
 	// Auth/User reads (with audit writer for denial evidence)
 	userRepo := user.NewRepository(mc.Ops)
@@ -484,6 +484,7 @@ func main() {
 	// OCS Balances (read + governed adjustment)
 	mux.Handle("GET /api/ocs/balances", authMiddleware(http.HandlerFunc(balanceHandler.List)))
 	mux.Handle("GET /api/ocs/balances/{imsi}", authMiddleware(http.HandlerFunc(balanceHandler.Get)))
+	mux.Handle("GET /api/ocs/balances/{imsi}/adjustments", authMiddleware(http.HandlerFunc(balanceHandler.Adjustments)))
 	mux.Handle("POST /api/ocs/balances/{imsi}/adjust", authMiddleware(http.HandlerFunc(balanceHandler.Adjust)))
 	mux.Handle("POST /api/ocs/balances/{imsi}/reset", authMiddleware(http.HandlerFunc(balanceHandler.Reset)))
 
@@ -492,6 +493,7 @@ func main() {
 	mux.Handle("GET /api/ocs/usage", authMiddleware(http.HandlerFunc(ocsHandler.Usage)))
 	mux.Handle("GET /api/ocs/reservations", authMiddleware(http.HandlerFunc(ocsHandler.Reservations)))
 	mux.Handle("GET /api/ocs/subscribers", authMiddleware(http.HandlerFunc(ocsHandler.Subscribers)))
+	mux.Handle("GET /api/ocs/subscribers/{imsi}", authMiddleware(http.HandlerFunc(ocsHandler.GetSubscriber)))
 
 	// Tariff Plans
 	mux.Handle("GET /api/tariff-plans", authMiddleware(http.HandlerFunc(tariffHandler.List)))

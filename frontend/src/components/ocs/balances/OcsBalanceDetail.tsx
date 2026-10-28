@@ -16,7 +16,7 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Database, MessageSquare, Phone, ShieldCheck, SlidersHorizontal, Wallet } from 'lucide-react';
+import { ArrowLeft, Database, History, MessageSquare, Phone, ShieldCheck, SlidersHorizontal, Wallet } from 'lucide-react';
 import PageHeader from '../../ui/PageHeader';
 import RefreshButton from '../../ui/RefreshButton';
 import OcsStatusBadge from '../common/OcsStatusBadge';
@@ -27,7 +27,7 @@ import { useRead } from '../../../lib/api/use-read';
 import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
-import { toBalanceViewModel } from '../../../features/ocs/ocs-view-models';
+import { toBalanceViewModel, toAdjustmentListViewModel, type OcsAdjustmentViewModel } from '../../../features/ocs/ocs-view-models';
 import { formatOcsBytes, formatOcsNumber, formatOcsTime } from '../../../features/ocs/ocs-format';
 
 interface OcsBalanceDetailProps {
@@ -42,12 +42,43 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const encoded = encodeURIComponent(imsi);
   const { data, error, isLoading: loading, mutate: refresh } = useRead<unknown>(
-    `/api/ocs/balances/${encodeURIComponent(imsi)}`,
+    `/api/ocs/balances/${encoded}`,
+  );
+  /* The trail is a separate read on purpose: a log outage must not hide the
+   * balance itself, and the balance must stay readable when the log is empty. */
+  const { data: adjustmentsData, mutate: refreshAdjustments } = useRead<unknown>(
+    `/api/ocs/balances/${encoded}/adjustments?limit=20`,
   );
 
   const balance = toBalanceViewModel(data);
+  const adjustments = toAdjustmentListViewModel(adjustmentsData).records;
   const backTo = { to: '/ocs/balances', label: t('ocs_back_to_list') };
+
+  const bucketLabel = (bucket: string | null): string => {
+    if (bucket === 'data') return t('ocs_bucket_data');
+    if (bucket === 'voice') return t('ocs_bucket_voice');
+    if (bucket === 'sms') return t('ocs_bucket_sms');
+    return '\u2014';
+  };
+
+  const adjustmentSummary = (adjustment: OcsAdjustmentViewModel): string => {
+    const operation = adjustment.operation === 'credit'
+      ? t('ocs_adjust_credit')
+      : adjustment.operation === 'debit'
+        ? t('ocs_adjust_debit')
+        : '\u2014';
+    const bucket = bucketLabel(adjustment.bucket);
+    const amount = adjustment.amount === null
+      ? '\u2014'
+      : adjustment.bucket === 'data'
+        ? formatOcsBytes(adjustment.amount)
+        : adjustment.bucket === 'voice'
+          ? `${adjustment.amount}s`
+          : String(adjustment.amount);
+    return `${operation} ${bucket} ${amount}`;
+  };
 
   if (loading && !balance) {
     return (
@@ -222,6 +253,56 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
         </div>
       </div>
 
+      <section className="ocs-detail-section ocs-detail-section-full">
+        <h3><History size={16} aria-hidden="true" /> {t('ocs_adjustments_title')}</h3>
+        <p className="ocs-detail-hint">{t('ocs_adjustments_note')}</p>
+        {adjustments.length === 0 ? (
+          <p className="ocs-empty">{t('ocs_adjustments_empty')}</p>
+        ) : (
+          <div className="ocs-table-wrap">
+            <table className="ocs-table">
+              <caption className="sr-only">{t('ocs_adjustments_title')}</caption>
+              <thead>
+                <tr>
+                  <th data-column-priority="essential">{t('ocs_adjustments_col_time')}</th>
+                  <th data-column-priority="important">{t('ocs_adjustments_col_actor')}</th>
+                  <th data-column-priority="essential">{t('ocs_adjustments_col_change')}</th>
+                  <th data-column-priority="supplementary">{t('ocs_adjustments_col_reason')}</th>
+                  <th data-column-priority="supplementary">{t('ocs_adjustments_col_result')}</th>
+                  <th data-column-priority="supplementary">{t('ocs_balance_version')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adjustments.map((adjustment, index) => (
+                  <tr key={adjustment.id ?? `adjustment-${index}`}>
+                    <td data-label={t('ocs_adjustments_col_time')} data-column-priority="essential" className="ocs-time-cell">
+                      {formatOcsTime(adjustment.createdAt)}
+                    </td>
+                    <td data-label={t('ocs_adjustments_col_actor')} data-column-priority="important">
+                      {adjustment.actor || '\u2014'}
+                    </td>
+                    <td data-label={t('ocs_adjustments_col_change')} data-column-priority="essential" className="ocs-mono">
+                      {adjustmentSummary(adjustment)}
+                    </td>
+                    <td data-label={t('ocs_adjustments_col_reason')} data-column-priority="supplementary">
+                      {adjustment.reason || '\u2014'}
+                    </td>
+                    <td data-label={t('ocs_adjustments_col_result')} data-column-priority="supplementary">
+                      {adjustment.result || '\u2014'}
+                    </td>
+                    <td data-label={t('ocs_balance_version')} data-column-priority="supplementary" className="ocs-mono">
+                      {adjustment.beforeVersion === null || adjustment.afterVersion === null
+                        ? '\u2014'
+                        : `${adjustment.beforeVersion} \u2192 ${adjustment.afterVersion}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       {adjustOpen && (
         <AdjustBalanceModal
           isOpen={true}
@@ -237,6 +318,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
               message: result.message,
             });
             void refresh();
+            void refreshAdjustments();
           }}
         />
       )}

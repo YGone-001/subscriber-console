@@ -271,6 +271,70 @@ export function toTariffDetailViewModel(payload: unknown): TariffPlanViewModel |
   return toTariffPlanViewModel(payload);
 }
 
+/*
+ * Governed adjustment trail.
+ *
+ * One record per BALANCE_ADJUST operation-log entry. The bucket and operation
+ * stay as the API words (`data`/`voice`/`sms`, `credit`/`debit`) and are
+ * localized at render time; the amount is unitless on purpose because its unit
+ * depends on the bucket.
+ */
+export type OcsAdjustmentViewModel = {
+  id: string | null;
+  createdAt: string | null;
+  actor: string | null;
+  role: string | null;
+  result: string | null;
+  reason: string | null;
+  bucket: string | null;
+  operation: string | null;
+  amount: number | null;
+  ticketId: string | null;
+  beforeVersion: number | null;
+  afterVersion: number | null;
+};
+
+export type OcsAdjustmentListViewModel = OcsListResult<OcsAdjustmentViewModel> & {
+  total: number | null;
+  page: number | null;
+  limit: number | null;
+};
+
+function toAdjustmentViewModel(payload: unknown): OcsAdjustmentViewModel | null {
+  const record = asRecord(payload);
+  if (!record) return null;
+  return {
+    id: field(record, 'id', asIdString) ?? field(record, '_id', asIdString),
+    createdAt: field(record, 'createdAt', asTimestamp) ?? field(record, 'created_at', asTimestamp),
+    actor: field(record, 'actor', asText),
+    role: field(record, 'role', asText),
+    result: field(record, 'result', asText),
+    reason: field(record, 'reason', asString),
+    bucket: field(record, 'bucket', asText),
+    operation: field(record, 'operation', asText),
+    amount: field(record, 'amount', asNumber),
+    ticketId: field(record, 'ticketId', asText),
+    beforeVersion: field(record, 'beforeVersion', asNumber),
+    afterVersion: field(record, 'afterVersion', asNumber),
+  };
+}
+
+/** `{ok, imsi, total, records}` on the balance adjustment trail. */
+export function toAdjustmentListViewModel(payload: unknown): OcsAdjustmentListViewModel {
+  const list = unwrapList(payload, 'records', 'adjustments', 'items');
+  const container = asRecord(payload);
+  const total = field(container, 'total', asNumber);
+  const page = field(container, 'page', asNumber);
+  const limit = field(container, 'limit', asNumber);
+  if (!list) return { records: [], readable: false, total, page, limit };
+  const records: OcsAdjustmentViewModel[] = [];
+  for (const entry of list) {
+    const view = toAdjustmentViewModel(entry);
+    if (view) records.push(view);
+  }
+  return { records, readable: true, total, page, limit };
+}
+
 /** Bucket consumption as a 0-100 percentage, or null when it cannot be derived. */
 export function bucketUsagePercent(bucket: OcsBucket): number | null {
   const total = bucket.total ?? (bucket.used !== null && bucket.available !== null ? bucket.used + bucket.available : null);

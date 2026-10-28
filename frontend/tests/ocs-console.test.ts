@@ -20,7 +20,7 @@ import {
   pageCountFor,
   sanitizeImsiInput,
 } from '../src/features/ocs/ocs-format';
-import { toBalanceListViewModel, toBalanceSummaryViewModel } from '../src/features/ocs/ocs-view-models';
+import { toAdjustmentListViewModel, toBalanceListViewModel, toBalanceSummaryViewModel } from '../src/features/ocs/ocs-view-models';
 import { attachmentFileName } from '../src/lib/api/download';
 import { hasActiveOcsFilters } from '../src/features/ocs/use-ocs-query-state';
 
@@ -94,6 +94,59 @@ test('a balance record without an available figure keeps it null instead of coer
   assert.equal(records.length, 1);
   assert.equal(records[0].data.available, null);
   assert.equal(records[0].invariants.data, null);
+});
+
+test('the adjustment trail projects the operation log without inventing fields', () => {
+  const trail = toAdjustmentListViewModel({
+    ok: true,
+    imsi: '310150123456789',
+    total: 1,
+    page: 1,
+    limit: 20,
+    records: [{
+      id: 'adj-1',
+      createdAt: '2026-10-01T08:00:00.000Z',
+      action: 'BALANCE_ADJUST',
+      actor: 'op1',
+      role: 'operator',
+      result: 'success',
+      reason: 'goodwill credit',
+      bucket: 'data',
+      operation: 'credit',
+      amount: 1073741824,
+      ticketId: 'INC100234',
+      beforeVersion: 3,
+      afterVersion: 4,
+    }],
+  });
+
+  assert.equal(trail.readable, true);
+  assert.equal(trail.total, 1);
+  assert.equal(trail.records.length, 1);
+  const record = trail.records[0];
+  assert.equal(record.actor, 'op1');
+  assert.equal(record.bucket, 'data');
+  assert.equal(record.amount, 1073741824);
+  assert.equal(record.beforeVersion, 3);
+  assert.equal(record.afterVersion, 4);
+
+  const empty = toAdjustmentListViewModel({ ok: true, imsi: '310150123456789', total: 0, records: [] });
+  assert.deepEqual(empty.records, []);
+  assert.equal(empty.total, 0);
+
+  const absent = toAdjustmentListViewModel({ ok: true, imsi: '310150123456789' });
+  assert.equal(absent.records.length, 0);
+  assert.equal(absent.total, null, 'an absent total stays null rather than counting zero rows');
+});
+
+test('an adjustment without a reported amount keeps it null', () => {
+  const trail = toAdjustmentListViewModel({
+    ok: true,
+    total: 1,
+    records: [{ id: 'adj-2', bucket: 'sms', operation: 'debit' }],
+  });
+  assert.equal(trail.records[0].amount, null);
+  assert.equal(trail.records[0].bucket, 'sms');
 });
 
 test('the export filename prefers the server header and falls back to the documented pattern', () => {

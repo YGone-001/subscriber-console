@@ -111,6 +111,46 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── GET /api/ocs/balances/{imsi}/adjustments ───────────────────────────────
+
+// Adjustments handles GET /api/ocs/balances/{imsi}/adjustments.
+//
+// Read-only: it projects the governed adjustment trail from the operation log.
+// It never reads or writes the charging plane and never mutates the balance.
+func (h *Handler) Adjustments(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "ocs.read", h.auditWriter) {
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "ocs:balances:adjustments:"+p.Username, 120, 60) {
+		return
+	}
+
+	imsi := strings.TrimSpace(r.PathValue("imsi"))
+	if !imsiRegex.MatchString(imsi) {
+		response.Error(w, http.StatusBadRequest, "Invalid IMSI format", "INVALID_IMSI")
+		return
+	}
+
+	q := r.URL.Query()
+	page := intParam(q.Get("page"), 1)
+	limit := intParam(q.Get("limit"), 20)
+
+	result, err := h.repo.ListAdjustments(r.Context(), imsi, page, limit)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, result)
+}
+
 // ── POST /api/ocs/balances/{imsi}/adjust ───────────────────────────────────
 
 // Adjust handles POST /api/ocs/balances/{imsi}/adjust.

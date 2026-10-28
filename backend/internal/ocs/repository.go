@@ -489,6 +489,26 @@ func (r *Repository) ListSubscribers(ctx context.Context, opts SubscriberQueryOp
 	}, nil
 }
 
+// GetSubscriberRecord returns one OCS subscriber contract, or nil when absent.
+// The projection is the same mapper the list uses, so a detail read and a list
+// row can never disagree about the same document.
+func (r *Repository) GetSubscriberRecord(ctx context.Context, imsi string) (*SubscriberRecord, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	var doc bson.M
+	err := r.subscribers.FindOne(ctx, bson.M{"imsi": imsi}).Decode(&doc)
+	if err == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	record := mapSubscriberRecord(doc)
+	return &record, nil
+}
+
 func mapSubscriberRecord(doc bson.M) SubscriberRecord {
 	return SubscriberRecord{
 		ID:        docID(doc),

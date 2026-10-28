@@ -131,7 +131,7 @@ The production surface is the derived METHOD+PATH registration set parsed from
 duplicated numbers drift independently and leave a gate red after an unrelated feature lands.
 
 ```text
-measured total                     = 162 (GET 79 / POST 57 / PUT 13 / DELETE 10 / PATCH 3)
+measured total                     = 164 (GET 81 / POST 57 / PUT 13 / DELETE 10 / PATCH 3)
 duplicate METHOD+PATH registrations = 0
 ```
 

@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (162 exact METHOD+PATH registrations)
+Read + write APIs (164 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 162
+Go registration set                  = 164
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -534,8 +534,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 162 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，162 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 164 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，164 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -561,7 +561,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (162 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (164 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -611,7 +611,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **162 条** METHOD+PATH 精确注册（GET 79 / POST 57 / PUT 13 / DELETE 10 / PATCH 3）：
+路由权威为源码派生的 Go 注册集合，共 **164 条** METHOD+PATH 精确注册（GET 81 / POST 57 / PUT 13 / DELETE 10 / PATCH 3）：
 
 ```text
 GET    /api/analytics/metrics
@@ -626,10 +626,12 @@ GET    /api/profiles/{name}/versions
 GET    /api/profiles/{name}/export
 GET    /api/ocs/balances
 GET    /api/ocs/balances/{imsi}
+GET    /api/ocs/balances/{imsi}/adjustments
 GET    /api/ocs/sessions
 GET    /api/ocs/usage
 GET    /api/ocs/reservations
 GET    /api/ocs/subscribers
+GET    /api/ocs/subscribers/{imsi}
 GET    /api/tariff-plans
 GET    /api/tariff-plans/{planId}
 GET    /api/tariff-plans/{planId}/export
@@ -781,7 +783,7 @@ POST   /api/knowledge/files
 状态：
 
 ```text
-Go production API registrations = 162 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 164 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0

@@ -68,6 +68,35 @@ type BalanceDetailResponse struct {
 	Balance BalanceRecord `json:"balance"`
 }
 
+// AdjustmentRecord is one governed balance adjustment, projected from the
+// operation log written by BALANCE_ADJUST. The audit document is the authority;
+// this projection exposes only the fields needed to reconstruct what changed.
+type AdjustmentRecord struct {
+	ID            string `json:"id"`
+	CreatedAt     string `json:"createdAt"`
+	Action        string `json:"action"`
+	Actor         string `json:"actor,omitempty"`
+	Role          string `json:"role,omitempty"`
+	Result        string `json:"result,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+	Bucket        string `json:"bucket,omitempty"`
+	Operation     string `json:"operation,omitempty"`
+	Amount        *int64 `json:"amount,omitempty"`
+	TicketID      string `json:"ticketId,omitempty"`
+	BeforeVersion *int64 `json:"beforeVersion,omitempty"`
+	AfterVersion  *int64 `json:"afterVersion,omitempty"`
+}
+
+// AdjustmentListResponse matches GET /api/ocs/balances/{imsi}/adjustments.
+type AdjustmentListResponse struct {
+	OK      bool               `json:"ok"`
+	IMSI    string             `json:"imsi"`
+	Total   int64              `json:"total"`
+	Page    int                `json:"page"`
+	Limit   int                `json:"limit"`
+	Records []AdjustmentRecord `json:"records"`
+}
+
 // AdjustBalanceRequest is the payload for POST /api/ocs/balances/{imsi}/adjust.
 type AdjustBalanceRequest struct {
 	Operation string `json:"operation"`         // "credit" | "debit"
