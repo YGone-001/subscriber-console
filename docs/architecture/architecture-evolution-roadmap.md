@@ -2,7 +2,8 @@
 
 > Planned architecture evolution authority for xCloud subscriber-console.
 > This roadmap describes proposed states. It does not change the current production
-> runtime, API contracts, deployment configuration, security model, or OCS freeze.
+> runtime, API contracts, deployment configuration, security model, or the
+> charging-plane exclusion.
 
 ## Purpose and Authority
 
@@ -20,7 +21,7 @@ The roadmap preserves these present facts:
   operation, API security authority, and embedded static React SPA hosting.
 - Next.js source is retired; numeric port 13333 is reassigned to Vite development.
 - MongoDB `xcloud` and `xcloud_ops` remain the current source of truth.
-- The OCS management plane is frozen; the charging plane remains excluded.
+- The OCS management plane is open to governed lifecycle and UX correction; the charging plane remains excluded.
 - Authorized business operations use direct execution with RBAC, fresh actor
   revalidation, best-effort operation logging, and CAS protection.
 
@@ -92,6 +93,59 @@ audit/         notification/ platform/
 
 Service boundaries should be designed before they are deployed as independent
 services. The roadmap avoids premature microservice decomposition.
+
+## Business Operations Lifecycle and Retention
+
+> Status: accepted direction. The current source and observable behavior remain
+> authoritative until the corresponding implementation lands; this section does not
+> claim the changes are live.
+
+The OCS management plane is open to governed lifecycle, data-truthfulness and UI
+correction. The charging plane remains frozen and excluded.
+
+### Contract Lifecycle
+
+- `active <-> suspended`, then `terminated` as a terminal status.
+- Termination preserves the contract and balance records; terminated contracts are read-only.
+- `resume` is allowed only from `suspended`; terminated contracts cannot be resumed, re-priced or adjusted.
+- Subscriber deletion is rejected while an active or suspended contract exists. After termination, deleting the subscriber identity does not cascade-delete OCS contract or balance history.
+
+### Retention and Permanent Cleanup
+
+Permanent cleanup is a data-retention operation, not a contract-row action.
+
+- Admin surface: Platform Management -> Data Retention, plus a CLI that shares the same retention service.
+- Retention window: configurable, default 365 days; `0` disables physical cleanup.
+- Eligibility: only `terminated` contracts older than the window; active and suspended contracts are always refused.
+- Workflow: dry-run first; the apply step requires a reason and explicit confirmation, writes audit evidence, supports batches and is idempotent.
+- Cascade order: balance adjustments -> balance account -> contract. `app_audit_logs` and the subscriber identity record are retained.
+- The contract detail page states the retention state and points to the retention surface; it never offers a single-record hard delete.
+
+### Data Truthfulness
+
+Read projections return `null` or explicit unavailability for missing measurements. They must not substitute 0, a default plan, a default status or default QoS values. Explicit zero remains a real value. Write paths treat an omitted field as "no change" and an explicit zero as a value; they do not coerce blanks to zero.
+
+This covers OCS balance buckets, plan/status joins, subscriber traffic totals, AMBR and QoS fields, and adjustment-history reads.
+
+### Template Apply and Onboarding
+
+- Applying a template to an existing subscriber requires a server-authoritative preview at every entry point. The preview reports field-level changes, whether credential material changes, the current binding and a precondition token.
+- The apply request carries that token; a stale preview is rejected with no write.
+- A subscriber create uses the selected tariff plan as the authority for the initial quota. Client-side onboarding values are suggestions only; voice and SMS may remain unconfigured when the plan does not model them.
+- Template deletion is archival: an additive `archived` state hides the template from active lists, preserves the binding for existing subscribers and never modifies subscriber provisioning data. Referenced templates are not hard-deleted.
+
+### Route and Scale Boundaries
+
+- Redirect-only routes remain compatibility aliases. No OCS dashboard, session, usage or rating page is planned; the subscriber rating link targets the concrete tariff plan.
+- The subscriber list remains on the current implementation at the current ~10k population. Server-side aggregation and keyset pagination are deferred behind a documented capacity trigger and benchmark.
+
+### Acceptance Evidence
+
+When implemented, this direction requires:
+
+- Go tests for lifecycle transitions, retention eligibility/cascade/audit, CAS on every balance adjustment entry point, and server-side filter validation.
+- Frontend render tests for null/unavailable states and preview-first template apply.
+- Documentation and contract updates for any additive field or route, with AGENTS/CLAUDE parity and route/registration gates green.
 
 ## Medium-Term Platform Foundations
 
