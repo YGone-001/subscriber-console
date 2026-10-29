@@ -93,11 +93,12 @@ type ProfileListOrder struct {
 // ProfileListRequest is everything the list read may vary by. An empty request is
 // the historical one: every template, name ascending, no cursor.
 type ProfileListRequest struct {
-	Order   ProfileListOrder
-	Limit   int    // 0 = unbounded
-	Cursor  string // opaque keyset from a previous page
-	Query   string // lowercase name/title contains
-	Billing string // "", configured, missing, unlinked
+	Order           ProfileListOrder
+	Limit           int    // 0 = unbounded
+	Cursor          string // opaque keyset from a previous page
+	Query           string // lowercase name/title contains
+	Billing         string // "", configured, missing, unlinked
+	IncludeArchived bool   // default excludes archived templates
 }
 
 // ProfileListPage carries one page plus the summary of the whole (filtered)
@@ -336,6 +337,18 @@ func compareInts(left, right int) int {
 	}
 }
 
+func profileListFilter(includeArchived bool) bson.M {
+	if includeArchived {
+		return bson.M{}
+	}
+	return bson.M{"archived": bson.M{"$ne": true}}
+}
+
+func profileArchived(doc bson.M) bool {
+	archived, _ := doc["archived"].(bool)
+	return archived
+}
+
 // ListProfiles returns one page of templates plus the summary of the whole
 // collection. An unrequested page (no limit, no cursor) is the historical
 // response: every template in name order.
@@ -343,7 +356,7 @@ func (r *Repository) ListProfiles(ctx context.Context, request ProfileListReques
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	cursor, err := r.profiles.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "name", Value: 1}}))
+	cursor, err := r.profiles.Find(ctx, profileListFilter(request.IncludeArchived), options.Find().SetSort(bson.D{{Key: "name", Value: 1}}))
 	if err != nil {
 		return ProfileListPage{}, err
 	}
@@ -394,6 +407,7 @@ func (r *Repository) ListProfiles(ctx context.Context, request ProfileListReques
 			SessionCount:          sessionCount,
 			PccRuleCount:          pccRuleCount,
 			OCSDefaultsConfigured: hasOCSDefaults(doc),
+			Archived:              profileArchived(doc),
 			AccessRestriction:     optionalIntField(doc, "access_restriction_data"),
 			AMBR:                  profileAMBR(doc),
 		})

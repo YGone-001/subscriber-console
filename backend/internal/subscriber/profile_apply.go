@@ -83,6 +83,9 @@ func BuildProfileApplyPreview(ctx context.Context, imsi string, profileName stri
 	if profile == nil {
 		return nil, &SubscriberGovernanceError{Code: "PROFILE_NOT_FOUND"}
 	}
+	if archived, _ := profile["archived"].(bool); archived {
+		return nil, &SubscriberGovernanceError{Code: "PROFILE_ARCHIVED"}
+	}
 
 	effective := buildSubscriberAfterProfileApply(subscriber, profile, profileName)
 	state, changed := ProfileDrift(subscriber, profile, profileName)
@@ -127,6 +130,9 @@ func PrepareFrozenSubscriberProfileApply(ctx context.Context, imsi string, profi
 	}
 	if profile == nil {
 		return nil, &SubscriberGovernanceError{Code: "PROFILE_NOT_FOUND"}
+	}
+	if archived, _ := profile["archived"].(bool); archived {
+		return nil, &SubscriberGovernanceError{Code: "PROFILE_ARCHIVED"}
 	}
 
 	subHash := computeSubscriberPreconditionHash(subscriber)
@@ -174,6 +180,9 @@ func AssertFrozenSubscriberProfileApply(ctx context.Context, intent FrozenSubscr
 		return nil, err
 	}
 	if profile == nil {
+		return nil, nil
+	}
+	if archived, _ := profile["archived"].(bool); archived {
 		return nil, nil
 	}
 

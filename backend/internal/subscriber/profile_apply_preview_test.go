@@ -50,6 +50,18 @@ func TestBuildProfileApplyPreviewReportsChangesAndBindsToken(t *testing.T) {
 		t.Fatalf("preview token must bind the apply intent: %q != %q", preview.PreviewToken, intent.OperationFingerprint)
 	}
 
+	archivedProfile := bson.M{
+		"name":      "tpl-a",
+		"archived":  true,
+		"auth":      profile["auth"],
+		"ambr":      profile["ambr"],
+		"sliceList": profile["sliceList"],
+	}
+	archivedLookup := func(context.Context, string) (bson.M, error) { return archivedProfile, nil }
+	if _, err := BuildProfileApplyPreview(context.Background(), "460001234567890", "tpl-a", lookup, archivedLookup); err == nil {
+		t.Fatal("an archived profile must not be previewed")
+	}
+
 	applied := BuildSubscriberAfterProfileApply(subscriber, profile, "tpl-a")
 	sameLookup := func(context.Context, string) (bson.M, error) { return applied, nil }
 	noChange, err := BuildProfileApplyPreview(context.Background(), "460001234567890", "tpl-a", sameLookup, profileLookup)

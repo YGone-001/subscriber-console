@@ -7,7 +7,7 @@
  * what "bound", "dangling" and "not yet resolvable" mean, so the classification
  * lives here once instead of being re-derived per component.
  */
-export type TemplateOption = { name: string; title?: string };
+export type TemplateOption = { name: string; title?: string; archived?: boolean };
 
 export type TemplateBindingState = 'unbound' | 'pending' | 'bound' | 'dangling';
 

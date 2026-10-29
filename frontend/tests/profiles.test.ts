@@ -410,8 +410,8 @@ test('the template list renders a retryable error instead of an empty state', ()
 
 test('the list action renders view or edit by template permission', () => {
   const source = read('../src/features/profiles/ProfilesPage.tsx');
-  assert.match(source, /canEditTemplates \? <Pencil/);
-  assert.match(source, /: <Eye size=/);
+  assert.match(source, /archived \|\| !canEditTemplates \? <Eye size=/);
+  assert.match(source, /: <Pencil size=/);
 });
 
 test('credential display is driven by the server-stated condition, not a client guess', () => {
@@ -510,7 +510,7 @@ test('an unavailable impact is reported as unknown rather than zero', () => {
 
   const page = read('../src/features/profiles/ProfileDetailPage.tsx');
   assert.match(page, /prof_change_confirm_desc_unknown/);
-  assert.match(page, /prof_del_in_use_unknown_desc/);
+  assert.ok(!/prof_del_in_use_unknown_desc/.test(page), 'the retired force-delete flow must be absent');
   assert.ok(!/impactedSubscribers \|\| 1/.test(page), 'the force-delete fallback must not invent one subscriber');
 });
 
@@ -970,7 +970,7 @@ test('clone and export are wired to their endpoints and stay permission-gated', 
   assert.match(detailPage, /getBlob\(`\/api\/profiles\/\$\{encodeURIComponent\(profileName\)\}\/export`\)/);
   assert.match(detailPage, /import \{ getBlob \} from '\.\.\/\.\.\/lib\/api\/read-client'/);
   /* Clone is a write and sits behind canWrite; export is a read and does not. */
-  const cloneGuard = detailPage.indexOf('{canWrite && (\n              <button');
+  const cloneGuard = detailPage.indexOf('{!isArchived && canWrite && (\n              <button');
   const cloneButton = detailPage.indexOf("t('prof_clone_btn')");
   const exportButton = detailPage.indexOf("t('prof_export_btn')");
   assert.ok(cloneGuard >= 0 && cloneButton > cloneGuard, 'the clone action must be gated on profiles.write');
@@ -1121,7 +1121,7 @@ test('a header click flips its column or starts a new one from its default', () 
 
 test('the template list carries its order in the URL, the read key and the header', () => {
   const page = read('../src/features/profiles/ProfilesPage.tsx');
-  assert.match(page, /const PROFILE_URL_KEYS = \['q', 'billing', 'sort', 'order'\] as const;/);
+  assert.match(page, /const PROFILE_URL_KEYS = \['q', 'billing', 'sort', 'order', 'archived'\] as const;/);
   assert.match(page, /profilesListReadUrl\(\{/);
   assert.match(page, /url\.setFilters\(isDefault \? \{ sort: '', order: '' \} : \{ sort: next\.field, order: next\.direction \}\)/);
   for (const field of ['name', 'sliceCount', 'subscriberCount', 'updatedAt']) {

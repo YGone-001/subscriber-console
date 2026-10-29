@@ -50,7 +50,7 @@ const FILTER_LABEL_KEYS: Record<ProfileListFilter, string> = {
   withoutBilling: 'prof_filter_without_billing',
   unassigned: 'prof_filter_unassigned',
 };
-const PROFILE_URL_KEYS = ['q', 'billing', 'sort', 'order'] as const;
+const PROFILE_URL_KEYS = ['q', 'billing', 'sort', 'order', 'archived'] as const;
 
 /* The ranking lives in the URL, so the read key, the header arrows and a shared
  * link describe the same order. Both parameters are written together: a
@@ -82,6 +82,7 @@ export function ProfilesPage() {
 
   const searchQuery = url.filters.q ?? '';
   const listFilter = profileFilterFromParam(url.filters.billing);
+  const includeArchived = url.filters.archived === '1';
   const [searchInput, setSearchInput] = useState(searchQuery);
 
   /* The server owns the ranking and the facets, so the read key carries them; the
@@ -93,7 +94,8 @@ export function ProfilesPage() {
     query: searchQuery,
     billing: url.filters.billing ?? '',
     limit: PROFILE_LIST_PAGE_SIZE,
-  }), [sortField, sortDirection, searchQuery, url.filters.billing]);
+    includeArchived,
+  }), [sortField, sortDirection, searchQuery, url.filters.billing, includeArchived]);
   const { data, isLoading, error, mutate } = useRead<ProfilesResponse>(listUrl);
 
   const [extraPages, setExtraPages] = useState<{ rows: ProfileListItem[]; nextCursor: string | null }[]>([]);
@@ -131,6 +133,7 @@ export function ProfilesPage() {
         billing: url.filters.billing ?? '',
         limit: PROFILE_LIST_PAGE_SIZE,
         cursor: nextCursor,
+        includeArchived,
       }));
       setExtraPages((current) => [...current, {
         rows: page.profiles ?? [],
@@ -188,7 +191,7 @@ export function ProfilesPage() {
     router.push(`/profile/${encodeURIComponent(name)}`);
   };
 
-  const hasActiveFilter = searchQuery.trim() !== '' || listFilter !== 'all';
+  const hasActiveFilter = searchQuery.trim() !== '' || listFilter !== 'all' || includeArchived;
 
   /* ------------------------------------------------------------ bulk actions -- */
 
@@ -265,6 +268,7 @@ export function ProfilesPage() {
 
   const renderProfileRow = (profile: ProfileListItem) => {
     const linked = linkedSubscriberCount(profile);
+    const archived = profile.archived === true;
     const billingConfigured = profile.ocsDefaultsConfigured === true;
     /* Three distinct states, one neutral tone: a configured restriction is a
      * business choice, not a defect, so only the billing gap keeps a signal
@@ -295,6 +299,7 @@ export function ProfilesPage() {
           >
             <span className={styles.profileTemplateTitle}>{profile.title || profile.name}</span>
             <span className={styles.profileTemplateKey}>{profile.name}</span>
+            {archived && <span className={`${styles.profileChip} ${styles.profileChipNeutral}`}>{t('prof_archived_badge')}</span>}
           </button>
         </td>
         <td data-label={t("prof_table_content")} data-column-priority="essential" className={styles.profileContentCell}>
@@ -354,10 +359,10 @@ export function ProfilesPage() {
             type="button"
             className={styles.profileRowAction}
             onClick={() => openTemplate(profile.name)}
-            title={canEditTemplates ? t("edit") : t("prof_view_details")}
-            aria-label={`${canEditTemplates ? t("edit") : t("prof_view_details")}: ${profile.title || profile.name}`}
+            title={archived || !canEditTemplates ? t("prof_view_details") : t("edit")}
+            aria-label={`${archived || !canEditTemplates ? t("prof_view_details") : t("edit")}: ${profile.title || profile.name}`}
           >
-            {canEditTemplates ? <Pencil size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+            {archived || !canEditTemplates ? <Eye size={17} aria-hidden="true" /> : <Pencil size={17} aria-hidden="true" />}
           </button>
         </td>
       </tr>
@@ -427,6 +432,14 @@ export function ProfilesPage() {
               {t(FILTER_LABEL_KEYS[filter])}
             </button>
           ))}
+          <button
+            type="button"
+            className={`${includeArchived ? "btn btn-primary" : "btn btn-outline"} profile-domain-btn`}
+            aria-pressed={includeArchived}
+            onClick={() => url.setFilter('archived', includeArchived ? '' : '1')}
+          >
+            {t('prof_filter_archived')}
+          </button>
         </div>
         {canEditTemplates && (
           <div className="page-action-buttons">

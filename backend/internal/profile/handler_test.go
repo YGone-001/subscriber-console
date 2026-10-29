@@ -421,9 +421,13 @@ func TestDeleteProfile(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	// Verify profile was deleted
-	if _, exists := repo.profiles["test_profile"]; exists {
-		t.Error("profile should have been deleted")
+	// Verify profile was archived, not removed
+	archived, exists := repo.profiles["test_profile"]
+	if !exists {
+		t.Fatal("profile deletion must archive the stored document")
+	}
+	if flag, _ := archived["archived"].(bool); !flag {
+		t.Error("profile must be archived")
 	}
 
 	// Verify version was saved
@@ -463,13 +467,17 @@ func TestDeleteProfileInUse(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.Delete(w, req)
 
-	if w.Code != http.StatusConflict {
-		t.Errorf("expected status %d, got %d", http.StatusConflict, w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	// Verify profile was NOT deleted
-	if _, exists := repo.profiles["test_profile"]; !exists {
-		t.Error("profile should not have been deleted when in use")
+	// Verify profile was archived rather than deleted
+	archived, exists := repo.profiles["test_profile"]
+	if !exists {
+		t.Fatal("referenced profile must remain stored after archive")
+	}
+	if flag, _ := archived["archived"].(bool); !flag {
+		t.Error("referenced profile must be archived when deleted")
 	}
 }
 
@@ -508,9 +516,14 @@ func TestDeleteProfileForce(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	// Verify profile was deleted (force=true)
-	if _, exists := repo.profiles["test_profile"]; exists {
-		t.Error("profile should have been deleted with force=true")
+	// A referenced profile is archived even when force=true; physical deletion
+	// would break existing subscriber provenance.
+	archived, exists := repo.profiles["test_profile"]
+	if !exists {
+		t.Fatal("referenced profile must remain stored after force delete")
+	}
+	if flag, _ := archived["archived"].(bool); !flag {
+		t.Error("referenced profile must be archived, not removed")
 	}
 }
 

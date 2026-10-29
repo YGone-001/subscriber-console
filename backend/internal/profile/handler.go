@@ -213,11 +213,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page, err := h.repo.ListProfiles(r.Context(), ProfileListRequest{
-		Order:   order,
-		Limit:   limit,
-		Cursor:  query.Get("cursor"),
-		Query:   query.Get("q"),
-		Billing: billing,
+		Order:           order,
+		Limit:           limit,
+		Cursor:          query.Get("cursor"),
+		Query:           query.Get("q"),
+		Billing:         billing,
+		IncludeArchived: query.Get("includeArchived") == "true",
 	})
 	if err != nil {
 		if errors.Is(err, ErrInvalidProfileCursor) {
@@ -1041,6 +1042,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The archive flag is a dedicated state transition, not template content.
+	// It keeps the stored document and every subscriber binding intact.
+	if rawArchived, ok := body["archived"]; ok {
+		h.setProfileArchived(w, r, p, name, body, rawArchived, expected, hasExpected)
+		return
+	}
+
 	// Validate body fields (fail-closed)
 	if err := validateProfileUpdateBody(body); err != nil {
 		response.JSON(w, http.StatusBadRequest, map[string]any{
@@ -1059,6 +1067,14 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	currentRevision := profileRevision(existing)
+	if existing != nil && profileArchived(existing) {
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":     "Archived profiles cannot be edited; restore the template first",
+			"code":      "PROFILE_ARCHIVED",
+			"committed": false,
+		})
+		return
+	}
 	// A precondition against a template that is no longer there must not
 	// resurrect it as a sparse shell.
 	if hasExpected && (existing == nil || expected != currentRevision) {
@@ -1191,6 +1207,95 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// setProfileArchived changes only the archived flag. Content, revision history
+// and subscriber bindings are preserved; the caller has already performed auth,
+// fresh-actor and rate-limit checks.
+func (h *Handler) setProfileArchived(w http.ResponseWriter, r *http.Request, p *auth.Principal, name string, body map[string]any, raw any, expected int64, hasExpected bool) {
+	if len(body) != 1 {
+		response.JSON(w, http.StatusBadRequest, map[string]any{
+			"error":     "archived cannot be combined with template content",
+			"code":      "INVALID_PROFILE_UPDATE",
+			"committed": false,
+		})
+		return
+	}
+	archived, ok := raw.(bool)
+	if !ok {
+		response.JSON(w, http.StatusBadRequest, map[string]any{
+			"error":     "archived must be a boolean",
+			"code":      "INVALID_PROFILE_UPDATE",
+			"committed": false,
+		})
+		return
+	}
+	existing, err := h.repo.GetProfile(r.Context(), name)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if existing == nil {
+		response.Error(w, http.StatusNotFound, "Profile not found", "PROFILE_NOT_FOUND")
+		return
+	}
+	currentRevision := profileRevision(existing)
+	if hasExpected && expected != currentRevision {
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":            "The template changed since it was loaded; reload before saving",
+			"code":             "PROFILE_REVISION_CONFLICT",
+			"expectedRevision": expected,
+			"currentRevision":  currentRevision,
+			"committed":        false,
+		})
+		return
+	}
+	if profileArchived(existing) == archived {
+		response.JSON(w, http.StatusOK, map[string]any{
+			"message":        "Profile already has the requested archive state",
+			"classification": "NO_EFFECT",
+			"archived":       archived,
+			"revision":       currentRevision,
+		})
+		return
+	}
+	updated := deepCopyBsonM(existing)
+	updated["archived"] = archived
+	updated["updatedBy"] = p.Username
+	updated["updatedAt"] = nowProfileTime()
+	updated["revision"] = currentRevision + 1
+	if err := h.repo.ReplaceProfileCAS(r.Context(), name, existing, updated); err != nil {
+		if err == ErrProfilePreconditionChanged {
+			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_UPDATE_PRECONDITION_CHANGED")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Profile archive state update failed", "PROFILE_UPDATE_FAILED")
+		return
+	}
+	action := "ARCHIVE"
+	classification := "ARCHIVED"
+	if !archived {
+		action = "UNARCHIVE"
+		classification = "UNARCHIVED"
+	}
+	versionRecord := bson.M{
+		"versionId":   generateVersionID(),
+		"profileName": name,
+		"profile":     existing,
+		"action":      action,
+		"savedAt":     updated["updatedAt"],
+		"savedBy":     p.Username,
+		"title":       existing["title"],
+		"sliceCount":  sliceCount(existing),
+	}
+	_ = h.repo.SaveProfileVersion(r.Context(), versionRecord)
+	h.writeStrictAudit(r.Context(), "PROFILE_"+action, "profile", name, p.Username, p.NormalizedRole, existing, updated, "success", "SUCCESS", true, nil)
+	response.JSON(w, http.StatusOK, map[string]any{
+		"message":        "Profile archive state updated",
+		"classification": classification,
+		"archived":       archived,
+		"revision":       updated["revision"],
+	})
+}
+
 // Delete handles DELETE /api/profiles/:name
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
@@ -1266,66 +1371,54 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check if profile is in use by subscribers
-	force := r.URL.Query().Get("force") == "true"
-	if !force {
-		count, err := h.repo.CountSubscribersByProfile(r.Context(), name)
-		if err != nil {
-			response.InternalError(w)
-			return
-		}
-		if count > 0 {
-			response.Error(w, http.StatusConflict, fmt.Sprintf("Profile is in use by %d subscriber(s)", count), "PROFILE_IN_USE")
-			return
-		}
-	}
+	// Deletion is an archival state transition. The stored template, revision
+	// and every subscriber binding are preserved; a missing or unreferenced
+	// template is archived just the same.
+	h.archiveProfile(w, r, p, name, existing)
+}
 
-	// Perform CAS delete
-	if err := h.repo.DeleteProfileCAS(r.Context(), name, existing); err != nil {
-		if err == ErrProfilePreconditionChanged {
-			// Audit PRECONDITION_CHANGED
-			h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PRECONDITION_CHANGED", false, err)
-			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_DELETE_PRECONDITION_CHANGED")
-			return
-		}
-		// Storage failure - audit FAILED_NO_MUTATION
-		h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "FAILED_NO_MUTATION", false, err)
-		response.JSON(w, http.StatusInternalServerError, map[string]any{
-			"error":     "Profile deletion failed",
-			"code":      "PROFILE_DELETE_FAILED",
-			"committed": false,
+// archiveProfile marks a referenced template as archived. It keeps the stored
+// document, revision and every subscriber binding intact.
+func (h *Handler) archiveProfile(w http.ResponseWriter, r *http.Request, p *auth.Principal, name string, existing bson.M) {
+	if profileArchived(existing) {
+		response.JSON(w, http.StatusOK, DeleteProfileResponse{
+			Message:  "Profile already archived",
+			Archived: true,
 		})
 		return
 	}
+	updated := deepCopyBsonM(existing)
+	updated["archived"] = true
+	updated["updatedBy"] = p.Username
+	updated["updatedAt"] = nowProfileTime()
+	updated["revision"] = profileRevision(existing) + 1
 
-	// Save version record
-	now := nowProfileTime()
+	if err := h.repo.ReplaceProfileCAS(r.Context(), name, existing, updated); err != nil {
+		if err == ErrProfilePreconditionChanged {
+			h.writeStrictAudit(r.Context(), "PROFILE_ARCHIVE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PRECONDITION_CHANGED", false, err)
+			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_DELETE_PRECONDITION_CHANGED")
+			return
+		}
+		h.writeStrictAudit(r.Context(), "PROFILE_ARCHIVE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "FAILED_NO_MUTATION", false, err)
+		response.Error(w, http.StatusInternalServerError, "Profile archive failed", "PROFILE_ARCHIVE_FAILED")
+		return
+	}
+
 	versionRecord := bson.M{
 		"versionId":   generateVersionID(),
 		"profileName": name,
 		"profile":     existing,
-		"action":      "DELETE",
-		"savedAt":     now,
+		"action":      "ARCHIVE",
+		"savedAt":     updated["updatedAt"],
 		"savedBy":     p.Username,
 		"title":       existing["title"],
 		"sliceCount":  sliceCount(existing),
 	}
-	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
-		// Profile was deleted but version save failed - partial write
-		h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PARTIAL_WRITE", true, err)
-		response.JSON(w, http.StatusInternalServerError, map[string]any{
-			"error":     "Profile deleted but version save failed",
-			"code":      "PROFILE_DELETE_PARTIAL_WRITE",
-			"committed": true,
-		})
-		return
-	}
-
-	// Write strict audit record (non-gating)
-	h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "success", "SUCCESS", true, nil)
-
+	_ = h.repo.SaveProfileVersion(r.Context(), versionRecord)
+	h.writeStrictAudit(r.Context(), "PROFILE_ARCHIVE", "profile", name, p.Username, p.NormalizedRole, existing, updated, "success", "SUCCESS", true, nil)
 	response.JSON(w, http.StatusOK, DeleteProfileResponse{
-		Message: "Profile deleted successfully",
+		Message:  "Profile archived successfully",
+		Archived: true,
 	})
 }
 

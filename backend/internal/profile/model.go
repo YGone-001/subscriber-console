@@ -26,6 +26,7 @@ type ProfileListItem struct {
 	SessionCount          int    `json:"sessionCount"`
 	PccRuleCount          int    `json:"pccRuleCount"`
 	OCSDefaultsConfigured bool   `json:"ocsDefaultsConfigured"`
+	Archived              bool   `json:"archived"`
 	// AccessRestriction is null when the template carries no
 	// access_restriction_data, which is distinct from an explicit 0.
 	AccessRestriction *int                `json:"accessRestriction"`
@@ -214,5 +215,6 @@ type UpdateProfileResponse struct {
 
 // DeleteProfileResponse matches DELETE /api/profiles/:name response shape.
 type DeleteProfileResponse struct {
-	Message string `json:"message"`
+	Message  string `json:"message"`
+	Archived bool   `json:"archived,omitempty"`
 }

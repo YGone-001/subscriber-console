@@ -113,6 +113,7 @@ export interface ProfilesListQuery {
   billing?: string;
   limit?: number;
   cursor?: string | null;
+  includeArchived?: boolean;
 }
 
 /* Only non-default choices go on the wire, so the untouched view keeps the read
@@ -127,6 +128,7 @@ export function profilesListReadUrl(input: ProfilesListQuery): string {
   if (input.billing) params.set('billing', input.billing);
   if (input.limit) params.set('limit', String(input.limit));
   if (input.cursor) params.set('cursor', input.cursor);
+  if (input.includeArchived) params.set('includeArchived', 'true');
   const search = params.toString();
   return search ? `/api/profiles?${search}` : '/api/profiles';
 }

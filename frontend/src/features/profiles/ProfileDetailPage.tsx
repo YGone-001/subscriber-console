@@ -101,7 +101,6 @@ export function ProfileDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [forceDeleteCount, setForceDeleteCount] = useState<number | 'unknown' | null>(null);
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<ProfileVersionDetail | null>(null);
   const [discardTarget, setDiscardTarget] = useState<'leave' | 'cancel' | 'restore' | null>(null);
@@ -167,6 +166,7 @@ export function ProfileDetailPage() {
   /* The counter the page loaded with; every write preconditions on it so a
    * concurrent edit surfaces as a conflict instead of a silent overwrite. */
   const storedRevision = typeof profile?.revision === 'number' ? profile.revision : null;
+  const isArchived = profile?.archived === true;
   const hasUnsavedChanges = isEditing && editingBaseline !== null && editingBaseline !== draftSignature(draft);
 
   const draftPayload = useMemo(
@@ -336,8 +336,15 @@ export function ProfileDetailPage() {
       if (force) params.set('force', 'true');
       if (storedRevision !== null) params.set('expectedRevision', String(storedRevision));
       const query = params.toString();
-      await deleteJson(`/api/profiles/${encodeURIComponent(profileName)}${query ? `?${query}` : ''}`);
+      const response = await deleteJson<{ archived?: boolean }>(`/api/profiles/${encodeURIComponent(profileName)}${query ? `?${query}` : ''}`);
       await globalMutate('/api/profiles');
+      if (response?.archived) {
+        setIsDeleteConfirmOpen(false);
+        setNotice({ type: 'success', text: t('prof_msg_archived') });
+        await mutateDetail();
+        await mutateVersions();
+        return;
+      }
       router.push('/profile');
     } catch (err) {
       setIsDeleteConfirmOpen(false);
@@ -345,14 +352,6 @@ export function ProfileDetailPage() {
       if (err instanceof MutationApiError && err.code === 'PROFILE_REVISION_CONFLICT') {
         setError(t('prof_err_revision_conflict'));
         void mutateDetail();
-        return;
-      }
-      const conflict = err instanceof MutationApiError
-        && err.status === 409
-        && (err.code === 'PROFILE_IN_USE' || /in use by/i.test(message));
-      if (conflict) {
-        const parsed = Number(message.match(/(\d+)/)?.[1] ?? 0);
-        setForceDeleteCount(parsed > 0 ? parsed : (impact.kind === 'known' && impact.count > 0 ? impact.count : 'unknown'));
         return;
       }
       setError(message);
@@ -451,6 +450,25 @@ export function ProfileDetailPage() {
       setError(detail ? `${t('prof_apply_error', { imsi })} (${detail})` : t('prof_apply_error', { imsi }));
     } finally {
       setIsApplying(false);
+    }
+  };
+
+  const executeUnarchive = async () => {
+    if (!profileName) return;
+    setIsDeleting(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = { archived: false };
+      if (storedRevision !== null) payload.expectedRevision = storedRevision;
+      await putJson(`/api/profiles/${encodeURIComponent(profileName)}`, payload);
+      await globalMutate('/api/profiles');
+      await mutateDetail();
+      await mutateVersions();
+      setNotice({ type: 'success', text: t('prof_msg_unarchived') });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('prof_err_save'));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -576,6 +594,7 @@ export function ProfileDetailPage() {
         icon={<Boxes size={23} />}
         title={isCreate ? t('prof_new_profile') : (draft.title || profileName || '')}
         description={isCreate ? t('prof_new_desc') : t('prof_detail_subtitle')}
+        status={isArchived ? t('prof_archived_badge') : undefined}
         actions={isCreate || isEditing ? (
           <div className="page-action-buttons">
             <button className="btn btn-outline" onClick={requestCancelEditing}>{t('cancel')}</button>
@@ -589,9 +608,14 @@ export function ProfileDetailPage() {
           </div>
         ) : (
           <div className="page-action-buttons">
-            {canWrite && (
+            {!isArchived && canWrite && (
               <button className="btn btn-primary" onClick={startEditing}>
                 <Pencil size={16} /> {t('prof_btn_edit')}
+              </button>
+            )}
+            {isArchived && canWrite && (
+              <button className="btn btn-primary" onClick={() => { void executeUnarchive(); }} disabled={isDeleting}>
+                <Pencil size={16} /> {t('prof_unarchive_btn')}
               </button>
             )}
             {!isCreate && (
@@ -602,7 +626,7 @@ export function ProfileDetailPage() {
                 <Users size={16} /> {t('prof_view_linked')}
               </button>
             )}
-            {canApplyTemplates && !isCreate && (
+            {!isArchived && canApplyTemplates && !isCreate && (
               <button
                 className="btn btn-outline"
                 onClick={() => { setApplyImsi(''); setApplyPreview(null); setApplyPreviewError(''); setIsApplyOpen(true); }}
@@ -610,7 +634,7 @@ export function ProfileDetailPage() {
                 <UserPlus size={16} /> {t('prof_apply_btn')}
               </button>
             )}
-            {canWrite && (
+            {!isArchived && canWrite && (
               <button
                 className="btn btn-outline"
                 onClick={() => { setCloneKey(''); setCloneTitle(''); setIsCloneOpen(true); }}
@@ -621,9 +645,9 @@ export function ProfileDetailPage() {
             <button className="btn btn-outline" onClick={() => { void downloadExport(); }} disabled={isExporting}>
               <Download size={16} /> {isExporting ? t('prof_export_busy') : t('prof_export_btn')}
             </button>
-            {canWrite && (
+            {!isArchived && canWrite && (
               <button className="btn btn-danger" onClick={() => setIsDeleteConfirmOpen(true)} disabled={isDeleting}>
-                <Trash2 size={16} /> {t('delete')}
+                <Trash2 size={16} /> {t('prof_archive_btn')}
               </button>
             )}
           </div>
@@ -651,28 +675,13 @@ export function ProfileDetailPage() {
       {isDeleteConfirmOpen && (
         <ConfirmActionPanel
           tone="danger"
-          title={t('prof_del_confirm', { name: profileName || '' })}
-          message={t('prof_del_desc')}
-          confirmLabel={t('delete')}
+          title={t('prof_archive_confirm_title', { name: profileName || '' })}
+          message={t('prof_archive_confirm_desc')}
+          confirmLabel={t('prof_archive_btn')}
           cancelLabel={t('cancel')}
           isWorking={isDeleting}
           onConfirm={() => { void executeDelete(false); }}
           onCancel={() => setIsDeleteConfirmOpen(false)}
-        />
-      )}
-
-      {forceDeleteCount !== null && (
-        <ConfirmActionPanel
-          tone="danger"
-          title={t('prof_del_in_use_title', { name: profileName || '' })}
-          message={forceDeleteCount === 'unknown'
-            ? t('prof_del_in_use_unknown_desc', { name: profileName || '' })
-            : t('prof_del_in_use_desc', { count: forceDeleteCount ?? 0, name: profileName || '' })}
-          confirmLabel={t('prof_btn_force_delete')}
-          cancelLabel={t('cancel')}
-          isWorking={isDeleting}
-          onConfirm={() => { void executeDelete(true); }}
-          onCancel={() => setForceDeleteCount(null)}
         />
       )}
 

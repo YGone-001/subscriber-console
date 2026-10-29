@@ -519,13 +519,13 @@ Charging plane (frozen, excluded):
 - 资费计划（`ocs_tariff_plans`）、签约合同（`ocs_subscribers`）、余额管理（`ocs_balances`）不再整体冻结；允许在不改变身份、权限、审计边界的前提下修正生命周期语义、读取投影、错误态与运营界面。
 - 任何修改仍须保持既有 API path、query aliases、response shape 的向后兼容；新增字段或端点按加法式契约实施，并同步更新 AGENTS/CLAUDE、route/registration 计数与相关门禁。
 - 严禁引入或耦合运行时计费面实体（`ocs_sessions`、`ocs_reservations`、`ocs_usage`、`ocs_events`、`ocs_config`、Gy/Ro/CCR/CCA 协议栈），严禁把管理面重构扩展为计费引擎。
-- 已批准的目标方向（模板归档与原子创建仍待实施；余额读取、CAS、资费删除守卫、合约生命周期、数据保留、模板下发强制预览、套餐权威开通与分区错误态已实施）：
+- 已批准的目标方向（原子创建仍待实施；余额读取、CAS、资费删除守卫、合约生命周期、数据保留、模板下发强制预览、套餐权威开通、模板归档与分区错误态已实施）：
   - 合约终止为 `terminated` 终态，保留合约与余额；恢复仅允许 `suspended -> active`；订阅者删除不得绕过数据保留期。
   - 永久清理是独立的数据保留操作（平台管理 → 数据保留 + CLI），默认保留 365 天、可配置、`0` 表示永不清理；仅清理超过保留期的 terminated 记录，保留审计与订阅者身份。
   - 缺失测量一律投影为 `null` 或显式不可用，禁止用 0、默认套餐或默认 QoS 冒充测量值。
   - 模板下发在所有入口强制服务端预览，并与下发请求绑定；开通额度以套餐为准，语音/短信未建模时允许未配置。
   - 模板删除为归档，不修改既有订阅者数据；订阅者列表当前约 1 万规模，服务端聚合/游标分页按容量触发线另行实施。
-  - 已实施部分：余额读取投影为 nullable（缺失字段/版本不补 0）；所有余额调整入口发送 `version`，缺失字段或版本拒绝写入；资费删除在服务端拒绝绑定合约（`TARIFF_PLAN_DELETE_IN_USE`）；OCS 列表过滤统一转义正则元字符；资费详情与余额调整历史按分区显示不可用态；合约终止为 `terminated` 状态迁移并保留合约/余额，`resume` 仅允许 `suspended -> active`，终结合约拒绝余额调整（`PATCH /api/ocs/subscribers/{imsi}` 携带 `{"status":"terminated"}`；`DELETE` 为兼容的软终止别名）；订阅者删除在 active/suspended 合约存在时拒绝，终结合约后仅删除订阅者身份、保留 OCS 历史；数据保留为独立平台面（`GET /api/system/retention/ocs`、`POST /api/system/retention/ocs/purge`、`/system/retention`、`backend/cmd/ocs-retention`），默认 365 天可配置、`0` 禁用，仅清理超过窗口的 terminated 记录，按 adjustments→balances→contracts 级联，保留 `app_audit_logs` 与订阅者身份；模板下发必须先调用同一端点的 `preview:true` 获取服务端预览与 `previewToken`，apply 必须携带 token，预览过期返回 `PROFILE_APPLY_STALE` 且零写入；开通额度由所选套餐 `quota_per_grant` 与套餐规则派生，套餐未建模的语音/短信保持未配置。
+  - 已实施部分：余额读取投影为 nullable（缺失字段/版本不补 0）；所有余额调整入口发送 `version`，缺失字段或版本拒绝写入；资费删除在服务端拒绝绑定合约（`TARIFF_PLAN_DELETE_IN_USE`）；OCS 列表过滤统一转义正则元字符；资费详情与余额调整历史按分区显示不可用态；合约终止为 `terminated` 状态迁移并保留合约/余额，`resume` 仅允许 `suspended -> active`，终结合约拒绝余额调整（`PATCH /api/ocs/subscribers/{imsi}` 携带 `{"status":"terminated"}`；`DELETE` 为兼容的软终止别名）；订阅者删除在 active/suspended 合约存在时拒绝，终结合约后仅删除订阅者身份、保留 OCS 历史；数据保留为独立平台面（`GET /api/system/retention/ocs`、`POST /api/system/retention/ocs/purge`、`/system/retention`、`backend/cmd/ocs-retention`），默认 365 天可配置、`0` 禁用，仅清理超过窗口的 terminated 记录，按 adjustments→balances→contracts 级联，保留 `app_audit_logs` 与订阅者身份；模板下发必须先调用同一端点的 `preview:true` 获取服务端预览与 `previewToken`，apply 必须携带 token，预览过期返回 `PROFILE_APPLY_STALE` 且零写入；开通额度由所选套餐 `quota_per_grant` 与套餐规则派生，套餐未建模的语音/短信保持未配置；模板删除改为归档（`DELETE /api/profiles/{name}` 设置 `archived=true` 并保留文档/绑定/版本，默认列表排除归档，`includeArchived=true` 可查看，`PUT` 携带 `{"archived":false}` 可恢复；归档模板禁止编辑、下发与克隆）。
   - 详见 `docs/architecture/architecture-evolution-roadmap.md#business-operations-lifecycle-and-retention`。
 
 ### 6.2 托管集合与端点

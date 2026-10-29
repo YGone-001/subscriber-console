@@ -199,7 +199,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   useEffect(() => {
     const fetchProfileList = async () => {
       try {
-        const data = await getJson<ApiRecord>('/api/profiles');
+        const data = await getJson<ApiRecord>('/api/profiles?includeArchived=1');
         setProfileList(data.profiles || []);
       } catch {
     /* Best-effort side effect: a failure here must not block the form. */

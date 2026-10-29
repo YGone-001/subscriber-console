@@ -1707,6 +1707,8 @@ func (h *WriteHandler) handleProfileApplyError(w http.ResponseWriter, err error)
 			response.Error(w, http.StatusNotFound, "Subscriber not found", govErr.Code)
 		case "PROFILE_NOT_FOUND":
 			response.Error(w, http.StatusNotFound, "Profile not found", govErr.Code)
+		case "PROFILE_ARCHIVED":
+			response.Error(w, http.StatusConflict, "Archived profiles cannot be applied", govErr.Code)
 		case "INVALID_PROFILE_NAME":
 			response.Error(w, http.StatusBadRequest, "profileName is required", govErr.Code)
 		case "SUBSCRIBER_PROFILE_APPLY_NO_EFFECT":

@@ -103,10 +103,11 @@ services. The roadmap avoids premature microservice decomposition.
 > status with a guarded resume, subscriber deletion is blocked while a contract
 > is active or suspended (terminated OCS history is retained), and the
 > terminated-contract retention operation is available through the admin console
-> and CLI. Template apply now requires a server-authoritative preview token, and
-> subscriber onboarding quota is derived from the selected tariff plan. Template
-> archive and atomic create remain pending; the current source remains
-> authoritative for those areas.
+> and CLI. Template apply now requires a server-authoritative preview token,
+> subscriber onboarding quota is derived from the selected tariff plan, and
+> template deletion archives the template while preserving subscriber bindings.
+> Atomic create remains pending; the current source remains authoritative for
+> that area.
 
 The OCS management plane is open to governed lifecycle, data-truthfulness and UI
 correction. The charging plane remains frozen and excluded.
@@ -140,7 +141,7 @@ This covers OCS balance buckets, plan/status joins, subscriber traffic totals, A
 - Applying a template to an existing subscriber requires a server-authoritative preview at every entry point. The preview reports field-level changes, whether credential material changes, the current binding and a precondition token. This is implemented: `POST /api/subscribers/{imsi}/profile` with `preview:true` returns the safe before/after projection and token; applying without the token is refused and a stale token returns `PROFILE_APPLY_STALE` with zero writes.
 - The apply request carries that token; a stale preview is rejected with no write.
 - A subscriber create uses the selected tariff plan as the authority for the initial quota. Client-side onboarding values are suggestions only; voice and SMS may remain unconfigured when the plan does not model them. The create form now derives data quota from `quota_per_grant` and optional voice/SMS grants from plan rules; it no longer writes the former 10 GB / 1h / 100 constants.
-- Template deletion is archival: an additive `archived` state hides the template from active lists, preserves the binding for existing subscribers and never modifies subscriber provisioning data. Referenced templates are not hard-deleted.
+- Template deletion is archival: an additive `archived` state hides the template from active lists, preserves the binding for existing subscribers and never modifies subscriber provisioning data. Referenced templates are not hard-deleted. This is implemented: `DELETE /api/profiles/{name}` archives, `includeArchived=true` lists archived templates, and `PUT {"archived":false}` restores them.
 
 ### Route and Scale Boundaries
 

@@ -162,6 +162,9 @@ export function SubscriberTemplateCard({
             <span className="status-badge partial">{t('sub_tpl_unbound')}</span>
           )}
           <span className="policy-text">{bindingInfo.name || t('sub_tpl_unbound')}</span>
+          {boundTemplate?.archived && (
+            <span className="status-badge suspended">{t('prof_archived_badge')}</span>
+          )}
         </div>
 
         {bindingState === 'dangling' && (
@@ -211,7 +214,7 @@ export function SubscriberTemplateCard({
               disabled={profileList.length === 0}
             >
               <option value="">{profileList.length > 0 ? t('sub_apply_profile_pick') : t('sub_no_profiles')}</option>
-              {profileList.map((template) => (
+              {profileList.filter((template) => !template.archived).map((template) => (
                 <option key={template.name} value={template.name}>
                   {template.title || template.name}
                 </option>

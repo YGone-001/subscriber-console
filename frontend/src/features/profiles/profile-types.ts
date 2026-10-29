@@ -20,6 +20,7 @@ export type ProfileRecord = {
   createdBy?: string;
   /** Monotonic write counter; a save preconditions on the value it loaded. */
   revision?: number;
+  archived?: boolean;
 };
 
 export type ProfileStats = {
@@ -56,6 +57,7 @@ export type ProfileListItem = {
   activeSubscribers?: number;
   suspendedSubscribers?: number;
   restrictedSubscribers?: number;
+  archived?: boolean;
 };
 
 export type ProfileGlobalSummary = {
