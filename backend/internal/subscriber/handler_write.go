@@ -411,6 +411,8 @@ func (h *WriteHandler) handleGovernanceError(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusInternalServerError, "Subscriber updated but OCS provisioning failed", govErr.Code)
 	case "SUBSCRIBER_DELETE_PARTIAL_WRITE":
 		response.Error(w, http.StatusInternalServerError, "Subscriber deleted but OCS cleanup failed", govErr.Code)
+	case "SUBSCRIBER_ACTIVE_CONTRACT_EXISTS":
+		response.Error(w, http.StatusConflict, "Terminate the OCS contract before deleting the subscriber", govErr.Code)
 	default:
 		response.Error(w, http.StatusConflict, govErr.Code, govErr.Code)
 	}

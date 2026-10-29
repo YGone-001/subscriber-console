@@ -525,7 +525,7 @@ Charging plane (frozen, excluded):
   - 缺失测量一律投影为 `null` 或显式不可用，禁止用 0、默认套餐或默认 QoS 冒充测量值。
   - 模板下发在所有入口强制服务端预览，并与下发请求绑定；开通额度以套餐为准，语音/短信未建模时允许未配置。
   - 模板删除为归档，不修改既有订阅者数据；订阅者列表当前约 1 万规模，服务端聚合/游标分页按容量触发线另行实施。
-  - 已实施部分：余额读取投影为 nullable（缺失字段/版本不补 0）；所有余额调整入口发送 `version`，缺失字段或版本拒绝写入；资费删除在服务端拒绝绑定合约（`TARIFF_PLAN_DELETE_IN_USE`）；OCS 列表过滤统一转义正则元字符；资费详情与余额调整历史按分区显示不可用态；合约终止为 `terminated` 状态迁移并保留合约/余额，`resume` 仅允许 `suspended -> active`，终结合约拒绝余额调整（`PATCH /api/ocs/subscribers/{imsi}` 携带 `{"status":"terminated"}`；`DELETE` 为兼容的软终止别名）。
+  - 已实施部分：余额读取投影为 nullable（缺失字段/版本不补 0）；所有余额调整入口发送 `version`，缺失字段或版本拒绝写入；资费删除在服务端拒绝绑定合约（`TARIFF_PLAN_DELETE_IN_USE`）；OCS 列表过滤统一转义正则元字符；资费详情与余额调整历史按分区显示不可用态；合约终止为 `terminated` 状态迁移并保留合约/余额，`resume` 仅允许 `suspended -> active`，终结合约拒绝余额调整（`PATCH /api/ocs/subscribers/{imsi}` 携带 `{"status":"terminated"}`；`DELETE` 为兼容的软终止别名）；订阅者删除在 active/suspended 合约存在时拒绝，终结合约后仅删除订阅者身份、保留 OCS 历史。
   - 详见 `docs/architecture/architecture-evolution-roadmap.md#business-operations-lifecycle-and-retention`。
 
 ### 6.2 托管集合与端点

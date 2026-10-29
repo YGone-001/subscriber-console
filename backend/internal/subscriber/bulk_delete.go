@@ -488,6 +488,14 @@ func parseSafeSnapshot(m map[string]any) SafeSnapshot {
 
 // DeleteSubscriberCAS deletes a subscriber with CAS (Compare-And-Swap).
 func (r *Repository) DeleteSubscriberCAS(ctx context.Context, imsi string, expected bson.M) (bool, error) {
+	contractStatus, contractExists, err := r.GetOcsContractStatus(ctx, imsi)
+	if err != nil {
+		return false, err
+	}
+	if subscriberDeleteBlockedByContract(contractStatus, contractExists) {
+		return false, &SubscriberGovernanceError{Code: "SUBSCRIBER_ACTIVE_CONTRACT_EXISTS"}
+	}
+
 	collection := r.subscribers
 
 	// Build filter from expected state (excluding _id)

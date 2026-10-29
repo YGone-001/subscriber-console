@@ -1146,10 +1146,21 @@ func (r *Repository) fetchSingleOcsProvisioning(ctx context.Context, imsi string
 	return ocsSub, balance, tariffPlan, nil
 }
 
-// DeleteOcsProvisioning deletes OCS provisioning data for a subscriber.
+// DeleteOcsProvisioning deletes OCS provisioning data for a subscriber. It
+// deliberately does nothing when an OCS contract exists: a terminated contract
+// and its balance are retained for the data-retention operation, and an
+// active/suspended contract blocks subscriber deletion before this point.
 func (r *Repository) DeleteOcsProvisioning(ctx context.Context, imsi string) error {
+	_, contractExists, err := r.GetOcsContractStatus(ctx, imsi)
+	if err != nil {
+		return fmt.Errorf("read ocs contract before cleanup: %w", err)
+	}
+	if contractExists {
+		return nil
+	}
+
 	// Delete OCS subscriber
-	_, err := r.ocsSubs.DeleteOne(ctx, bson.M{"imsi": imsi})
+	_, err = r.ocsSubs.DeleteOne(ctx, bson.M{"imsi": imsi})
 	if err != nil {
 		return fmt.Errorf("delete ocs subscriber: %w", err)
 	}
@@ -1161,6 +1172,22 @@ func (r *Repository) DeleteOcsProvisioning(ctx context.Context, imsi string) err
 	}
 
 	return nil
+}
+
+// GetOcsContractStatus reports whether a billing contract exists and its stored
+// status. Missing status is returned as an empty string, which blocks implicit
+// subscriber deletion rather than assuming the contract is active.
+func (r *Repository) GetOcsContractStatus(ctx context.Context, imsi string) (string, bool, error) {
+	var doc bson.M
+	err := r.ocsSubs.FindOne(ctx, bson.M{"imsi": imsi}).Decode(&doc)
+	if err == mongo.ErrNoDocuments {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	status, _ := doc["status"].(string)
+	return status, true, nil
 }
 
 // xcloudToLegacyState maps a xcloud subscriber document to legacy state format.

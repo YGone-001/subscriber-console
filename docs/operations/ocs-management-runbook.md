@@ -150,6 +150,11 @@ Target Collection: `xcloud.ocs_subscribers`
      resume, tariff reassignment, termination and balance adjustment are all
      refused. Physical cleanup belongs to the data-retention operation, not this
      route.
+   - Deleting the subscriber identity is refused while the contract is active or
+     suspended (`SUBSCRIBER_ACTIVE_CONTRACT_EXISTS`). After termination the
+     subscriber record may be deleted, but the OCS contract and balance are
+     retained as billing history for the retention operation; they are not
+     cascade-deleted.
 
 ### 4.3 Console Surface (`/ocs/contracts`)
 - KPI strip: all / active / suspended / terminated. `total` comes from the list

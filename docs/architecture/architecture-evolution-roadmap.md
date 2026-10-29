@@ -99,10 +99,11 @@ services. The roadmap avoids premature microservice decomposition.
 > Status: partially implemented. Balance reads now project missing measurements as
 > null, every console balance adjustment sends a CAS version, tariff deletion is
 > guarded server-side, OCS list filters are escaped, affected detail sections
-> expose unavailable states, and contract termination is a preserved terminal
-> status with a guarded resume. Retention, preview-first apply, plan-sourced
-> onboarding and template archive remain pending; the current source remains
-> authoritative for those areas.
+> expose unavailable states, contract termination is a preserved terminal
+> status with a guarded resume, and subscriber deletion is blocked while a
+> contract is active or suspended (terminated OCS history is retained).
+> Retention, preview-first apply, plan-sourced onboarding and template archive
+> remain pending; the current source remains authoritative for those areas.
 
 The OCS management plane is open to governed lifecycle, data-truthfulness and UI
 correction. The charging plane remains frozen and excluded.

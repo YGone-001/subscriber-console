@@ -197,6 +197,14 @@ func (r *Repository) UpdateSubscriberFromLegacy(ctx context.Context, imsi string
 // and cleans up OCS provisioning.
 // Matches Node deleteSubscriber() exactly — uses full expected document minus _id.
 func (r *Repository) DeleteSubscriber(ctx context.Context, imsi string, expected bson.M) (bool, error) {
+	contractStatus, contractExists, err := r.GetOcsContractStatus(ctx, imsi)
+	if err != nil {
+		return false, fmt.Errorf("read ocs contract before delete: %w", err)
+	}
+	if subscriberDeleteBlockedByContract(contractStatus, contractExists) {
+		return false, &SubscriberGovernanceError{Code: "SUBSCRIBER_ACTIVE_CONTRACT_EXISTS"}
+	}
+
 	// Atomic CAS: full expected document minus _id — matches Node exactly
 	expectedFilter := expectedDocumentFilter(expected)
 
@@ -208,12 +216,28 @@ func (r *Repository) DeleteSubscriber(ctx context.Context, imsi string, expected
 		return false, nil
 	}
 
-	// Clean up OCS provisioning — errors are typed, not swallowed
-	if err := r.deleteOcsProvisioning(ctx, imsi); err != nil {
-		return true, &SubscriberGovernanceError{Code: "SUBSCRIBER_DELETE_PARTIAL_WRITE"}
+	// A terminated contract and its balance are billing history. Retention owns
+	// their physical cleanup; deleting the subscriber identity must not erase it.
+	if ocsCleanupAllowed(contractStatus, contractExists) {
+		if err := r.deleteOcsProvisioning(ctx, imsi); err != nil {
+			return true, &SubscriberGovernanceError{Code: "SUBSCRIBER_DELETE_PARTIAL_WRITE"}
+		}
 	}
 
 	return true, nil
+}
+
+// subscriberDeleteBlockedByContract keeps active and suspended billing
+// contracts from losing their subscriber identity implicitly.
+func subscriberDeleteBlockedByContract(status string, exists bool) bool {
+	return exists && status != "terminated"
+}
+
+// ocsCleanupAllowed limits subscriber-driven OCS cleanup to identities that
+// never had a contract. A terminated contract is retained for the retention
+// operation, not deleted as a side effect.
+func ocsCleanupAllowed(_ string, contractExists bool) bool {
+	return !contractExists
 }
 
 // expectedDocumentFilter builds a CAS filter from the full expected document minus _id.
