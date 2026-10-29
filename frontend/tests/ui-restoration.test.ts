@@ -81,7 +81,7 @@ test('sidebar groups expose the restored navigation hierarchy for an administrat
 
   const platform = groups.find((group) => group.key === 'nav_platform');
   assert.ok(platform);
-  assert.deepEqual(platform.children.map((child) => child.targetRoute), ['/system-health', '/users', '/logs', '/knowledge']);
+  assert.deepEqual(platform.children.map((child) => child.targetRoute), ['/system-health', '/system/retention', '/users', '/logs', '/knowledge']);
 
   // The reference sidebar renders no Rating entry: the rating routes redirect to
   // the tariff surface, so exposing them would be a dead link.

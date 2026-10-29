@@ -37,6 +37,7 @@ import (
 	"subscriber/internal/rating"
 	"subscriber/internal/remediation"
 	"subscriber/internal/response"
+	"subscriber/internal/retention"
 	"subscriber/internal/runtimeinv"
 	"subscriber/internal/runtimewire"
 	"subscriber/internal/spa"
@@ -162,6 +163,15 @@ func main() {
 		mc.Ops.Collection("app_audit_logs"),
 	)
 	balanceHandler := balance.NewHandler(balanceRepo, limiter, userRepo, auditWriter)
+
+	// OCS terminated-contract retention (admin-only data-retention surface)
+	retentionRepo := retention.NewRepository(
+		mc.XCloud.Collection("ocs_subscribers"),
+		mc.XCloud.Collection("ocs_balances"),
+		mc.Ops.Collection("ocs_balance_adjustments"),
+	)
+	retentionService := retention.NewService(retentionRepo, auditWriter, cfg.OCSTerminatedRetentionDays)
+	retentionHandler := retention.NewHandler(retentionService, limiter, userRepo, auditWriter)
 
 	// OCS Subscriber Contract write handler
 	ocsSubscriberWriteHandler := ocs.NewSubscriberWriteHandler(ocsRepo, limiter, userRepo, auditWriter)
@@ -579,6 +589,8 @@ func main() {
 	mux.Handle("POST /api/analytics/init", authMiddleware(http.HandlerFunc(analyticsHandler.Init)))
 	mux.Handle("GET /api/system/health", authMiddleware(http.HandlerFunc(systemHandler.SystemHealth)))
 	mux.Handle("GET /api/system/mongo/health", authMiddleware(http.HandlerFunc(systemHandler.MongoHealth)))
+	mux.Handle("GET /api/system/retention/ocs", authMiddleware(http.HandlerFunc(retentionHandler.List)))
+	mux.Handle("POST /api/system/retention/ocs/purge", authMiddleware(http.HandlerFunc(retentionHandler.Purge)))
 	mux.Handle("GET /api/system/audit/status", authMiddleware(http.HandlerFunc(systemHandler.AuditStatus)))
 	mux.Handle("POST /api/system/audit/scan", authMiddleware(http.HandlerFunc(systemHandler.AuditScan)))
 	remediation.RegisterRoutes(mux, authMiddleware, remediationHandler)

@@ -162,6 +162,10 @@
     "dynamicParameters": []
   },
   {
+    "route": "/system/retention",
+    "dynamicParameters": []
+  },
+  {
     "route": "/users",
     "dynamicParameters": []
   },

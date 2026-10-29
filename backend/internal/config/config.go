@@ -47,6 +47,9 @@ type Config struct {
 	// UE information (read-only EPC/5GC endpoint allowlist)
 	UEInfoSources string // comma-separated role=host:port (mme, amf, smf)
 
+	// OCS terminated-contract retention. Zero disables physical cleanup.
+	OCSTerminatedRetentionDays int
+
 	// Knowledge base attachment storage (local filesystem, never client-visible)
 	KnowledgeUploadDir string // attachment bytes root
 	KnowledgeTrashDir  string // soft-delete recovery root
@@ -54,6 +57,15 @@ type Config struct {
 
 // Load reads configuration from environment variables with sensible defaults.
 func Load() (*Config, error) {
+	retentionDays := 365
+	if value := os.Getenv("OCS_TERMINATED_RETENTION_DAYS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			return nil, fmt.Errorf("OCS_TERMINATED_RETENTION_DAYS must be zero or positive")
+		}
+		retentionDays = parsed
+	}
+
 	cfg := &Config{
 		HTTPAddr:        envOrDefault("HTTP_ADDR", "127.0.0.1:18888"),
 		ReadTimeout:     envDurationOrDefault("HTTP_READ_TIMEOUT", 15*time.Second),
@@ -87,6 +99,8 @@ func Load() (*Config, error) {
 
 		KnowledgeUploadDir: envOrDefault("KNOWLEDGE_UPLOAD_DIR", "/srv/internal-resource-server/uploads"),
 		KnowledgeTrashDir:  envOrDefault("KNOWLEDGE_TRASH_DIR", "/srv/internal-resource-server/.trash"),
+
+		OCSTerminatedRetentionDays: retentionDays,
 	}
 
 	if cfg.MongoURI == "" {

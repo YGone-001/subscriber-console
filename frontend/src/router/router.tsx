@@ -36,6 +36,7 @@ import { UEInfoPage } from '../features/ue-info/UEInfoPage';
 import { KnowledgePage } from '../features/knowledge/KnowledgePage';
 import { KnowledgeDetailPage } from '../features/knowledge/KnowledgeDetailPage';
 import { KnowledgeEditorPage } from '../features/knowledge/KnowledgeEditorPage';
+import { RetentionPage } from '../features/retention/RetentionPage';
 
 const pages: Record<string, ReactNode> = {
   '/': <DashboardPage />,
@@ -68,6 +69,7 @@ const pages: Record<string, ReactNode> = {
   '/subscribers/new': <SubscriberDetailPage />,
   '/subscribers/:imsi': <SubscriberDetailPage />,
   '/system-health': <SystemHealthPage />,
+  '/system/retention': <RetentionPage />,
   '/users': <UsersPage />,
   '/users/:username': <UserDetailPage />,
   '/users/create': <UserCreatePage />,

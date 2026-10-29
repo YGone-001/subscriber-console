@@ -362,6 +362,14 @@
     ]
   },
   {
+    "route": "/system/retention",
+    "mode": "read",
+    "source": "frontend/src/features/retention/RetentionPage.tsx",
+    "readEndpoints": [
+      "GET /api/system/retention/ocs"
+    ]
+  },
+  {
     "route": "/knowledge",
     "mode": "read",
     "source": "frontend/src/features/knowledge/KnowledgePage.tsx",

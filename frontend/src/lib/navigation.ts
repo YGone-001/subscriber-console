@@ -1,4 +1,4 @@
-import { Activity, BellRing, BookOpen, Boxes, Briefcase, CreditCard, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, ScrollText, Settings, Smartphone, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { Activity, BellRing, BookOpen, Boxes, Briefcase, CreditCard, DatabaseBackup, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, ScrollText, Settings, Smartphone, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 import type { CanonicalRole } from '../types/auth';
 import { hasNavigationPermission } from './permissions';
 
@@ -54,6 +54,7 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/subscribers/new', targetRoute: '/subscribers/new', dynamicParameters: [], labelKey: 'nav_subscriber_new', icon: Users },
   { route: '/subscribers/:imsi', targetRoute: '/subscribers/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_subscriber', icon: Users },
   { route: '/system-health', targetRoute: '/system-health', dynamicParameters: [], labelKey: 'nav_system_health', icon: Activity, group: 'platform', visible: true },
+  { route: '/system/retention', targetRoute: '/system/retention', dynamicParameters: [], labelKey: 'nav_system_retention', icon: DatabaseBackup, group: 'platform', visible: true, permission: 'users.read' },
   { route: '/users', targetRoute: '/users', dynamicParameters: [], labelKey: 'nav_system_users', icon: UserCog, group: 'platform', visible: true, permission: 'users.read' },
   { route: '/users/:username', targetRoute: '/users/:username', dynamicParameters: ['username'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/users/create', targetRoute: '/users/create', dynamicParameters: [], labelKey: 'nav_user_create', icon: UserCog, permission: 'users.read' },
@@ -143,7 +144,7 @@ export type SidebarGroup = {
  */
 const BUSINESS_CHILD_ORDER = ['/subscribers', '/profile', '/ocs/tariffs', '/ocs/contracts', '/ocs/balances'];
 const NETWORK_CHILD_ORDER = ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info'];
-const PLATFORM_CHILD_ORDER = ['/system-health', '/users', '/logs', '/knowledge'];
+const PLATFORM_CHILD_ORDER = ['/system-health', '/system/retention', '/users', '/logs', '/knowledge'];
 
 /**
  * Grouped sidebar model derived from the current navigation authority.

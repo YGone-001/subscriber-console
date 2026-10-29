@@ -95,7 +95,7 @@ export function toInventoryPath(pattern) {
  * together with the AGENTS.md / CLAUDE.md totals that `test-agent-docs-parity`
  * cross-checks.
  */
-export const EXPECTED_GO_REGISTRATIONS = 164;
+export const EXPECTED_GO_REGISTRATIONS = 166;
 
 /**
  * The frozen business mutation census: unique METHOD+PATH mutation endpoints declared by

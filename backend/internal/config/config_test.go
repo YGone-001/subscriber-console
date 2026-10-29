@@ -12,6 +12,7 @@ func TestLoadDefaults(t *testing.T) {
 	os.Unsetenv("MONGODB_URI")
 	os.Unsetenv("MONGODB_XCLOUD_DB")
 	os.Unsetenv("MONGODB_APP_DB")
+	os.Unsetenv("OCS_TERMINATED_RETENTION_DAYS")
 
 	cfg, err := Load()
 	if err != nil {
@@ -42,6 +43,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.ShutdownTimeout != 10*time.Second {
 		t.Errorf("ShutdownTimeout = %v, want %v", cfg.ShutdownTimeout, 10*time.Second)
 	}
+	if cfg.OCSTerminatedRetentionDays != 365 {
+		t.Errorf("OCSTerminatedRetentionDays = %d, want 365", cfg.OCSTerminatedRetentionDays)
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -50,6 +54,7 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("MONGODB_XCLOUD_DB", "test_xcloud")
 	t.Setenv("MONGODB_APP_DB", "test_ops")
 	t.Setenv("HTTP_READ_TIMEOUT", "5s")
+	t.Setenv("OCS_TERMINATED_RETENTION_DAYS", "30")
 
 	cfg, err := Load()
 	if err != nil {
@@ -70,6 +75,16 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 	if cfg.ReadTimeout != 5*time.Second {
 		t.Errorf("ReadTimeout = %v, want %v", cfg.ReadTimeout, 5*time.Second)
+	}
+	if cfg.OCSTerminatedRetentionDays != 30 {
+		t.Errorf("OCSTerminatedRetentionDays = %d, want 30", cfg.OCSTerminatedRetentionDays)
+	}
+}
+
+func TestLoadRejectsNegativeRetention(t *testing.T) {
+	t.Setenv("OCS_TERMINATED_RETENTION_DAYS", "-1")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected negative retention days to be rejected")
 	}
 }
 

@@ -11,7 +11,7 @@ Target Components: Go Backend (:18888, API + embedded static React SPA), Nginx E
 The **OCS Management Plane** governs administrative operations for commercial telecommunication offerings, subscriber billing contracts, and quota balances. It operates strictly separated from the runtime **Charging Plane** (Gy/Ro/CCR/Diameter rating and session management).
 
 ### Operational Invariants
-1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Nginx edge routes `/api` and `/api/*` straight to Go (`GoRegistered = 164`); Go serves UI pages via embedded static React SPA. No fallback backend exists.
+1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Nginx edge routes `/api` and `/api/*` straight to Go (`GoRegistered = 166`); Go serves UI pages via embedded static React SPA. No fallback backend exists.
 2. **Canonical RBAC & Direct Execution**:
    - `admin`: System administration, user management, and direct business mutations.
    - `operator`: Core operational mutations (subscribers, balances, profiles, tariffs, rating) execute directly without approval. No user administration.
@@ -333,5 +333,34 @@ db.app_audit_logs.find({
 The OCS management plane is open to governed lifecycle, data-truthfulness and UI
 correction under the current API, RBAC, Fresh Actor, rate-limit and audit
 boundaries. The charging plane remains excluded. Production routing invariant
-`GoRegistered = 164` is strictly maintained; new fields or endpoints are additive
+`GoRegistered = 166` is strictly maintained; new fields or endpoints are additive
 and require the associated contract and documentation updates.
+
+---
+
+## 9. Terminated-Contract Data Retention
+
+Physical cleanup is a data-retention operation, separate from contract
+termination.
+
+- Policy: `OCS_TERMINATED_RETENTION_DAYS` (default `365`, `0` disables cleanup).
+- Admin surface: `/system/retention`; API `GET /api/system/retention/ocs` and
+  `POST /api/system/retention/ocs/purge`. Both require the `admin` role and
+  `core.configure`; apply additionally revalidates the fresh actor.
+- Eligibility: only `status=terminated` contracts whose stored `updated_at` is at
+  or before the cutoff. A contract without a parseable timestamp is not eligible;
+  active and suspended contracts are never touched.
+- Apply requires a reason and the exact confirmation phrase
+  `PURGE TERMINATED OCS`. The UI and API require a dry run first.
+- Cascade: `ocs_balance_adjustments` -> `ocs_balances` -> `ocs_subscribers`.
+  `xcloud_ops.app_audit_logs` and the subscriber identity record are retained.
+- Each purged contract writes a `PURGE` audit record with the reason, actor and
+  deleted counts. Audit write failures are reported as warnings after the write.
+- CLI (same service):
+  ```bash
+  go run ./cmd/ocs-retention                       # dry-run preview
+  go run ./cmd/ocs-retention --apply \
+    --reason "retention policy" --confirm "PURGE TERMINATED OCS"
+  ```
+  `--imsi <imsi>` is an explicit CLI-only maintenance escape hatch for one
+  already-terminated contract; it is not exposed over HTTP.

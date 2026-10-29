@@ -174,6 +174,12 @@ const EXPECTED_OCS_EXTENSION_ROUTES = new Set([
   'GET /api/ocs/balances/{imsi}/adjustments',
 ]);
 
+// Admin-only terminated-contract retention surface.
+const EXPECTED_RETENTION_ROUTES = new Set([
+  'GET /api/system/retention/ocs',
+  'POST /api/system/retention/ocs/purge',
+]);
+
 /*
  * Every post-normalization registration, in one place. The membership check and
  * the count are both derived from this union, so a new feature set can no longer
@@ -195,6 +201,7 @@ const ALLOWED_ADDED_ROUTES = new Set([
   ...EXPECTED_NF_LOGS_ROUTES,
   ...EXPECTED_NF_NOTIFICATIONS_ROUTES,
   ...EXPECTED_OCS_EXTENSION_ROUTES,
+  ...EXPECTED_RETENTION_ROUTES,
 ]);
 const EXPECTED_ADDED_ROUTE_COUNT = ALLOWED_ADDED_ROUTES.size;
 
