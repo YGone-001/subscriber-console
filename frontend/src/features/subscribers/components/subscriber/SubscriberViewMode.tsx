@@ -14,6 +14,7 @@ interface SubscriberViewModeProps {
   auth4GData: Auth4GData;
   usimType: "opc" | "op";
   ueAmbr: Ambr;
+  hasUeAmbr: boolean;
   imsi: string;
   msisdn: string;
   accessRestriction: number;
@@ -29,7 +30,7 @@ interface SubscriberViewModeProps {
   ocsContractStatus: string;
   hasOcsContract: boolean;
   hasOcsBalance: boolean;
-  ocsVolumeThreshold: number;
+  ocsVolumeThreshold: number | null;
   ocsDataReservedStr: string;
   ocsRules: any[];
   ratingList?: any[];
@@ -166,6 +167,7 @@ export default function SubscriberViewMode({
   auth4GData,
   usimType,
   ueAmbr,
+  hasUeAmbr,
   imsi,
   msisdn,
   accessRestriction,
@@ -203,36 +205,48 @@ export default function SubscriberViewMode({
       ? slice.session_list.reduce((sum, session: any) => sum + (Array.isArray(session.pcc_rule) ? session.pcc_rule.length : 0), 0)
       : 0), 0)
     : 0;
-  const trafficTotal = parseBytes(ocsTrafficTotalStr);
-  const trafficBalance = parseBytes(ocsTrafficBalanceStr);
-  const voiceTotal = parseSeconds(ocsVoiceTotalStr);
-  const voiceBalance = parseSeconds(ocsVoiceBalanceStr);
-  const smsTotal = parseEvents(ocsSmsTotalStr);
-  const smsBalance = parseEvents(ocsSmsBalanceStr);
-  const trafficPercent = trafficTotal > 0 ? Math.max(0, Math.min(100, (trafficBalance / trafficTotal) * 100)) : 0;
-  const voicePercent = voiceTotal > 0 ? Math.max(0, Math.min(100, (voiceBalance / voiceTotal) * 100)) : 0;
-  const smsPercent = smsTotal > 0 ? Math.max(0, Math.min(100, (smsBalance / smsTotal) * 100)) : 0;
+  const trafficTotal = ocsTrafficTotalStr ? parseBytes(ocsTrafficTotalStr) : null;
+  const trafficBalance = ocsTrafficBalanceStr ? parseBytes(ocsTrafficBalanceStr) : null;
+  const voiceTotal = ocsVoiceTotalStr ? parseSeconds(ocsVoiceTotalStr) : null;
+  const voiceBalance = ocsVoiceBalanceStr ? parseSeconds(ocsVoiceBalanceStr) : null;
+  const smsTotal = ocsSmsTotalStr ? parseEvents(ocsSmsTotalStr) : null;
+  const smsBalance = ocsSmsBalanceStr ? parseEvents(ocsSmsBalanceStr) : null;
+  const trafficPercent = trafficTotal !== null && trafficBalance !== null && trafficTotal > 0
+    ? Math.max(0, Math.min(100, (trafficBalance / trafficTotal) * 100))
+    : null;
+  const voicePercent = voiceTotal !== null && voiceBalance !== null && voiceTotal > 0
+    ? Math.max(0, Math.min(100, (voiceBalance / voiceTotal) * 100))
+    : null;
+  const smsPercent = smsTotal !== null && smsBalance !== null && smsTotal > 0
+    ? Math.max(0, Math.min(100, (smsBalance / smsTotal) * 100))
+    : null;
   const hasPlan = Boolean(ocsPlanId);
   const isContractSuspended = ocsContractStatus === "suspended" || ocsContractStatus === "terminated";
   const hasRestriction = Number(accessRestriction || 0) !== 0 && Number(accessRestriction || 0) !== 32;
   const hasRules = ocsRules.length > 0;
-  const balanceState: "missing" | "exhausted" | "low" | "normal" = !hasOcsBalance
+  const balanceState: "missing" | "unknown" | "exhausted" | "low" | "normal" = !hasOcsBalance
     ? "missing"
-    : trafficBalance <= 0
-      ? "exhausted"
-      : ocsVolumeThreshold > 0 && trafficBalance <= ocsVolumeThreshold
-        ? "low"
-        : "normal";
+    : trafficBalance === null
+      ? "unknown"
+      : trafficBalance <= 0
+        ? "exhausted"
+        : ocsVolumeThreshold === null
+          ? "unknown"
+          : ocsVolumeThreshold > 0 && trafficBalance <= ocsVolumeThreshold
+            ? "low"
+            : "normal";
   const balanceStateLabel = balanceState === "exhausted"
     ? t("sub_balance_exhausted")
     : balanceState === "low"
       ? t("sub_balance_low")
       : balanceState === "normal"
         ? t("sub_balance_normal")
-        : t("sub_not_configured");
+        : balanceState === "unknown"
+          ? t("unknown")
+          : t("sub_not_configured");
   const balanceCheckState: "ok" | "missing" | "warning" = balanceState === "missing" || balanceState === "exhausted"
     ? "missing"
-    : balanceState === "low"
+    : balanceState === "low" || balanceState === "unknown"
       ? "warning"
       : "ok";
 
@@ -253,7 +267,7 @@ export default function SubscriberViewMode({
       key: "balance",
       state: balanceCheckState,
       label: t("sub_check_balance"),
-      detail: hasOcsBalance ? `${balanceStateLabel} · ${ocsTrafficBalanceStr || "0 B"} / ${ocsTrafficTotalStr || "0 B"}` : undefined,
+      detail: hasOcsBalance ? `${balanceStateLabel} · ${ocsTrafficBalanceStr || "—"} / ${ocsTrafficTotalStr || "—"}` : undefined,
     },
     {
       key: "rules",
@@ -283,15 +297,23 @@ export default function SubscriberViewMode({
     sliceCount === 0 ? t("sub_360_focus_slice") : "",
     balanceState === "exhausted" ? t("sub_360_focus_exhausted") : "",
     balanceState === "low" ? t("sub_360_focus_low_balance") : "",
-    balanceState === "normal" && trafficTotal > 0 && trafficPercent < 30 ? t("sub_360_focus_traffic") : "",
+    balanceState === "normal" && trafficPercent !== null && trafficPercent < 30 ? t("sub_360_focus_traffic") : "",
     isContractSuspended ? t("sub_360_focus_contract_status") : "",
     hasRestriction ? t("sub_360_focus_access") : "",
   ].filter(Boolean).slice(0, 4);
 
-  const remainingLabel = (total: number, balance: number, configured: boolean) => {
+  const remainingLabel = (total: number | null, balance: number | null, configured: boolean) => {
     if (!configured) return t("sub_not_configured");
+    if (total === null || balance === null) return "—";
     if (total <= 0) return "0%";
     return `${Math.max(0, Math.min(100, (balance / total) * 100)).toFixed(0)}%`;
+  };
+
+  const ambrLabel = (direction?: { value?: number; unit?: number }) => {
+    if (!hasUeAmbr) return "—";
+    if (!direction || direction.value === undefined || direction.value === null) return "—";
+    const unit = AMBR_UNITS.find(u => u.val === direction.unit)?.label;
+    return unit ? `${direction.value} ${unit}` : String(direction.value);
   };
 
   return (
@@ -338,9 +360,9 @@ export default function SubscriberViewMode({
                 </div>
               )}
               <div className="overview-metrics-grid">
-                <SummaryMetric label={t("sub_360_data_remaining")} value={remainingLabel(trafficTotal, trafficBalance, hasOcsBalance)} accent={hasOcsBalance && trafficPercent >= 30} />
-                <SummaryMetric label={t("sub_360_voice_remaining")} value={remainingLabel(voiceTotal, voiceBalance, hasOcsBalance)} accent={hasOcsBalance && voicePercent >= 30} />
-                <SummaryMetric label={t("sub_360_sms_remaining")} value={remainingLabel(smsTotal, smsBalance, hasOcsBalance)} accent={hasOcsBalance && smsPercent >= 30} />
+                <SummaryMetric label={t("sub_360_data_remaining")} value={remainingLabel(trafficTotal, trafficBalance, hasOcsBalance)} accent={hasOcsBalance && trafficPercent !== null && trafficPercent >= 30} />
+                <SummaryMetric label={t("sub_360_voice_remaining")} value={remainingLabel(voiceTotal, voiceBalance, hasOcsBalance)} accent={hasOcsBalance && voicePercent !== null && voicePercent >= 30} />
+                <SummaryMetric label={t("sub_360_sms_remaining")} value={remainingLabel(smsTotal, smsBalance, hasOcsBalance)} accent={hasOcsBalance && smsPercent !== null && smsPercent >= 30} />
                 <SummaryMetric label={t("sub_360_rule_coverage")} value={`${[hasDataRule, hasVoiceRule, hasSmsRule, hasImsRule].filter(Boolean).length}/4`} accent={hasDataRule && hasVoiceRule && hasSmsRule && hasImsRule} />
               </div>
             </div>
@@ -366,10 +388,10 @@ export default function SubscriberViewMode({
                 {t("sub_360_data_balance")}
               </div>
               <div className="details-box-content">
-                <SummaryMetric label={t("sub_360_total_quota")} value={hasOcsBalance ? (ocsTrafficTotalStr || "0 B") : t("sub_not_configured")} />
-                <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsTrafficBalanceStr || "0 B") : t("sub_not_configured")} accent={hasOcsBalance} />
-                <SummaryMetric label={t("sub_360_reserved")} value={hasOcsBalance ? (ocsDataReservedStr || "0 B") : t("sub_not_configured")} />
-                <SummaryMetric label={t("sub_360_balance_threshold")} value={ocsVolumeThreshold > 0 ? formatBytes(ocsVolumeThreshold) : t("sub_not_configured")} />
+                <SummaryMetric label={t("sub_360_total_quota")} value={hasOcsBalance ? (ocsTrafficTotalStr || "—") : t("sub_not_configured")} />
+                <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsTrafficBalanceStr || "—") : t("sub_not_configured")} accent={hasOcsBalance} />
+                <SummaryMetric label={t("sub_360_reserved")} value={hasOcsBalance ? (ocsDataReservedStr || "—") : t("sub_not_configured")} />
+                <SummaryMetric label={t("sub_360_balance_threshold")} value={ocsVolumeThreshold === null ? t("sub_not_configured") : formatBytes(ocsVolumeThreshold)} />
               </div>
             </div>
 
@@ -379,8 +401,8 @@ export default function SubscriberViewMode({
                 {t("sub_360_ims_voice")}
               </div>
               <div className="details-box-content">
-                <SummaryMetric label={t("sub_360_total_duration")} value={hasOcsBalance ? (ocsVoiceTotalStr || "0s") : t("sub_not_configured")} />
-                <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsVoiceBalanceStr || "0s") : t("sub_not_configured")} accent={hasOcsBalance} />
+                <SummaryMetric label={t("sub_360_total_duration")} value={hasOcsBalance ? (ocsVoiceTotalStr || "—") : t("sub_not_configured")} />
+                <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsVoiceBalanceStr || "—") : t("sub_not_configured")} accent={hasOcsBalance} />
               </div>
             </div>
 
@@ -390,8 +412,8 @@ export default function SubscriberViewMode({
                 {t("sub_360_ims_sms")}
               </div>
               <div className="details-box-content">
-                <SummaryMetric label={t("sub_360_sms_quota")} value={hasOcsBalance ? (ocsSmsTotalStr || "0") : t("sub_not_configured")} />
-                <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsSmsBalanceStr || "0") : t("sub_not_configured")} accent={hasOcsBalance} />
+                <SummaryMetric label={t("sub_360_sms_quota")} value={hasOcsBalance ? (ocsSmsTotalStr || "—") : t("sub_not_configured")} />
+                <SummaryMetric label={t("sub_360_available")} value={hasOcsBalance ? (ocsSmsBalanceStr || "—") : t("sub_not_configured")} accent={hasOcsBalance} />
               </div>
             </div>
 
@@ -427,8 +449,8 @@ export default function SubscriberViewMode({
           <div className="auth-grid">
             <AuthValueCard label={t("sub_key_k")} value={auth4GData.k} copyable singleLine canReveal={canRevealCredentials} t={t} credentialState={auth4GData.credentialState} field="k" />
             <AuthValueCard label={`${t("sub_key_op")} (${usimType.toUpperCase()})`} value={auth4GData.opValue} copyable singleLine canReveal={canRevealCredentials} t={t} credentialState={auth4GData.credentialState} field={usimType === "op" ? "op" : "opc"} />
-            <AuthValueCard label="AMF" value={auth4GData.amf || "N/A"} t={t} />
-            <AuthValueCard label="SQN" value={String(auth4GData.sqn || 0)} t={t} />
+            <AuthValueCard label="AMF" value={auth4GData.amf || "—"} t={t} />
+            <AuthValueCard label="SQN" value={auth4GData.sqn === null || auth4GData.sqn === undefined ? "—" : String(auth4GData.sqn)} t={t} />
           </div>
         </DetailPanel>
 
@@ -439,7 +461,7 @@ export default function SubscriberViewMode({
               <div>
                 <div className="ambr-label">{t("sub_lbl_ambr_dl")}</div>
                 <div className="ambr-value">
-                  {ueAmbr.downlink?.value || 0} <span className="ambr-unit">{AMBR_UNITS.find(u => u.val === (ueAmbr.downlink?.unit || 1))?.label || ''}</span>
+                  {ambrLabel(ueAmbr.downlink)}
                 </div>
               </div>
             </div>
@@ -448,7 +470,7 @@ export default function SubscriberViewMode({
               <div>
                 <div className="ambr-label">{t("sub_lbl_ambr_ul")}</div>
                 <div className="ambr-value">
-                  {ueAmbr.uplink?.value || 0} <span className="ambr-unit">{AMBR_UNITS.find(u => u.val === (ueAmbr.uplink?.unit || 1))?.label || ''}</span>
+                  {ambrLabel(ueAmbr.uplink)}
                 </div>
               </div>
             </div>
@@ -457,12 +479,12 @@ export default function SubscriberViewMode({
 
         <DetailPanel id="sec-ocs-view" title={t("sec_billing_config")} icon={<Gauge size={18} color="var(--primary)" />}>
           <div className="billing-grid">
-            <SummaryMetric label={t("sub_traffic_quota")} value={ocsTrafficTotalStr} />
-            <SummaryMetric label={t("sub_traffic_balance")} value={ocsTrafficBalanceStr} accent />
-            <SummaryMetric label={t("sub_360_voice_quota")} value={ocsVoiceTotalStr} />
-            <SummaryMetric label={t("sub_360_voice_balance")} value={ocsVoiceBalanceStr} accent />
-            <SummaryMetric label={t("sub_360_sms_quota")} value={ocsSmsTotalStr} />
-            <SummaryMetric label={t("sub_360_sms_balance")} value={ocsSmsBalanceStr} accent />
+            <SummaryMetric label={t("sub_traffic_quota")} value={hasOcsBalance ? (ocsTrafficTotalStr || "—") : t("sub_not_configured")} />
+            <SummaryMetric label={t("sub_traffic_balance")} value={hasOcsBalance ? (ocsTrafficBalanceStr || "—") : t("sub_not_configured")} accent />
+            <SummaryMetric label={t("sub_360_voice_quota")} value={hasOcsBalance ? (ocsVoiceTotalStr || "—") : t("sub_not_configured")} />
+            <SummaryMetric label={t("sub_360_voice_balance")} value={hasOcsBalance ? (ocsVoiceBalanceStr || "—") : t("sub_not_configured")} accent />
+            <SummaryMetric label={t("sub_360_sms_quota")} value={hasOcsBalance ? (ocsSmsTotalStr || "—") : t("sub_not_configured")} />
+            <SummaryMetric label={t("sub_360_sms_balance")} value={hasOcsBalance ? (ocsSmsBalanceStr || "—") : t("sub_not_configured")} accent />
             <SummaryMetric label="PLMN" value={ocsPlmn || t("sub_not_configured")} />
             <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("sub_not_configured")} accent />
             <SummaryMetric label={t("sub_360_plan_status")} value={planStatusLabel(t, ocsPlanStatus)} />
@@ -531,8 +553,8 @@ export default function SubscriberViewMode({
                           <tr key={sessIdx} className="hover-session">
                             <td className="slice-table-td slice-table-td-main">{sess.name || "internet"}</td>
                             <td className="slice-table-td slice-table-td-sec">{typeLabel(sess.type)}</td>
-                            <td className="slice-table-td slice-table-td-sec">{sess.qos?._5qi || "-"}</td>
-                            <td className="slice-table-td slice-table-td-sec">{sess.qos?.arp?.priorityLevel || "-"}</td>
+                            <td className="slice-table-td slice-table-td-sec">{sess.qos?._5qi ?? "-"}</td>
+                            <td className="slice-table-td slice-table-td-sec">{sess.qos?.arp?.priorityLevel ?? "-"}</td>
                             <td className="slice-table-td slice-table-td-ambr">{getAmbrString(sess.ambr)}</td>
                             <td className="slice-table-td slice-table-td-sec">
                               {sess.pcc_rule && sess.pcc_rule.length > 0 ? (
@@ -541,10 +563,10 @@ export default function SubscriberViewMode({
                                     <div key={pccIdx} className="pcc-rule-item">
                                       <div className="pcc-rule-idx">{t("slice_rule_idx", { idx: pccIdx + 1 })}</div>
                                       <div className="pcc-rule-grid">
-                                        <div><span className="text-muted">5QI:</span> {rule.qos?._5qi || 1}</div>
-                                        <div><span className="text-muted">ARP:</span> {rule.qos?.arp?.priorityLevel || 2}</div>
+                                        <div><span className="text-muted">5QI:</span> {rule.qos?._5qi ?? "—"}</div>
+                                        <div><span className="text-muted">ARP:</span> {rule.qos?.arp?.priorityLevel ?? "—"}</div>
                                         <div className="pcc-rule-mbr">
-                                          <span className="text-muted">MBR:</span> {rule.qos?.mbr?.downlink?.value || 0} {AMBR_UNITS.find(u => u.val === (rule.qos?.mbr?.downlink?.unit || 1))?.label} (DL) / {rule.qos?.mbr?.uplink?.value || 0} {AMBR_UNITS.find(u => u.val === (rule.qos?.mbr?.uplink?.unit || 1))?.label} (UL)
+                                          <span className="text-muted">MBR:</span> {ambrLabel(rule.qos?.mbr?.downlink)} (DL) / {ambrLabel(rule.qos?.mbr?.uplink)} (UL)
                                         </div>
                                       </div>
                                     </div>

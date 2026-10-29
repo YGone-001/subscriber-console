@@ -31,6 +31,9 @@ var (
 
 	// ErrInvariantViolation is returned when current balance violates invariants.
 	ErrInvariantViolation = errors.New("BALANCE_INVARIANT_VIOLATION")
+
+	// ErrBalanceFieldsMissing is returned when the target bucket is incomplete.
+	ErrBalanceFieldsMissing = errors.New("BALANCE_FIELDS_MISSING")
 )
 
 // AdjustmentResult holds before and after balance records from a CAS adjustment.
@@ -69,7 +72,14 @@ func (r *Repository) AdjustBalanceCAS(ctx context.Context, imsi string, expected
 	}
 
 	before := mapBalanceDoc(currentDoc, nil)
-	if !before.InvariantOk {
+	if !balanceBucketFieldsPresent(currentDoc, bucket) {
+		return nil, ErrBalanceFieldsMissing
+	}
+	view := mapBalanceView(currentDoc, nil)
+	if view.InvariantOk == nil {
+		return nil, ErrBalanceFieldsMissing
+	}
+	if !*view.InvariantOk {
 		return nil, ErrInvariantViolation
 	}
 

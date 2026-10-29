@@ -112,6 +112,10 @@ test('a balance with no bucket fields reports null buckets instead of zeros', ()
   assert.ok(view);
   assert.equal(view.data.total, null);
   assert.equal(view.data.used, null);
+  assert.equal(view.planId, null, 'a missing plan must not become a default plan');
+  assert.equal(view.status, null, 'a missing status must not become active');
+  assert.equal(view.version, null, 'a missing version must stay unavailable');
+  assert.equal(view.invariants.all, null, 'an unreported invariant must stay unknown');
   assert.equal(bucketUsagePercent(view.data), null);
   assert.equal(view.imsi, '417010000000002');
 });

@@ -71,6 +71,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
    * The detail surface renders it instead of guessing from the draft. */
   const [profileBinding, setProfileBinding] = useState("");
   const [ueAmbr, setUeAmbr] = useState({ downlink: { unit: 3, value: 1 }, uplink: { unit: 3, value: 1 } });
+  const [hasUeAmbr, setHasUeAmbr] = useState(!imsi);
 
   const [slices, setSlices] = useState<any[]>([]);
   const [accessRestriction, setAccessRestriction] = useState<number>(0);
@@ -98,7 +99,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [ocsVoiceBalanceStr, setOcsVoiceBalanceStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.voiceBalance);
   const [ocsSmsTotalStr, setOcsSmsTotalStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.smsTotal);
   const [ocsSmsBalanceStr, setOcsSmsBalanceStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.smsBalance);
-  const [ocsVolumeThreshold, setOcsVolumeThreshold] = useState(0);
+  const [ocsVolumeThreshold, setOcsVolumeThreshold] = useState<number | null>(0);
   const [ocsDataReservedStr, setOcsDataReservedStr] = useState("");
   const initialOcsSignatureRef = useRef<string | null>(null);
 
@@ -257,7 +258,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           const plan = planData.plan;
           if (plan?.status) setOcsPlanStatus(String(plan.status));
           if (plan?.volume_threshold !== undefined) {
-            setOcsVolumeThreshold(Number(plan.volume_threshold) || 0);
+            const threshold = Number(plan.volume_threshold);
+            setOcsVolumeThreshold(Number.isFinite(threshold) ? threshold : null);
           }
           if (Array.isArray(plan?.rules)) setOcsRules(plan.rules);
         }
@@ -297,13 +299,12 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
             amf: p.auth.amf || prev.amf
           }));
         }
-        if (p.ambr) setUeAmbr(p.ambr);
+        if (p.ambr) { setUeAmbr(p.ambr); setHasUeAmbr(true); }
         if (Array.isArray(p.sliceList)) setSlices(JSON.parse(JSON.stringify(p.sliceList)));
         if (p.ocsDefaults) {
           const hasImsi = !!(imsi || inputImsi);
           if (!hasImsi) setOcsPlmn(p.ocsDefaults.plmn || ocsPlmn);
           if (p.ocsDefaults.trafficTotal !== undefined) setOcsTrafficTotalStr(formatBytes(p.ocsDefaults.trafficTotal));
-          else if (p.ocsDefaults.trafficBalance !== undefined) setOcsTrafficTotalStr(formatBytes(p.ocsDefaults.trafficBalance));
           if (p.ocsDefaults.trafficBalance !== undefined) setOcsTrafficBalanceStr(formatBytes(p.ocsDefaults.trafficBalance));
           if (p.ocsDefaults.voiceTotal !== undefined) setOcsVoiceTotalStr(formatSeconds(Number(p.ocsDefaults.voiceTotal)));
           else if (p.ocsDefaults.voiceBalance !== undefined) setOcsVoiceTotalStr(formatSeconds(Number(p.ocsDefaults.voiceBalance)));
@@ -340,7 +341,12 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           } else if (data.ocsImsi?.msisdn) {
             setMsisdn(String(data.ocsImsi.msisdn));
           }
-          if (data.sub4G.ambr) setUeAmbr(data.sub4G.ambr);
+          if (data.sub4G.ambr) {
+            setUeAmbr(data.sub4G.ambr);
+            setHasUeAmbr(true);
+          } else {
+            setHasUeAmbr(false);
+          }
           if (data.sub4G.sliceList && Array.isArray(data.sub4G.sliceList)) {
             setSlices(data.sub4G.sliceList);
           }
@@ -354,10 +360,12 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           setAuth4GData({
             k: data.auth4G.k || "",
             opValue: data.auth4G.opc || data.auth4G.op || "",
-            sqn: data.auth4G.sqn || 0,
-            amf: data.auth4G.amf || "8000",
+            sqn: typeof data.auth4G.sqn === "number" ? data.auth4G.sqn : null,
+            amf: typeof data.auth4G.amf === "string" ? data.auth4G.amf : "",
             credentialState: data.auth4G.credentialState
           });
+        } else if (imsi) {
+          setAuth4GData({ k: "", opValue: "", sqn: null, amf: "" });
         }
         setHasOcsBalance(Boolean(data.ocsTraffic));
         if (data.ocsTraffic) {
@@ -365,7 +373,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (data.ocsTraffic.traffic_total !== undefined) {
              setOcsTrafficTotalStr(formatBytes(data.ocsTraffic.traffic_total));
           } else {
-             setOcsTrafficTotalStr(formatBytes(data.ocsTraffic.traffic_balance || 0));
+             setOcsTrafficTotalStr("");
           }
           if (data.ocsTraffic.traffic_balance !== undefined) setOcsTrafficBalanceStr(formatBytes(data.ocsTraffic.traffic_balance));
           if (data.ocsTraffic.voice_total !== undefined) setOcsVoiceTotalStr(formatSeconds(Number(data.ocsTraffic.voice_total)));
@@ -392,14 +400,17 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (data.ocsTariffPlan?.plan_id) setOcsPlanId(String(data.ocsTariffPlan.plan_id));
           if (data.ocsTariffPlan?.status) setOcsPlanStatus(String(data.ocsTariffPlan.status));
           if (data.ocsTariffPlan?.volume_threshold !== undefined) {
-            setOcsVolumeThreshold(Number(data.ocsTariffPlan.volume_threshold) || 0);
+            const threshold = Number(data.ocsTariffPlan.volume_threshold);
+            setOcsVolumeThreshold(Number.isFinite(threshold) ? threshold : null);
+          } else {
+            setOcsVolumeThreshold(null);
           }
           if (Array.isArray(data.ocsTariffPlan?.rules)) setOcsRules(data.ocsTariffPlan.rules);
         } else {
           setOcsContractStatus("");
           setOcsPlanId("");
           setOcsPlanStatus("");
-          setOcsVolumeThreshold(0);
+          setOcsVolumeThreshold(null);
           setOcsRules([]);
         }
     } catch {
@@ -695,14 +706,14 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       isEditing, isLoading, isSaving, error, newlyAddedSliceIndex, inputImsi, toastMessage,
       hasUnsavedChanges,
       inputImsiExists, isCheckingInputImsi, inputMsisdnExists, isCheckingInputMsisdn,
-      expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
+      expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, hasUeAmbr, slices,
       accessRestriction, profileList, profilesReady, selectedProfileName, profileBinding, ratingList, tariffPlanList, ocsPlanId, ocsPlanStatus, ocsContractStatus, hasOcsContract, hasOcsBalance, ocsRules, ocsPlmn,
       ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr,
       ocsSmsTotalStr, ocsSmsBalanceStr, ocsVolumeThreshold, ocsDataReservedStr
     },
     actions: {
       setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn: handleMsisdnChange, loadFromProfile, setAuth4GData,
-      setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
+      setUsimType, setUeAmbr: (value: typeof ueAmbr) => { setHasUeAmbr(true); setUeAmbr(value); }, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
       setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr, setOcsPlanId, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
       handleSave, scrollTo, discardDraft, clearError: () => setError(null), clearToastMessage: () => setToastMessage(null)
     }

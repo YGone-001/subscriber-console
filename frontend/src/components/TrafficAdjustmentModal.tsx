@@ -10,21 +10,16 @@ import { BatteryCharging, ExternalLink, Save, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { BYTE_INPUT_UNITS, composeByteInput, formatBytes, parseBytes, splitByteInput } from '../lib/unitParser';
 import { MutationApiError, postJson } from '../lib/api/mutation-client';
+import { useRead } from '../lib/api/use-read';
 import { useAppRouter } from '../lib/ui-compat/router';
 import { OperationNotice } from './ui/OperationFeedback';
 import { Dialog } from './ui/Dialog';
+import { toBalanceViewModel } from '../features/ocs/ocs-view-models';
 
 type TrafficAdjustmentMode = "credit" | "debit";
 
-type TrafficInfo = {
-  total?: number;
-  used?: number;
-  balance?: number;
-};
-
 type TrafficAdjustmentModalProps = {
   imsi: string;
-  currentTraffic: TrafficInfo;
   defaultMode?: TrafficAdjustmentMode;
   onClose: () => void;
   onSuccess: (response: any) => void;
@@ -75,28 +70,37 @@ function ByteInput({
 
 export default function TrafficAdjustmentModal({
   imsi,
-  currentTraffic,
   defaultMode = "credit",
   onClose,
   onSuccess,
   t,
 }: TrafficAdjustmentModalProps) {
   const router = useAppRouter();
-  const total = Math.max(0, Number(currentTraffic.total || 0));
-  const used = Math.max(0, Number(currentTraffic.used || 0));
-  const balance = Math.max(0, Number(currentTraffic.balance ?? Math.max(0, total - used)));
+  const { data: balancePayload, error: balanceError, isLoading: balanceLoading, mutate: refreshBalance } = useRead<unknown>(
+    imsi ? `/api/ocs/balances/${encodeURIComponent(imsi)}` : null,
+  );
+  const balance = toBalanceViewModel(balancePayload);
+  const total = balance?.data.total ?? null;
+  const used = balance?.data.used ?? null;
+  const available = balance?.data.available ?? null;
+  const version = balance?.version ?? null;
   const [mode, setMode] = useState<TrafficAdjustmentMode>(defaultMode);
   const [amountStr, setAmountStr] = useState("1 GB");
   const [reason, setReason] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const formatMetric = (value: number | null) => value === null ? "—" : formatBytes(value);
 
   const preview = useMemo(() => {
     const amount = parseBytes(amountStr);
     const delta = mode === "credit" ? amount : -amount;
-    return { total: Math.max(0, total + delta), balance: Math.max(0, balance + delta), used };
-  }, [amountStr, balance, mode, total, used]);
+    return {
+      total: total === null ? null : Math.max(0, total + delta),
+      balance: available === null ? null : Math.max(0, available + delta),
+      used,
+    };
+  }, [amountStr, available, mode, total, used]);
 
   const handleModeChange = (nextMode: TrafficAdjustmentMode) => {
     setMode(nextMode);
@@ -104,12 +108,21 @@ export default function TrafficAdjustmentModal({
   };
 
   const handleSubmit = async () => {
+    if (balanceLoading || balanceError) return;
+    if (!balance) {
+      setError(t("ocs_detail_load_failed"));
+      return;
+    }
+    if (version === null) {
+      setError(t("ocs_balance_version_missing"));
+      return;
+    }
     const amount = parseBytes(amountStr);
     if (amount <= 0) {
       setError(t("traffic_amount_invalid"));
       return;
     }
-    if (mode === "debit" && amount > balance) {
+    if (mode === "debit" && available !== null && amount > available) {
       setError(t("ocs_balance_insufficient"));
       return;
     }
@@ -129,6 +142,7 @@ export default function TrafficAdjustmentModal({
           bucket: "data",
           amount,
           reason: reason.trim(),
+          version,
         },
       );
 
@@ -138,6 +152,7 @@ export default function TrafficAdjustmentModal({
       const code = err instanceof MutationApiError ? err.code : undefined;
       if (code && CAS_CODES.includes(code)) {
         setError(t("ocs_balance_precondition_changed"));
+        void refreshBalance();
       } else if (code === "GO_BACKEND_UNREACHABLE") {
         setError(t("ocs_balance_backend_unreachable"));
       } else {
@@ -191,16 +206,22 @@ export default function TrafficAdjustmentModal({
 
           <div className="ta-stats-grid">
             {[
-              [t("traffic_total"), total],
-              [t("traffic_used"), used],
-              [t("traffic_balance"), balance],
-            ].map(([label, value]) => (
-              <div key={String(label)} className="ta-stat-card">
+              { label: t("traffic_total"), value: total },
+              { label: t("traffic_used"), value: used },
+              { label: t("traffic_balance"), value: available },
+            ].map(({ label, value }) => (
+              <div key={label} className="ta-stat-card">
                 <div className="ta-stat-label">{label}</div>
-                <div className="ta-stat-value">{formatBytes(Number(value))}</div>
+                <div className="ta-stat-value">{formatMetric(value)}</div>
               </div>
             ))}
           </div>
+
+          {balanceLoading && <p className="text-muted" role="status">{t("loading")}</p>}
+          {balanceError && <p className="warning-text" role="alert">{t("ocs_detail_load_failed")}</p>}
+          {!balanceLoading && !balanceError && version === null && (
+            <p className="warning-text" role="alert">{t("ocs_balance_version_missing")}</p>
+          )}
 
           <ByteInput label={t("traffic_amount")} value={amountStr} onChange={setAmountStr} />
 
@@ -218,9 +239,9 @@ export default function TrafficAdjustmentModal({
           <div className="ta-preview">
             <div className="ta-preview-title">{t("traffic_preview")}</div>
             <div className="ta-preview-values">
-              <span>{t("traffic_total")}: {formatBytes(preview.total)}</span>
-              <span>{t("traffic_used")}: {formatBytes(preview.used)}</span>
-              <span>{t("traffic_balance")}: {formatBytes(preview.balance)}</span>
+              <span>{t("traffic_total")}: {formatMetric(preview.total)}</span>
+              <span>{t("traffic_used")}: {formatMetric(preview.used)}</span>
+              <span>{t("traffic_balance")}: {formatMetric(preview.balance)}</span>
             </div>
           </div>
 
@@ -241,7 +262,7 @@ export default function TrafficAdjustmentModal({
           </button>
           <div className="workflow-footer-actions">
             <button ref={cancelButtonRef} className="btn btn-outline" onClick={onClose} disabled={isSaving}>{t("cancel")}</button>
-            <button className="btn btn-primary" onClick={handleSubmit} disabled={isSaving}>
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={isSaving || balanceLoading || Boolean(balanceError) || !balance || version === null}>
               <Save size={16} /> {isSaving ? t("traffic_saving") : t("traffic_submit")}
             </button>
           </div>

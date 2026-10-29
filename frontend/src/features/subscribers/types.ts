@@ -21,18 +21,18 @@ export type SubscriberProvisioning = {
 };
 
 export type SubscriberTrafficSnapshot = {
-  used: number;
-  total: number;
-  balance?: number;
+  used: number | null;
+  total: number | null;
+  balance: number | null;
 };
 
 export type SubscriberSmsSnapshot = {
-  used: number;
-  total: number;
-  balance?: number;
+  used: number | null;
+  total: number | null;
+  balance: number | null;
 };
 
-export type SubscriberBalanceState = "missing" | "exhausted" | "low" | "normal";
+export type SubscriberBalanceState = "missing" | "unknown" | "exhausted" | "low" | "normal";
 
 export interface SubscriberRow {
   imsi: string;
@@ -55,15 +55,6 @@ export interface SubscriberRow {
 }
 
 export type TrafficAdjustmentMode = "credit" | "debit";
-
-export type TrafficAdjustmentTarget = {
-  imsi: string;
-  traffic: {
-    used: number;
-    total: number;
-    balance: number;
-  };
-};
 
 export type FeedbackState = {
   tone: FeedbackTone;

@@ -1484,6 +1484,7 @@ export const zh: Record<string, string> = {
     ocs_balance_ticket_ph: "例如：INC100234",
     ocs_balance_success_executed: "余额调整已直接执行",
     ocs_balance_precondition_changed: "余额已被并发修改，请刷新后重试 (CAS Precondition Changed)",
+    ocs_balance_version_missing: "该余额记录未上报版本号，请刷新并核对后再调整",
     ocs_balance_backend_unreachable: "Go 后端服务暂时不可用 (GO_BACKEND_UNREACHABLE)，未发生任何变更，请稍后重试",
     permission_denied: "无操作权限",
     ocs_balance_amount_invalid: "调整金额无效（必须大于0）",

@@ -96,9 +96,12 @@ services. The roadmap avoids premature microservice decomposition.
 
 ## Business Operations Lifecycle and Retention
 
-> Status: accepted direction. The current source and observable behavior remain
-> authoritative until the corresponding implementation lands; this section does not
-> claim the changes are live.
+> Status: partially implemented. Balance reads now project missing measurements as
+> null, every console balance adjustment sends a CAS version, tariff deletion is
+> guarded server-side, OCS list filters are escaped, and the affected detail
+> sections expose unavailable states. Contract lifecycle, retention, preview-first
+> apply, plan-sourced onboarding and template archive remain pending; the current
+> source remains authoritative for those areas.
 
 The OCS management plane is open to governed lifecycle, data-truthfulness and UI
 correction. The charging plane remains frozen and excluded.

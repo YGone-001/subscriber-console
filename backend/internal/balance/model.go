@@ -29,6 +29,39 @@ type BalanceRecord struct {
 	CycleResetAt     string  `json:"cycle_reset_at,omitempty"`
 }
 
+// BalanceRecordView is the API projection of a balance account. Every measured
+// value is nullable: a missing bucket field is unknown, not zero, and a missing
+// plan/status is unconfigured rather than a default plan. The internal
+// BalanceRecord stays numeric for the CAS write path, which refuses incomplete
+// records before touching storage.
+type BalanceRecordView struct {
+	ID               string   `json:"id"`
+	IMSI             string   `json:"imsi"`
+	PlanID           *string  `json:"plan_id"`
+	Status           *string  `json:"status"`
+	DataTotal        *int64   `json:"data_total"`
+	DataUsed         *int64   `json:"data_used"`
+	DataReserved     *int64   `json:"data_reserved"`
+	DataAvailable    *int64   `json:"data_available"`
+	VoiceTotal       *int64   `json:"voice_total"`
+	VoiceUsed        *int64   `json:"voice_used"`
+	VoiceReserved    *int64   `json:"voice_reserved"`
+	VoiceAvailable   *int64   `json:"voice_available"`
+	SmsTotal         *int64   `json:"sms_total"`
+	SmsUsed          *int64   `json:"sms_used"`
+	SmsAvailable     *int64   `json:"sms_available"`
+	MoneyBalance     *float64 `json:"money_balance"`
+	Version          *int64   `json:"version"`
+	DataInvariantOk  *bool    `json:"data_invariant_ok"`
+	VoiceInvariantOk *bool    `json:"voice_invariant_ok"`
+	SmsInvariantOk   *bool    `json:"sms_invariant_ok"`
+	InvariantOk      *bool    `json:"invariant_ok"`
+	CreatedAt        string   `json:"created_at,omitempty"`
+	UpdatedAt        string   `json:"updated_at,omitempty"`
+	CycleStartAt     string   `json:"cycle_start_at,omitempty"`
+	CycleResetAt     string   `json:"cycle_reset_at,omitempty"`
+}
+
 // BalanceSummary contains the aggregate statistics returned with the balance
 // list. The shape matches the Node.js listOcsBalances() summary exactly.
 type BalanceSummary struct {
@@ -53,19 +86,19 @@ type BalanceQueryOptions struct {
 
 // BalanceListResponse matches GET /api/ocs/balances response shape.
 type BalanceListResponse struct {
-	OK         bool            `json:"ok"`
-	Records    []BalanceRecord `json:"records"`
-	Total      int64           `json:"total"`
-	Page       int             `json:"page"`
-	Limit      int             `json:"limit"`
-	TotalPages int             `json:"totalPages"`
-	Summary    BalanceSummary  `json:"summary"`
+	OK         bool                `json:"ok"`
+	Records    []BalanceRecordView `json:"records"`
+	Total      int64               `json:"total"`
+	Page       int                 `json:"page"`
+	Limit      int                 `json:"limit"`
+	TotalPages int                 `json:"totalPages"`
+	Summary    BalanceSummary      `json:"summary"`
 }
 
 // BalanceDetailResponse matches GET /api/ocs/balances/{imsi} response shape.
 type BalanceDetailResponse struct {
-	OK      bool          `json:"ok"`
-	Balance BalanceRecord `json:"balance"`
+	OK      bool              `json:"ok"`
+	Balance BalanceRecordView `json:"balance"`
 }
 
 // AdjustmentRecord is one governed balance adjustment, projected from the
@@ -212,6 +245,34 @@ func (r *BalanceRecord) CheckInvariants() {
 	r.VoiceInvariantOk = r.VoiceTotal == (r.VoiceUsed + r.VoiceReserved + r.VoiceAvailable)
 	r.SmsInvariantOk = r.SmsTotal == (r.SmsUsed + r.SmsAvailable)
 	r.InvariantOk = r.DataInvariantOk && r.VoiceInvariantOk && r.SmsInvariantOk
+}
+
+// balanceViewFromRecord projects a complete internal record without inventing
+// plan or status values. Callers must only use it after verifying that every
+// bucket is present.
+func balanceViewFromRecord(record BalanceRecord, base BalanceRecordView) BalanceRecordView {
+	view := base
+	view.ID = record.ID
+	view.IMSI = record.IMSI
+	view.DataTotal = &record.DataTotal
+	view.DataUsed = &record.DataUsed
+	view.DataReserved = &record.DataReserved
+	view.DataAvailable = &record.DataAvailable
+	view.VoiceTotal = &record.VoiceTotal
+	view.VoiceUsed = &record.VoiceUsed
+	view.VoiceReserved = &record.VoiceReserved
+	view.VoiceAvailable = &record.VoiceAvailable
+	view.SmsTotal = &record.SmsTotal
+	view.SmsUsed = &record.SmsUsed
+	view.SmsAvailable = &record.SmsAvailable
+	view.MoneyBalance = &record.MoneyBalance
+	view.Version = &record.Version
+	view.DataInvariantOk = &record.DataInvariantOk
+	view.VoiceInvariantOk = &record.VoiceInvariantOk
+	view.SmsInvariantOk = &record.SmsInvariantOk
+	view.InvariantOk = &record.InvariantOk
+	view.UpdatedAt = record.UpdatedAt
+	return view
 }
 
 // Fingerprint returns the CAS fingerprint of the record.

@@ -37,7 +37,7 @@ interface SubscriberEditModeProps {
     ocsContractStatus: string;
     hasOcsContract: boolean;
     hasOcsBalance: boolean;
-    ocsVolumeThreshold: number;
+    ocsVolumeThreshold: number | null;
     ocsRules: any[];
     slices: Slice[];
     newlyAddedSliceIndex: number | null;
@@ -253,7 +253,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               className="form-input"
               value={auth4GData.sqn ?? ""}
               onFocus={(e) => e.target.select()}
-              onChange={(e) => setAuth4GData({ ...auth4GData, sqn: e.target.value === "" ? 0 : parseInt(e.target.value, 10) })}
+              onChange={(e) => setAuth4GData({ ...auth4GData, sqn: e.target.value === "" ? null : parseInt(e.target.value, 10) })}
               readOnly={authReadOnly}
               disabled={authReadOnly}
             />

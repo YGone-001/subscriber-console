@@ -79,11 +79,17 @@ export default function AdjustBalanceModal({
   };
 
   const calculatedAmount = calculateAmount();
+  const versionKnown = typeof version === 'number';
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
     setCasConflict(false);
+
+    if (!versionKnown) {
+      setError(t('ocs_balance_version_missing'));
+      return;
+    }
 
     if (calculatedAmount <= 0) {
       setError(t('ocs_balance_amount_invalid'));
@@ -165,6 +171,10 @@ export default function AdjustBalanceModal({
             {t('ocs_col_sms_avail')}: {smsAvailable === null ? '\u2014' : smsAvailable}
           </div>
         </div>
+
+        {!versionKnown && (
+          <div className="warning-text" role="alert">{t('ocs_balance_version_missing')}</div>
+        )}
 
         {error && (
           <div className="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row" role="alert">
@@ -301,7 +311,7 @@ export default function AdjustBalanceModal({
             <button
               type="submit"
               className="ocs-btn ocs-btn-primary"
-              disabled={submitting}
+              disabled={submitting || !versionKnown}
             >
               {submitting ? t('submitting') : t('ocs_balance_adjust')}
             </button>

@@ -87,9 +87,9 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
 
   const encoded = encodeURIComponent(planId);
   const { data, error, isLoading, mutate: refresh } = useRead<unknown>(`/api/tariff-plans/${encoded}`);
-  const { data: rulesData } = useRead<unknown>(`/api/tariff-plans/${encoded}/rules`);
-  const { data: subsData } = useRead<unknown>(`/api/tariff-plans/${encoded}/subscribers`);
-  const { data: opsData } = useRead<unknown>(`/api/tariff-plans/${encoded}/operations`);
+  const { data: rulesData, error: rulesError, mutate: refreshRules } = useRead<unknown>(`/api/tariff-plans/${encoded}/rules`);
+  const { data: subsData, error: subsError, mutate: refreshSubs } = useRead<unknown>(`/api/tariff-plans/${encoded}/subscribers`);
+  const { data: opsData, error: opsError, mutate: refreshOps } = useRead<unknown>(`/api/tariff-plans/${encoded}/operations`);
 
   const plan: TariffPlanViewModel | null = toTariffDetailViewModel(data);
   const rules = toRuleRows(rulesData);
@@ -239,7 +239,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_tariff_detail_rules_count')}</span>
-              <span className="ocs-detail-value">{rules.length}</span>
+              <span className="ocs-detail-value">{rulesError ? '\u2014' : rules.length}</span>
             </div>
           </div>
         </div>
@@ -249,7 +249,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t('ocs_tariff_detail_bound_count')}</span>
-              <span className="ocs-detail-value">{boundTotal ?? '\u2014'}</span>
+              <span className="ocs-detail-value">{subsError ? '\u2014' : boundTotal ?? '\u2014'}</span>
             </div>
           </div>
           <Link className="ocs-btn ocs-btn-secondary ocs-btn-compact-auto" to={`/ocs/contracts?plan=${encoded}`}>
@@ -260,6 +260,19 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
 
       <section className="ocs-detail-section ocs-detail-section-full">
         <h2><ListChecks size={16} aria-hidden="true" /> {t('ocs_tariff_rules_title')}</h2>
+        {rulesError ? (
+          <div className="ocs-feedback-error ocs-feedback-spaced" role="alert">
+            <span>{t('ocs_detail_load_failed')}</span>
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-secondary ocs-btn-compact-auto"
+              onClick={() => { void refreshRules(); }}
+            >
+              {t('retry')}
+            </button>
+          </div>
+        ) : (
+          <>
         {conflicts.length > 0 && (
           <div className="ocs-feedback-error ocs-feedback-spaced" role="alert">
             <span>{t('ocs_tariff_rule_conflicts', { count: conflicts.length })}</span>
@@ -300,11 +313,24 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
             </table>
           </div>
         )}
+          </>
+        )}
       </section>
 
       <section className="ocs-detail-section ocs-detail-section-full">
         <h2><Users size={16} aria-hidden="true" /> {t('ocs_tariff_bound_title')}</h2>
-        {boundRows.length === 0 ? (
+        {subsError ? (
+          <div className="ocs-feedback-error ocs-feedback-spaced" role="alert">
+            <span>{t('ocs_detail_load_failed')}</span>
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-secondary ocs-btn-compact-auto"
+              onClick={() => { void refreshSubs(); }}
+            >
+              {t('retry')}
+            </button>
+          </div>
+        ) : boundRows.length === 0 ? (
           <p className="ocs-empty">{t('ocs_tariff_bound_empty')}</p>
         ) : (
           <>
@@ -340,7 +366,18 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
 
       <section className="ocs-detail-section ocs-detail-section-full">
         <h2><History size={16} aria-hidden="true" /> {t('ocs_tariff_history_title')}</h2>
-        {history.length === 0 ? (
+        {opsError ? (
+          <div className="ocs-feedback-error ocs-feedback-spaced" role="alert">
+            <span>{t('ocs_detail_load_failed')}</span>
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-secondary ocs-btn-compact-auto"
+              onClick={() => { void refreshOps(); }}
+            >
+              {t('retry')}
+            </button>
+          </div>
+        ) : history.length === 0 ? (
           <p className="ocs-empty">{t('ocs_tariff_history_empty')}</p>
         ) : (
           <div className="ocs-table-wrap">

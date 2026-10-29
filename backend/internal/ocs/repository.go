@@ -45,7 +45,7 @@ func (r *Repository) ListBalances(ctx context.Context, opts BalanceQueryOptions)
 
 	filter := bson.M{}
 	if opts.IMSI != "" {
-		filter["imsi"] = bson.M{"$regex": opts.IMSI, "$options": "i"}
+		filter["imsi"] = bson.M{"$regex": regexp.QuoteMeta(opts.IMSI), "$options": "i"}
 	}
 	if opts.PlanID != "" {
 		filter["plan_id"] = opts.PlanID
@@ -165,10 +165,10 @@ func (r *Repository) ListSessions(ctx context.Context, opts SessionQueryOptions)
 
 	filter := bson.M{}
 	if opts.IMSI != "" {
-		filter["imsi"] = bson.M{"$regex": opts.IMSI, "$options": "i"}
+		filter["imsi"] = bson.M{"$regex": regexp.QuoteMeta(opts.IMSI), "$options": "i"}
 	}
 	if opts.SessionID != "" {
-		filter["session_id"] = bson.M{"$regex": opts.SessionID, "$options": "i"}
+		filter["session_id"] = bson.M{"$regex": regexp.QuoteMeta(opts.SessionID), "$options": "i"}
 	}
 	if opts.APN != "" {
 		filter["apn"] = opts.APN
@@ -249,10 +249,10 @@ func (r *Repository) ListUsageRecords(ctx context.Context, opts UsageQueryOption
 
 	filter := bson.M{}
 	if opts.IMSI != "" {
-		filter["imsi"] = bson.M{"$regex": opts.IMSI, "$options": "i"}
+		filter["imsi"] = bson.M{"$regex": regexp.QuoteMeta(opts.IMSI), "$options": "i"}
 	}
 	if opts.SessionID != "" {
-		filter["session_id"] = bson.M{"$regex": opts.SessionID, "$options": "i"}
+		filter["session_id"] = bson.M{"$regex": regexp.QuoteMeta(opts.SessionID), "$options": "i"}
 	}
 	if opts.APN != "" {
 		filter["apn"] = opts.APN
@@ -349,10 +349,10 @@ func (r *Repository) ListReservations(ctx context.Context, opts ReservationQuery
 
 	filter := bson.M{}
 	if opts.IMSI != "" {
-		filter["imsi"] = bson.M{"$regex": opts.IMSI, "$options": "i"}
+		filter["imsi"] = bson.M{"$regex": regexp.QuoteMeta(opts.IMSI), "$options": "i"}
 	}
 	if opts.SessionID != "" {
-		filter["session_id"] = bson.M{"$regex": opts.SessionID, "$options": "i"}
+		filter["session_id"] = bson.M{"$regex": regexp.QuoteMeta(opts.SessionID), "$options": "i"}
 	}
 	if opts.State != "" && opts.State != "all" {
 		filter["state"] = opts.State

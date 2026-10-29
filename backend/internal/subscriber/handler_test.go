@@ -143,29 +143,35 @@ func TestStatusFromARD(t *testing.T) {
 	}
 }
 
+func testInt64Ptr(value int64) *int64 {
+	return &value
+}
+
 func TestNormalizeTraffic(t *testing.T) {
-	// Normal case
 	traffic := normalizeTraffic(int64(1000), int64(300), int64(700))
-	if traffic.Total != 1000 || traffic.Used != 300 || traffic.Balance != 700 {
+	if traffic.Total == nil || *traffic.Total != 1000 ||
+		traffic.Used == nil || *traffic.Used != 300 ||
+		traffic.Balance == nil || *traffic.Balance != 700 {
 		t.Errorf("normalizeTraffic(1000, 300, 700) = %+v", traffic)
 	}
 
-	// Zero total defaults to balance
+	// A zero total is a real value, not a prompt to derive one from the balance.
 	traffic = normalizeTraffic(int64(0), int64(0), int64(500))
-	if traffic.Total != 500 {
-		t.Errorf("normalizeTraffic(0, 0, 500).Total = %d, want 500", traffic.Total)
+	if traffic.Total == nil || *traffic.Total != 0 {
+		t.Errorf("normalizeTraffic(0, 0, 500).Total = %v, want 0", traffic.Total)
 	}
 
-	// Total less than balance gets corrected
-	traffic = normalizeTraffic(int64(100), int64(0), int64(500))
-	if traffic.Total != 500 {
-		t.Errorf("normalizeTraffic(100, 0, 500).Total = %d, want 500", traffic.Total)
+	traffic = normalizeTraffic(nil, nil, int64(500))
+	if traffic.Total != nil || traffic.Used != nil || traffic.Balance == nil || *traffic.Balance != 500 {
+		t.Errorf("normalizeTraffic(nil, nil, 500) = %+v", traffic)
 	}
 }
 
 func TestNormalizeSMS(t *testing.T) {
 	sms := normalizeSMS(int64(100), int64(20), int64(80))
-	if sms.Total != 100 || sms.Used != 20 || sms.Balance != 80 {
+	if sms.Total == nil || *sms.Total != 100 ||
+		sms.Used == nil || *sms.Used != 20 ||
+		sms.Balance == nil || *sms.Balance != 80 {
 		t.Errorf("normalizeSMS(100, 20, 80) = %+v", sms)
 	}
 }
@@ -201,13 +207,13 @@ func TestEnsureImsiRange(t *testing.T) {
 }
 
 func TestIsLowTraffic(t *testing.T) {
-	if !isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: 0}, Provisioning: SubscriberProvisioning{Balance: true}}) {
+	if !isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: testInt64Ptr(0)}, Provisioning: SubscriberProvisioning{Balance: true}}) {
 		t.Error("provisioned balance 0 should be low traffic")
 	}
-	if isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: 100}, Provisioning: SubscriberProvisioning{Balance: true}}) {
+	if isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}, Provisioning: SubscriberProvisioning{Balance: true}}) {
 		t.Error("balance 100 should not be low traffic")
 	}
-	if isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: 0}}) {
+	if isLowTraffic(SubscriberRow{Traffic: TrafficSnapshot{Balance: testInt64Ptr(0)}}) {
 		t.Error("missing balance record must be unprovisioned, not low traffic")
 	}
 }
@@ -216,16 +222,17 @@ func TestClassifyBalance(t *testing.T) {
 	tests := []struct {
 		name       string
 		hasBalance bool
-		available  int64
+		available  *int64
 		threshold  int64
 		want       string
 	}{
-		{"missing record", false, 0, 1073741824, balanceStateMissing},
-		{"exhausted", true, 0, 1073741824, balanceStateExhausted},
-		{"low at threshold", true, 1073741824, 1073741824, balanceStateLow},
-		{"low below threshold", true, 1024, 1073741824, balanceStateLow},
-		{"normal above threshold", true, 1073741825, 1073741824, balanceStateNormal},
-		{"threshold disabled", true, 1024, 0, balanceStateNormal},
+		{"missing record", false, nil, 1073741824, balanceStateMissing},
+		{"unknown available", true, nil, 1073741824, balanceStateUnknown},
+		{"exhausted", true, testInt64Ptr(0), 1073741824, balanceStateExhausted},
+		{"low at threshold", true, testInt64Ptr(1073741824), 1073741824, balanceStateLow},
+		{"low below threshold", true, testInt64Ptr(1024), 1073741824, balanceStateLow},
+		{"normal above threshold", true, testInt64Ptr(1073741825), 1073741824, balanceStateNormal},
+		{"threshold disabled", true, testInt64Ptr(1024), 0, balanceStateNormal},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -237,7 +244,7 @@ func TestClassifyBalance(t *testing.T) {
 }
 
 func TestMatchesStatusFilter(t *testing.T) {
-	row := SubscriberRow{Status: "Active", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: SubscriberProvisioning{Balance: true}}
+	row := SubscriberRow{Status: "Active", Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}, Provisioning: SubscriberProvisioning{Balance: true}}
 	if !matchesStatusFilter(row, "all") {
 		t.Error("all should match")
 	}
@@ -248,12 +255,12 @@ func TestMatchesStatusFilter(t *testing.T) {
 		t.Error("restricted should not match Active")
 	}
 
-	restrictedRow := SubscriberRow{Status: "Suspended", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: SubscriberProvisioning{Balance: true}}
+	restrictedRow := SubscriberRow{Status: "Suspended", Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}, Provisioning: SubscriberProvisioning{Balance: true}}
 	if !matchesStatusFilter(restrictedRow, "restricted") {
 		t.Error("restricted should match Suspended")
 	}
 
-	lowRow := SubscriberRow{Status: "Active", Traffic: TrafficSnapshot{Balance: 0}, Provisioning: SubscriberProvisioning{Balance: true}}
+	lowRow := SubscriberRow{Status: "Active", Traffic: TrafficSnapshot{Balance: testInt64Ptr(0)}, Provisioning: SubscriberProvisioning{Balance: true}}
 	if !matchesStatusFilter(lowRow, "lowTraffic") {
 		t.Error("lowTraffic should match provisioned balance 0")
 	}
@@ -400,13 +407,13 @@ func TestLegacyStateRoundTripsIntoUpdateValidation(t *testing.T) {
 func TestSummaryFacetCounts(t *testing.T) {
 	provisioned := SubscriberProvisioning{Contract: true, Balance: true, TariffPlan: true}
 	rows := []SubscriberRow{
-		{IMSI: "460000000000001", Status: "Active", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: provisioned},
-		{IMSI: "460000000000002", Status: "Suspended", Traffic: TrafficSnapshot{Balance: 100}, Provisioning: provisioned},
-		{IMSI: "460000000000003", Status: "Active", Traffic: TrafficSnapshot{Balance: 0}, Provisioning: provisioned}, // exhausted
-		{IMSI: "460000000000004", Status: "Active", Traffic: TrafficSnapshot{Balance: 200}, Provisioning: provisioned},
+		{IMSI: "460000000000001", Status: "Active", Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}, Provisioning: provisioned},
+		{IMSI: "460000000000002", Status: "Suspended", Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}, Provisioning: provisioned},
+		{IMSI: "460000000000003", Status: "Active", Traffic: TrafficSnapshot{Balance: testInt64Ptr(0)}, Provisioning: provisioned}, // exhausted
+		{IMSI: "460000000000004", Status: "Active", Traffic: TrafficSnapshot{Balance: testInt64Ptr(200)}, Provisioning: provisioned},
 		{IMSI: "460000000000005", Status: "Active"}, // no OCS records: unprovisioned, not low traffic
 		{
-			IMSI: "460000000000006", Status: "Active", Traffic: TrafficSnapshot{Balance: 50},
+			IMSI: "460000000000006", Status: "Active", Traffic: TrafficSnapshot{Balance: testInt64Ptr(50)},
 			Provisioning: provisioned, BalanceState: balanceStateLow, BalanceThreshold: 100,
 		},
 	}
@@ -496,11 +503,11 @@ func TestSortDirectionDefault(t *testing.T) {
 func TestPaginationAfterFilter(t *testing.T) {
 	// 5 rows, 3 active, 2 suspended
 	rows := []SubscriberRow{
-		{IMSI: "460000000000001", Status: "Active", Traffic: TrafficSnapshot{Balance: 100}},
-		{IMSI: "460000000000002", Status: "Suspended", Traffic: TrafficSnapshot{Balance: 100}},
-		{IMSI: "460000000000003", Status: "Active", Traffic: TrafficSnapshot{Balance: 100}},
-		{IMSI: "460000000000004", Status: "Suspended", Traffic: TrafficSnapshot{Balance: 100}},
-		{IMSI: "460000000000005", Status: "Active", Traffic: TrafficSnapshot{Balance: 100}},
+		{IMSI: "460000000000001", Status: "Active", Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}},
+		{IMSI: "460000000000002", Status: "Suspended", Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}},
+		{IMSI: "460000000000003", Status: "Active", Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}},
+		{IMSI: "460000000000004", Status: "Suspended", Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}},
+		{IMSI: "460000000000005", Status: "Active", Traffic: TrafficSnapshot{Balance: testInt64Ptr(100)}},
 	}
 
 	// Filter to "active" → 3 rows
@@ -661,7 +668,7 @@ func TestMatchesFiltersContractProvisioningAndBalance(t *testing.T) {
 		ContractStatus: "suspended",
 		Policy:         "plan_a",
 		Provisioning:   provisioned,
-		Traffic:        TrafficSnapshot{Balance: 0},
+		Traffic:        TrafficSnapshot{Balance: testInt64Ptr(0)},
 	}
 
 	if !matchesFilters(row, SubscriberListFilters{Status: "active", ContractStatus: "suspended", Provisioning: "complete", PlanID: "plan_a", BalanceStatus: "exhausted"}) {
@@ -684,7 +691,7 @@ func TestMatchesFiltersContractProvisioningAndBalance(t *testing.T) {
 		IMSI:             "460000000000003",
 		Status:           "Active",
 		Provisioning:     provisioned,
-		Traffic:          TrafficSnapshot{Balance: 100},
+		Traffic:          TrafficSnapshot{Balance: testInt64Ptr(100)},
 		BalanceState:     balanceStateLow,
 		BalanceThreshold: 1024,
 	}
@@ -702,7 +709,7 @@ func TestMatchesFiltersContractProvisioningAndBalance(t *testing.T) {
 		IMSI:             "460000000000004",
 		Status:           "Active",
 		Provisioning:     provisioned,
-		Traffic:          TrafficSnapshot{Balance: 2048},
+		Traffic:          TrafficSnapshot{Balance: testInt64Ptr(2048)},
 		BalanceState:     balanceStateNormal,
 		BalanceThreshold: 1024,
 	}

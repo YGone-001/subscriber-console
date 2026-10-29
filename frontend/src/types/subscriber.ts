@@ -42,7 +42,7 @@ export interface Slice {
 export interface Auth4GData {
   k: string;
   opValue: string;
-  sqn: number;
+  sqn: number | null;
   amf: string;
   /* Stated by the server when the reader may not see the material: withheld is
    * not the same as unconfigured. */

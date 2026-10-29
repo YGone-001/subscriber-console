@@ -1,6 +1,6 @@
 # OCS Management Plane Operations Runbook
 
-Status: PRODUCTION / FROZEN  
+Status: PRODUCTION / DIRECT EXECUTION (MANAGEMENT PLANE OPEN TO GOVERNED CORRECTION; CHARGING PLANE EXCLUDED)
 Version: 2.0.0 (Direct Execution / Production Baseline)  
 Target Components: Go Backend (:18888, API + embedded static React SPA), Nginx Edge (:80), MongoDB (`xcloud`, `xcloud_ops`)
 
@@ -87,13 +87,13 @@ Target Collection: `xcloud.ocs_tariff_plans`
 4. **Clone Plan**:
    - `POST /api/tariff-plans/{planId}/clone` creates a duplicate template with a new `target_plan_id`.
 5. **Delete Plan**:
-   - `DELETE /api/tariff-plans/{planId}` removes the plan document. The API only
-     protects the default plan (`DEFAULT_TARIFF_PLAN_PROTECTED`); it does not
-     verify contract references, so a plan still bound to contracts can be
-     removed through the API and leave a dangling `plan_id`.
-   - The console therefore refuses the delete while `subscriberCount > 0` and
-     states the bound count on the control. Unbind or migrate the contracts
-     first.
+   - `DELETE /api/tariff-plans/{planId}` removes the plan document only when no
+     contract references it. The server refuses the default plan with
+     `DEFAULT_TARIFF_PLAN_PROTECTED` and refuses a bound plan with
+     `TARIFF_PLAN_DELETE_IN_USE` (HTTP 409); a dangling `plan_id` cannot be
+     created through this endpoint, including by a concurrent binding race.
+   - The console also refuses the delete while `subscriberCount > 0` and states
+     the bound count on the control. Unbind or migrate the contracts first.
 
 ### 3.3 Console Surface (`/ocs/tariffs`)
 - List: search by plan id/name, status filter, sortable columns, and a KPI strip
@@ -198,7 +198,11 @@ To adjust quota for a subscriber:
 5. A concurrent write answers `BALANCE_PRECONDITION_CHANGED`; refetch the record
    and retry. A broken conservation invariant blocks the write with
    `BALANCE_INVARIANT_VIOLATION`, which is why the invariant state is shown in
-   both the list and the detail page.
+   both the list and the detail page. A record whose bucket fields or version
+   are not reported is refused with `BALANCE_FIELDS_MISSING` or
+   `BALANCE_VERSION_MISSING`; unknown values are never coerced to zero.
+   Every console adjustment entry point (balance list, balance detail and both
+   subscriber surfaces) sends the record version.
 
 ### 5.2.1 Console Surface (`/ocs/balances`)
 - KPI strip: account count, data allocated, data used and data available, read
@@ -288,11 +292,15 @@ To confirm a request reached the Go backend:
 | Error Code | HTTP Status | Cause | Operational Action |
 |---|---|---|---|
 | `BALANCE_RESET_DISABLED` | 400 | Attempted hard reset on balance | Instruct operator to use delta adjustment (`/adjust`) with CAS version. |
-| `CAS_CONFLICT` | 409 | Document version modified concurrently | Reload record to fetch current version and resubmit request. |
+| `BALANCE_PRECONDITION_CHANGED` | 409 | Document version modified concurrently | Reload record to fetch current version and resubmit request. |
+| `BALANCE_FIELDS_MISSING` | 409 | The balance record omits fields needed to verify or adjust the bucket | Inspect the stored document; do not treat missing fields as zero. |
+| `BALANCE_VERSION_MISSING` | 409 | The balance record does not report a version | Reconcile the record before adjusting; CAS cannot be enforced without it. |
+| `BALANCE_INVARIANT_VIOLATION` | 409 | Conservation equation is broken | Repair the record before any adjustment. |
 | `GO_BACKEND_UNREACHABLE` | 502 | Go process (:18888) is down | Check Go service process and restart if necessary. |
 | `PLAN_NOT_FOUND` | 404 | Referenced `plan_id` does not exist | Verify plan exists in `/ocs/tariffs` before assigning to contract. |
 | `INSUFFICIENT_BALANCE` | 422 | Negative adjustment exceeds available quota | Adjust delta to not violate conservation invariant (`available >= 0`). |
 | `TARIFF_PLAN_EXISTS` | 409 | Tariff plan with this ID already exists | Choose a distinct `plan_id` for creation or cloning. |
+| `TARIFF_PLAN_DELETE_IN_USE` | 409 | Tariff plan is still bound to contracts | Unbind or migrate the contracts before deleting the plan. |
 
 ### 7.4 Internal Operation Log Inquiries
 All operations append internal operational records to `xcloud_ops.app_audit_logs` for troubleshooting, traceability, and operational evidence.  
@@ -306,8 +314,10 @@ db.app_audit_logs.find({
 
 ---
 
-## 8. Permanent Freeze Sign-Off
+## 8. Management Plane Governance
 
-The OCS Management Plane is in permanent maintenance mode.  
-No further architectural modifications, new management routes, or Charging Plane couplings are permitted.  
-Production routing invariant `GoRegistered = 164` is strictly maintained.
+The OCS management plane is open to governed lifecycle, data-truthfulness and UI
+correction under the current API, RBAC, Fresh Actor, rate-limit and audit
+boundaries. The charging plane remains excluded. Production routing invariant
+`GoRegistered = 164` is strictly maintained; new fields or endpoints are additive
+and require the associated contract and documentation updates.

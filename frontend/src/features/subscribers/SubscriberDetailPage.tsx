@@ -13,13 +13,11 @@
  */
 import { useState } from 'react';
 import { useSWRConfig } from 'swr';
-import { ArrowLeft, BatteryCharging, Copy, Layers, Pencil, Save, Trash2 } from 'lucide-react';
-import { useI18n } from '../../providers/I18nProvider';
+import { ArrowLeft, BatteryCharging, Copy, Layers, Pencil, Save, Trash2 } from 'lucide-react';import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useAppParam, useAppRouter } from '../../lib/ui-compat/router';
 import { copyText } from '../../lib/clipboard';
-import { parseBytes } from '../../lib/unitParser';
 import PageHeader from '../../components/ui/PageHeader';
 import { ConfirmActionPanel, OperationNotice } from '../../components/ui/OperationFeedback';
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/ui/UnsavedChangesGuard';
@@ -97,10 +95,6 @@ export function SubscriberDetailPage() {
   };
 
   const unsavedGuard = useUnsavedChangesGuard(() => hasUnsavedChanges, confirmDiscard);
-
-  const trafficTotal = parseBytes(ocsTrafficTotalStr);
-  const trafficBalance = parseBytes(ocsTrafficBalanceStr);
-  const trafficUsed = Math.max(0, trafficTotal - trafficBalance);
 
   const sections = isEditing
     ? [
@@ -228,6 +222,7 @@ export function SubscriberDetailPage() {
               auth4GData={state.auth4GData}
               usimType={state.usimType}
               ueAmbr={state.ueAmbr}
+              hasUeAmbr={state.hasUeAmbr}
               imsi={imsi || inputImsi}
               msisdn={msisdn}
               accessRestriction={state.accessRestriction}
@@ -289,7 +284,6 @@ export function SubscriberDetailPage() {
       {isTrafficModalOpen && imsi && (
         <TrafficAdjustmentModal
           imsi={imsi}
-          currentTraffic={{ total: trafficTotal, used: trafficUsed, balance: trafficBalance }}
           onClose={() => setIsTrafficModalOpen(false)}
           onSuccess={() => {
             setIsTrafficModalOpen(false);

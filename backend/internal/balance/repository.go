@@ -111,24 +111,25 @@ func (r *Repository) ListBalances(ctx context.Context, opts BalanceQueryOptions)
 		}
 	}
 
-	records := make([]BalanceRecord, 0, len(rawDocs))
+	records := make([]BalanceRecordView, 0, len(rawDocs))
 	for _, doc := range rawDocs {
-		records = append(records, mapBalanceDoc(doc, subMap))
+		records = append(records, mapBalanceView(doc, subMap))
 	}
 
-	// Apply invariant filter
+	// Apply invariant filter. A record whose conservation fields are absent is
+	// neither valid nor broken, so it belongs to neither subset.
 	if opts.InvariantStatus == "valid" {
-		filtered := make([]BalanceRecord, 0)
+		filtered := make([]BalanceRecordView, 0)
 		for _, rec := range records {
-			if rec.InvariantOk {
+			if rec.InvariantOk != nil && *rec.InvariantOk {
 				filtered = append(filtered, rec)
 			}
 		}
 		records = filtered
 	} else if opts.InvariantStatus == "broken" {
-		filtered := make([]BalanceRecord, 0)
+		filtered := make([]BalanceRecordView, 0)
 		for _, rec := range records {
-			if !rec.InvariantOk {
+			if rec.InvariantOk != nil && !*rec.InvariantOk {
 				filtered = append(filtered, rec)
 			}
 		}
@@ -136,7 +137,7 @@ func (r *Repository) ListBalances(ctx context.Context, opts BalanceQueryOptions)
 	}
 
 	if records == nil {
-		records = []BalanceRecord{}
+		records = []BalanceRecordView{}
 	}
 
 	summary, err := r.computeBalanceSummary(ctx)
@@ -184,6 +185,33 @@ func (r *Repository) GetBalanceByIMSI(ctx context.Context, imsi string) (*Balanc
 
 	rec := mapBalanceDoc(doc, subMap)
 	return &rec, nil
+}
+
+// GetBalanceViewByIMSI returns the nullable read projection for one account.
+// It is the authority for reads and for the pre-adjustment completeness check.
+func (r *Repository) GetBalanceViewByIMSI(ctx context.Context, imsi string) (*BalanceRecordView, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	var doc bson.M
+	err := r.balances.FindOne(ctx, bson.M{"imsi": imsi}).Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	subMap := make(map[string]bson.M)
+	if r.subscribers != nil {
+		var sub bson.M
+		if err := r.subscribers.FindOne(ctx, bson.M{"imsi": imsi}).Decode(&sub); err == nil {
+			subMap[imsi] = sub
+		}
+	}
+
+	view := mapBalanceView(doc, subMap)
+	return &view, nil
 }
 
 // ListAdjustments returns the governed adjustment trail for one balance account.
@@ -530,4 +558,171 @@ func mapBalanceDoc(doc bson.M, subMap map[string]bson.M) BalanceRecord {
 	}
 	rec.CheckInvariants()
 	return rec
+}
+
+// mapBalanceView projects the stored document without manufacturing values.
+// Missing measurements stay nil, and a conservation check is nil (unknown)
+// whenever one of its operands is absent.
+func mapBalanceView(doc bson.M, subMap map[string]bson.M) BalanceRecordView {
+	imsi := strWithDefault(doc, "imsi", "")
+	sub := subMap[imsi]
+
+	dataTotal := numericInt64ValuePtr(doc, "data_total")
+	dataUsed := numericInt64ValuePtr(doc, "data_used")
+	dataReserved := numericInt64ValuePtr(doc, "data_reserved")
+	dataAvailable := numericInt64ValuePtr(doc, "data_available")
+
+	voiceTotal := numericInt64ValuePtr(doc, "voice_total")
+	voiceUsed := numericInt64ValuePtr(doc, "voice_used")
+	voiceReserved := numericInt64ValuePtr(doc, "voice_reserved")
+	voiceAvailable := numericInt64ValuePtr(doc, "voice_available")
+
+	smsTotal := numericInt64ValuePtr(doc, "sms_total")
+	smsUsed := numericInt64ValuePtr(doc, "sms_used")
+	smsAvailable := numericInt64ValuePtr(doc, "sms_available")
+
+	planID := stringValuePtr(doc, "plan_id")
+	if planID == nil && sub != nil {
+		planID = stringValuePtr(sub, "plan_id")
+	}
+
+	status := stringValuePtr(doc, "status")
+	if status == nil && sub != nil {
+		status = stringValuePtr(sub, "status")
+	}
+
+	createdAt := timeStr(doc, "created_at")
+	if createdAt == "" && sub != nil {
+		createdAt = timeStr(sub, "created_at")
+	}
+
+	dataInvariant := invariant4(dataTotal, dataUsed, dataReserved, dataAvailable)
+	voiceInvariant := invariant4(voiceTotal, voiceUsed, voiceReserved, voiceAvailable)
+	smsInvariant := invariant3(smsTotal, smsUsed, smsAvailable)
+
+	var overallInvariant *bool
+	if dataInvariant != nil && voiceInvariant != nil && smsInvariant != nil {
+		overall := *dataInvariant && *voiceInvariant && *smsInvariant
+		overallInvariant = &overall
+	}
+
+	view := BalanceRecordView{
+		ID:               docID(doc),
+		IMSI:             imsi,
+		PlanID:           planID,
+		Status:           status,
+		DataTotal:        dataTotal,
+		DataUsed:         dataUsed,
+		DataReserved:     dataReserved,
+		DataAvailable:    dataAvailable,
+		VoiceTotal:       voiceTotal,
+		VoiceUsed:        voiceUsed,
+		VoiceReserved:    voiceReserved,
+		VoiceAvailable:   voiceAvailable,
+		SmsTotal:         smsTotal,
+		SmsUsed:          smsUsed,
+		SmsAvailable:     smsAvailable,
+		MoneyBalance:     numericFloat64ValuePtr(doc, "money_balance"),
+		Version:          numericInt64ValuePtr(doc, "version"),
+		DataInvariantOk:  dataInvariant,
+		VoiceInvariantOk: voiceInvariant,
+		SmsInvariantOk:   smsInvariant,
+		InvariantOk:      overallInvariant,
+		CreatedAt:        createdAt,
+		UpdatedAt:        timeStr(doc, "updated_at"),
+		CycleStartAt:     timeStr(doc, "cycle_start_at"),
+		CycleResetAt:     timeStr(doc, "cycle_reset_at"),
+	}
+	if view.ID == "" {
+		view.ID = imsi
+	}
+	return view
+}
+
+func stringValuePtr(doc bson.M, key string) *string {
+	if doc == nil {
+		return nil
+	}
+	value, ok := doc[key]
+	if !ok || value == nil {
+		return nil
+	}
+	text, ok := value.(string)
+	if !ok || text == "" {
+		return nil
+	}
+	return &text
+}
+
+func numericInt64ValuePtr(doc bson.M, key string) *int64 {
+	if doc == nil {
+		return nil
+	}
+	value, ok := doc[key]
+	if !ok || value == nil {
+		return nil
+	}
+	switch value.(type) {
+	case int32, int64, float64, bson.Decimal128:
+		converted := numericInt64(value)
+		return &converted
+	default:
+		return nil
+	}
+}
+
+func numericFloat64ValuePtr(doc bson.M, key string) *float64 {
+	if doc == nil {
+		return nil
+	}
+	value, ok := doc[key]
+	if !ok || value == nil {
+		return nil
+	}
+	switch value.(type) {
+	case int32, int64, float64:
+		converted := numericFloat64(value)
+		return &converted
+	default:
+		return nil
+	}
+}
+
+func invariant4(total, used, reserved, available *int64) *bool {
+	if total == nil || used == nil || reserved == nil || available == nil {
+		return nil
+	}
+	ok := *total == *used+*reserved+*available
+	return &ok
+}
+
+func invariant3(total, used, available *int64) *bool {
+	if total == nil || used == nil || available == nil {
+		return nil
+	}
+	ok := *total == *used+*available
+	return &ok
+}
+
+// balanceBucketFieldsPresent reports whether every stored field needed to
+// adjust one bucket is actually present. Missing fields must block a write
+// instead of being read as zeroes.
+func balanceBucketFieldsPresent(doc bson.M, bucket string) bool {
+	keys := []string{}
+	switch bucket {
+	case "data":
+		keys = []string{"data_total", "data_used", "data_reserved", "data_available"}
+	case "voice":
+		keys = []string{"voice_total", "voice_used", "voice_reserved", "voice_available"}
+	case "sms":
+		keys = []string{"sms_total", "sms_used", "sms_available"}
+	default:
+		return false
+	}
+	for _, key := range keys {
+		if numericInt64ValuePtr(doc, key) == nil {
+			return false
+		}
+	}
+	return numericInt64ValuePtr(doc, "version") != nil
 }

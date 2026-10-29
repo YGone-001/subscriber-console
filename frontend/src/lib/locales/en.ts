@@ -1485,6 +1485,7 @@ export const en: Record<string, string> = {
     ocs_balance_ticket_ph: "e.g. INC100234",
     ocs_balance_success_executed: "Balance adjustment executed successfully",
     ocs_balance_precondition_changed: "Balance was modified concurrently; please refresh and retry",
+    ocs_balance_version_missing: "This balance record does not report a version; refresh and reconcile it before adjusting",
     ocs_balance_backend_unreachable: "Go backend service is temporarily unavailable (GO_BACKEND_UNREACHABLE). No changes were made.",
     permission_denied: "Permission denied",
     ocs_balance_amount_invalid: "Adjustment amount must be greater than zero",

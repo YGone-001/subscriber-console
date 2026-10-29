@@ -330,6 +330,19 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A plan that is still bound to contracts must not disappear from under
+	// them. The console also disables the action, but the server is the
+	// authority and a concurrent binding can race the UI.
+	boundCount, err := h.repo.CountSubscribersByPlan(r.Context(), planID)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if boundCount > 0 {
+		response.Error(w, http.StatusConflict, fmt.Sprintf("Cannot delete: tariff plan is currently used by %d subscriber(s)", boundCount), "TARIFF_PLAN_DELETE_IN_USE")
+		return
+	}
+
 	// Direct execution
 	if err := h.repo.DeletePlan(r.Context(), planID); err != nil {
 		if err.Error() == "DEFAULT_TARIFF_PLAN_PROTECTED" {

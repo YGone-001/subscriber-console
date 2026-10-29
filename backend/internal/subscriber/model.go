@@ -69,18 +69,19 @@ type SubscriberRow struct {
 	LastActive       string                 `json:"lastActive"`
 }
 
-// TrafficSnapshot holds traffic balance data.
+// TrafficSnapshot holds traffic balance data. A missing field is unknown, not
+// zero: the list must not claim a remaining percentage it never measured.
 type TrafficSnapshot struct {
-	Total   int64 `json:"total"`
-	Used    int64 `json:"used"`
-	Balance int64 `json:"balance"`
+	Total   *int64 `json:"total"`
+	Used    *int64 `json:"used"`
+	Balance *int64 `json:"balance"`
 }
 
 // SMSSnapshot holds SMS balance data.
 type SMSSnapshot struct {
-	Total   int64 `json:"total"`
-	Used    int64 `json:"used"`
-	Balance int64 `json:"balance"`
+	Total   *int64 `json:"total"`
+	Used    *int64 `json:"used"`
+	Balance *int64 `json:"balance"`
 }
 
 // --- MSISDN Lookup ---

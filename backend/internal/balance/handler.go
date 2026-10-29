@@ -95,7 +95,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rec, err := h.repo.GetBalanceByIMSI(r.Context(), imsi)
+	rec, err := h.repo.GetBalanceViewByIMSI(r.Context(), imsi)
 	if err != nil {
 		response.InternalError(w)
 		return
@@ -238,7 +238,27 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !current.InvariantOk {
+	// The nullable projection is the authority for what the record actually
+	// reports. An incomplete record cannot be adjusted safely: the write path
+	// would otherwise turn absent fields into zeroes.
+	view, err := h.repo.GetBalanceViewByIMSI(r.Context(), imsi)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if view == nil {
+		response.Error(w, http.StatusNotFound, "Balance record not found", "BALANCE_NOT_FOUND")
+		return
+	}
+	if view.Version == nil {
+		response.Error(w, http.StatusConflict, "Balance record version is not reported; refresh before adjusting", "BALANCE_VERSION_MISSING")
+		return
+	}
+	if view.InvariantOk == nil {
+		response.Error(w, http.StatusConflict, "Balance record is missing bucket fields; invariant cannot be verified", "BALANCE_FIELDS_MISSING")
+		return
+	}
+	if !*view.InvariantOk {
 		response.Error(w, http.StatusConflict, "Balance record has broken invariants", "BALANCE_INVARIANT_VIOLATION")
 		return
 	}
@@ -265,10 +285,10 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// CAS version precondition check if provided by client
-	expectedVersion := current.Version
+	expectedVersion := *view.Version
 	if body.Version != nil {
 		expectedVersion = *body.Version
-		if expectedVersion != current.Version {
+		if expectedVersion != *view.Version {
 			response.Error(w, http.StatusConflict, "Balance was modified concurrently; please retry", "BALANCE_PRECONDITION_CHANGED")
 			return
 		}
@@ -287,6 +307,10 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 		}
 		if err == ErrInvariantViolation {
 			response.Error(w, http.StatusConflict, "Balance record violates invariants", "BALANCE_INVARIANT_VIOLATION")
+			return
+		}
+		if err == ErrBalanceFieldsMissing {
+			response.Error(w, http.StatusConflict, "Balance record is missing bucket fields", "BALANCE_FIELDS_MISSING")
 			return
 		}
 		response.InternalError(w)
@@ -331,7 +355,7 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 		"outcome": "success",
 		"message": "operation completed",
 		"imsi":    imsi,
-		"balance": res.After,
+		"balance": balanceViewFromRecord(res.After, *view),
 	})
 }
 

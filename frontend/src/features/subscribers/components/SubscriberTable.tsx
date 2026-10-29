@@ -258,19 +258,21 @@ export function SubscriberTable(props: SubscriberTableProps) {
           {paginatedSubscribers.map((sub) => {
             const traffic = sub.traffic;
             const hasBalance = Boolean(sub.provisioning?.balance);
-            const total = traffic?.total || 0;
-            const used = traffic?.used || 0;
-            const balance = traffic?.balance ?? Math.max(0, total - used);
-            const uRatio = total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0;
-            const remainingPercent = total > 0 ? Math.max(0, Math.min(100, (balance / total) * 100)) : (hasBalance ? 0 : null);
+            const total = traffic?.total ?? null;
+            const used = traffic?.used ?? null;
+            const balance = traffic?.balance ?? null;
+            const measured = total !== null && used !== null && balance !== null;
+            const uRatio = measured && total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0;
+            const remainingPercent = measured && total > 0 ? Math.max(0, Math.min(100, (balance / total) * 100)) : null;
             const balanceState = sub.balanceState ?? (hasBalance
-              ? (balance <= 0 ? "exhausted" : (sub.balanceThreshold && balance <= sub.balanceThreshold ? "low" : "normal"))
+              ? (measured ? (balance <= 0 ? "exhausted" : (sub.balanceThreshold && balance <= sub.balanceThreshold ? "low" : "normal")) : "unknown")
               : "missing");
             const balanceStateLabel = balanceState === "low"
               ? t("sub_balance_low")
               : balanceState === "exhausted"
                 ? t("sub_balance_exhausted_short")
                 : "";
+            const formatTrafficValue = (value: number | null) => value === null ? "—" : formatBytes(value);
             const isSelected = selectedImsis.includes(sub.imsi);
             const net = resolveNetwork(sub.imsi);
             const networkTooltip = net.network && net.network !== 'Unknown'
@@ -427,9 +429,9 @@ export function SubscriberTable(props: SubscriberTableProps) {
                   {hasBalance ? (
                     <div className="traffic-container">
                       <div className="traffic-stats">
-                        <span>{formatBytes(balance)}</span>
-                        <span>{formatBytes(total)}</span>
-                        <span className="traffic-percent">{remainingPercent === null ? t("sub_not_configured") : `${remainingPercent.toFixed(0)}%`}</span>
+                        <span>{formatTrafficValue(balance)}</span>
+                        <span>{formatTrafficValue(total)}</span>
+                        <span className="traffic-percent">{remainingPercent === null ? "—" : `${remainingPercent.toFixed(0)}%`}</span>
                       </div>
                       {balanceStateLabel && (
                         <div
@@ -441,12 +443,14 @@ export function SubscriberTable(props: SubscriberTableProps) {
                           {balanceStateLabel}
                         </div>
                       )}
-                      <div className="traffic-bar-container">
-                        <div
-                          className={`traffic-bar ${uRatio > 90 ? "high" : uRatio > 70 ? "medium" : "low"}`}
-                          style={{ "--traffic-scale": Math.min(uRatio, 100) / 100 } as React.CSSProperties}
-                        />
-                      </div>
+                      {measured && (
+                        <div className="traffic-bar-container">
+                          <div
+                            className={`traffic-bar ${uRatio > 90 ? "high" : uRatio > 70 ? "medium" : "low"}`}
+                            style={{ "--traffic-scale": Math.min(uRatio, 100) / 100 } as React.CSSProperties}
+                          />
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <span className="no-policy">{t("sub_not_configured")}</span>

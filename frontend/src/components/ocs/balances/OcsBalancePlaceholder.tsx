@@ -334,6 +334,8 @@ export default function OcsBalancePlaceholder() {
           dataAvailable={adjustTarget.data.available}
           voiceAvailable={adjustTarget.voice.available}
           smsAvailable={adjustTarget.sms.available}
+          version={adjustTarget.version}
+          onRefresh={() => { void refresh(); }}
           onClose={() => setAdjustTarget(null)}
           onSuccess={(result) => {
             setFeedback({

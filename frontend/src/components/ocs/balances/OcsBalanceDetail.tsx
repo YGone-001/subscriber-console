@@ -48,7 +48,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
   );
   /* The trail is a separate read on purpose: a log outage must not hide the
    * balance itself, and the balance must stay readable when the log is empty. */
-  const { data: adjustmentsData, mutate: refreshAdjustments } = useRead<unknown>(
+  const { data: adjustmentsData, error: adjustmentsError, isLoading: adjustmentsLoading, mutate: refreshAdjustments } = useRead<unknown>(
     `/api/ocs/balances/${encoded}/adjustments?limit=20`,
   );
 
@@ -262,7 +262,20 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
       <section className="ocs-detail-section ocs-detail-section-full">
         <h2><History size={16} aria-hidden="true" /> {t('ocs_adjustments_title')}</h2>
         <p className="ocs-detail-hint">{t('ocs_adjustments_note')}</p>
-        {adjustments.length === 0 ? (
+        {adjustmentsError ? (
+          <div className="ocs-feedback-error ocs-feedback-spaced" role="alert">
+            <span>{t('ocs_detail_load_failed')}</span>
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-secondary ocs-btn-compact-auto"
+              onClick={() => { void refreshAdjustments(); }}
+            >
+              {t('retry')}
+            </button>
+          </div>
+        ) : adjustmentsLoading && adjustments.length === 0 ? (
+          <p className="ocs-empty">{t('loading')}</p>
+        ) : adjustments.length === 0 ? (
           <p className="ocs-empty">{t('ocs_adjustments_empty')}</p>
         ) : (
           <div className="ocs-table-wrap">
@@ -317,6 +330,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
           voiceAvailable={balance.voice.available}
           smsAvailable={balance.sms.available}
           version={balance.version}
+          onRefresh={() => { void refresh(); }}
           onClose={() => setAdjustOpen(false)}
           onSuccess={(result) => {
             setFeedback({

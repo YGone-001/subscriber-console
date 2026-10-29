@@ -50,7 +50,6 @@ import type {
   SubscriberRow,
   SubscriberSummaryKey,
   SubscribersResponse,
-  TrafficAdjustmentTarget,
 } from './types';
 
 const SUBSCRIBER_PAGE_SIZES = [10, 20, 50] as const;
@@ -83,7 +82,7 @@ export function SubscribersPage() {
   const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [copiedImsi, setCopiedImsi] = useState<string | null>(null);
-  const [trafficAdjustmentTarget, setTrafficAdjustmentTarget] = useState<TrafficAdjustmentTarget | null>(null);
+  const [trafficAdjustmentTarget, setTrafficAdjustmentTarget] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [isDeletingSingle, setIsDeletingSingle] = useState<string | null>(null);
@@ -202,10 +201,7 @@ export function SubscribersPage() {
   const handleOpenTrafficAdjustment = (sub: SubscriberRow, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setActiveDropdown(null);
-    const used = sub.traffic?.used || 0;
-    const total = sub.traffic?.total || 0;
-    const balance = sub.traffic?.balance ?? Math.max(0, total - used);
-    setTrafficAdjustmentTarget({ imsi: sub.imsi, traffic: { used, total, balance } });
+    setTrafficAdjustmentTarget(sub.imsi);
   };
 
   const handleOpenProfileApply = (sub: SubscriberRow) => {
@@ -636,9 +632,8 @@ export function SubscribersPage() {
 
       {trafficAdjustmentTarget && (
         <TrafficAdjustmentModal
-          imsi={trafficAdjustmentTarget.imsi}
+          imsi={trafficAdjustmentTarget}
           t={t}
-          currentTraffic={trafficAdjustmentTarget.traffic}
           onClose={() => setTrafficAdjustmentTarget(null)}
           onSuccess={() => {
             void mutateSubscribers();

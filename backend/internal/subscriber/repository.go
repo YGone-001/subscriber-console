@@ -138,55 +138,35 @@ func extractWebuiMeta(doc bson.M) map[string]any {
 	return nil
 }
 
-// normalizeTraffic computes traffic totals from balance doc fields.
+// normalizeTraffic carries the stored traffic fields without deriving totals
+// from whatever happens to be present.
 func normalizeTraffic(dataTotal, dataUsed, dataAvailable any) TrafficSnapshot {
-	balance := numericInt64(dataAvailable)
-	total := numericInt64(dataTotal)
-	used := numericInt64(dataUsed)
-
-	if total == 0 {
-		total = balance
-	}
-	if total < balance {
-		total = balance
-	}
-	if used == 0 {
-		used = total - balance
-	}
-	if used < 0 {
-		used = 0
-	}
-
 	return TrafficSnapshot{
-		Total:   total,
-		Used:    used,
-		Balance: balance,
+		Total:   numericInt64Ptr(dataTotal),
+		Used:    numericInt64Ptr(dataUsed),
+		Balance: numericInt64Ptr(dataAvailable),
 	}
 }
 
-// normalizeSMS computes SMS totals from balance doc fields.
+// normalizeSMS carries the stored SMS fields without deriving totals.
 func normalizeSMS(smsTotal, smsUsed, smsAvailable any) SMSSnapshot {
-	balance := numericInt64(smsAvailable)
-	total := numericInt64(smsTotal)
-	used := numericInt64(smsUsed)
-
-	if total == 0 {
-		total = balance
-	}
-	if total < balance {
-		total = balance
-	}
-	if used == 0 {
-		used = total - balance
-	}
-	if used < 0 {
-		used = 0
-	}
-
 	return SMSSnapshot{
-		Total:   total,
-		Used:    used,
-		Balance: balance,
+		Total:   numericInt64Ptr(smsTotal),
+		Used:    numericInt64Ptr(smsUsed),
+		Balance: numericInt64Ptr(smsAvailable),
+	}
+}
+
+func numericInt64Ptr(value any) *int64 {
+	if value == nil {
+		return nil
+	}
+	switch value.(type) {
+	case int32, int64, float64, bson.Decimal128:
+		converted := numericInt64(value)
+		return &converted
+	default:
+		return nil
 	}
 }
 
@@ -382,21 +362,26 @@ func toSubscriberRow(
 // volume_threshold. Reserved quota is already excluded from data_available.
 const (
 	balanceStateMissing   = "missing"
+	balanceStateUnknown   = "unknown"
 	balanceStateExhausted = "exhausted"
 	balanceStateLow       = "low"
 	balanceStateNormal    = "normal"
 )
 
 // classifyBalance separates "no balance record" from an exhausted balance and
-// applies the plan threshold only when it is configured and positive.
-func classifyBalance(hasBalance bool, available, threshold int64) string {
+// applies the plan threshold only when it is configured and positive. A record
+// without an available field has no measurable state.
+func classifyBalance(hasBalance bool, available *int64, threshold int64) string {
 	if !hasBalance {
 		return balanceStateMissing
 	}
-	if available <= 0 {
+	if available == nil {
+		return balanceStateUnknown
+	}
+	if *available <= 0 {
 		return balanceStateExhausted
 	}
-	if threshold > 0 && available <= threshold {
+	if threshold > 0 && *available <= threshold {
 		return balanceStateLow
 	}
 	return balanceStateNormal
@@ -924,7 +909,22 @@ func sortSubscriberRows(rows []SubscriberRow, sortField, sortDirection string) {
 		var cmp int
 		switch sortField {
 		case "usage":
-			cmp = int(rows[i].Traffic.Used - rows[j].Traffic.Used)
+			left, right := rows[i].Traffic.Used, rows[j].Traffic.Used
+			if left == nil || right == nil {
+				if left == nil && right == nil {
+					cmp = 0
+				} else if left == nil {
+					return false
+				} else {
+					return true
+				}
+			} else if *left < *right {
+				cmp = -1
+			} else if *left > *right {
+				cmp = 1
+			} else {
+				cmp = 0
+			}
 		case "lastActive":
 			cmp = strings.Compare(rows[i].LastActive, rows[j].LastActive)
 		case "plmn":
