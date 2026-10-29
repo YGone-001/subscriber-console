@@ -27,14 +27,14 @@ import { ProfileDriftCard } from './components/ProfileDriftCard';
 import { ProfileVersionsCard } from './components/ProfileVersionsCard';
 import {
   buildDraftChangeRows,
-  buildProfileKeyFromTitle,
   buildProfilePayload,
   createDraftFromProfile,
   createEmptyDraft,
   draftSignature,
+  suggestProfileKey,
   type ProfileDraft,
 } from './profile-draft';
-import { findProfileDraftIssue, type ProfileDraftIssue } from './profile-validation';
+import { findProfileDraftIssue, profileKeyIssue, type ProfileDraftIssue } from './profile-validation';
 import { resolveTemplateImpact } from './profile-format';
 import { buildProfileVersionDiff } from './profile-version-diff';
 import type {
@@ -89,6 +89,9 @@ export function ProfileDetailPage() {
 
   const [draft, setDraft] = useState<ProfileDraft>(createEmptyDraft);
   const [isEditing, setIsEditing] = useState(isCreate);
+  /* The title suggests a key until the operator types one; after that the
+   * suggestion stops overwriting their choice. */
+  const [isKeyTouched, setIsKeyTouched] = useState(false);
   const [editingBaseline, setEditingBaseline] = useState<string | null>(() => (isCreate ? draftSignature(createEmptyDraft()) : null));
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -220,6 +223,10 @@ export function ProfileDetailPage() {
     switch (issue.code) {
       case 'nameRequired':
         return t('prof_err_name_req');
+      case 'nameInvalid':
+        return t('prof_err_name_invalid');
+      case 'nameReserved':
+        return t('prof_err_name_reserved');
       case 'kFormat':
         return t('prof_err_k_format');
       case 'opFormat':
@@ -239,7 +246,9 @@ export function ProfileDetailPage() {
 
   const prepareSave = (): { targetName: string; payload: Record<string, unknown> } | null => {
     setError(null);
-    const targetName = profileName || buildProfileKeyFromTitle(draft.title);
+    /* The key is validated and sent exactly as typed: leading or trailing spaces
+     * are a format error, not something the client may quietly repair. */
+    const targetName = profileName || draft.key;
     const issue = findProfileDraftIssue({
       name: targetName,
       auth: draft.auth,
@@ -534,7 +543,7 @@ export function ProfileDetailPage() {
             <button
               className="btn btn-primary"
               onClick={requestSave}
-              disabled={isSaving || (isCreate && !draft.title.trim()) || (!isCreate && changedDraftRows.length === 0)}
+              disabled={isSaving || (isCreate && (!draft.title.trim() || !draft.key.trim())) || (!isCreate && changedDraftRows.length === 0)}
             >
               <Save size={16} /> {isSaving ? t('sub_btn_saving') : (isCreate ? t('prof_btn_create') : t('prof_btn_save'))}
             </button>
@@ -814,6 +823,8 @@ export function ProfileDetailPage() {
               state={{
                 inputName: draft.title,
                 profileTitle: draft.title,
+                profileKey: draft.key,
+                profileKeyProblem: isCreate ? profileKeyIssue(draft.key) : null,
                 authData: draft.auth,
                 canEditCredentials,
                 usimType: draft.usimType,
@@ -832,7 +843,17 @@ export function ProfileDetailPage() {
               }}
               actions={{
                 setInputName: (value: string) => setDraft((current) => ({ ...current, title: value })),
-                setProfileTitle: (value: string) => setDraft((current) => ({ ...current, title: value })),
+                /* The key follows the title only until the operator edits the key
+                 * themselves; after that it is their decision. */
+                setProfileTitle: (value: string) => setDraft((current) => ({
+                  ...current,
+                  title: value,
+                  key: isKeyTouched ? current.key : suggestProfileKey(value),
+                })),
+                setProfileKey: (value: string) => {
+                  setIsKeyTouched(true);
+                  setDraft((current) => ({ ...current, key: value }));
+                },
                 setAuthData: (value: ProfileDraft['auth']) => setDraft((current) => ({ ...current, auth: value })),
                 setUsimType: (value: ProfileDraft['usimType']) => setDraft((current) => ({ ...current, usimType: value })),
                 setUeAmbr: (value: ProfileDraft['ueAmbr']) => setDraft((current) => ({ ...current, ueAmbr: value })),

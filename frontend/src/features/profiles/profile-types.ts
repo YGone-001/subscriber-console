@@ -126,3 +126,86 @@ export type RatingRule = {
 };
 
 export type RatingsResponse = { ratings?: RatingRule[] };
+
+/* --------------------------------------------------------------- workspace -- */
+
+export type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+export type ProfileAuthDraft = { k: string; opValue: string; amf: string };
+
+export type ProfileAmbrDraft = { downlink: ProfileAmbrSide; uplink: ProfileAmbrSide };
+
+/* Slice content is wide xCloud BSON: the editor touches a handful of keys and
+ * the rest travels through untouched, so this is deliberately not narrowed. */
+export type ProfileSliceDraft = Record<string, any>;
+
+export type ProfileOcsDefaultsDraft = Record<string, any>;
+
+export type ProfileAccessBit = { value: number; key: string };
+
+export type ProfileKeyProblem = { code: 'nameRequired' | 'nameInvalid' | 'nameReserved' };
+
+export type ProfileDataStatus = 'ready' | 'unavailable' | 'loading';
+
+/*
+ * The edit workspace's props. These were typed `any`, so a field the page forgot
+ * to pass rendered as undefined instead of failing the build; naming them makes
+ * the page's object literal a checked contract.
+ */
+export type ProfileEditState = {
+  inputName: string;
+  profileTitle: string;
+  profileKey: string;
+  profileKeyProblem: ProfileKeyProblem | null;
+  authData: ProfileAuthDraft;
+  canEditCredentials: boolean;
+  usimType: 'opc' | 'op';
+  ueAmbr: ProfileAmbrDraft;
+  isAccessRestrictionsExpanded: boolean;
+  accessRestriction: number | null;
+  ocsDefaults: ProfileOcsDefaultsDraft;
+  tariffPlanList: TariffPlanOption[];
+  ratingList: RatingRule[];
+  tariffPlanStatus: ProfileDataStatus;
+  ratingStatus: ProfileDataStatus;
+  accessBits: ProfileAccessBit[] | null;
+  slices: ProfileSliceDraft[];
+  newlyAddedSliceIndex: number | null;
+  expandedSlices: number[];
+};
+
+export type ProfileEditActions = {
+  setInputName: (value: string) => void;
+  setProfileTitle: (value: string) => void;
+  setProfileKey: (value: string) => void;
+  setAuthData: (value: ProfileAuthDraft) => void;
+  setUsimType: (value: 'opc' | 'op') => void;
+  setUeAmbr: (value: ProfileAmbrDraft) => void;
+  setIsAccessRestrictionsExpanded: (value: boolean | ((previous: boolean) => boolean)) => void;
+  setAccessRestriction: (value: number | null) => void;
+  setOcsDefaults: (value: ProfileOcsDefaultsDraft) => void;
+  addSlice: () => void;
+  handleSliceChange: (index: number, slice: ProfileSliceDraft) => void;
+  removeSlice: (index: number) => void;
+  toggleSliceExpanded: (index: number) => void;
+  jumpToAnchor: (id: string) => void;
+};
+
+export type ProfileViewState = {
+  authData: ProfileAuthDraft;
+  credentialState: CredentialState | null;
+  rawAuth: Record<string, unknown> | null;
+  usimType: 'opc' | 'op';
+  ocsDefaults: ProfileOcsDefaultsDraft;
+  tariffPlanList: TariffPlanOption[];
+  ratingList: RatingRule[];
+  ratingStatus: ProfileDataStatus;
+  ueAmbr: ProfileAmbrDraft;
+  isAccessRestrictionsExpanded: boolean;
+  setIsAccessRestrictionsExpanded: (value: boolean | ((previous: boolean) => boolean)) => void;
+  accessRestriction: number | null;
+  accessBits: ProfileAccessBit[] | null;
+  slices: ProfileSliceDraft[];
+  backendStats: ProfileStats | null;
+  statsUnavailable: boolean;
+};

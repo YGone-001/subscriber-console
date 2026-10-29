@@ -10,11 +10,21 @@ import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from '../../../lib
 import { AmbrUnitSelect } from './AmbrUnitSelect';
 import { DEFAULT_ACCESS_RESTRICTION_BITS, accessBitLabel } from '../profile-access';
 import { ratingTypeLabel, ratingUnitLabel } from '../profile-format';
+import type {
+  ProfileEditActions,
+  ProfileEditState,
+  Translate,
+} from '../profile-types';
 import styles from '../../../styles/modules/profile.module.css';
 
-export default function ProfileEditMode({ t, profileName, state, actions }: any) {
+export default function ProfileEditMode({ t, profileName, state, actions }: {
+  t: Translate;
+  profileName: string | null;
+  state: ProfileEditState;
+  actions: ProfileEditActions;
+}) {
   const {
-    profileTitle, authData, canEditCredentials, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
+    profileTitle, profileKey, profileKeyProblem, authData, canEditCredentials, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
     ocsDefaults, tariffPlanList, ratingList, tariffPlanStatus, ratingStatus, accessBits, slices, newlyAddedSliceIndex,
     expandedSlices
   } = state;
@@ -23,7 +33,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
   const credentialsEditable = canEditCredentials !== false;
 
   const {
-    setInputName, setProfileTitle, setAuthData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
+    setInputName, setProfileTitle, setProfileKey, setAuthData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
     setOcsDefaults, addSlice, handleSliceChange, removeSlice, toggleSliceExpanded, jumpToAnchor
   } = actions;
   const hasTotalTraffic = String(ocsDefaults.trafficTotal ?? '').trim() !== '';
@@ -45,6 +55,16 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
     setProfileTitle(value);
     if (!profileName) setInputName(value);
   };
+  /* A key problem is stated where the key is typed; the save button stays bound
+   * to the same rule the service enforces. */
+  const keyProblemLabel = (() => {
+    switch (profileKeyProblem?.code) {
+      case 'nameRequired': return t('prof_key_err_required');
+      case 'nameInvalid': return t('prof_key_err_invalid');
+      case 'nameReserved': return t('prof_key_err_reserved');
+      default: return '';
+    }
+  })();
 
   return (
     <div className={styles.profileContainer}>
@@ -60,6 +80,26 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
               <label className="form-label">{!profileName && <span className="form-asterisk">*</span>}{t("prof_title")}</label>
               <input type="text" className="form-input" value={profileTitle} onChange={(e) => handleTitleChange(e.target.value)} placeholder={t("prof_title_ph")} />
             </div>
+            {!profileName && (
+              <div>
+                <label className="form-label" htmlFor="profile-key"><span className="form-asterisk">*</span>{t("prof_key")}</label>
+                <input
+                  id="profile-key"
+                  type="text"
+                  className="form-input"
+                  value={profileKey}
+                  maxLength={64}
+                  autoComplete="off"
+                  aria-describedby="profile-key-help"
+                  aria-invalid={profileKeyProblem ? true : undefined}
+                  onChange={(e) => setProfileKey(e.target.value)}
+                  placeholder={t("prof_key_ph")}
+                />
+                <p id="profile-key-help" className={keyProblemLabel ? "warning-text" : "text-muted"}>
+                  {keyProblemLabel || t("prof_key_help")}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -23,6 +23,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ArrowUpDown, Layers } from 'lucide-react';
 import BatchCreateModal from '../../components/BatchCreateModal';
 import SubscriberBatchUpdateModal from '../../components/SubscriberBatchUpdateModal';
+import { SubscriberImportModal } from './components/SubscriberImportModal';
 import TrafficAdjustmentModal from '../../components/TrafficAdjustmentModal';
 import { ConfirmActionPanel, OperationNotice } from '../../components/ui/OperationFeedback';
 import { DataTablePagination } from '../../components/ui/DataTablePagination';
@@ -95,6 +96,7 @@ export function SubscribersPage() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
 
   const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [profileApplyTarget, setProfileApplyTarget] = useState<SubscriberRow | null>(null);
   const [applyProfileName, setApplyProfileName] = useState('');
   const [isApplyingProfile, setIsApplyingProfile] = useState(false);
@@ -522,6 +524,7 @@ export function SubscribersPage() {
           pendingDelete={pendingDelete}
           handleOpenNew={handleOpenNew}
           setIsBatchOpen={setIsBatchOpen}
+          onOpenImport={() => setIsImportOpen(true)}
         />
 
         {searchTermInvalid && (
@@ -617,6 +620,12 @@ export function SubscribersPage() {
           )}
         </div>
       </div>
+
+      <SubscriberImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImported={() => { void mutateSubscribers(); }}
+      />
 
       <BatchCreateModal
         isOpen={isBatchOpen}

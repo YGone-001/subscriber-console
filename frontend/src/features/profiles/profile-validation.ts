@@ -27,6 +27,8 @@ export type ProfileDraftInput = {
 
 export type ProfileDraftIssue =
   | { code: 'nameRequired' }
+  | { code: 'nameInvalid' }
+  | { code: 'nameReserved' }
   | { code: 'kFormat' }
   | { code: 'opFormat' }
   | { code: 'amfFormat' }
@@ -34,6 +36,28 @@ export type ProfileDraftIssue =
   | { code: 'sstRange'; index: number }
   | { code: 'sdFormat'; index: number }
   | { code: 'pgwIpv4'; sessionName: string };
+
+/*
+ * The creation-time key policy, mirrored from the service: one to sixty-four
+ * characters, alphanumeric/underscore/hyphen at the ends, interior spaces
+ * allowed, and `new` is reserved because it is an SPA route segment the key
+ * would shadow. The read path stays more permissive so an existing odd-named
+ * template remains reachable.
+ */
+const PROFILE_KEY = /^[a-zA-Z0-9_-](?:[a-zA-Z0-9_ -]{0,62}[a-zA-Z0-9_-])?$/;
+const RESERVED_PROFILE_KEY = /^new$/i;
+
+export type ProfileKeyIssue = { code: 'nameRequired' | 'nameInvalid' | 'nameReserved' };
+
+export function profileKeyIssue(value: unknown): ProfileKeyIssue | null {
+  /* No trimming: a leading or trailing space is exactly what the service
+   * rejects, and silently repairing the operator's input here would hide it. */
+  const key = typeof value === 'string' ? value : '';
+  if (key.trim() === '') return { code: 'nameRequired' };
+  if (RESERVED_PROFILE_KEY.test(key)) return { code: 'nameReserved' };
+  if (!PROFILE_KEY.test(key)) return { code: 'nameInvalid' };
+  return null;
+}
 
 const HEX_32 = /^[0-9a-fA-F]{32}$/;
 const HEX_4 = /^[0-9a-fA-F]{4}$/;
@@ -45,7 +69,8 @@ function text(value: unknown): string {
 }
 
 export function findProfileDraftIssue(input: ProfileDraftInput): ProfileDraftIssue | null {
-  if (text(input.name) === '') return { code: 'nameRequired' };
+  const keyIssue = profileKeyIssue(input.name);
+  if (keyIssue) return keyIssue;
 
   if (input.validateAuth !== false) {
     const auth = input.auth ?? {};

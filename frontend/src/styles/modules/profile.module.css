@@ -71,6 +71,7 @@
 
 /* Fixed column grid: the identifier column keeps a real share of the width no
  * matter how long the AMBR or date strings get. */
+.profileColSelect { width: 36px; }
 .profileColTemplate { width: 20%; }
 .profileColContent { width: 18%; }
 .profileColLinked { width: 12%; }
@@ -78,6 +79,13 @@
 .profileColOwner { width: 10%; }
 .profileColUpdated { width: 15%; }
 .profileColActions { width: 8%; }
+
+/* The selection column is a control, not content: it is centred and never
+ * shrinks to nothing. */
+.profileTableSelect {
+  width: 36px;
+  text-align: center;
+}
 
 /* The shared responsive rule hides the supplementary columns at 980px; the
  * surviving columns take over their share instead of leaving dead space. */

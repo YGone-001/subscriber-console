@@ -8,9 +8,12 @@ import { getAmbrString, typeLabel } from '../../subscribers/components/subscribe
 import { ambrSideView, mbrSideText, ratingTypeLabel, ratingUnitLabel } from '../profile-format';
 import { DEFAULT_ACCESS_RESTRICTION_BITS, accessBitLabel, type AccessRestrictionBit } from '../profile-access';
 import { isWithheldPlaceholder } from '../../../types/credential';
+import type { ProfileViewState, Translate } from '../profile-types';
 import styles from '../../../styles/modules/profile.module.css';
 
-export default function ProfileViewMode({ t, authData, credentialState, rawAuth, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, accessBits, slices, backendStats, statsUnavailable }: any) {
+export default function ProfileViewMode({ t, authData, credentialState, rawAuth, usimType, ocsDefaults, tariffPlanList, ratingList, ratingStatus, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, accessBits, slices, backendStats, statsUnavailable }: {
+  t: Translate;
+} & ProfileViewState) {
   /* The stored value is a 3GPP bitmask. Reading it is a decode, not a number the
    * operator should have to do in their head, so the same vocabulary the editor
    * uses is what the view renders. Unknown bits are still reported: a mask this

@@ -13,12 +13,13 @@ import {
   type ProfileDiffLabels,
   type ProfileDiffSection,
 } from '../src/features/profiles/profile-version-diff';
-import { findProfileDraftIssue } from '../src/features/profiles/profile-validation';
+import { findProfileDraftIssue, profileKeyIssue } from '../src/features/profiles/profile-validation';
 import {
   buildDraftChangeRows,
   buildProfilePayload,
   createDraftFromProfile,
   createEmptyDraft,
+  suggestProfileKey,
 } from '../src/features/profiles/profile-draft';
 import {
   countProfilesWithoutBilling,
@@ -43,6 +44,50 @@ import {
 import { resolveUsimType } from '../src/types/credential';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
+
+/* ------------------------------------------------------ template key -- */
+
+/* The key is the template's identity, so it is chosen, not fabricated. A title
+ * with no ASCII identity suggests nothing rather than inventing a timestamped
+ * key the operator can never change. */
+test('a template key is suggested from a title, never invented', () => {
+  assert.equal(suggestProfileKey('Default 5G'), 'Default-5G');
+  assert.equal(suggestProfileKey('  billing / v2  '), 'billing-v2');
+  assert.equal(suggestProfileKey('默认 5G 模板'), '', 'a partly-ASCII title suggests no key either');
+  assert.equal(suggestProfileKey('   '), '');
+  assert.ok(suggestProfileKey('a'.repeat(100)).length <= 64);
+});
+
+/* The creation-time policy is mirrored from the service: same length, same
+ * character set, same reserved word. */
+test('the template key policy mirrors the creation contract', () => {
+  const code = (value: string) => profileKeyIssue(value)?.code ?? null;
+
+  assert.equal(code(''), 'nameRequired');
+  assert.equal(code('   '), 'nameRequired');
+  assert.equal(code('new'), 'nameReserved');
+  assert.equal(code('NEW'), 'nameReserved');
+  assert.equal(code(' lead'), 'nameInvalid');
+  assert.equal(code('trail '), 'nameInvalid');
+  assert.equal(code('has/slash'), 'nameInvalid');
+  assert.equal(code('über'), 'nameInvalid');
+  assert.equal(code('a'.repeat(65)), 'nameInvalid');
+
+  assert.equal(code('default-5g'), null);
+  assert.equal(code('Default_5G'), null);
+  assert.equal(code('key with space'), null, 'interior spaces are allowed');
+  assert.equal(code('a'.repeat(64)), null, '64 characters is the limit, inclusive');
+});
+
+test('the draft carries the key so the create payload uses the chosen identity', () => {
+  assert.equal(createEmptyDraft().key, '');
+  const fromStored = createDraftFromProfile({ name: 'tpl_a', title: 'A' }, 'fallback');
+  assert.equal(fromStored.key, 'tpl_a');
+  assert.equal(fromStored.title, 'A');
+
+  const issue = findProfileDraftIssue({ name: 'new', slices: [] });
+  assert.deepEqual(issue, { code: 'nameReserved' });
+});
 
 /* One seam table for the template stylesheet module. The sheet and its consumers
  * agree on a set of exported keys; a key renamed on one side only leaves the class
@@ -696,6 +741,33 @@ test('the subscriber detail is a route page, not a modal', () => {
   assert.ok(!components.includes('SubscriberModal.tsx'), 'the retired modal must not come back');
 });
 
+/* The template list can act on a selection: export and delete are per-record
+ * endpoint calls, fanned out with a progress line and per-row failures. */
+test('the template list acts on a selection without inventing an endpoint', () => {
+  const page = read('../src/features/profiles/ProfilesPage.tsx');
+  assert.match(page, /t\('prof_bulk_export'\)/);
+  assert.match(page, /t\('prof_bulk_delete'\)/);
+  assert.match(page, /deleteJson\(`\/api\/profiles\/\$\{encodeURIComponent\(name\)\}`\)/);
+  assert.match(page, /\/export`\)/);
+  assert.match(page, /prof_bulk_progress/);
+  assert.match(page, /prof_select_all/);
+});
+
+/* The subscriber empty state tells operators to import a CSV file; the entry
+ * point must exist and must go through the import contract, not raw fetch. */
+test('the subscriber list offers the import its empty state promises', () => {
+  const page = read('../src/features/subscribers/SubscribersPage.tsx');
+  assert.match(page, /SubscriberImportModal/);
+  assert.match(page, /onOpenImport/);
+
+  const modal = read('../src/features/subscribers/components/SubscriberImportModal.tsx');
+  assert.match(modal, /parseImportContent\(/);
+  assert.match(modal, /validateAndNormalizeImportRecord\(/);
+  assert.match(modal, /mode=precheck/);
+  assert.match(modal, /mode=import/);
+  assert.ok(!modal.includes('fetch('), 'the import must go through the mutation client');
+});
+
 test('the compact AMBR pair drops the direction words the column heading already carries', () => {
   assert.equal(formatAmbrPairCompact(null, 'N/A'), 'N/A');
   assert.equal(formatAmbrPairCompact({ downlink: null, uplink: null }, 'N/A'), 'N/A');
@@ -713,7 +785,7 @@ test('the template table pins its column grid so the identifier cannot be starve
   /* One declared col per column, whatever it is named: a missing <col> quietly
    * takes the fixed layout's guarantee away from that column. */
   const columnCount = (page.match(/<col\b/g) ?? []).length;
-  assert.equal(columnCount, 7, `the grid must declare one col per column, got ${columnCount}`);
+  assert.equal(columnCount, 8, `the grid must declare one col per column, got ${columnCount}`);
   assert.match(css, /\.profileGovernanceTable \{[^}]*table-layout: fixed/);
   assert.match(css, /\.profileColTemplate \{ width: 20%/);
   assert.match(page, /formatAmbrPairCompact\(/);

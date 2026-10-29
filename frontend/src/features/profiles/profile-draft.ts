@@ -9,6 +9,9 @@ import type { ProfileAmbrSide } from './profile-types';
 export type { ProfileAmbrSide };
 
 export type ProfileDraft = {
+  /* The template's identity. It addresses the API and the route, so it is chosen
+   * once and never rewritten; the title is only a display name. */
+  key: string;
   title: string;
   auth: { k: string; opValue: string; amf: string };
   usimType: 'opc' | 'op';
@@ -40,6 +43,7 @@ export const PROFILE_SECTION_FIELDS = [
 
 export function createEmptyDraft(): ProfileDraft {
   return {
+    key: '',
     title: '',
     auth: { k: '', opValue: '', amf: '' },
     usimType: 'opc',
@@ -56,6 +60,7 @@ export function createDraftFromProfile(profile: any, fallbackTitle: string): Pro
   const draft = createEmptyDraft();
   if (!profile) return draft;
 
+  draft.key = String(profile.name || fallbackTitle || '');
   draft.title = profile.title || fallbackTitle || '';
 
   if (profile.auth) {
@@ -194,18 +199,26 @@ export function buildDraftChangeRows(
     }));
 }
 
-export function buildProfileKeyFromTitle(title: string): string {
+/*
+ * A title can suggest a key, and the suggestion is deliberately not a fallback:
+ * a title with no ASCII identity (for example an all-Chinese one) suggests
+ * nothing, and the operator must name the template themselves. The previous
+ * behaviour invented `profile_<base36 timestamp>`, which produced unreadable
+ * identifiers that could never be changed afterwards.
+ */
+export function suggestProfileKey(title: string): string {
   const trimmed = title.trim();
-  const asciiKey = trimmed
+  if (trimmed === '') return '';
+  /* A partly-ASCII title is not a faithful identity either: "默认 5G 模板" would
+   * suggest "5G", which is meaningless and collision-prone. Only a title that is
+   * entirely printable ASCII suggests a key. */
+  if (!/^[\x20-\x7E]+$/.test(trimmed)) return '';
+  return trimmed
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9_\s-]/g, ' ')
-    .trim()
-    .replace(/\s+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 48);
-
-  if (/^[a-zA-Z0-9_\s-]+$/.test(trimmed) && trimmed.length <= 64) return trimmed;
-  return `${asciiKey || 'profile'}_${Date.now().toString(36)}`;
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64)
+    .replace(/-+$/g, '');
 }

@@ -6,7 +6,7 @@
  * subscriber list.
  */
 import React from "react";
-import { Trash2, Plus, Layers, ClipboardPenLine } from "lucide-react";
+import { Trash2, Plus, Layers, ClipboardPenLine, Upload } from "lucide-react";
 import { useI18n } from '../../../providers/I18nProvider';
 
 export interface SubscriberToolbarProps {
@@ -22,6 +22,7 @@ export interface SubscriberToolbarProps {
   pendingDelete: unknown;
   handleOpenNew: () => void;
   setIsBatchOpen: (open: boolean) => void;
+  onOpenImport: () => void;
 }
 
 export function SubscriberToolbar(props: SubscriberToolbarProps) {
@@ -30,7 +31,7 @@ export function SubscriberToolbar(props: SubscriberToolbarProps) {
     searchQuery, setSearchQuery, setCurrentPage, setSelectedImsis,
     selectedImsis, canEditSubscribers, setIsBatchUpdateModalOpen,
     handleBulkDelete, isDeletingBulk, pendingDelete,
-    handleOpenNew, setIsBatchOpen,
+    handleOpenNew, setIsBatchOpen, onOpenImport,
   } = props;
 
   return (
@@ -79,6 +80,13 @@ export function SubscriberToolbar(props: SubscriberToolbarProps) {
                title={t("batch_create")}
              >
                <Layers size={16} /> {t("batch_create")}
+             </button>
+             <button
+               className="btn btn-outline btn-primary-padded"
+               onClick={onOpenImport}
+               title={t("sub_import_action")}
+             >
+               <Upload size={16} /> {t("sub_import_action")}
              </button>
            </>
          )}

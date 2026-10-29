@@ -10,14 +10,15 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../providers/I18nProvider';
-import { ArrowDown, ArrowUp, ArrowUpDown, Boxes, Eye, Gauge, Link2Off, Pencil, Plus, Users } from 'lucide-react';
-import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
+import { ArrowDown, ArrowUp, ArrowUpDown, Boxes, Download, Eye, Gauge, Link2Off, Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { EmptyState, LoadingRows, ConfirmActionPanel, OperationNotice } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { SortableTableHeader } from '../../components/ui/SortableTableHeader';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useRead } from '../../lib/api/use-read';
-import { getJson } from '../../lib/api/read-client';
+import { getBlob, getJson } from '../../lib/api/read-client';
+import { deleteJson } from '../../lib/api/mutation-client';
 import { useAppRouter } from '../../lib/ui-compat/router';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { formatAmbrPairCompact } from './profile-format';
@@ -189,6 +190,79 @@ export function ProfilesPage() {
 
   const hasActiveFilter = searchQuery.trim() !== '' || listFilter !== 'all';
 
+  /* ------------------------------------------------------------ bulk actions -- */
+
+  const [selectedNames, setSelectedNames] = useState<string[]>([]);
+  const [bulk, setBulk] = useState<{
+    kind: 'export' | 'delete';
+    total: number;
+    done: number;
+    failures: Array<{ name: string; reason: string }>;
+  } | null>(null);
+  const [bulkNotice, setBulkNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+
+  const toggleSelected = (name: string) => {
+    setSelectedNames((current) => (current.includes(name)
+      ? current.filter((entry) => entry !== name)
+      : [...current, name]));
+  };
+
+  const clearSelection = () => setSelectedNames([]);
+
+  const runBulkExport = async () => {
+    const total = selectedNames.length;
+    const failures: Array<{ name: string; reason: string }> = [];
+    setBulk({ kind: 'export', total, done: 0, failures });
+    for (const [index, name] of selectedNames.entries()) {
+      try {
+        const blob = await getBlob(`/api/profiles/${encodeURIComponent(name)}/export`);
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `profile-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        failures.push({ name, reason: error instanceof Error ? error.message : String(error) });
+      }
+      setBulk({ kind: 'export', total, done: index + 1, failures: [...failures] });
+    }
+    setBulk(null);
+    clearSelection();
+    setBulkNotice(failures.length === 0
+      ? { tone: 'success', text: t('prof_bulk_export_done', { count: total }) }
+      : {
+        tone: 'danger',
+        text: `${t('prof_bulk_export_failed', { count: failures.length, total })} ${t('prof_bulk_failures', { items: failures.slice(0, 3).map((failure) => failure.name).join(', ') })}`,
+      });
+  };
+
+  const runBulkDelete = async () => {
+    const total = selectedNames.length;
+    const failures: Array<{ name: string; reason: string }> = [];
+    setBulk({ kind: 'delete', total, done: 0, failures });
+    for (const [index, name] of selectedNames.entries()) {
+      try {
+        await deleteJson(`/api/profiles/${encodeURIComponent(name)}`);
+      } catch (error) {
+        failures.push({ name, reason: error instanceof Error ? error.message : String(error) });
+      }
+      setBulk({ kind: 'delete', total, done: index + 1, failures: [...failures] });
+    }
+    setBulk(null);
+    clearSelection();
+    await mutate();
+    setBulkNotice(failures.length === 0
+      ? { tone: 'success', text: t('prof_bulk_delete_done', { count: total }) }
+      : {
+        tone: 'danger',
+        text: `${t('prof_bulk_delete_failed', { count: failures.length, total })} ${t('prof_bulk_failures', { items: failures.slice(0, 3).map((failure) => failure.name).join(', ') })}`,
+      });
+  };
+
   const renderProfileRow = (profile: ProfileListItem) => {
     const linked = linkedSubscriberCount(profile);
     const billingConfigured = profile.ocsDefaultsConfigured === true;
@@ -203,6 +277,15 @@ export function ProfilesPage() {
         : t("prof_access_limited");
     return (
       <tr key={profile.name}>
+        <td className={styles.profileTableSelect} data-column-priority="essential">
+          <input
+            type="checkbox"
+            className="checkbox-custom"
+            aria-label={t('prof_select_row', { name: profile.title || profile.name })}
+            checked={selectedNames.includes(profile.name)}
+            onChange={() => toggleSelected(profile.name)}
+          />
+        </td>
         <td data-label={t("prof_table_template")} data-column-priority="essential">
           <button
             type="button"
@@ -354,9 +437,54 @@ export function ProfilesPage() {
         )}
       </div>
 
+      {bulkNotice && (
+        <OperationNotice
+          presentation="inline"
+          tone={bulkNotice.tone}
+          message={bulkNotice.text}
+          onClose={() => setBulkNotice(null)}
+        />
+      )}
+
+      {selectedNames.length > 0 && (
+        <div className="page-action-bar" role="group" aria-label={t('prof_bulk_selected', { count: selectedNames.length })}>
+          <span className="form-label">{t('prof_bulk_selected', { count: selectedNames.length })}</span>
+          <div className="page-action-buttons">
+            <button type="button" className="btn btn-outline" onClick={() => { void runBulkExport(); }} disabled={Boolean(bulk)}>
+              <Download size={15} /> {t('prof_bulk_export')}
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => setIsBulkDeleteOpen(true)} disabled={Boolean(bulk)}>
+              <Trash2 size={15} /> {t('prof_bulk_delete')}
+            </button>
+            <button type="button" className="btn btn-outline" onClick={clearSelection} disabled={Boolean(bulk)}>
+              {t('prof_bulk_clear')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {bulk && (
+        <p className="form-label" role="status">
+          {t('prof_bulk_progress', { done: bulk.done, total: bulk.total })}
+        </p>
+      )}
+
+      {isBulkDeleteOpen && (
+        <ConfirmActionPanel
+          tone="danger"
+          title={t('prof_bulk_delete_title', { count: selectedNames.length })}
+          message={t('prof_bulk_delete_desc', { count: selectedNames.length })}
+          confirmLabel={t('delete')}
+          cancelLabel={t('cancel')}
+          isWorking={bulk?.kind === 'delete'}
+          onConfirm={() => { setIsBulkDeleteOpen(false); void runBulkDelete(); }}
+          onCancel={() => setIsBulkDeleteOpen(false)}
+        />
+      )}
+
       {isLoading ? (
         <div className={`dash-card ${styles.profileTableState}`}>
-          <LoadingRows columns={7} rows={4} />
+          <LoadingRows columns={8} rows={4} />
         </div>
       ) : error ? (
         <div className={`dash-card ${styles.profileTableState}`}>
@@ -381,6 +509,7 @@ export function ProfilesPage() {
             <table className={styles.profileGovernanceTable}>
               <caption className="sr-only">{t("prof_governance_title")}</caption>
               <colgroup>
+                <col className={styles.profileColSelect} />
                 <col className={styles.profileColTemplate} />
                 <col className={styles.profileColContent} />
                 <col className={styles.profileColLinked} />
@@ -391,6 +520,20 @@ export function ProfilesPage() {
               </colgroup>
               <thead>
                 <tr>
+                  <th className={styles.profileTableSelect}>
+                    <input
+                      type="checkbox"
+                      className="checkbox-custom"
+                      aria-label={t('prof_select_all')}
+                      checked={profiles.length > 0 && profiles.every((profile) => selectedNames.includes(profile.name))}
+                      onChange={(event) => {
+                        const pageNames = profiles.map((profile) => profile.name);
+                        setSelectedNames(event.target.checked
+                          ? Array.from(new Set([...selectedNames, ...pageNames]))
+                          : selectedNames.filter((name) => !pageNames.includes(name)));
+                      }}
+                    />
+                  </th>
                   <SortableTableHeader
                     label={t("prof_table_template")}
                     active={sortField === 'name'}
