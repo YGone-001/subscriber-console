@@ -140,6 +140,30 @@ func TestValidateSubscriberUpdatePayload_NegativeTraffic(t *testing.T) {
 	}
 }
 
+func TestValidateSubscriberUpdatePayload_RejectsUnsupportedSub4GFields(t *testing.T) {
+	cases := []map[string]any{
+		{"profile_name": "tpl_5g"},
+		{"allowedVisitedPlmns": "all"},
+		{"msisdn": "12345678901"},
+		{"security": map[string]any{"k": "x"}},
+		{"imsi": "310260123456789"},
+	}
+
+	for _, sub := range cases {
+		if err := ValidateSubscriberUpdatePayload(UpdatePayload{Sub4G: sub}); err == nil {
+			t.Errorf("sub4G %v must be rejected: the builder would write it into the stored document", sub)
+		}
+	}
+
+	if err := ValidateSubscriberUpdatePayload(UpdatePayload{Sub4G: map[string]any{
+		"access_restriction_data": 32,
+		"network_access_mode":     0,
+		"msisdnList":              []any{map[string]any{"msisdn": "12345678901"}},
+	}}); err != nil {
+		t.Errorf("contract fields must remain accepted: %v", err)
+	}
+}
+
 func TestValidateSubscriberUpdatePayload_EmptyPayload(t *testing.T) {
 	if err := ValidateSubscriberUpdatePayload(UpdatePayload{}); err != nil {
 		t.Fatalf("unexpected error for empty payload: %v", err)

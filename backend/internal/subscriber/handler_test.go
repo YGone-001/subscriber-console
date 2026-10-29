@@ -361,11 +361,13 @@ func TestXcloudToLegacyState(t *testing.T) {
 	}
 }
 
-// TestLegacyStateRoundTripsIntoUpdateValidation pins the invariant that the
-// legacy read projection can be submitted back on PUT unchanged. The projection
-// emits qos.index=0 for sessions while the real QCI travels in _5qi, so update
-// validation must follow the same precedence as normalizeSessionQos().
-func TestLegacyStateRoundTripsIntoUpdateValidation(t *testing.T) {
+// TestLegacyStateWritableSubsetPassesUpdateValidation pins the invariant that the
+// writable part of the legacy read projection uses the same QoS precedence as
+// normalizeSessionQos(): the projection emits qos.index=0 while the real QCI
+// travels in _5qi. The read-only projection keys (profile_name,
+// allowedVisitedPlmns) are not writable and must be refused, because the update
+// builder would otherwise persist them as top-level fields.
+func TestLegacyStateWritableSubsetPassesUpdateValidation(t *testing.T) {
 	doc := bson.M{
 		"imsi": "460001234567890",
 		"slice": []any{
@@ -394,8 +396,18 @@ func TestLegacyStateRoundTripsIntoUpdateValidation(t *testing.T) {
 		t.Fatal("xcloudToLegacyState should not return nil")
 	}
 
-	if err := ValidateSubscriberUpdatePayload(UpdatePayload{Sub4G: state.Sub4G}); err != nil {
-		t.Fatalf("legacy read projection must be accepted by update validation: %v", err)
+	writable := map[string]any{}
+	for _, key := range []string{"access_restriction_data", "network_access_mode", "ambr", "msisdnList", "sliceList"} {
+		if value, ok := state.Sub4G[key]; ok {
+			writable[key] = value
+		}
+	}
+	if err := ValidateSubscriberUpdatePayload(UpdatePayload{Sub4G: writable}); err != nil {
+		t.Fatalf("writable projection subset must be accepted by update validation: %v", err)
+	}
+
+	if err := ValidateSubscriberUpdatePayload(UpdatePayload{Sub4G: state.Sub4G}); err == nil {
+		t.Fatal("read-only projection keys must be refused by update validation")
 	}
 }
 

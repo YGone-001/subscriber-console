@@ -12,7 +12,10 @@
     "optionalBodyKeys": [
       "msisdn",
       "planId",
-      "auth4G"
+      "profileName",
+      "auth4G",
+      "sub4G",
+      "ocsTraffic"
     ],
     "forbiddenBodyKeys": [],
     "responseSemantics": "mutation-result",
@@ -26,6 +29,18 @@
           "sqn"
         ],
         "semanticRule": "if auth4G is present: k + amf + sqn required, exactly one of op or opc required"
+      },
+      "sub4G": {
+        "allowedKeys": [
+          "access_restriction_data",
+          "network_access_mode",
+          "ambr",
+          "msisdnList",
+          "sliceList"
+        ],
+        "forbiddenKeys": [
+          "msisdn"
+        ]
       }
     }
   },

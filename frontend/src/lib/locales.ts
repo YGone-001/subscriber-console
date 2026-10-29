@@ -132,6 +132,8 @@ const LEGACY_EN: Record<string, string> = {
   sub_err_create_rolled_back: 'Creation failed and was rolled back, so nothing was created. Reason: {error}',
   sub_err_create_rollback_partial: 'Creation failed. The subscriber document was deleted, but OCS cleanup failed; reconcile any remaining OCS records for {imsi}. Original failure: {error}',
   sub_err_create_rollback_failed: 'Creation failed AND the rollback did not succeed, so subscriber {imsi} still exists and must be removed manually. Failure: {error} Rollback failure: {rollback}',
+  sub_err_ocs_contract_retained: 'IMSI {imsi} still has terminated OCS history retained for the retention window. Reuse it only after that history is purged through Data Retention.',
+  sub_err_ocs_contract_exists: 'IMSI {imsi} already has an OCS contract without a subscriber record. Reconcile that contract before creating a subscriber.',
   sub_err_auth_not_applied: 'The K/OPc you entered cannot be applied: this service refuses to change authentication material (K/OPc/AMF/SQN) on a record that already exists.',
   sub_err_auth_change_rejected: 'This service refuses to change authentication material (K/OPc/AMF/SQN) on an existing subscriber.',
   /* Shown beside the read-only authentication fields when editing an existing subscriber. */
@@ -263,6 +265,8 @@ const LEGACY_ZH: Record<string, string> = {
   sub_err_create_rolled_back: '创建失败，已回滚，未产生任何用户。原因：{error}',
   sub_err_create_rollback_partial: '创建失败。订阅用户主记录已删除，但 OCS 清理失败；请为 {imsi} 核对并处理残留的 OCS 记录。原始失败原因：{error}',
   sub_err_create_rollback_failed: '创建失败，且回滚未成功，订阅用户 {imsi} 仍然存在，需要手动删除。失败原因：{error} 回滚失败原因：{rollback}',
+  sub_err_ocs_contract_retained: 'IMSI {imsi} 仍保留处于数据保留期内的已终止 OCS 历史。需先在“数据保留”中清理该历史后才能复用。',
+  sub_err_ocs_contract_exists: 'IMSI {imsi} 已存在一条没有订阅者记录的 OCS 合约。请先核对该合约再创建订阅用户。',
   sub_err_auth_not_applied: '您填写的 K/OPc 无法写入：该服务不允许在已存在的记录上修改鉴权材料（K/OPc/AMF/SQN）。',
   sub_err_auth_change_rejected: '该服务不允许修改已有订阅用户的鉴权材料（K/OPc/AMF/SQN）。',
   /* 编辑既有订阅用户时，显示在只读鉴权字段旁。 */

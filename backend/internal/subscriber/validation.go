@@ -47,6 +47,16 @@ func ValidateTariffPlanId(value string) error {
 	return nil
 }
 
+// allowedSub4GKeys mirrors the write contract for sub4G. Read projections add
+// fields such as profile_name and allowedVisitedPlmns; those are not writable.
+var allowedSub4GKeys = map[string]struct{}{
+	"access_restriction_data": {},
+	"network_access_mode":     {},
+	"ambr":                    {},
+	"msisdnList":              {},
+	"sliceList":               {},
+}
+
 // UpdatePayload holds the subscriber update request body.
 // Matches Node LegacySubscriberUpdatePayload shape.
 type UpdatePayload struct {
@@ -79,6 +89,14 @@ func ValidateSubscriberUpdatePayload(payload UpdatePayload) error {
 
 	if payload.Sub4G != nil {
 		sub := payload.Sub4G
+		// The builder copies every non-special key into the stored document, so an
+		// unexpected key would write a field nobody modelled (or overwrite one, for
+		// example security). Only the contract's fields are accepted.
+		for key := range sub {
+			if _, ok := allowedSub4GKeys[key]; !ok {
+				return fmt.Errorf("sub4G.%s is not a supported field", key)
+			}
+		}
 		if err := validateOptionalInteger(sub, "access_restriction_data", 0, 255); err != nil {
 			return err
 		}
@@ -196,15 +214,20 @@ func validateMsisdnList(m map[string]any) error {
 		return fmt.Errorf("sub4G.msisdnList must be an array")
 	}
 	for i, item := range list {
-		itemMap, ok := item.(map[string]any)
-		if !ok {
-			continue
+		var value any
+		switch entry := item.(type) {
+		case map[string]any:
+			msisdn, ok := entry["msisdn"]
+			if !ok || msisdn == nil {
+				continue
+			}
+			value = msisdn
+		case string:
+			value = entry
+		default:
+			return fmt.Errorf("sub4G.msisdnList[%d] must be an object or string", i)
 		}
-		msisdn, ok := itemMap["msisdn"]
-		if !ok || msisdn == nil {
-			continue
-		}
-		s := fmt.Sprintf("%v", msisdn)
+		s := strings.TrimSpace(fmt.Sprintf("%v", value))
 		if s != "" && !msisdnDigits.MatchString(s) {
 			return fmt.Errorf("sub4G.msisdnList[%d].msisdn must contain digits only", i)
 		}

@@ -308,9 +308,49 @@ test('buildSubscriberCreateRequest omits auth4G entirely when not supplied', () 
 test('buildSubscriberCreateRequest carries the template binding when one is chosen', () => {
   const bound = buildSubscriberCreateRequest('001010000000004', { profileName: '  tpl_5g  ' });
   assert.equal(bound.profileName, 'tpl_5g', 'the binding must be trimmed and sent');
+  validatePayloadAgainstContract(bound as unknown as Record<string, unknown>, getContract('subscriber create'));
 
   const unbound = buildSubscriberCreateRequest('001010000000004', { profileName: '   ' });
   assert.ok(!('profileName' in unbound), 'a blank selection must not bind the record to anything');
+});
+
+/*
+ * A create is one request now. The record, its 4G configuration and its OCS
+ * provisioning all travel together, so the builder must carry the same sub4G
+ * projection the edit path uses and the OCS buckets the operator entered.
+ */
+test('buildSubscriberCreateRequest carries sub4G and ocsTraffic in the create request', () => {
+  const sub4G = {
+    access_restriction_data: 32,
+    network_access_mode: 0,
+    ambr: { downlink: { value: 100, unit: 2 }, uplink: { value: 50, unit: 2 } },
+    msisdnList: [{ msisdn: '12345678901' }],
+    sliceList: [],
+  };
+  const ocsTraffic = { planId: 'plan_1', traffic_total: 10737418240, traffic_balance: 10737418240 };
+
+  const req = buildSubscriberCreateRequest('001010000000018', {
+    msisdn: '12345678901',
+    planId: 'plan_1',
+    profileName: 'tpl_5g',
+    sub4G,
+    ocsTraffic,
+  });
+
+  assert.deepEqual(req, {
+    imsi: '001010000000018',
+    msisdn: '12345678901',
+    planId: 'plan_1',
+    profileName: 'tpl_5g',
+    sub4G,
+    ocsTraffic,
+  });
+  validatePayloadAgainstContract(req as unknown as Record<string, unknown>, getContract('subscriber create'));
+
+  const minimal = buildSubscriberCreateRequest('001010000000019', { planId: 'plan_1', sub4G: {}, ocsTraffic: {} });
+  assert.ok(!('sub4G' in minimal), 'an empty sub4G object must not be sent');
+  assert.ok(!('ocsTraffic' in minimal), 'an empty ocsTraffic object must not be sent');
+  validatePayloadAgainstContract(minimal as unknown as Record<string, unknown>, getContract('subscriber create'));
 });
 
 test('buildSubscriberCreateRequest rejects invalid authentication material', () => {

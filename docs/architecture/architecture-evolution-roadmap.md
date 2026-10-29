@@ -96,7 +96,7 @@ services. The roadmap avoids premature microservice decomposition.
 
 ## Business Operations Lifecycle and Retention
 
-> Status: partially implemented. Balance reads now project missing measurements as
+> Status: implemented. Balance reads now project missing measurements as
 > null, every console balance adjustment sends a CAS version, tariff deletion is
 > guarded server-side, OCS list filters are escaped, affected detail sections
 > expose unavailable states, contract termination is a preserved terminal
@@ -104,10 +104,11 @@ services. The roadmap avoids premature microservice decomposition.
 > is active or suspended (terminated OCS history is retained), and the
 > terminated-contract retention operation is available through the admin console
 > and CLI. Template apply now requires a server-authoritative preview token,
-> subscriber onboarding quota is derived from the selected tariff plan, and
-> template deletion archives the template while preserving subscriber bindings.
-> Atomic create remains pending; the current source remains authoritative for
-> that area.
+> subscriber onboarding quota is derived from the selected tariff plan, template
+> deletion archives the template while preserving subscriber bindings, and
+> subscriber creation is a single server-side flow that writes the record, its
+> 4G configuration and its OCS contract/quota together and compensates on
+> failure.
 
 The OCS management plane is open to governed lifecycle, data-truthfulness and UI
 correction. The charging plane remains frozen and excluded.
@@ -142,6 +143,15 @@ This covers OCS balance buckets, plan/status joins, subscriber traffic totals, A
 - The apply request carries that token; a stale preview is rejected with no write.
 - A subscriber create uses the selected tariff plan as the authority for the initial quota. Client-side onboarding values are suggestions only; voice and SMS may remain unconfigured when the plan does not model them. The create form now derives data quota from `quota_per_grant` and optional voice/SMS grants from plan rules; it no longer writes the former 10 GB / 1h / 100 constants.
 - Template deletion is archival: an additive `archived` state hides the template from active lists, preserves the binding for existing subscribers and never modifies subscriber provisioning data. Referenced templates are not hard-deleted. This is implemented: `DELETE /api/profiles/{name}` archives, `includeArchived=true` lists archived templates, and `PUT {"archived":false}` restores them.
+
+### Atomic Subscriber Create
+
+- `POST /api/subscribers` accepts optional `sub4G` and `ocsTraffic` alongside `imsi`, `msisdn`, `planId`, `profileName` and `auth4G`. The record, the same sub4G projection the edit path applies, the template binding, the OCS contract and the initial quota are written by one handler call; the console no longer issues a follow-up `PUT` after create.
+- Initial quota is strict: only supplied buckets are written. Voice and SMS stay unconfigured when the operator supplies no values, instead of inheriting the legacy 10 GB / 1 h / 100 defaults.
+- If OCS provisioning fails after the subscriber insert, the handler deletes the inserted subscriber and any OCS rows it wrote. A successful compensation returns the original failure (for example a missing tariff plan); a failed compensation returns `SUBSCRIBER_CREATE_PARTIAL_WRITE` so the client finishes the rollback.
+- Reusing an IMSI must not overwrite existing OCS state: a terminated contract still inside the retention window is refused with 409 `OCS_CONTRACT_RETAINED`, and an OCS contract without a subscriber record is refused with 409 `OCS_CONTRACT_EXISTS`. Both cases write nothing; retained history is removed only by the retention operation.
+- `sub4G` writes accept only the five documented fields. Read projections such as `profile_name` and `allowedVisitedPlmns` are not writable: echoing a detail payload back would otherwise persist projection-only keys as top-level subscriber fields.
+- `sub4G.msisdnList` is the MSISDN authority on create. A top-level `msisdn` that contradicts its first entry is refused with 400 `MSISDN_MISMATCH` instead of being silently dropped, every persisted number is checked for uniqueness (`MSISDN_EXISTS`), and the OCS contract's primary number is the list's first entry.
 
 ### Route and Scale Boundaries
 

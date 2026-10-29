@@ -81,7 +81,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [profilesReady, setProfilesReady] = useState(false);
   /* The template the operator picked for this create. It travels on the create
    * request so the service records the binding at the same time the record is
-   * born; the follow-up content update never rewrites it. */
+   * born; a later edit never rewrites it. */
   const [selectedProfileName, setSelectedProfileName] = useState("");
   const [ratingList, setRatingList] = useState<any[]>([]);
   const [tariffPlanList, setTariffPlanList] = useState<TariffPlanOption[]>([]);
@@ -514,11 +514,10 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
-    /* A create is TWO calls: POST the record, then PUT the full configuration. If the
-     * PUT fails the record already exists, so the message must say so rather than
-     * report a bare validation error and invite a duplicate retry. Declared outside the
-     * try so the catch can still see it. */
-    let createdInThisAttempt = false;
+    /* A create is ONE server-side flow: the record, its configuration and its OCS
+     * provisioning are written by the same handler, which compensates on failure.
+     * Only an explicit partial-write report still needs the client-side rollback. */
+    let createPartialWrite = false;
     /* Hoisted alongside the flag so the catch can roll the record back. */
     const targetImsi = imsi || inputImsi;
     try {
@@ -557,21 +556,53 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       }));
 
       /*
-       * Authentication material is provisioned at CREATION. It travels on the POST and must not
-       * appear on the follow-up PUT: the service refuses to change authentication material on a
-       * record that already exists, so sending it on both calls turned every create into a 422.
+       * Authentication material is provisioned at CREATION and travels on the create POST only:
+       * the service refuses to change it on a record that already exists, so the edit path below
+       * never sends it.
        */
       const authPayload: any = { k: auth4GData.k, sqn: Number(auth4GData.sqn), amf: auth4GData.amf };
       authPayload[usimType] = auth4GData.opValue;
+
+      /* Only writable contract fields are sent. Echoing the whole stored sub4G
+       * back would persist read projections such as profile_name and
+       * allowedVisitedPlmns as top-level fields. network_access_mode has no
+       * editor here, so it is carried unchanged from the stored value. */
+      const finalSub4G: Record<string, any> = {
+        ambr: ueAmbr,
+        sliceList: sanitizedSlices,
+        access_restriction_data: accessRestriction,
+        msisdnList: [{ msisdn }],
+      };
+      if (typeof baseSub4G.network_access_mode === "number") {
+        finalSub4G.network_access_mode = baseSub4G.network_access_mode;
+      }
+
+      /* Only send OCS fields the operator actually has values for. An empty
+       * form on an unprovisioned subscriber must not silently create a default
+       * contract or zero out an existing balance. */
+      const ocsTrafficPayload: Record<string, any> = {};
+      if (ocsPlanId) ocsTrafficPayload.planId = ocsPlanId;
+      if (ocsTrafficTotalStr) ocsTrafficPayload.traffic_total = parseBytes(ocsTrafficTotalStr);
+      if (ocsTrafficBalanceStr) ocsTrafficPayload.traffic_balance = parseBytes(ocsTrafficBalanceStr);
+      if (ocsVoiceTotalStr) ocsTrafficPayload.voice_total = parseSeconds(ocsVoiceTotalStr);
+      if (ocsVoiceBalanceStr) ocsTrafficPayload.voice_balance = parseSeconds(ocsVoiceBalanceStr);
+      if (ocsSmsTotalStr) ocsTrafficPayload.sms_total = parseEvents(ocsSmsTotalStr);
+      if (ocsSmsBalanceStr) ocsTrafficPayload.sms_balance = parseEvents(ocsSmsBalanceStr);
 
       if (!imsi) {
         try {
           await postJson('/api/subscribers', buildSubscriberCreateRequest(targetImsi, {
             planId: ocsPlanId,
+            msisdn,
             profileName: selectedProfileName || undefined,
             auth4G: authPayload,
+            sub4G: finalSub4G,
+            ocsTraffic: ocsTrafficPayload,
           }));
-          createdInThisAttempt = true;
+          onRefresh();
+          if (onSaved) onSaved(targetImsi, true);
+          else onClose();
+          return;
         } catch (createError) {
           const createData = mutationErrorBody(createError);
           if ((createError instanceof MutationApiError && createError.status === 409) || createData.error === "Subscriber already exists") {
@@ -585,34 +616,20 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (createData.error === "Tariff plan not found") throw new Error(t("tariff_plan_err_not_found"));
           if (createData.error === "Invalid plan_id format") throw new Error(t("tariff_plan_err_id"));
           if (createData.error === "Tariff plan is disabled") throw new Error(t("tariff_plan_err_disabled"));
-          /* The server inserted the primary record before OCS provisioning failed.
-           * Treat it as created so the shared rollback below reconciles it. */
+          if (createData.code === "OCS_CONTRACT_RETAINED") {
+            throw new Error(t("sub_err_ocs_contract_retained", { imsi: targetImsi }));
+          }
+          if (createData.code === "OCS_CONTRACT_EXISTS") {
+            throw new Error(t("sub_err_ocs_contract_exists", { imsi: targetImsi }));
+          }
+          /* A partial server write is the only case that still needs the shared
+           * rollback; a failed atomic create leaves nothing behind. */
           if (createError instanceof MutationApiError && createError.code === "SUBSCRIBER_CREATE_PARTIAL_WRITE") {
-            createdInThisAttempt = true;
+            createPartialWrite = true;
           }
           throw createError;
         }
       }
-
-      const finalSub4G = {
-        ...baseSub4G,
-        ambr: ueAmbr,
-        sliceList: sanitizedSlices,
-        access_restriction_data: accessRestriction,
-        msisdnList: [{ msisdn }],
-      };
-
-      /* Only send OCS fields the operator actually has values for. An empty
-       * form on an unprovisioned subscriber must not silently create a default
-       * contract or zero out an existing balance. */
-      const ocsTrafficPayload: Record<string, any> = {};
-      if (ocsPlanId) ocsTrafficPayload.planId = ocsPlanId;
-      if (ocsTrafficTotalStr) ocsTrafficPayload.traffic_total = parseBytes(ocsTrafficTotalStr);
-      if (ocsTrafficBalanceStr) ocsTrafficPayload.traffic_balance = parseBytes(ocsTrafficBalanceStr);
-      if (ocsVoiceTotalStr) ocsTrafficPayload.voice_total = parseSeconds(ocsVoiceTotalStr);
-      if (ocsVoiceBalanceStr) ocsTrafficPayload.voice_balance = parseSeconds(ocsVoiceBalanceStr);
-      if (ocsSmsTotalStr) ocsTrafficPayload.sms_total = parseEvents(ocsSmsTotalStr);
-      if (ocsSmsBalanceStr) ocsTrafficPayload.sms_balance = parseEvents(ocsSmsBalanceStr);
 
       /*
        * No auth4G here. This request only applies ordinary mutable configuration; authentication
@@ -627,7 +644,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         smsTotal: ocsSmsTotalStr,
         smsBalance: ocsSmsBalanceStr,
       });
-      const ocsDirty = !imsi || initialOcsSignatureRef.current !== currentOcsSignature;
+      const ocsDirty = initialOcsSignatureRef.current !== currentOcsSignature;
 
       const payload: any = {
         sub4G: finalSub4G,
@@ -662,16 +679,13 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       else onClose();
     } catch (err: any) {
       /*
-       * Creating is TWO calls: POST the record, then PUT the full configuration. If the
-       * PUT fails the record is already in the database, which is why an error could
-       * still leave a created subscriber behind.
-       *
-       * Rolling the record back makes "an error was shown" mean "nothing was created",
-       * which is what an operator expects, and it also avoids leaving a subscriber on
-       * the service's default authentication key.
+       * A failed create is compensated by the server, so an error normally means nothing
+       * was created. The exception is an explicit partial-write report: the server could
+       * not undo its own insert, and rolling it back here is what keeps "an error was
+       * shown" meaning "nothing was created".
        */
       let message = err.message || t("sub_err_save");
-      if (createdInThisAttempt) {
+      if (createPartialWrite) {
         try {
           await deleteJson(`/api/subscribers/${encodeURIComponent(targetImsi)}`);
           message = t("sub_err_create_rolled_back", { error: message });

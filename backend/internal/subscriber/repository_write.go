@@ -3,6 +3,7 @@ package subscriber
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -32,7 +33,7 @@ func (r *Repository) FindSubscriberByImsi(ctx context.Context, imsi string) (bso
 // Authentication material is not supplied, so the document keeps the server's default security
 // block. Callers that have operator-supplied credentials use CreateSubscriberWithAuthentication.
 func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string, planId *string, msisdn *string) (bson.M, error) {
-	return r.createSubscriber(ctx, imsi, planId, msisdn, nil, "")
+	return r.createSubscriber(ctx, imsi, planId, msisdn, nil, "", nil, nil)
 }
 
 // CreateSubscriberWithAuthentication creates a new subscriber, provisioning operator-supplied
@@ -42,7 +43,7 @@ func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string
 // subscriber is never persisted with default credentials that a second write then has to replace.
 // A nil auth preserves the default-authentication behaviour exactly.
 func (r *Repository) CreateSubscriberWithAuthentication(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial) (bson.M, error) {
-	return r.createSubscriber(ctx, imsi, planId, msisdn, auth, "")
+	return r.createSubscriber(ctx, imsi, planId, msisdn, auth, "", nil, nil)
 }
 
 // CreateSubscriberWithAuthenticationAndProfile creates a new subscriber exactly like
@@ -54,14 +55,21 @@ func (r *Repository) CreateSubscriberWithAuthentication(ctx context.Context, ims
 // from a template without it produced a record that looked template-shaped but was invisible to
 // the template that produced it. An empty profileName keeps the unbound behaviour.
 //
-// Only the binding is written here. The create body carries no content fields, so callers that
-// want the template's AMBR, slices or access restriction still send them on the follow-up update,
-// which never touches the binding.
+// Only the binding is written by this entry point. Callers that also supply configuration use
+// CreateSubscriberWithConfiguration, which writes it in the same create; a later update never
+// touches the binding.
 func (r *Repository) CreateSubscriberWithAuthenticationAndProfile(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial, profileName string) (bson.M, error) {
-	return r.createSubscriber(ctx, imsi, planId, msisdn, auth, profileName)
+	return r.createSubscriber(ctx, imsi, planId, msisdn, auth, profileName, nil, nil)
 }
 
-func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial, profileName string) (bson.M, error) {
+// CreateSubscriberWithConfiguration writes the subscriber document, template
+// binding, sub4G provisioning and initial OCS quota in one create flow. The
+// client no longer needs a follow-up PUT for a new subscriber.
+func (r *Repository) CreateSubscriberWithConfiguration(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial, profileName string, sub4G map[string]any, ocsTraffic map[string]any) (bson.M, error) {
+	return r.createSubscriber(ctx, imsi, planId, msisdn, auth, profileName, sub4G, ocsTraffic)
+}
+
+func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial, profileName string, sub4G map[string]any, ocsTraffic map[string]any) (bson.M, error) {
 	// Check if subscriber already exists
 	existing, err := r.FindSubscriberByImsi(ctx, imsi)
 	if err != nil {
@@ -69,6 +77,21 @@ func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *
 	}
 	if existing != nil {
 		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_EXISTS"}
+	}
+
+	// A retained OCS contract is billing history, not a provisioning row to be
+	// overwritten. Reusing an IMSI whose terminated history is still inside the
+	// retention window would silently rewrite that history through the upsert,
+	// so the operator must purge it first.
+	contractStatus, contractExists, err := r.GetOcsContractStatus(ctx, imsi)
+	if err != nil {
+		return nil, err
+	}
+	if contractExists {
+		if contractStatus == "terminated" {
+			return nil, &SubscriberGovernanceError{Code: "OCS_CONTRACT_RETAINED"}
+		}
+		return nil, &SubscriberGovernanceError{Code: "OCS_CONTRACT_EXISTS"}
 	}
 
 	// Validate and resolve tariff plan
@@ -87,20 +110,38 @@ func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *
 		return nil, &SubscriberGovernanceError{Code: "OCS_PLAN_DISABLED"}
 	}
 
-	// Check MSISDN availability if provided
+	// The persisted MSISDN list is the authority: sub4G.msisdnList wins, as it
+	// does on update, and the legacy top-level msisdn must agree with its first
+	// entry. Every persisted number is checked, so a secondary MSISDN cannot
+	// duplicate another subscriber and the OCS contract always carries the same
+	// primary number as the subscriber document.
+	finalMsisdns, hasList := msisdnValuesFromSub4G(sub4G)
+	trimmedMsisdn := ""
+	if msisdn != nil {
+		trimmedMsisdn = strings.TrimSpace(*msisdn)
+	}
+	if !hasList && trimmedMsisdn != "" {
+		finalMsisdns = []string{trimmedMsisdn}
+	}
+	if hasList && trimmedMsisdn != "" {
+		if len(finalMsisdns) == 0 || finalMsisdns[0] != trimmedMsisdn {
+			return nil, &SubscriberGovernanceError{Code: "MSISDN_MISMATCH"}
+		}
+	}
+
 	var msisdnList []any
-	if msisdn != nil && *msisdn != "" {
-		if err := validateMsisdnDigits(*msisdn); err != nil {
+	for _, value := range finalMsisdns {
+		if err := validateMsisdnDigits(value); err != nil {
 			return nil, err
 		}
-		exists, err := r.checkMsisdnExists(ctx, *msisdn, "")
+		exists, err := r.checkMsisdnExists(ctx, value, "")
 		if err != nil {
 			return nil, err
 		}
 		if exists {
 			return nil, &SubscriberGovernanceError{Code: "MSISDN_EXISTS"}
 		}
-		msisdnList = []any{*msisdn}
+		msisdnList = append(msisdnList, value)
 	}
 
 	// Build default core subscriber document
@@ -109,6 +150,11 @@ func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *
 	// Apply operator-supplied authentication material before the first and only write, so the
 	// document is correct the moment it exists. A nil receiver leaves the defaults untouched.
 	auth.ApplyTo(doc)
+
+	// Apply the same sub4G projection the update path uses before the insert.
+	if len(sub4G) > 0 {
+		doc = buildXcloudSubscriberFromLegacy(imsi, UpdatePayload{Sub4G: sub4G}, doc)
+	}
 
 	// Record the template binding in the same single write, mirroring the metadata the governed
 	// apply writes. A record created from a template is a template-governed record from birth.
@@ -120,7 +166,7 @@ func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *
 	}
 
 	// Insert subscriber
-	_, err = r.subscribers.InsertOne(ctx, doc)
+	insertResult, err := r.subscribers.InsertOne(ctx, doc)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_EXISTS"}
@@ -132,17 +178,43 @@ func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *
 	input := OcsProvisioningInput{
 		IMSI:   imsi,
 		PlanID: &resolvedPlanId,
+		Strict: true,
 	}
-	if msisdn != nil && *msisdn != "" {
-		input.MSISDN = msisdn
+	if len(finalMsisdns) > 0 {
+		primary := finalMsisdns[0]
+		input.MSISDN = &primary
+	}
+	if len(ocsTraffic) > 0 {
+		mapOcsTrafficToInput(ocsTraffic, &input)
 	}
 	if err := r.provisionOcsSubscriber(ctx, input); err != nil {
-		// Partial failure: subscriber inserted but OCS provisioning failed
-		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_CREATE_PARTIAL_WRITE"}
+		rollbackErr := r.rollbackCreate(ctx, imsi, insertResult.InsertedID)
+		if rollbackErr != nil {
+			return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_CREATE_PARTIAL_WRITE"}
+		}
+		// The subscriber is gone, so the caller can be told the real reason (for
+		// example a tariff plan that disappeared mid-create) instead of a generic
+		// failure it cannot act on.
+		if govErr, ok := err.(*SubscriberGovernanceError); ok {
+			return nil, govErr
+		}
+		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_CREATE_FAILED"}
 	}
 
 	// Reload the created document
 	return r.FindSubscriberByImsi(ctx, imsi)
+}
+
+// rollbackCreate removes the just-inserted subscriber and any OCS rows written
+// before provisioning failed, so a failed create leaves no record behind.
+func (r *Repository) rollbackCreate(ctx context.Context, imsi string, insertedID any) error {
+	_, subErr := r.subscribers.DeleteOne(ctx, bson.M{"_id": insertedID})
+	_, ocsErr := r.ocsSubs.DeleteOne(ctx, bson.M{"imsi": imsi})
+	_, balErr := r.ocsBalances.DeleteOne(ctx, bson.M{"imsi": imsi})
+	if subErr != nil || ocsErr != nil || balErr != nil {
+		return fmt.Errorf("rollback create: subscriber=%v ocs=%v balance=%v", subErr, ocsErr, balErr)
+	}
+	return nil
 }
 
 // UpdateSubscriberFromLegacy applies a payload to an existing subscriber document
@@ -402,6 +474,48 @@ func (r *Repository) checkMsisdnExists(ctx context.Context, msisdn, excludeImsi 
 	return count > 0, nil
 }
 
+// msisdnValuesFromSub4G extracts the persisted MSISDN list in the same shape
+// convertMsisdnList writes: objects contribute their msisdn, strings contribute
+// themselves. The second return value reports whether the caller supplied the
+// list at all, so an explicit empty list is not confused with an absent one.
+func msisdnValuesFromSub4G(sub4G map[string]any) ([]string, bool) {
+	if sub4G == nil {
+		return nil, false
+	}
+	raw, ok := sub4G["msisdnList"]
+	if !ok || raw == nil {
+		return nil, false
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		if typed, ok := raw.(bson.A); ok {
+			list = []any(typed)
+		} else {
+			return nil, false
+		}
+	}
+	values := make([]string, 0, len(list))
+	for _, item := range list {
+		var value any
+		switch entry := item.(type) {
+		case map[string]any:
+			msisdn, ok := entry["msisdn"]
+			if !ok || msisdn == nil {
+				continue
+			}
+			value = msisdn
+		case string:
+			value = entry
+		default:
+			continue
+		}
+		if trimmed := strings.TrimSpace(fmt.Sprintf("%v", value)); trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	return values, true
+}
+
 // validateMsisdnDigits checks that MSISDN contains only digits.
 func validateMsisdnDigits(msisdn string) error {
 	if msisdn == "" {
@@ -432,6 +546,11 @@ type OcsProvisioningInput struct {
 
 	SMSTotal     *int64
 	SMSAvailable *int64
+
+	// Strict suppresses the legacy 10 GB / 1h / 100 defaults. It is used by the
+	// atomic create path so absent buckets stay unconfigured instead of being
+	// invented by the provisioning layer.
+	Strict bool
 }
 
 // Default OCS balance constants — matches Node exactly.
@@ -515,6 +634,10 @@ func (r *Repository) provisionOcsSubscriber(ctx context.Context, input OcsProvis
 	// Load existing balance for preservation semantics
 	var existingBalance bson.M
 	_ = r.ocsBalances.FindOne(ctx, bson.M{"imsi": input.IMSI}).Decode(&existingBalance)
+
+	if input.Strict {
+		return r.provisionStrictBalance(ctx, input, now, planId)
+	}
 
 	// ── Data balance ──
 	// Matches Node: dataTotal = toNumber(input.total, DEFAULT_TOTAL_BALANCE)
@@ -678,6 +801,69 @@ func (r *Repository) provisionOcsSubscriber(ctx context.Context, input OcsProvis
 	}
 
 	return nil
+}
+
+// provisionStrictBalance writes only the buckets the caller supplied. Missing
+// buckets stay absent rather than inheriting the legacy provisioning defaults.
+func (r *Repository) provisionStrictBalance(ctx context.Context, input OcsProvisioningInput, now time.Time, planId string) error {
+	balance := bson.M{
+		"imsi":           input.IMSI,
+		"plan_id":        planId,
+		"status":         "active",
+		"version":        int64(1),
+		"updated_at":     now,
+		"cycle_start_at": now,
+		"cycle_reset_at": now,
+	}
+	if total, used, reserved, available, present := strictBucket(input.DataTotal, input.DataAvailable); present {
+		balance["data_total"] = total
+		balance["data_used"] = used
+		balance["data_reserved"] = reserved
+		balance["data_available"] = available
+	}
+	if total, used, reserved, available, present := strictBucket(input.VoiceTotal, input.VoiceAvailable); present {
+		balance["voice_total"] = total
+		balance["voice_used"] = used
+		balance["voice_reserved"] = reserved
+		balance["voice_available"] = available
+	}
+	if total, used, _, available, present := strictBucket(input.SMSTotal, input.SMSAvailable); present {
+		balance["sms_total"] = total
+		balance["sms_used"] = used
+		balance["sms_available"] = available
+	}
+
+	_, err := r.ocsBalances.UpdateOne(
+		ctx,
+		bson.M{"imsi": input.IMSI},
+		bson.M{"$set": balance, "$setOnInsert": bson.M{"created_at": now}},
+		options.UpdateOne().SetUpsert(true),
+	)
+	if err != nil {
+		return fmt.Errorf("upsert strict ocs balance: %w", err)
+	}
+	return nil
+}
+
+func strictBucket(totalInput, availableInput *int64) (total, used, reserved, available int64, present bool) {
+	if totalInput == nil && availableInput == nil {
+		return 0, 0, 0, 0, false
+	}
+	if totalInput != nil {
+		total = max64(*totalInput, 0)
+	} else {
+		total = max64(*availableInput, 0)
+	}
+	if availableInput != nil {
+		available = max64(*availableInput, 0)
+	} else {
+		available = total
+	}
+	if available > total {
+		available = total
+	}
+	used = total - available
+	return total, used, 0, available, true
 }
 
 func min64(a, b int64) int64 {

@@ -94,6 +94,10 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, err.Error(), "INVALID_AUTH_MATERIAL")
 		return
 	}
+	if err := ValidateSubscriberUpdatePayload(UpdatePayload{Sub4G: body.Sub4G, OcsTraffic: body.OcsTraffic}); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error(), "VALIDATION_ERROR")
+		return
+	}
 
 	// Fresh actor validation — mandatory, fail-closed
 	fresh, httpErr := RevalidateFreshActor(r.Context(), h.userRepo, p)
@@ -132,7 +136,7 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create subscriber (governance is DIRECT for CREATE for all authorized roles)
-	created, err := h.repo.CreateSubscriberWithAuthenticationAndProfile(r.Context(), imsi, body.ResolvedPlanId(), msisdn, auth, profileName)
+	created, err := h.repo.CreateSubscriberWithConfiguration(r.Context(), imsi, body.ResolvedPlanId(), msisdn, auth, profileName, body.Sub4G, body.OcsTraffic)
 	if err != nil {
 		h.handleCreateError(w, err)
 		return
@@ -431,14 +435,22 @@ func (h *WriteHandler) handleCreateError(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusConflict, "Subscriber already exists", govErr.Code)
 	case "MSISDN_EXISTS":
 		response.Error(w, http.StatusConflict, "MSISDN already exists", govErr.Code)
+	case "MSISDN_MISMATCH":
+		response.Error(w, http.StatusBadRequest, "msisdn must match the first sub4G.msisdnList entry", govErr.Code)
 	case "INVALID_PLAN_ID":
 		response.Error(w, http.StatusBadRequest, "Invalid plan_id format", govErr.Code)
 	case "OCS_PLAN_NOT_FOUND":
 		response.Error(w, http.StatusNotFound, "Tariff plan not found", govErr.Code)
 	case "OCS_PLAN_DISABLED":
 		response.Error(w, http.StatusConflict, "Tariff plan is disabled", govErr.Code)
+	case "OCS_CONTRACT_RETAINED":
+		response.Error(w, http.StatusConflict, "IMSI still has terminated OCS contract history; purge it through retention before reuse", govErr.Code)
+	case "OCS_CONTRACT_EXISTS":
+		response.Error(w, http.StatusConflict, "IMSI already has an OCS contract without a subscriber record", govErr.Code)
 	case "SUBSCRIBER_CREATE_PARTIAL_WRITE":
 		response.Error(w, http.StatusInternalServerError, "Subscriber created but OCS provisioning failed", govErr.Code)
+	case "SUBSCRIBER_CREATE_FAILED":
+		response.Error(w, http.StatusInternalServerError, "Subscriber create failed; no record was left behind", govErr.Code)
 	default:
 		response.Error(w, http.StatusInternalServerError, "Failed to create subscriber", govErr.Code)
 	}
@@ -487,12 +499,15 @@ type CreateSubscriberBody struct {
 	// and then narrowed by ParseCreateAuthenticationMaterial, so an unknown nested field is
 	// rejected rather than silently persisted.
 	Auth4G map[string]any `json:"auth4G,omitempty"`
+	// Sub4G and OcsTraffic allow a create to write provisioning and quota in the
+	// same request as the subscriber document. They are optional and additive.
+	Sub4G      map[string]any `json:"sub4G,omitempty"`
+	OcsTraffic map[string]any `json:"ocsTraffic,omitempty"`
 	// ProfileName optionally records the user template this record is created from.
 	// It becomes `webui_meta.profile_name`, the binding the attribution filter, the
-	// template statistics and the drift probe read. The create body carries no
-	// content fields, so a caller that wants the template's AMBR, slices or access
-	// restriction still sends them on the follow-up update, which never rewrites the
-	// binding.
+	// template statistics and the drift probe read. A caller that supplies Sub4G
+	// writes that configuration in the same create; the binding is never rewritten
+	// by a later update.
 	ProfileName string `json:"profileName,omitempty"`
 }
 
