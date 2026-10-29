@@ -45,6 +45,67 @@ type ProfileLookupFn func(ctx context.Context, name string) (bson.M, error)
 // SubscriberCASFn is a function that replaces a subscriber document using CAS.
 type SubscriberCASFn func(ctx context.Context, expected bson.M, replacement bson.M) (bool, error)
 
+// ProfileApplyPreview is the server-authoritative preview returned before a
+// template is applied. It contains no credential material: security changes are
+// reported as a boolean, and the snapshots are the same safe projection used by
+// the apply audit.
+type ProfileApplyPreview struct {
+	IMSI            string       `json:"imsi"`
+	ProfileName     string       `json:"profileName"`
+	CurrentProfile  string       `json:"currentProfile"`
+	State           string       `json:"state"`
+	ChangedGroups   []string     `json:"changedGroups"`
+	SecurityChanged bool         `json:"securityChanged"`
+	NoEffect        bool         `json:"noEffect"`
+	PreviewToken    string       `json:"previewToken"`
+	Before          SafeSnapshot `json:"before"`
+	AfterPreview    SafeSnapshot `json:"afterPreview"`
+}
+
+// BuildProfileApplyPreview loads the subscriber and template and returns the
+// same projection the governed apply will use, including the token that binds
+// the eventual apply to this preview.
+func BuildProfileApplyPreview(ctx context.Context, imsi string, profileName string, lookup SubscriberLookupFn, profileLookup ProfileLookupFn) (*ProfileApplyPreview, error) {
+	if strings.TrimSpace(profileName) == "" {
+		return nil, &SubscriberGovernanceError{Code: "INVALID_PROFILE_NAME"}
+	}
+	subscriber, err := lookup(ctx, imsi)
+	if err != nil {
+		return nil, err
+	}
+	if subscriber == nil {
+		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_NOT_FOUND"}
+	}
+	profile, err := profileLookup(ctx, profileName)
+	if err != nil {
+		return nil, err
+	}
+	if profile == nil {
+		return nil, &SubscriberGovernanceError{Code: "PROFILE_NOT_FOUND"}
+	}
+
+	effective := buildSubscriberAfterProfileApply(subscriber, profile, profileName)
+	state, changed := ProfileDrift(subscriber, profile, profileName)
+	securityChanged := securityMaterialChanged(subscriber, effective)
+	before := SubscriberSafeSnapshot(subscriber)
+	afterPreview := SubscriberSafeSnapshot(effective)
+	subHash := computeSubscriberPreconditionHash(subscriber)
+	profHash := computeProfilePreconditionHash(profile)
+
+	return &ProfileApplyPreview{
+		IMSI:            imsi,
+		ProfileName:     profileName,
+		CurrentProfile:  GetProfileName(subscriber),
+		State:           state,
+		ChangedGroups:   changed,
+		SecurityChanged: securityChanged,
+		NoEffect:        state == DriftInSync && !securityChanged && GetProfileName(subscriber) == profileName,
+		PreviewToken:    computeProfileApplyFingerprint(imsi, profileName, subHash, profHash, afterPreview),
+		Before:          before,
+		AfterPreview:    afterPreview,
+	}, nil
+}
+
 // PrepareFrozenSubscriberProfileApply loads subscriber + profile and freezes the profile apply state.
 // Matches Node prepareFrozenSubscriberProfileApply() exactly.
 func PrepareFrozenSubscriberProfileApply(ctx context.Context, imsi string, profileName string, lookup SubscriberLookupFn, profileLookup ProfileLookupFn) (*FrozenSubscriberProfileApplyV1, error) {

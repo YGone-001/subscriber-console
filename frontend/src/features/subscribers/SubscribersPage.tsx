@@ -40,7 +40,9 @@ import { copyText } from '../../lib/clipboard';
 import { useRead } from '../../lib/api/use-read';
 import { deleteJson, postJson } from '../../lib/api/mutation-client';
 import { useAppRouter } from '../../lib/ui-compat/router';
-import { buildProfileApplyRequest } from './mutation-contract';
+import { buildProfileApplyPreviewRequest, buildProfileApplyRequest } from './mutation-contract';
+import { ProfileApplyPreviewNotice } from '../profiles/components/ProfileApplyPreviewNotice';
+import type { ProfileApplyPreview } from '../profiles/profile-apply-preview';
 import type {
   FeedbackState,
   PendingDelete,
@@ -99,6 +101,10 @@ export function SubscribersPage() {
   const [profileApplyTarget, setProfileApplyTarget] = useState<SubscriberRow | null>(null);
   const [applyProfileName, setApplyProfileName] = useState('');
   const [isApplyingProfile, setIsApplyingProfile] = useState(false);
+  const [applyPreview, setApplyPreview] = useState<ProfileApplyPreview | null>(null);
+  const [isPreviewingProfile, setIsPreviewingProfile] = useState(false);
+  const [applyPreviewError, setApplyPreviewError] = useState('');
+  const applyPreviewToken = useRef(0);
 
   /* Template drill-down arrives as ?profile=<name> from the template detail page. */
   const [searchParams, setSearchParams] = useSearchParams();
@@ -207,21 +213,55 @@ export function SubscribersPage() {
   const handleOpenProfileApply = (sub: SubscriberRow) => {
     setProfileApplyTarget(sub);
     setApplyProfileName('');
+    setApplyPreview(null);
+    setApplyPreviewError('');
   };
+
+  useEffect(() => {
+    if (!profileApplyTarget || !applyProfileName) {
+      setApplyPreview(null);
+      setApplyPreviewError('');
+      return;
+    }
+    const token = ++applyPreviewToken.current;
+    const timer = window.setTimeout(async () => {
+      setIsPreviewingProfile(true);
+      setApplyPreview(null);
+      setApplyPreviewError('');
+      try {
+        const response = await postJson<{ preview?: ProfileApplyPreview }>(
+          `/api/subscribers/${encodeURIComponent(profileApplyTarget.imsi)}/profile`,
+          buildProfileApplyPreviewRequest(applyProfileName),
+        );
+        if (applyPreviewToken.current !== token) return;
+        setApplyPreview(response?.preview ?? null);
+      } catch (error) {
+        if (applyPreviewToken.current !== token) return;
+        setApplyPreviewError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (applyPreviewToken.current === token) setIsPreviewingProfile(false);
+      }
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      applyPreviewToken.current += 1;
+    };
+  }, [applyProfileName, profileApplyTarget]);
 
   const executeProfileApply = async () => {
     if (!profileApplyTarget) return;
     const targetImsi = profileApplyTarget.imsi;
     const profileName = applyProfileName.trim();
-    if (!profileName) return;
+    if (!profileName || !applyPreview?.previewToken || applyPreview.noEffect) return;
     setIsApplyingProfile(true);
     try {
       const data = await postJson<{ outcome?: string; message?: string }>(
         `/api/subscribers/${encodeURIComponent(targetImsi)}/profile`,
-        buildProfileApplyRequest(profileName),
+        buildProfileApplyRequest(profileName, applyPreview.previewToken),
       );
       setProfileApplyTarget(null);
       setApplyProfileName('');
+      setApplyPreview(null);
       setFeedback({
         tone: 'success',
         title: t('sub_feedback_success_title'),
@@ -239,8 +279,8 @@ export function SubscribersPage() {
           ? `${t('sub_apply_profile_error', { imsi: targetImsi })} (${detail})`
           : t('sub_apply_profile_error', { imsi: targetImsi }),
       });
-      setProfileApplyTarget(null);
-      setApplyProfileName('');
+      setApplyPreview(null);
+      setApplyPreviewError(detail || t('error'));
     } finally {
       setIsApplyingProfile(false);
     }
@@ -485,9 +525,14 @@ export function SubscribersPage() {
             confirmLabel={t('sub_apply_profile_confirm')}
             cancelLabel={t('cancel')}
             isWorking={isApplyingProfile}
-            confirmDisabled={!applyProfileName.trim() || profileList.length === 0}
+            confirmDisabled={!applyProfileName.trim() || profileList.length === 0 || !applyPreview || applyPreview.noEffect || isPreviewingProfile || Boolean(applyPreviewError)}
             onConfirm={() => void executeProfileApply()}
-            onCancel={() => { setProfileApplyTarget(null); setApplyProfileName(''); }}
+            onCancel={() => {
+              setProfileApplyTarget(null);
+              setApplyProfileName('');
+              setApplyPreview(null);
+              setApplyPreviewError('');
+            }}
           >
             <div>
               <label className="form-label" htmlFor="subscriber-apply-profile-select">{t('profile_template')}</label>
@@ -495,7 +540,11 @@ export function SubscribersPage() {
                 id="subscriber-apply-profile-select"
                 className="form-input"
                 value={applyProfileName}
-                onChange={(event) => setApplyProfileName(event.target.value)}
+                onChange={(event) => {
+                  setApplyProfileName(event.target.value);
+                  setApplyPreview(null);
+                  setApplyPreviewError('');
+                }}
                 disabled={profileList.length === 0}
               >
                 <option value="">{profileList.length > 0 ? t('sub_apply_profile_pick') : t('sub_no_profiles')}</option>
@@ -504,6 +553,7 @@ export function SubscribersPage() {
                 ))}
               </select>
             </div>
+            <ProfileApplyPreviewNotice preview={applyPreview} loading={isPreviewingProfile} error={applyPreviewError} />
           </ConfirmActionPanel>
         )}
 

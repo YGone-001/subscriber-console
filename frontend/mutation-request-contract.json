@@ -229,7 +229,10 @@
     "requiredBodyKeys": [
       "profileName"
     ],
-    "optionalBodyKeys": [],
+    "optionalBodyKeys": [
+      "preview",
+      "previewToken"
+    ],
     "forbiddenBodyKeys": [
       "profile"
     ],

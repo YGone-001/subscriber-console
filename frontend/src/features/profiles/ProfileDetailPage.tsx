@@ -6,7 +6,7 @@
  * read goes through the shared read client so failures are visible instead of
  * rendering a default-filled form.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { ArrowLeft, Boxes, Copy, Download, Pencil, Save, Trash2, UserPlus, Users } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
@@ -14,7 +14,9 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useRead } from '../../lib/api/use-read';
 import { getBlob } from '../../lib/api/read-client';
 import { MutationApiError, deleteJson, postJson, putJson } from '../../lib/api/mutation-client';
-import { buildProfileApplyRequest } from '../subscribers/mutation-contract';
+import { buildProfileApplyPreviewRequest, buildProfileApplyRequest } from '../subscribers/mutation-contract';
+import { ProfileApplyPreviewNotice } from './components/ProfileApplyPreviewNotice';
+import type { ProfileApplyPreview } from './profile-apply-preview';
 import { useAppParam, useAppRouter, useAppSearchParam } from '../../lib/ui-compat/router';
 import { hasPermission } from '../../lib/permissions';
 import PageHeader from '../../components/ui/PageHeader';
@@ -109,6 +111,10 @@ export function ProfileDetailPage() {
   const [expandedSlices, setExpandedSlices] = useState<number[]>([0]);
   const [isApplyOpen, setIsApplyOpen] = useState(false);
   const [applyImsi, setApplyImsi] = useState('');
+  const [applyPreview, setApplyPreview] = useState<ProfileApplyPreview | null>(null);
+  const [isPreviewingApply, setIsPreviewingApply] = useState(false);
+  const [applyPreviewError, setApplyPreviewError] = useState('');
+  const applyPreviewToken = useRef(0);
   const [isApplying, setIsApplying] = useState(false);
   const [isCloneOpen, setIsCloneOpen] = useState(false);
   const [cloneKey, setCloneKey] = useState('');
@@ -388,18 +394,50 @@ export function ProfileDetailPage() {
     }
   };
 
+  useEffect(() => {
+    if (!isApplyOpen || !/^\d{15}$/.test(applyImsi.trim())) {
+      setApplyPreview(null);
+      setApplyPreviewError('');
+      return;
+    }
+    const token = ++applyPreviewToken.current;
+    const timer = window.setTimeout(async () => {
+      setIsPreviewingApply(true);
+      setApplyPreview(null);
+      setApplyPreviewError('');
+      try {
+        const response = await postJson<{ preview?: ProfileApplyPreview }>(
+          `/api/subscribers/${encodeURIComponent(applyImsi.trim())}/profile`,
+          buildProfileApplyPreviewRequest(profileName || ''),
+        );
+        if (applyPreviewToken.current !== token) return;
+        setApplyPreview(response?.preview ?? null);
+      } catch (err) {
+        if (applyPreviewToken.current !== token) return;
+        setApplyPreviewError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (applyPreviewToken.current === token) setIsPreviewingApply(false);
+      }
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      applyPreviewToken.current += 1;
+    };
+  }, [applyImsi, isApplyOpen, profileName]);
+
   const executeApply = async () => {
-    if (!profileName) return;
+    if (!profileName || !applyPreview?.previewToken || applyPreview.noEffect) return;
     const imsi = applyImsi.trim();
     setIsApplying(true);
     setError(null);
     try {
       const data = await postJson<{ outcome?: string }>(
         `/api/subscribers/${encodeURIComponent(imsi)}/profile`,
-        buildProfileApplyRequest(profileName),
+        buildProfileApplyRequest(profileName, applyPreview.previewToken),
       );
       setIsApplyOpen(false);
       setApplyImsi('');
+      setApplyPreview(null);
       setNotice({
         type: 'success',
         text: data?.outcome === 'no_effect'
@@ -408,6 +446,7 @@ export function ProfileDetailPage() {
       });
     } catch (err) {
       setIsApplyOpen(false);
+      setApplyPreview(null);
       const detail = err instanceof Error ? err.message : '';
       setError(detail ? `${t('prof_apply_error', { imsi })} (${detail})` : t('prof_apply_error', { imsi }));
     } finally {
@@ -566,7 +605,7 @@ export function ProfileDetailPage() {
             {canApplyTemplates && !isCreate && (
               <button
                 className="btn btn-outline"
-                onClick={() => { setApplyImsi(''); setIsApplyOpen(true); }}
+                onClick={() => { setApplyImsi(''); setApplyPreview(null); setApplyPreviewError(''); setIsApplyOpen(true); }}
               >
                 <UserPlus size={16} /> {t('prof_apply_btn')}
               </button>
@@ -686,9 +725,13 @@ export function ProfileDetailPage() {
           confirmLabel={t('prof_apply_confirm')}
           cancelLabel={t('cancel')}
           isWorking={isApplying}
-          confirmDisabled={!/^\d{15}$/.test(applyImsi.trim())}
+          confirmDisabled={!/^\d{15}$/.test(applyImsi.trim()) || !applyPreview || applyPreview.noEffect || isPreviewingApply || Boolean(applyPreviewError)}
           onConfirm={() => { void executeApply(); }}
-          onCancel={() => setIsApplyOpen(false)}
+          onCancel={() => {
+            setIsApplyOpen(false);
+            setApplyPreview(null);
+            setApplyPreviewError('');
+          }}
         >
           <div>
             <label className="form-label" htmlFor="profile-apply-imsi">{t('prof_apply_imsi_label')}</label>
@@ -705,6 +748,7 @@ export function ProfileDetailPage() {
             {applyImsi.trim() !== '' && !/^\d{15}$/.test(applyImsi.trim()) && (
               <div className="warning-text">{t('prof_apply_imsi_invalid')}</div>
             )}
+            <ProfileApplyPreviewNotice preview={applyPreview} loading={isPreviewingApply} error={applyPreviewError} />
           </div>
         </ConfirmActionPanel>
       )}

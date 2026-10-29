@@ -9,7 +9,7 @@ import { sessionQosPreset } from '../../lib/imsQosPresets.js';
 import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
 import { deleteJson, MutationApiError, postJson, putJson } from '../../lib/api/mutation-client';
 import { buildSubscriberCreateRequest } from './mutation-contract';
-import { ONBOARDING_TEMPLATE, isRecommendedOnboardingPlan } from './onboarding-template';
+import { isRecommendedOnboardingPlan } from './onboarding-template';
 import type { Auth4GData } from '../../types/subscriber';
 import { resolveUsimType } from '../../types/credential';
 
@@ -93,12 +93,12 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [ocsRules, setOcsRules] = useState<any[]>([]);
 
   const [ocsPlmn, setOcsPlmn] = useState("");
-  const [ocsTrafficTotalStr, setOcsTrafficTotalStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.dataTotal);
-  const [ocsTrafficBalanceStr, setOcsTrafficBalanceStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.dataBalance);
-  const [ocsVoiceTotalStr, setOcsVoiceTotalStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.voiceTotal);
-  const [ocsVoiceBalanceStr, setOcsVoiceBalanceStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.voiceBalance);
-  const [ocsSmsTotalStr, setOcsSmsTotalStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.smsTotal);
-  const [ocsSmsBalanceStr, setOcsSmsBalanceStr] = useState(imsi ? "" : ONBOARDING_TEMPLATE.smsBalance);
+  const [ocsTrafficTotalStr, setOcsTrafficTotalStr] = useState("");
+  const [ocsTrafficBalanceStr, setOcsTrafficBalanceStr] = useState("");
+  const [ocsVoiceTotalStr, setOcsVoiceTotalStr] = useState("");
+  const [ocsVoiceBalanceStr, setOcsVoiceBalanceStr] = useState("");
+  const [ocsSmsTotalStr, setOcsSmsTotalStr] = useState("");
+  const [ocsSmsBalanceStr, setOcsSmsBalanceStr] = useState("");
   const [ocsVolumeThreshold, setOcsVolumeThreshold] = useState<number | null>(0);
   const [ocsDataReservedStr, setOcsDataReservedStr] = useState("");
   const initialOcsSignatureRef = useRef<string | null>(null);
@@ -262,6 +262,35 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
             setOcsVolumeThreshold(Number.isFinite(threshold) ? threshold : null);
           }
           if (Array.isArray(plan?.rules)) setOcsRules(plan.rules);
+          if (!imsi) {
+            const quota = Number(plan?.quota_per_grant);
+            if (Number.isFinite(quota) && quota > 0) {
+              setOcsTrafficTotalStr(formatBytes(quota));
+              setOcsTrafficBalanceStr(formatBytes(quota));
+            } else {
+              setOcsTrafficTotalStr("");
+              setOcsTrafficBalanceStr("");
+            }
+            const rules = Array.isArray(plan?.rules) ? plan.rules : [];
+            const voiceRule = rules.find((rule: any) => rule?.charging_type === "voice_time");
+            const smsRule = rules.find((rule: any) => rule?.charging_type === "sms_event" || rule?.unit === "events");
+            const voiceQuota = Number(voiceRule?.quota_per_grant);
+            const smsQuota = Number(smsRule?.quota_per_grant);
+            if (Number.isFinite(voiceQuota) && voiceQuota > 0) {
+              setOcsVoiceTotalStr(formatSeconds(voiceQuota));
+              setOcsVoiceBalanceStr(formatSeconds(voiceQuota));
+            } else {
+              setOcsVoiceTotalStr("");
+              setOcsVoiceBalanceStr("");
+            }
+            if (Number.isFinite(smsQuota) && smsQuota > 0) {
+              setOcsSmsTotalStr(formatEvents(smsQuota));
+              setOcsSmsBalanceStr(formatEvents(smsQuota));
+            } else {
+              setOcsSmsTotalStr("");
+              setOcsSmsBalanceStr("");
+            }
+          }
         }
 
         if (ratingsData) {

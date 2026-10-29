@@ -17,7 +17,9 @@ import { postJson } from '../../../lib/api/mutation-client';
 import { ConfirmActionPanel } from '../../../components/ui/OperationFeedback';
 import { PROFILE_DRIFT_GROUP_LABEL_KEYS } from '../../profiles/components/ProfileDriftCard';
 import { resolveTemplateBinding, type TemplateOption } from '../subscriber-template-binding';
-import { buildProfileApplyRequest } from '../mutation-contract';
+import { buildProfileApplyPreviewRequest, buildProfileApplyRequest } from '../mutation-contract';
+import { ProfileApplyPreviewNotice } from '../../profiles/components/ProfileApplyPreviewNotice';
+import type { ProfileApplyPreview } from '../../profiles/profile-apply-preview';
 
 type DriftEntry = { imsi: string; state: string; changedGroups?: string[] };
 type DriftReport = { results?: DriftEntry[] };
@@ -43,7 +45,7 @@ export function SubscriberTemplateCard({
   const { t } = useI18n();
   const [isApplyOpen, setIsApplyOpen] = useState(false);
   const [picked, setPicked] = useState('');
-  const [preview, setPreview] = useState<DriftEntry | null>(null);
+  const [preview, setPreview] = useState<ProfileApplyPreview | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [isApplying, setIsApplying] = useState(false);
@@ -66,13 +68,12 @@ export function SubscriberTemplateCard({
     setPreviewError('');
     setPreview(null);
     try {
-      const report = await postJson<DriftReport>(
-        `/api/profiles/${encodeURIComponent(templateName)}/drift-precheck`,
-        { imsis: [imsi] },
+      const report = await postJson<{ preview?: ProfileApplyPreview }>(
+        `/api/subscribers/${encodeURIComponent(imsi)}/profile`,
+        buildProfileApplyPreviewRequest(templateName),
       );
       if (previewToken.current !== token) return;
-      const entry = (report?.results ?? []).find((row) => row.imsi === imsi) ?? (report?.results ?? [])[0] ?? null;
-      setPreview(entry);
+      setPreview(report?.preview ?? null);
     } catch (error) {
       if (previewToken.current !== token) return;
       setPreviewError(error instanceof Error ? error.message : String(error));
@@ -96,12 +97,12 @@ export function SubscriberTemplateCard({
 
   const executeApply = async () => {
     const templateName = picked.trim();
-    if (!templateName) return;
+    if (!templateName || !preview?.previewToken) return;
     setIsApplying(true);
     try {
       const data = await postJson<{ outcome?: string }>(
         `/api/subscribers/${encodeURIComponent(imsi)}/profile`,
-        buildProfileApplyRequest(templateName),
+        buildProfileApplyRequest(templateName, preview.previewToken),
       );
       closeApply();
       onApplied(data?.outcome === 'no_effect'
@@ -111,6 +112,7 @@ export function SubscriberTemplateCard({
       const detail = error instanceof Error && error.message ? ` (${error.message})` : '';
       onError(`${t('sub_apply_profile_error', { imsi })}${detail}`);
       closeApply();
+      void requestPreview(templateName);
     } finally {
       setIsApplying(false);
     }
@@ -132,16 +134,6 @@ export function SubscriberTemplateCard({
       setIsChecking(false);
     }
   };
-
-  const previewSummary = (() => {
-    if (isPreviewing) return t('sub_tpl_previewing');
-    if (previewError) return t('sub_tpl_preview_failed', { error: previewError });
-    if (!preview) return '';
-    if (preview.state === 'unknown') return t('sub_tpl_preview_unknown');
-    if (preview.state === 'in_sync') return t('sub_tpl_preview_sync');
-    const groups = (preview.changedGroups ?? []).map((group) => groupLabel(t, group)).join(' · ');
-    return t('sub_tpl_preview_changed', { groups: groups || t('prof_drift_state_changed') });
-  })();
 
   const checkSummary = (() => {
     if (isChecking) return t('sub_tpl_checking');
@@ -205,7 +197,7 @@ export function SubscriberTemplateCard({
           confirmLabel={t('sub_apply_profile_confirm')}
           cancelLabel={t('cancel')}
           isWorking={isApplying}
-          confirmDisabled={!picked.trim() || isPreviewing || !preview || preview.state === 'unknown'}
+          confirmDisabled={!picked.trim() || isPreviewing || !preview || preview.noEffect || Boolean(previewError)}
           onConfirm={() => { void executeApply(); }}
           onCancel={closeApply}
         >
@@ -226,9 +218,7 @@ export function SubscriberTemplateCard({
               ))}
             </select>
           </div>
-          {previewSummary && (
-            <p className={previewError ? 'warning-text' : 'text-muted'} role="status">{previewSummary}</p>
-          )}
+          <ProfileApplyPreviewNotice preview={preview} loading={isPreviewing} error={previewError} />
         </ConfirmActionPanel>
       )}
     </div>

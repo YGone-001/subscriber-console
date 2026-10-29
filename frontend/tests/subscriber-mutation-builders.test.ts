@@ -430,6 +430,10 @@ test('buildProfileApplyRequest produces authoritative shape with profileName and
   const contract = getContract('subscriber apply profile');
   validatePayloadAgainstContract(req as unknown as Record<string, unknown>, contract);
 
+  const previewed = buildProfileApplyRequest('profile_standard', 'token-123');
+  assert.deepEqual(previewed, { profileName: 'profile_standard', previewToken: 'token-123' });
+  validatePayloadAgainstContract(previewed as unknown as Record<string, unknown>, contract);
+
   assert.throws(() => buildProfileApplyRequest(''), /profileName is required/);
 });
 

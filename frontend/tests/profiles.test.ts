@@ -675,13 +675,15 @@ test('a genuinely different section is still detected', () => {
 
 test('template apply is wired to the governed endpoint from both surfaces', () => {
   const detailPage = read('../src/features/profiles/ProfileDetailPage.tsx');
-  assert.match(detailPage, /import \{ buildProfileApplyRequest \} from '\.\.\/subscribers\/mutation-contract'/);
-  assert.match(detailPage, /buildProfileApplyRequest\(profileName\)/);
+  assert.match(detailPage, /import \{[^}]*buildProfileApplyRequest[^}]*\} from '\.\.\/subscribers\/mutation-contract'/);
+  assert.match(detailPage, /buildProfileApplyRequest\(profileName, applyPreview\.previewToken\)/);
+  assert.match(detailPage, /buildProfileApplyPreviewRequest\(profileName/);
   assert.match(detailPage, /\/api\/subscribers\/\$\{encodeURIComponent\(imsi\)\}\/profile/);
   assert.match(detailPage, /subscribers\.write/);
 
   const subscribersPage = read('../src/features/subscribers/SubscribersPage.tsx');
-  assert.match(subscribersPage, /buildProfileApplyRequest\(profileName\)/);
+  assert.match(subscribersPage, /buildProfileApplyRequest\(profileName, applyPreview\.previewToken\)/);
+  assert.match(subscribersPage, /buildProfileApplyPreviewRequest\(applyProfileName\)/);
   assert.match(subscribersPage, /\/api\/subscribers\/\$\{encodeURIComponent\(targetImsi\)\}\/profile/);
 });
 

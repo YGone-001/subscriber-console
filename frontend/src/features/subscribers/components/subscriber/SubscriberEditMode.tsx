@@ -377,9 +377,9 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           {isNewSubscriber && (
             <p className="auth-readonly-note auth-edit-full" role="note">
               {t("sub_default_template_notice", {
-                data: ONBOARDING_TEMPLATE.dataTotal,
-                voice: ONBOARDING_TEMPLATE.voiceTotal,
-                sms: ONBOARDING_TEMPLATE.smsTotal,
+                data: ocsTrafficTotalStr || t("sub_not_configured"),
+                voice: ocsVoiceTotalStr || t("sub_not_configured"),
+                sms: ocsSmsTotalStr || t("sub_not_configured"),
               })}
             </p>
           )}

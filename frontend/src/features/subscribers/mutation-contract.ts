@@ -204,6 +204,16 @@ export interface SubscriberUpdatePayload {
 
 export interface ProfileApplyPayload {
   profileName: string;
+  preview?: boolean;
+  previewToken?: string;
+}
+
+export function buildProfileApplyPreviewRequest(profileName: string): ProfileApplyPayload {
+  const trimmed = String(profileName || '').trim();
+  if (!trimmed) {
+    throw new Error('profileName is required');
+  }
+  return { profileName: trimmed, preview: true };
 }
 
 export interface TrafficAdjustmentPayload {
@@ -458,14 +468,13 @@ export function buildSubscriberUpdateRequest(options: {
   };
 }
 
-export function buildProfileApplyRequest(profileName: string): ProfileApplyPayload {
+export function buildProfileApplyRequest(profileName: string, previewToken?: string): ProfileApplyPayload {
   const trimmed = String(profileName || '').trim();
   if (!trimmed) {
     throw new Error('profileName is required');
   }
-  return {
-    profileName: trimmed,
-  };
+  const token = String(previewToken || '').trim();
+  return token ? { profileName: trimmed, previewToken: token } : { profileName: trimmed };
 }
 
 export function buildTrafficAdjustRequest(options: {

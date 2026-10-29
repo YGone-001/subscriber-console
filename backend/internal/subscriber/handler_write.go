@@ -1526,7 +1526,9 @@ func (h *WriteHandler) ProfileApply(w http.ResponseWriter, r *http.Request) {
 
 	// Parse body
 	var body struct {
-		ProfileName string `json:"profileName"`
+		ProfileName  string `json:"profileName"`
+		Preview      bool   `json:"preview"`
+		PreviewToken string `json:"previewToken"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		response.Error(w, http.StatusBadRequest, "Invalid request body", "INVALID_REQUEST")
@@ -1544,6 +1546,24 @@ func (h *WriteHandler) ProfileApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if body.Preview {
+		preview, err := BuildProfileApplyPreview(
+			r.Context(), imsi, strings.TrimSpace(body.ProfileName),
+			h.repo.FindSubscriberByImsi, h.repo.FindProfileByName,
+		)
+		if err != nil {
+			h.handleProfileApplyError(w, err)
+			return
+		}
+		response.JSON(w, http.StatusOK, map[string]any{"outcome": "preview", "preview": preview})
+		return
+	}
+
+	if strings.TrimSpace(body.PreviewToken) == "" {
+		response.Error(w, http.StatusBadRequest, "A preview token is required before applying a profile", "PROFILE_PREVIEW_REQUIRED")
+		return
+	}
+
 	// Prepare frozen intent
 	intent, err := PrepareFrozenSubscriberProfileApply(
 		r.Context(), imsi, strings.TrimSpace(body.ProfileName),
@@ -1551,6 +1571,15 @@ func (h *WriteHandler) ProfileApply(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		h.handleProfileApplyError(w, err)
+		return
+	}
+	if strings.TrimSpace(body.PreviewToken) != intent.OperationFingerprint {
+		h.writeProfileApplyAudit(r, intent, fresh, "failed", "DIRECT_GOVERNED", "PREVIEW_STALE", false, false)
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":     "Profile preview is stale; preview again before applying",
+			"code":      "PROFILE_APPLY_STALE",
+			"committed": false,
+		})
 		return
 	}
 
