@@ -131,7 +131,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
               {t('ocs_balance_view_subscriber')}
             </Link>
             <RefreshButton loading={loading} onClick={() => void refresh()} label={t('refresh')} className="ocs-btn" />
-            {canAdjust && (
+            {canAdjust && balance.status !== 'terminated' && (
               <button type="button" className="ocs-btn ocs-btn-primary" onClick={() => setAdjustOpen(true)}>
                 <SlidersHorizontal size={14} aria-hidden="true" />
                 <span>{t('ocs_balance_adjust')}</span>

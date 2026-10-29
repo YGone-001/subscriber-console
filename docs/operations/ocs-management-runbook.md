@@ -138,13 +138,18 @@ Target Collection: `xcloud.ocs_subscribers`
    - Sets status to `suspended`. Rating engine halts usage grants for suspended contracts.
 4. **Contract Resumption**:
    - Submit `POST /api/ocs/subscribers/{imsi}/resume`.
-   - Restores status to `active`.
+   - Allowed only from `suspended`; a terminated contract answers
+     `CONTRACT_TERMINATED` and is never resurrected.
 5. **Contract Termination**:
-   - Submit `DELETE /api/ocs/subscribers/{imsi}`.
-   - Moves contract to `terminated` or removes record after balance reconciliation.
-   - A terminated contract is terminal in the console: suspend, resume, tariff
-     reassignment and terminate are all hidden for that row, because
-     `POST /resume` would otherwise move the record back to `active`.
+   - Submit `PATCH /api/ocs/subscribers/{imsi}` with `{"status":"terminated"}`.
+   - Moves the contract to the terminal `terminated` state and preserves both the
+     contract and its balance records. `DELETE /api/ocs/subscribers/{imsi}` is a
+     compatibility alias for the same soft transition; it no longer removes
+     records.
+   - A terminated contract is terminal in the console and in the API: suspend,
+     resume, tariff reassignment, termination and balance adjustment are all
+     refused. Physical cleanup belongs to the data-retention operation, not this
+     route.
 
 ### 4.3 Console Surface (`/ocs/contracts`)
 - KPI strip: all / active / suspended / terminated. `total` comes from the list
@@ -301,6 +306,10 @@ To confirm a request reached the Go backend:
 | `INSUFFICIENT_BALANCE` | 422 | Negative adjustment exceeds available quota | Adjust delta to not violate conservation invariant (`available >= 0`). |
 | `TARIFF_PLAN_EXISTS` | 409 | Tariff plan with this ID already exists | Choose a distinct `plan_id` for creation or cloning. |
 | `TARIFF_PLAN_DELETE_IN_USE` | 409 | Tariff plan is still bound to contracts | Unbind or migrate the contracts before deleting the plan. |
+| `CONTRACT_TERMINATED` | 409 | Resume/suspend/tariff/adjust attempted on a terminated contract | Terminated contracts are read-only; no lifecycle resurrection. |
+| `CONTRACT_NOT_SUSPENDED` | 409 | Resume attempted from a state other than suspended | Only `suspended -> active` is allowed. |
+| `CONTRACT_NOT_ACTIVE` | 409 | Suspend attempted from a state other than active | Only `active -> suspended` is allowed. |
+| `CONTRACT_NOT_TERMINATABLE` | 409 | Termination attempted from an undefined state | Inspect the contract status before terminating. |
 
 ### 7.4 Internal Operation Log Inquiries
 All operations append internal operational records to `xcloud_ops.app_audit_logs` for troubleshooting, traceability, and operational evidence.  

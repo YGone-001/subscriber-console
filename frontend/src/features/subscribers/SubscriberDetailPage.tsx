@@ -169,7 +169,7 @@ export function SubscriberDetailPage() {
               </button>
             ) : (
               <>
-                {canAdjustBalance && state.hasOcsBalance && (
+                {canAdjustBalance && state.hasOcsBalance && state.ocsContractStatus !== 'terminated' && (
                   <button type="button" className="btn btn-outline" onClick={() => setIsTrafficModalOpen(true)}>
                     <BatteryCharging size={16} /> {t('traffic_adjust')}
                   </button>

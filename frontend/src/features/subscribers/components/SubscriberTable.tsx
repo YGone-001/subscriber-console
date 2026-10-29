@@ -467,7 +467,7 @@ export function SubscriberTable(props: SubscriberTableProps) {
                       <button type="button" className="action-btn action-btn-primary" onClick={(e) => { e.stopPropagation(); handleOpenView(sub.imsi); }} title={t("sub_action_view")} aria-label={`${t("sub_action_view")}: ${sub.imsi}`}>
                         <Eye size={18} />
                       </button>
-                      {canAdjustBalance && hasBalance && (
+                      {canAdjustBalance && hasBalance && sub.contractStatus !== "terminated" && (
                         <button type="button" className="action-btn action-btn-primary" onClick={(e) => handleOpenTrafficAdjustment(sub, e)} title={t("traffic_adjust")} aria-label={`${t("traffic_adjust")}: ${sub.imsi}`}>
                           <BatteryCharging size={18} />
                         </button>

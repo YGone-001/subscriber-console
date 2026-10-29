@@ -254,6 +254,10 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusConflict, "Balance record version is not reported; refresh before adjusting", "BALANCE_VERSION_MISSING")
 		return
 	}
+	if view.Status != nil && *view.Status == "terminated" {
+		response.Error(w, http.StatusConflict, "Terminated contracts cannot be adjusted", "CONTRACT_TERMINATED")
+		return
+	}
 	if view.InvariantOk == nil {
 		response.Error(w, http.StatusConflict, "Balance record is missing bucket fields; invariant cannot be verified", "BALANCE_FIELDS_MISSING")
 		return

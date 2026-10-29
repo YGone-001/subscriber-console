@@ -57,6 +57,7 @@ type createContractBody struct {
 
 type updateTariffBody struct {
 	PlanID string `json:"plan_id"`
+	Status string `json:"status"`
 }
 
 // ── Create ─────────────────────────────────────────────────────────────────
@@ -190,6 +191,19 @@ func (h *SubscriberWriteHandler) UpdateTariff(w http.ResponseWriter, r *http.Req
 	}
 
 	planID := strings.TrimSpace(body.PlanID)
+	status := strings.TrimSpace(body.Status)
+	if status != "" {
+		if planID != "" {
+			response.Error(w, http.StatusBadRequest, "Cannot update plan_id and status in one request", "OCS_MIXED_UPDATE_NOT_SUPPORTED")
+			return
+		}
+		if status != "terminated" {
+			response.Error(w, http.StatusBadRequest, "Only the terminated status is accepted here", "OCS_INVALID_STATUS")
+			return
+		}
+		h.terminateContract(w, r)
+		return
+	}
 	if planID == "" {
 		response.Error(w, http.StatusBadRequest, "plan_id is required", "OCS_PLAN_ID_REQUIRED")
 		return
@@ -339,6 +353,11 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 		return
 	}
 
+	if code, message, errorCode := contractTransitionError(currentStatus, status); code != 0 {
+		response.Error(w, code, message, errorCode)
+		return
+	}
+
 	if err := h.repo.SetContractStatus(r.Context(), imsi, status); err != nil {
 		if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
 			response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
@@ -376,6 +395,13 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 
 // Terminate handles DELETE /api/ocs/subscribers/{imsi}
 func (h *SubscriberWriteHandler) Terminate(w http.ResponseWriter, r *http.Request) {
+	h.terminateContract(w, r)
+}
+
+// terminateContract moves a contract into the terminal state without deleting
+// the contract or its balance. DELETE keeps this route for compatibility; the
+// console uses PATCH {"status":"terminated"}.
+func (h *SubscriberWriteHandler) terminateContract(w http.ResponseWriter, r *http.Request) {
 	imsi := r.PathValue("imsi")
 	if imsi == "" || !imsiRegex.MatchString(imsi) {
 		response.Error(w, http.StatusBadRequest, "Valid IMSI is required", "OCS_INVALID_IMSI")
@@ -418,7 +444,21 @@ func (h *SubscriberWriteHandler) Terminate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := h.repo.TerminateContract(r.Context(), imsi); err != nil {
+	currentStatus, _ := before["status"].(string)
+	if currentStatus == "terminated" {
+		response.JSON(w, http.StatusOK, map[string]any{
+			"outcome": "executed",
+			"message": "OCS subscriber contract already terminated",
+			"imsi":    imsi,
+		})
+		return
+	}
+	if code, message, errorCode := contractTransitionError(currentStatus, "terminated"); code != 0 {
+		response.Error(w, code, message, errorCode)
+		return
+	}
+
+	if err := h.repo.SetContractStatus(r.Context(), imsi, "terminated"); err != nil {
 		if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
 			response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
 			return
@@ -427,15 +467,20 @@ func (h *SubscriberWriteHandler) Terminate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	after := copyBson(before)
+	after["status"] = "terminated"
+
 	h.writeSubscriberAudit(r, audit.WriteAuditInput{
-		Action:   "DELETE",
+		Action:   "UPDATE",
 		Module:   "ocs-subscribers",
 		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
 		Before:   before,
+		After:    after,
 		Result:   "success",
 		Metadata: map[string]interface{}{
-			"operation": string(OpContractTerminate),
-			"actorRole": fresh.NormalizedRole,
+			"operation":    string(OpContractTerminate),
+			"actorRole":    fresh.NormalizedRole,
+			"statusChange": "terminated",
 		},
 	}, fresh)
 
@@ -444,6 +489,35 @@ func (h *SubscriberWriteHandler) Terminate(w http.ResponseWriter, r *http.Reques
 		"message": "operation completed",
 		"imsi":    imsi,
 	})
+}
+
+// contractTransitionError returns a deterministic refusal for lifecycle moves
+// that would resurrect a terminated contract or skip a defined state.
+func contractTransitionError(current, target string) (int, string, string) {
+	switch target {
+	case "terminated":
+		if current == "terminated" {
+			return 0, "", ""
+		}
+		if current != "active" && current != "suspended" {
+			return http.StatusConflict, "Contract cannot be terminated from its current status", "CONTRACT_NOT_TERMINATABLE"
+		}
+	case "active":
+		if current == "terminated" {
+			return http.StatusConflict, "Terminated contracts cannot be resumed", "CONTRACT_TERMINATED"
+		}
+		if current != "suspended" {
+			return http.StatusConflict, "Contract can only be resumed from suspended", "CONTRACT_NOT_SUSPENDED"
+		}
+	case "suspended":
+		if current == "terminated" {
+			return http.StatusConflict, "Terminated contracts cannot be suspended", "CONTRACT_TERMINATED"
+		}
+		if current != "active" {
+			return http.StatusConflict, "Contract can only be suspended from active", "CONTRACT_NOT_ACTIVE"
+		}
+	}
+	return 0, "", ""
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

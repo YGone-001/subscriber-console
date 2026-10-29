@@ -21,7 +21,7 @@ import OcsStatusBadge from '../common/OcsStatusBadge';
 import ConfirmDialog from '../common/ConfirmDialog';
 import OcsDetailState from '../common/OcsDetailState';
 import { useRead } from '../../../lib/api/use-read';
-import { deleteJson, patchJson, postJson } from '../../../lib/api/mutation-client';
+import { patchJson, postJson } from '../../../lib/api/mutation-client';
 import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
@@ -304,7 +304,8 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
           loading={Boolean(busy)}
           onConfirm={() => {
             setConfirmTerminate(false);
-            void run('terminate', () => deleteJson(`/api/ocs/subscribers/${encodeURIComponent(contract.imsi ?? '')}`));
+            void run('terminate', () =>
+              patchJson(`/api/ocs/subscribers/${encodeURIComponent(contract.imsi ?? '')}`, { status: 'terminated' }));
           }}
           onCancel={() => setConfirmTerminate(false)}
         />

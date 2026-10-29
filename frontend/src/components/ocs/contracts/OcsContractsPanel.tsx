@@ -36,7 +36,7 @@ import ConfirmDialog from '../common/ConfirmDialog';
 import OcsSortIcon from '../common/OcsSortIcon';
 import { OcsFilterSelect, OcsResetFilters, OcsSearchField, OcsToolbar } from '../common/OcsToolbar';
 import { useRead } from '../../../lib/api/use-read';
-import { deleteJson, patchJson, postJson } from '../../../lib/api/mutation-client';
+import { patchJson, postJson } from '../../../lib/api/mutation-client';
 import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
@@ -489,7 +489,7 @@ export default function OcsContractsPanel() {
             const imsi = confirmTerminate;
             setConfirmTerminate(null);
             void executeAction(imsi, 'terminate', () =>
-              deleteJson(`/api/ocs/subscribers/${encodeURIComponent(imsi)}`));
+              patchJson(`/api/ocs/subscribers/${encodeURIComponent(imsi)}`, { status: 'terminated' }));
           }}
           onCancel={() => setConfirmTerminate(null)}
         />

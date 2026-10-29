@@ -306,7 +306,7 @@ export default function OcsBalancePlaceholder() {
                       >
                         <Eye size={14} aria-hidden="true" />
                       </Link>
-                      {canAdjust && (
+                      {canAdjust && record.status !== 'terminated' && (
                         <button
                           type="button"
                           className="ocs-btn-sm ocs-btn-secondary"
