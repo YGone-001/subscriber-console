@@ -443,7 +443,7 @@ func securityMaterialChanged(current, effective bson.M) bool {
 // by a template can never be invisible to that template's linked-subscriber
 // read, and a subscriber bound through a legacy field is not forever reported
 // as drifted.
-var profileBindingFields = []string{
+var profileBindingFields = [4]string{
 	"webui_meta.profile_name",
 	"webui_meta.profile",
 	"profile_name",
@@ -453,8 +453,24 @@ var profileBindingFields = []string{
 // GetProfileName reports the template a subscriber document is bound to,
 // reading every field the attribution filter matches.
 func GetProfileName(doc bson.M) string {
-	for _, path := range profileBindingFields {
-		if value, ok := nestedStringField(doc, path); ok {
+	values := [len(profileBindingFields)]string{}
+	for index, path := range profileBindingFields {
+		values[index], _ = nestedStringField(doc, path)
+	}
+	return profileNameFromBindingValues(values[0], values[1], values[2], values[3])
+}
+
+// profileNameFromBindingValues holds the binding precedence for every reader:
+// the projected list row passes the same four values without materializing a
+// document.
+func profileNameFromBindingValues(webuiProfileName, webuiProfile, legacyProfileName, legacyProfile string) string {
+	for _, value := range [len(profileBindingFields)]string{
+		webuiProfileName,
+		webuiProfile,
+		legacyProfileName,
+		legacyProfile,
+	} {
+		if value != "" {
 			return value
 		}
 	}

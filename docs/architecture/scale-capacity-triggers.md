@@ -24,7 +24,8 @@ GOTOOLCHAIN=go1.24.0 go test -run '^$' -bench BenchmarkSubscriberListRows \
   -benchtime=10x ./internal/subscriber
 ```
 
-Measurement on 2026-10-30:
+Measurement on 2026-10-30, before the projection and typed-decode iterations
+below:
 
 | Dataset | Time per list request | Allocations |
 |---|---:|---:|
@@ -34,9 +35,10 @@ Measurement on 2026-10-30:
 The benchmark seeds one subscriber, one active OCS contract and one balance per
 IMSI, creates the declared production indexes, and calls
 `ListSubscriberRowsFiltered` with `limit=50`. It excludes HTTP transport but
-includes the fetch-all, enrichment, facet and in-memory pagination cost. The
-10k result is already at the warning line: the current implementation is usable
-at the current population but has little headroom.
+includes the fetch-all, enrichment, facet and in-memory pagination cost. At the
+original baseline the 10k result sat on the warning line; the current path
+(~233 ms, ~187 MB) is back inside it, but the headroom is still one doubling of
+the subscriber population away.
 
 ### Aggregation prototype gate (2026-10-30)
 
@@ -53,13 +55,63 @@ read path.
 
 ### Compact batch projection (2026-10-30)
 
-The current read path now projects only the subscriber and OCS fields the list
-row and filters actually read, instead of loading full subscriber, contract and
-balance documents for every match. Measured at 10k: ~262 ms and ~191 MB
-allocated (baseline ~307 ms / ~218 MB). This meets the latency target but still
-misses the allocated-memory target (~64 MB); the next iteration should decode
-bounded OCS rows into typed structs rather than bson.M maps. The golden baseline
-still passes unchanged.
+The read path stopped loading full subscriber, contract and balance documents
+for every match and projects only the fields the row and filters read. Measured
+at 10k: ~262 ms, ~191 MB, ~1.71M allocs (original ~307 ms / ~218 MB / ~2.26M
+allocs). The golden baseline passed unchanged. This iteration also dropped
+`msisdnList` from the subscriber projection, which would have hidden the MSISDN
+of a document that carries only the list form; the typed iteration restored it.
+
+### Typed list documents (2026-10-30, current path)
+
+The list now decodes the projected subscriber, contract, balance and plan
+documents into fixed structs instead of `bson.M` maps, and one typed row builder
+(`toSubscriberRow` in `backend/internal/subscriber/list_typed.go`) replaces the
+map-based row, MSISDN, binding and last-active helpers. Fields stay loose (`any`,
+or `bson.RawValue` where absent and explicit null must stay distinguishable) so
+an unexpected stored type degrades to the same projection the map reader
+produced instead of failing the whole list. Cursors are decoded into slices with
+a known upper bound instead of `cursor.All`, which grows its result through
+reflection and reallocates the whole slice repeatedly at this scale.
+
+| Dataset | Original | Compact projection | Typed documents |
+|---|---:|---:|---:|
+| 1,000 subscribers | ~38.8 ms, ~21.7 MB, ~226k allocs | — | ~27.4 ms, ~18.1 MB, ~105k allocs |
+| 10,000 subscribers | ~307 ms, ~218.6 MB, ~2.26M allocs | ~262 ms, ~191 MB, ~1.71M allocs | ~207 ms, ~185 MB, ~1.04M allocs |
+
+Two correctness defects were fixed on the way, both confirmed against live data:
+
+- `lastActive` dropped every stored BSON date. The driver decodes a date into
+  int64 milliseconds, and the previous reader only accepted `time.Time` and RFC
+  3339 strings, so the row silently fell back to the document identifier's
+  creation instant or to empty. Live `xcloud` holds both shapes (8 subscribers
+  with string timestamps, 2 with dates; 3 contracts and 1 balance with dates),
+  and one live subscriber reported activity 38 days older than its balance
+  account's own `updated_at`. Timestamps are now read as `bson.RawValue`, so a
+  date is a date and an unrelated number is still not evidence.
+- The legacy `msisdnList: [{msisdn}]` form never resolved. An embedded document
+  inside an array decodes as `bson.D`, which the MSISDN reader did not accept, so
+  such a subscriber showed the contract number instead of its own. No live
+  document uses that form today; the reader now accepts it as documented.
+
+The golden baseline was re-recorded for these two fixes and extended with a
+`msisdnList`-only subscriber, a subscriber whose only MSISDN is on the contract,
+an explicit-null `access_restriction_data`, a contract with an empty `plan_id`
+and a balance without `data_available`. Every other row field is byte-identical
+to the previous baseline.
+
+Allocation floor: a memory profile attributes ~78% of the residual 10k bytes to
+driver-internal decode buffers. `mongo.getDecoder` → `bson.NewDocumentReader` →
+`bufio.NewReader` allocates a 4 KiB reader per decoded document, and one list
+request decodes ~30k documents (10k subscribers + 10k contracts + 10k balances),
+so ~144 MB of the ~185 MB is fixed by the decoded-document count and not by the
+row structs (~8 MB) or the filters. The ~64 MB per-request target is therefore
+unreachable through any client-side decoding change; it requires returning fewer
+documents, which is the server-side aggregation rewrite the trigger table
+already owns. That rewrite stays gated: at the current population the measured
+latency and allocation are inside the warning line (~207 ms < 300 ms, ~185 MB <
+200 MB), and the remaining byte headroom is documented as driver-owned rather
+than row-owned.
 
 ## Trigger table
 

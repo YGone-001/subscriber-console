@@ -148,6 +148,17 @@ func seedListGoldenFixture(t *testing.T, repo *Repository) {
 			"_id": "sub-6", "imsi": "460020000000006", "msisdn": bson.A{"18800000006"},
 			"access_restriction_data": 32, "updated_at": fixed,
 		},
+		// The xCloud MSISDN has appeared both as a scalar list and as the legacy
+		// msisdnList form, and an explicit null access_restriction_data is not the
+		// same fact as an absent one. Both shapes are pinned here.
+		bson.M{
+			"_id": "sub-7", "imsi": "460020000000007",
+			"msisdnList":              bson.A{bson.M{"msisdn": "18800000007"}},
+			"access_restriction_data": nil, "updated_at": fixed,
+		},
+		bson.M{
+			"_id": "sub-8", "imsi": "460020000000008", "updated_at": fixed,
+		},
 	}
 	if _, err := repo.subscribers.InsertMany(ctx, subscribers); err != nil {
 		t.Fatalf("seed subscribers: %v", err)
@@ -159,6 +170,11 @@ func seedListGoldenFixture(t *testing.T, repo *Repository) {
 		bson.M{"_id": "contract-4", "imsi": "460020000000004", "plan_id": "plan_b", "status": "active", "updated_at": fixed},
 		bson.M{"_id": "contract-5", "imsi": "460020000000005", "plan_id": "plan_missing", "status": "active", "updated_at": fixed},
 		bson.M{"_id": "contract-6", "imsi": "460020000000006", "plan_id": "plan_a", "status": "terminated", "updated_at": fixed},
+		// contract-7 carries a different MSISDN than the subscriber document to
+		// pin that the xCloud value wins. contract-8 has an empty plan_id, which
+		// resolves through the default plan, and its MSISDN is the only one.
+		bson.M{"_id": "contract-7", "imsi": "460020000000007", "plan_id": "plan_a", "status": "active", "msisdn": "18800000907", "updated_at": fixed},
+		bson.M{"_id": "contract-8", "imsi": "460020000000008", "plan_id": "", "status": "active", "msisdn": "18800000008", "updated_at": fixed},
 	}
 	if _, err := repo.ocsSubs.InsertMany(ctx, contracts); err != nil {
 		t.Fatalf("seed contracts: %v", err)
@@ -180,6 +196,14 @@ func seedListGoldenFixture(t *testing.T, repo *Repository) {
 		bson.M{
 			"imsi": "460020000000006", "data_total": int64(200), "data_used": int64(0), "data_available": int64(200),
 			"sms_total": int64(10), "sms_used": int64(0), "sms_available": int64(10),
+		},
+		// sub-7 has no SMS fields at all; sub-8 has no data_available, so its
+		// balance state is unmeasurable rather than exhausted.
+		bson.M{
+			"imsi": "460020000000007", "data_total": int64(500), "data_used": int64(0), "data_available": int64(500),
+		},
+		bson.M{
+			"imsi": "460020000000008", "data_total": int64(300), "data_used": int64(120),
 		},
 	}
 	if _, err := repo.ocsBalances.InsertMany(ctx, balances); err != nil {

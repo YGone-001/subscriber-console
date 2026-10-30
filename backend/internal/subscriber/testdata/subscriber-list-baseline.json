@@ -31,7 +31,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000002",
@@ -61,7 +61,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000003",
@@ -87,7 +87,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000004",
@@ -116,7 +116,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000005",
@@ -144,7 +144,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000006",
@@ -174,19 +174,76 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000007",
+          "msisdn": "18800000007",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 0,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 500,
+            "used": 0,
+            "balance": 500
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000008",
+          "msisdn": "18800000008",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "unknown",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": 300,
+            "used": 120,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 6,
+      "total": 8,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 6,
-        "active": 4,
+        "total": 8,
+        "active": 6,
         "restricted": 2,
         "lowTraffic": 1,
         "lowBalance": 1,
-        "unprovisioned": 2
+        "unprovisioned": 3
       }
     }
   },
@@ -222,7 +279,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000003",
@@ -248,7 +305,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000005",
@@ -276,7 +333,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000006",
@@ -306,19 +363,76 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000007",
+          "msisdn": "18800000007",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 0,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 500,
+            "used": 0,
+            "balance": 500
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000008",
+          "msisdn": "18800000008",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "unknown",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": 300,
+            "used": 120,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 4,
+      "total": 6,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 4,
-        "active": 4,
+        "total": 6,
+        "active": 6,
         "restricted": 2,
         "lowTraffic": 0,
         "lowBalance": 0,
-        "unprovisioned": 2
+        "unprovisioned": 3
       }
     }
   },
@@ -354,7 +468,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000004",
@@ -383,7 +497,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 2,
@@ -391,7 +505,7 @@
       "limit": 50,
       "summary": {
         "total": 2,
-        "active": 4,
+        "active": 6,
         "restricted": 2,
         "lowTraffic": 1,
         "lowBalance": 1,
@@ -430,7 +544,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -438,7 +552,7 @@
       "limit": 50,
       "summary": {
         "total": 1,
-        "active": 4,
+        "active": 6,
         "restricted": 2,
         "lowTraffic": 1,
         "lowBalance": 0,
@@ -478,7 +592,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000004",
@@ -507,7 +621,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000005",
@@ -535,19 +649,76 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000007",
+          "msisdn": "18800000007",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 0,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 500,
+            "used": 0,
+            "balance": 500
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000008",
+          "msisdn": "18800000008",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "unknown",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": 300,
+            "used": 120,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 3,
+      "total": 5,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 3,
-        "active": 2,
+        "total": 5,
+        "active": 4,
         "restricted": 1,
         "lowTraffic": 1,
         "lowBalance": 0,
-        "unprovisioned": 1
+        "unprovisioned": 2
       }
     }
   },
@@ -583,7 +754,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -631,7 +802,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -675,7 +846,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -723,7 +894,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000002",
@@ -753,7 +924,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000004",
@@ -782,7 +953,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000006",
@@ -812,19 +983,49 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000007",
+          "msisdn": "18800000007",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 0,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 500,
+            "used": 0,
+            "balance": 500
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 4,
+      "total": 5,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 4,
-        "active": 2,
+        "total": 5,
+        "active": 3,
         "restricted": 2,
         "lowTraffic": 1,
         "lowBalance": 1,
-        "unprovisioned": 2
+        "unprovisioned": 3
       }
     }
   },
@@ -856,7 +1057,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000005",
@@ -884,19 +1085,46 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000008",
+          "msisdn": "18800000008",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "unknown",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": 300,
+            "used": 120,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 2,
+      "total": 3,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 2,
-        "active": 2,
+        "total": 3,
+        "active": 3,
         "restricted": 0,
         "lowTraffic": 0,
         "lowBalance": 0,
-        "unprovisioned": 2
+        "unprovisioned": 3
       }
     }
   },
@@ -928,7 +1156,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -940,7 +1168,7 @@
         "restricted": 0,
         "lowTraffic": 0,
         "lowBalance": 0,
-        "unprovisioned": 2
+        "unprovisioned": 3
       }
     }
   },
@@ -972,7 +1200,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000005",
@@ -1000,7 +1228,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 2,
@@ -1012,7 +1240,7 @@
         "restricted": 0,
         "lowTraffic": 0,
         "lowBalance": 0,
-        "unprovisioned": 2
+        "unprovisioned": 3
       }
     }
   },
@@ -1044,7 +1272,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000005",
@@ -1072,19 +1300,46 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000008",
+          "msisdn": "18800000008",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "unknown",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": 300,
+            "used": 120,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 2,
+      "total": 3,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 2,
-        "active": 2,
+        "total": 3,
+        "active": 3,
         "restricted": 0,
         "lowTraffic": 0,
         "lowBalance": 0,
-        "unprovisioned": 2
+        "unprovisioned": 3
       }
     }
   },
@@ -1120,7 +1375,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000002",
@@ -1150,7 +1405,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000006",
@@ -1180,15 +1435,45 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000007",
+          "msisdn": "18800000007",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 0,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 500,
+            "used": 0,
+            "balance": 500
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 3,
+      "total": 4,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 3,
-        "active": 2,
+        "total": 4,
+        "active": 3,
         "restricted": 1,
         "lowTraffic": 0,
         "lowBalance": 1,
@@ -1227,7 +1512,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -1274,7 +1559,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -1322,7 +1607,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -1370,7 +1655,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000006",
@@ -1400,15 +1685,45 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000007",
+          "msisdn": "18800000007",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 0,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 500,
+            "used": 0,
+            "balance": 500
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 2,
+      "total": 3,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 2,
-        "active": 2,
+        "total": 3,
+        "active": 3,
         "restricted": 0,
         "lowTraffic": 1,
         "lowBalance": 1,
@@ -1448,7 +1763,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000002",
@@ -1478,7 +1793,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000006",
@@ -1508,15 +1823,45 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000007",
+          "msisdn": "18800000007",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 0,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 500,
+            "used": 0,
+            "balance": 500
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 3,
+      "total": 4,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 3,
-        "active": 2,
+        "total": 4,
+        "active": 3,
         "restricted": 1,
         "lowTraffic": 1,
         "lowBalance": 1,
@@ -1552,7 +1897,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000005",
@@ -1580,7 +1925,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 2,
@@ -1628,7 +1973,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -1676,7 +2021,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -1724,7 +2069,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000002",
@@ -1754,7 +2099,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000003",
@@ -1780,7 +2125,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000004",
@@ -1809,7 +2154,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000005",
@@ -1837,7 +2182,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000006",
@@ -1867,19 +2212,76 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000007",
+          "msisdn": "18800000007",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 0,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 500,
+            "used": 0,
+            "balance": 500
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000008",
+          "msisdn": "18800000008",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "unknown",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": 300,
+            "used": 120,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 6,
+      "total": 8,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 6,
-        "active": 4,
+        "total": 8,
+        "active": 6,
         "restricted": 2,
         "lowTraffic": 1,
         "lowBalance": 1,
-        "unprovisioned": 2
+        "unprovisioned": 3
       },
       "matchedBy": "imsi"
     }
@@ -1916,7 +2318,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
       "total": 1,
@@ -1962,7 +2364,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000004",
@@ -1991,19 +2393,19 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 6,
+      "total": 8,
       "page": 2,
       "limit": 2,
       "summary": {
-        "total": 6,
-        "active": 4,
+        "total": 8,
+        "active": 6,
         "restricted": 2,
         "lowTraffic": 1,
         "lowBalance": 1,
-        "unprovisioned": 2
+        "unprovisioned": 3
       }
     }
   },
@@ -2011,6 +2413,33 @@
     "name": "sort_usage_desc",
     "result": {
       "subscribers": [
+        {
+          "imsi": "460020000000008",
+          "msisdn": "18800000008",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "unknown",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": 300,
+            "used": 120,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
         {
           "imsi": "460020000000004",
           "msisdn": "18800000004",
@@ -2038,7 +2467,7 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000001",
@@ -2068,7 +2497,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000002",
@@ -2098,7 +2527,37 @@
             "used": 10,
             "balance": 0
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
+        },
+        {
+          "imsi": "460020000000007",
+          "msisdn": "18800000007",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 0,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 500,
+            "used": 0,
+            "balance": 500
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000006",
@@ -2128,7 +2587,7 @@
             "used": 0,
             "balance": 10
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000005",
@@ -2156,7 +2615,7 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         },
         {
           "imsi": "460020000000003",
@@ -2182,19 +2641,19 @@
             "used": null,
             "balance": null
           },
-          "lastActive": ""
+          "lastActive": "2026-10-01T12:00:00.000Z"
         }
       ],
-      "total": 6,
+      "total": 8,
       "page": 1,
       "limit": 50,
       "summary": {
-        "total": 6,
-        "active": 4,
+        "total": 8,
+        "active": 6,
         "restricted": 2,
         "lowTraffic": 1,
         "lowBalance": 1,
-        "unprovisioned": 2
+        "unprovisioned": 3
       }
     }
   }

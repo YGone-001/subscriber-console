@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -119,25 +118,6 @@ func statusFromARD(ard int) string {
 	return "Active"
 }
 
-// extractARD extracts the ARD value from a subscriber document.
-func extractARD(doc bson.M) int {
-	if v, ok := doc["access_restriction_data"]; ok {
-		return int(numericInt64(v))
-	}
-	return 32
-}
-
-// extractWebuiMeta extracts webui_meta as a map.
-func extractWebuiMeta(doc bson.M) map[string]any {
-	if v, ok := doc["webui_meta"].(bson.M); ok {
-		return map[string]any(v)
-	}
-	if v, ok := doc["webui_meta"].(map[string]any); ok {
-		return v
-	}
-	return nil
-}
-
 // normalizeTraffic carries the stored traffic fields without deriving totals
 // from whatever happens to be present.
 func normalizeTraffic(dataTotal, dataUsed, dataAvailable any) TrafficSnapshot {
@@ -170,86 +150,6 @@ func numericInt64Ptr(value any) *int64 {
 	}
 }
 
-// computeLastActive determines the last active timestamp from multiple sources.
-func computeLastActive(xcloudDoc, ocsSubDoc, balanceDoc bson.M) string {
-	// Try: ocsSub.updated_at > xcloud.webui_meta.updated_at > xcloud.updated_at
-	// > ocsSub.created_at > xcloud.webui_meta.created_at > xcloud.created_at
-	// > xcloud._id timestamp > balance.updated_at
-	candidates := []any{}
-
-	if ocsSubDoc != nil {
-		candidates = append(candidates, ocsSubDoc["updated_at"])
-	}
-	if meta := extractWebuiMeta(xcloudDoc); meta != nil {
-		candidates = append(candidates, meta["updated_at"])
-	}
-	candidates = append(candidates, xcloudDoc["updated_at"])
-	if ocsSubDoc != nil {
-		candidates = append(candidates, ocsSubDoc["created_at"])
-	}
-	if meta := extractWebuiMeta(xcloudDoc); meta != nil {
-		candidates = append(candidates, meta["created_at"])
-	}
-	candidates = append(candidates, xcloudDoc["created_at"])
-
-	// ObjectId timestamp
-	if id, ok := xcloudDoc["_id"].(bson.ObjectID); ok {
-		candidates = append(candidates, id.Timestamp())
-	}
-
-	if balanceDoc != nil {
-		candidates = append(candidates, balanceDoc["updated_at"])
-	}
-
-	var latest time.Time
-	for _, raw := range candidates {
-		if raw == nil {
-			continue
-		}
-		var t time.Time
-		switch v := raw.(type) {
-		case time.Time:
-			t = v
-		case string:
-			parsed, err := time.Parse(time.RFC3339Nano, v)
-			if err != nil {
-				continue
-			}
-			t = parsed
-		default:
-			continue
-		}
-		if !t.IsZero() && t.After(latest) {
-			latest = t
-		}
-	}
-
-	if latest.IsZero() {
-		return ""
-	}
-	return latest.UTC().Format("2006-01-02T15:04:05.000Z")
-}
-
-// extractSubscriberMSISDN reads the first MSISDN from the legacy xCloud
-// document and falls back to the OCS contract. The xCloud shape has appeared
-// both as msisdnList[{msisdn}] and as a plain msisdn array, so both are accepted.
-func extractSubscriberMSISDN(xcloudDoc, ocsSubDoc bson.M) string {
-	if xcloudDoc != nil {
-		if value, ok := firstMSISDNValue(xcloudDoc["msisdnList"]); ok {
-			return value
-		}
-		if value, ok := firstMSISDNValue(xcloudDoc["msisdn"]); ok {
-			return value
-		}
-	}
-	if ocsSubDoc != nil {
-		if value, ok := ocsSubDoc["msisdn"].(string); ok {
-			return value
-		}
-	}
-	return ""
-}
-
 func firstMSISDNValue(raw any) (string, bool) {
 	switch value := raw.(type) {
 	case string:
@@ -280,82 +180,19 @@ func firstMSISDNValue(raw any) (string, bool) {
 		if item, ok := value["msisdn"].(string); ok && item != "" {
 			return item, true
 		}
+	// The driver decodes an embedded document inside an array as bson.D, so the
+	// legacy msisdnList[{msisdn}] form never resolved through the map branches.
+	case bson.D:
+		for _, element := range value {
+			if element.Key != "msisdn" {
+				continue
+			}
+			if item, ok := element.Value.(string); ok && item != "" {
+				return item, true
+			}
+		}
 	}
 	return "", false
-}
-
-func extractContractStatus(ocsSubDoc bson.M) string {
-	if ocsSubDoc == nil {
-		return ""
-	}
-	status, _ := ocsSubDoc["status"].(string)
-	return status
-}
-
-// toSubscriberRow converts raw BSON documents to a SubscriberRow.
-func toSubscriberRow(
-	xcloudDoc bson.M,
-	ocsSubDoc bson.M,
-	balanceDoc bson.M,
-	tariffPlanDoc bson.M,
-) SubscriberRow {
-	imsi, _ := xcloudDoc["imsi"].(string)
-	ard := extractARD(xcloudDoc)
-	plmn := imsi
-	if len(plmn) > 5 {
-		plmn = plmn[:5]
-	}
-
-	var planID, planName, planStatus string
-	if ocsSubDoc != nil {
-		planID, _ = ocsSubDoc["plan_id"].(string)
-	}
-	if tariffPlanDoc != nil {
-		planName, _ = tariffPlanDoc["name"].(string)
-		planStatus, _ = tariffPlanDoc["status"].(string)
-	}
-	if planName == "" {
-		planName = planID
-	}
-
-	var traffic TrafficSnapshot
-	var sms SMSSnapshot
-	if balanceDoc != nil {
-		traffic = normalizeTraffic(balanceDoc["data_total"], balanceDoc["data_used"], balanceDoc["data_available"])
-		sms = normalizeSMS(balanceDoc["sms_total"], balanceDoc["sms_used"], balanceDoc["sms_available"])
-	}
-
-	var balanceThreshold int64
-	if ocsSubDoc != nil && tariffPlanDoc != nil {
-		balanceThreshold = numericInt64(tariffPlanDoc["volume_threshold"])
-	}
-	balanceState := classifyBalance(balanceDoc != nil, traffic.Balance, balanceThreshold)
-
-	return SubscriberRow{
-		IMSI:             imsi,
-		MSISDN:           extractSubscriberMSISDN(xcloudDoc, ocsSubDoc),
-		Status:           statusFromARD(ard),
-		ContractStatus:   extractContractStatus(ocsSubDoc),
-		BalanceState:     balanceState,
-		BalanceThreshold: balanceThreshold,
-		ARD:              ard,
-		PLMN:             plmn,
-		// One binding authority. A narrower reader that saw only
-		// webui_meta.profile_name used to project this field, so a row could
-		// disagree with the template that counted the same subscriber.
-		Profile:      GetProfileName(xcloudDoc),
-		Policy:       planID,
-		PolicyName:   planName,
-		PolicyStatus: planStatus,
-		Provisioning: SubscriberProvisioning{
-			Contract:   ocsSubDoc != nil,
-			Balance:    balanceDoc != nil,
-			TariffPlan: ocsSubDoc != nil && tariffPlanDoc != nil,
-		},
-		Traffic:    traffic,
-		SMS:        sms,
-		LastActive: computeLastActive(xcloudDoc, ocsSubDoc, balanceDoc),
-	}
 }
 
 // Balance states are derived from data_available and the assigned plan's
@@ -670,20 +507,12 @@ func (r *Repository) ListSubscriberRowsFiltered(ctx context.Context, page, limit
 	// Fetch only the subscriber fields the row projection and filters actually
 	// read. Full documents (security, slices, sessions, unknown fields) are not
 	// materialized for the whole collection.
-	cursor, err := r.subscribers.Find(ctx, filter, options.Find().
-		SetProjection(subscriberListProjection()).
-		SetSort(bson.M{"imsi": 1}))
+	docs, err := r.fetchSubscriberListDocs(ctx, filter)
 	if err != nil {
-		return SubscriberListResult[SubscriberRow]{}, fmt.Errorf("find subscribers: %w", err)
-	}
-	defer cursor.Close(ctx)
-
-	var xcloudDocs []bson.M
-	if err := cursor.All(ctx, &xcloudDocs); err != nil {
-		return SubscriberListResult[SubscriberRow]{}, fmt.Errorf("decode subscribers: %w", err)
+		return SubscriberListResult[SubscriberRow]{}, err
 	}
 
-	if len(xcloudDocs) == 0 {
+	if len(docs) == 0 {
 		return SubscriberListResult[SubscriberRow]{
 			Subscribers: []SubscriberRow{},
 			Total:       0,
@@ -695,27 +524,25 @@ func (r *Repository) ListSubscriberRowsFiltered(ctx context.Context, page, limit
 		}, nil
 	}
 
-	// Collect IMSIs for OCS lookup
-	imsis := make([]string, len(xcloudDocs))
-	for i, doc := range xcloudDocs {
-		imsis[i], _ = doc["imsi"].(string)
+	imsis := make([]string, len(docs))
+	for index := range docs {
+		imsis[index], _ = docs[index].IMSI.(string)
 	}
 
-	// Fetch OCS data in parallel
-	ocsSubMap, balanceMap, tariffPlanMap, err := r.fetchOcsProvisioning(ctx, imsis)
+	ocs, err := r.fetchSubscriberListOcs(ctx, imsis)
 	if err != nil {
 		return SubscriberListResult[SubscriberRow]{}, fmt.Errorf("fetch ocs provisioning: %w", err)
 	}
 
-	// Build rows
-	rows := make([]SubscriberRow, len(xcloudDocs))
-	for i, doc := range xcloudDocs {
-		imsi := imsis[i]
-		rows[i] = toSubscriberRow(
-			doc,
-			ocsSubMap[imsi],
-			balanceMap[imsi],
-			tariffPlanMap[getPlanID(ocsSubMap[imsi])],
+	rows := make([]SubscriberRow, len(docs))
+	for index := range docs {
+		imsi := imsis[index]
+		contract := ocs.contracts[imsi]
+		rows[index] = toSubscriberRow(
+			docs[index],
+			contract,
+			ocs.balances[imsi],
+			ocs.plans[listContractPlanID(contract)],
 		)
 	}
 
@@ -803,120 +630,6 @@ func (r *Repository) resolveSearchFilter(ctx context.Context, query, searchBy st
 		source = *lookup.Source
 	}
 	return bson.M{"imsi": *lookup.IMSI}, true, "msisdn", source, nil
-}
-
-// getPlanID extracts plan_id from an OCS subscriber doc, defaulting to plan_default_10gb.
-func getPlanID(ocsSub bson.M) string {
-	if ocsSub == nil {
-		return defaultPlanID
-	}
-	if pid, ok := ocsSub["plan_id"].(string); ok && pid != "" {
-		return pid
-	}
-	return defaultPlanID
-}
-
-func subscriberListProjection() bson.M {
-	return bson.M{
-		"imsi":                    1,
-		"msisdn":                  1,
-		"access_restriction_data": 1,
-		"webui_meta":              1,
-		"profile_name":            1,
-		"profile":                 1,
-		"updated_at":              1,
-		"created_at":              1,
-	}
-}
-
-// fetchOcsProvisioning fetches the bounded OCS fields needed by the list row
-// and filters. It intentionally does not load full contract/balance documents.
-func (r *Repository) fetchOcsProvisioning(ctx context.Context, imsis []string) (
-	ocsSubMap map[string]bson.M,
-	balanceMap map[string]bson.M,
-	tariffPlanMap map[string]bson.M,
-	err error,
-) {
-	ocsSubMap = make(map[string]bson.M)
-	balanceMap = make(map[string]bson.M)
-	tariffPlanMap = make(map[string]bson.M)
-
-	// Fetch OCS subscribers
-	ocsCursor, err := r.ocsSubs.Find(ctx, bson.M{"imsi": bson.M{"$in": imsis}}, options.Find().SetProjection(bson.M{
-		"imsi": 1, "status": 1, "plan_id": 1, "msisdn": 1, "updated_at": 1, "created_at": 1,
-	}))
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("find ocs subscribers: %w", err)
-	}
-	defer ocsCursor.Close(ctx)
-
-	var ocsSubs []bson.M
-	if err := ocsCursor.All(ctx, &ocsSubs); err != nil {
-		return nil, nil, nil, fmt.Errorf("decode ocs subscribers: %w", err)
-	}
-	for _, doc := range ocsSubs {
-		if imsi, ok := doc["imsi"].(string); ok {
-			ocsSubMap[imsi] = doc
-		}
-	}
-
-	// Fetch balances
-	balCursor, err := r.ocsBalances.Find(ctx, bson.M{"imsi": bson.M{"$in": imsis}}, options.Find().SetProjection(bson.M{
-		"imsi": 1, "data_total": 1, "data_used": 1, "data_available": 1,
-		"sms_total": 1, "sms_used": 1, "sms_available": 1, "updated_at": 1,
-	}))
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("find ocs balances: %w", err)
-	}
-	defer balCursor.Close(ctx)
-
-	var balances []bson.M
-	if err := balCursor.All(ctx, &balances); err != nil {
-		return nil, nil, nil, fmt.Errorf("decode ocs balances: %w", err)
-	}
-	for _, doc := range balances {
-		if imsi, ok := doc["imsi"].(string); ok {
-			balanceMap[imsi] = doc
-		}
-	}
-
-	// Collect plan IDs
-	planIDSet := make(map[string]struct{})
-	for _, ocsSub := range ocsSubs {
-		pid, _ := ocsSub["plan_id"].(string)
-		if pid == "" {
-			pid = defaultPlanID
-		}
-		planIDSet[pid] = struct{}{}
-	}
-	// Always include default plan
-	planIDSet[defaultPlanID] = struct{}{}
-
-	planIDs := make([]string, 0, len(planIDSet))
-	for pid := range planIDSet {
-		planIDs = append(planIDs, pid)
-	}
-
-	// Fetch tariff plans
-	planCursor, err := r.tariffPlans.Find(ctx, bson.M{"plan_id": bson.M{"$in": planIDs}}, options.Find().SetProjection(bson.M{
-		"plan_id": 1, "name": 1, "status": 1, "volume_threshold": 1,
-	}))
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("find tariff plans: %w", err)
-	}
-	defer planCursor.Close(ctx)
-
-	var plans []bson.M
-	if err := planCursor.All(ctx, &plans); err != nil {
-		return nil, nil, nil, fmt.Errorf("decode tariff plans: %w", err)
-	}
-	for _, doc := range plans {
-		if pid, ok := doc["plan_id"].(string); ok {
-			tariffPlanMap[pid] = doc
-		}
-	}
-
-	return ocsSubMap, balanceMap, tariffPlanMap, nil
 }
 
 // sortSubscriberRows sorts rows in-place by the given field and direction.

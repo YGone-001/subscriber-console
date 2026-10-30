@@ -598,78 +598,186 @@ func TestLegacyDetailSections(t *testing.T) {
 	}
 }
 
-func TestComputeLastActiveUsesLatestTimestamp(t *testing.T) {
-	doc := bson.M{
-		"updated_at": "2026-01-01T00:00:00.000Z",
+func TestSubscriberRowLastActiveUsesLatestTimestamp(t *testing.T) {
+	doc := listSubscriberDoc{
+		IMSI:      "460000000000001",
+		UpdatedAt: rawBSONValue(t, "2026-01-01T00:00:00.000Z"),
 	}
-	ocsSub := bson.M{
-		"updated_at": "2026-03-01T00:00:00.000Z",
+	contract := &listContractDoc{
+		IMSI:      "460000000000001",
+		UpdatedAt: rawBSONValue(t, "2026-03-01T00:00:00.000Z"),
 	}
-	balance := bson.M{
-		"updated_at": "2026-02-01T00:00:00.000Z",
+	balance := &listBalanceDoc{
+		IMSI:      "460000000000001",
+		UpdatedAt: rawBSONValue(t, "2026-02-01T00:00:00.000Z"),
 	}
 
-	got := computeLastActive(doc, ocsSub, balance)
+	got := toSubscriberRow(doc, contract, balance, nil).LastActive
 	want := "2026-03-01T00:00:00.000Z"
 	if got != want {
-		t.Fatalf("computeLastActive = %q, want %q", got, want)
+		t.Fatalf("LastActive = %q, want %q", got, want)
 	}
 }
 
-func TestComputeLastActiveUnknownIsEmpty(t *testing.T) {
-	if got := computeLastActive(bson.M{}, nil, nil); got != "" {
+func TestSubscriberRowLastActiveUnknownIsEmpty(t *testing.T) {
+	got := toSubscriberRow(listSubscriberDoc{IMSI: "460000000000001"}, nil, nil, nil).LastActive
+	if got != "" {
 		t.Fatalf("missing timestamps must return empty, got %q", got)
 	}
 }
 
-func TestComputeLastActiveAcceptsTimeValues(t *testing.T) {
+func TestSubscriberRowLastActiveAcceptsTimeValues(t *testing.T) {
 	older := time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC)
 	newer := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 
-	got := computeLastActive(bson.M{"updated_at": newer}, bson.M{"updated_at": older}, nil)
+	got := toSubscriberRow(
+		listSubscriberDoc{IMSI: "460000000000001", UpdatedAt: rawBSONValue(t, newer)},
+		&listContractDoc{IMSI: "460000000000001", UpdatedAt: rawBSONValue(t, older)},
+		nil, nil,
+	).LastActive
 	want := "2026-04-01T00:00:00.000Z"
 	if got != want {
-		t.Fatalf("computeLastActive = %q, want %q", got, want)
+		t.Fatalf("LastActive = %q, want %q", got, want)
 	}
 }
 
-func TestExtractSubscriberMSISDN(t *testing.T) {
+// xCloud stores activity timestamps both as BSON dates and as RFC 3339 strings,
+// and this driver decodes a date into int64 milliseconds. A reader that only
+// accepted time.Time and string silently dropped every stored date, so the row
+// reported the document identifier's creation instant instead of the newest
+// measured activity.
+func TestSubscriberRowLastActiveReadsStoredDates(t *testing.T) {
+	stored := time.Date(2026, 5, 4, 3, 2, 1, 0, time.UTC)
+	row := toSubscriberRow(
+		listSubscriberDoc{IMSI: "460000000000001", UpdatedAt: rawBSONValue(t, stored)},
+		nil, nil, nil,
+	)
+	if row.LastActive != "2026-05-04T03:02:01.000Z" {
+		t.Fatalf("LastActive = %q, want the stored date", row.LastActive)
+	}
+
+	mixed := toSubscriberRow(
+		listSubscriberDoc{
+			IMSI:      "460000000000002",
+			UpdatedAt: rawBSONValue(t, "2026-01-01T00:00:00.000Z"),
+			WebuiMeta: rawBSONValue(t, bson.M{"updated_at": time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)}),
+			CreatedAt: rawBSONValue(t, "2025-12-01T00:00:00.000Z"),
+		},
+		nil, nil, nil,
+	)
+	if mixed.LastActive != "2026-06-01T00:00:00.000Z" {
+		t.Fatalf("LastActive = %q, want the newest of the string and date candidates", mixed.LastActive)
+	}
+}
+
+// A numeric field that is not a timestamp must not be read as one.
+func TestSubscriberRowLastActiveIgnoresNonTimestamps(t *testing.T) {
+	row := toSubscriberRow(
+		listSubscriberDoc{IMSI: "460000000000001", UpdatedAt: rawBSONValue(t, int64(1790856000000))},
+		nil, nil, nil,
+	)
+	if row.LastActive != "" {
+		t.Fatalf("LastActive = %q, want empty for a non-timestamp value", row.LastActive)
+	}
+}
+
+func TestSubscriberRowMSISDN(t *testing.T) {
 	tests := []struct {
-		name   string
-		xcloud bson.M
-		ocs    bson.M
-		want   string
+		name       string
+		subscriber listSubscriberDoc
+		contract   *listContractDoc
+		want       string
 	}{
 		{
-			name:   "msisdnList object",
-			xcloud: bson.M{"msisdnList": bson.A{bson.M{"msisdn": "18800000001"}}},
-			want:   "18800000001",
+			name:       "msisdnList object",
+			subscriber: listSubscriberDoc{IMSI: "460000000000001", MSISDNList: bson.A{bson.M{"msisdn": "18800000001"}}},
+			want:       "18800000001",
 		},
 		{
-			name:   "msisdn array",
-			xcloud: bson.M{"msisdn": bson.A{"18800000002"}},
-			want:   "18800000002",
+			// The driver decodes an embedded array element as bson.D, which is the
+			// shape a stored msisdnList actually arrives in.
+			name:       "msisdnList object decoded as an ordered document",
+			subscriber: listSubscriberDoc{IMSI: "460000000000001", MSISDNList: bson.A{bson.D{{Key: "msisdn", Value: "18800000009"}}}},
+			want:       "18800000009",
 		},
 		{
-			name:   "ocs fallback",
-			xcloud: bson.M{},
-			ocs:    bson.M{"msisdn": "18800000003"},
-			want:   "18800000003",
+			name:       "msisdn array",
+			subscriber: listSubscriberDoc{IMSI: "460000000000001", MSISDN: bson.A{"18800000002"}},
+			want:       "18800000002",
 		},
 		{
-			name:   "missing",
-			xcloud: bson.M{},
-			want:   "",
+			name:       "subscriber value wins over the contract",
+			subscriber: listSubscriberDoc{IMSI: "460000000000001", MSISDNList: bson.A{bson.D{{Key: "msisdn", Value: "18800000007"}}}},
+			contract:   &listContractDoc{IMSI: "460000000000001", MSISDN: "18800000907"},
+			want:       "18800000007",
+		},
+		{
+			name:       "ocs fallback",
+			subscriber: listSubscriberDoc{IMSI: "460000000000001"},
+			contract:   &listContractDoc{IMSI: "460000000000001", MSISDN: "18800000003"},
+			want:       "18800000003",
+		},
+		{
+			name:       "missing",
+			subscriber: listSubscriberDoc{IMSI: "460000000000001"},
+			want:       "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := extractSubscriberMSISDN(tt.xcloud, tt.ocs); got != tt.want {
-				t.Fatalf("extractSubscriberMSISDN = %q, want %q", got, tt.want)
+			if got := toSubscriberRow(tt.subscriber, tt.contract, nil, nil).MSISDN; got != tt.want {
+				t.Fatalf("MSISDN = %q, want %q", got, tt.want)
 			}
 		})
 	}
+}
+
+// An absent access_restriction_data keeps the legacy 32 default; an explicit
+// null is a stored value and projects as 0.
+func TestSubscriberRowARDDistinguishesAbsentFromNull(t *testing.T) {
+	absent := toSubscriberRow(listSubscriberDoc{IMSI: "460000000000001"}, nil, nil, nil)
+	if absent.ARD != 32 || absent.Status != "Active" {
+		t.Fatalf("absent ARD = %d/%q, want 32/Active", absent.ARD, absent.Status)
+	}
+
+	null := toSubscriberRow(listSubscriberDoc{IMSI: "460000000000001", ARD: bson.RawValue{Type: bson.TypeNull}}, nil, nil, nil)
+	if null.ARD != 0 {
+		t.Fatalf("null ARD = %d, want 0", null.ARD)
+	}
+
+	stored := toSubscriberRow(listSubscriberDoc{IMSI: "460000000000001", ARD: rawBSONValue(t, 255)}, nil, nil, nil)
+	if stored.ARD != 255 || stored.Status != "Suspended" {
+		t.Fatalf("stored ARD = %d/%q, want 255/Suspended", stored.ARD, stored.Status)
+	}
+
+	// Live documents carry the restriction data as int32, int64 and double.
+	for _, testCase := range []struct {
+		name  string
+		value any
+		want  int
+	}{
+		{"int32", int32(63), 63},
+		{"int64", int64(32), 32},
+		{"double", float64(255), 255},
+		{"string", "32", 0},
+	} {
+		row := toSubscriberRow(listSubscriberDoc{IMSI: "460000000000001", ARD: rawBSONValue(t, testCase.value)}, nil, nil, nil)
+		if row.ARD != testCase.want {
+			t.Fatalf("%s ARD = %d, want %d", testCase.name, row.ARD, testCase.want)
+		}
+	}
+}
+
+// rawBSONValue builds the raw value the driver hands to the typed list
+// documents, so a test exercises the same decoding shape production sees.
+func rawBSONValue(t *testing.T, value any) bson.RawValue {
+	t.Helper()
+	valueType, data, err := bson.MarshalValue(value)
+	if err != nil {
+		t.Fatalf("marshal test value: %v", err)
+	}
+	return bson.RawValue{Type: valueType, Value: data}
 }
 
 func TestMatchesFiltersContractProvisioningAndBalance(t *testing.T) {
@@ -828,17 +936,18 @@ func TestParseSubscriberListFilters(t *testing.T) {
 }
 
 func TestToSubscriberRowProvisioningSignals(t *testing.T) {
-	doc := bson.M{
-		"imsi":       "460000000000001",
-		"msisdnList": bson.A{bson.M{"msisdn": "18800000001"}},
+	doc := listSubscriberDoc{
+		IMSI:       "460000000000001",
+		MSISDNList: bson.A{bson.M{"msisdn": "18800000001"}},
 	}
-	ocsSub := bson.M{
-		"imsi":    "460000000000001",
-		"status":  "active",
-		"plan_id": "plan_a",
+	ocsSub := &listContractDoc{
+		IMSI:      "460000000000001",
+		Status:    "active",
+		PlanID:    "plan_a",
+		UpdatedAt: rawBSONValue(t, time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)),
 	}
-	balance := bson.M{"imsi": "460000000000001", "data_total": int64(100), "data_available": int64(0)}
-	plan := bson.M{"plan_id": "plan_a", "name": "Plan A", "status": "active", "volume_threshold": int64(100)}
+	balance := &listBalanceDoc{IMSI: "460000000000001", DataTotal: int64(100), DataAvailable: int64(0)}
+	plan := &listPlanDoc{PlanID: "plan_a", Name: "Plan A", Status: "active", VolumeThreshold: int64(100)}
 
 	row := toSubscriberRow(doc, ocsSub, balance, plan)
 	if row.MSISDN != "18800000001" {
@@ -857,7 +966,7 @@ func TestToSubscriberRowProvisioningSignals(t *testing.T) {
 		t.Fatalf("BalanceThreshold = %d, want 100", row.BalanceThreshold)
 	}
 
-	lowBalance := bson.M{"imsi": "460000000000001", "data_total": int64(100), "data_available": int64(50)}
+	lowBalance := &listBalanceDoc{IMSI: "460000000000001", DataTotal: int64(100), DataAvailable: int64(50)}
 	lowRow := toSubscriberRow(doc, ocsSub, lowBalance, plan)
 	if lowRow.BalanceState != balanceStateLow || !isLowBalance(lowRow) {
 		t.Fatalf("low balance state = %q, want low", lowRow.BalanceState)
@@ -869,6 +978,9 @@ func TestToSubscriberRowProvisioningSignals(t *testing.T) {
 	orphan := toSubscriberRow(doc, nil, nil, plan)
 	if orphan.Provisioning.Contract || orphan.Provisioning.Balance || orphan.Provisioning.TariffPlan {
 		t.Fatalf("orphan provisioning flags = %+v, want all false", orphan.Provisioning)
+	}
+	if orphan.BalanceThreshold != 0 {
+		t.Fatalf("an orphan row must not inherit a plan threshold, got %d", orphan.BalanceThreshold)
 	}
 	if isLowTraffic(orphan) {
 		t.Fatal("orphan row must not be treated as low traffic")
@@ -882,13 +994,13 @@ func TestToSubscriberRowProvisioningSignals(t *testing.T) {
 func TestSubscriberRowProjectsEveryBindingField(t *testing.T) {
 	cases := []struct {
 		field string
-		doc   bson.M
+		doc   listSubscriberDoc
 		want  string
 	}{
-		{"webui_meta.profile_name", bson.M{"imsi": "460000000000001", "webui_meta": bson.M{"profile_name": "tpl_a"}}, "tpl_a"},
-		{"webui_meta.profile", bson.M{"imsi": "460000000000001", "webui_meta": bson.M{"profile": "tpl_b"}}, "tpl_b"},
-		{"profile_name", bson.M{"imsi": "460000000000001", "profile_name": "tpl_c"}, "tpl_c"},
-		{"profile", bson.M{"imsi": "460000000000001", "profile": "tpl_d"}, "tpl_d"},
+		{"webui_meta.profile_name", listSubscriberDoc{IMSI: "460000000000001", WebuiMeta: rawBSONValue(t, bson.M{"profile_name": "tpl_a"})}, "tpl_a"},
+		{"webui_meta.profile", listSubscriberDoc{IMSI: "460000000000001", WebuiMeta: rawBSONValue(t, bson.M{"profile": "tpl_b"})}, "tpl_b"},
+		{"profile_name", listSubscriberDoc{IMSI: "460000000000001", ProfileName: "tpl_c"}, "tpl_c"},
+		{"profile", listSubscriberDoc{IMSI: "460000000000001", Profile: "tpl_d"}, "tpl_d"},
 	}
 	for _, testCase := range cases {
 		row := toSubscriberRow(testCase.doc, nil, nil, nil)
@@ -897,7 +1009,7 @@ func TestSubscriberRowProjectsEveryBindingField(t *testing.T) {
 		}
 	}
 
-	unbound := toSubscriberRow(bson.M{"imsi": "460000000000002"}, nil, nil, nil)
+	unbound := toSubscriberRow(listSubscriberDoc{IMSI: "460000000000002"}, nil, nil, nil)
 	if unbound.Profile != "" {
 		t.Fatalf("an unbound subscriber must report an empty binding, got %q", unbound.Profile)
 	}

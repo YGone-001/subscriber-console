@@ -3,8 +3,6 @@
 // The read models reproduce the public subscriber and search API contract.
 package subscriber
 
-import "go.mongodb.org/mongo-driver/v2/bson"
-
 // --- Subscriber List ---
 
 // SubscriberListResult is the generic list response.
@@ -131,58 +129,6 @@ type BatchPrecheckResult struct {
 }
 
 // --- Internal BSON models ---
-
-// xcloudSubscriberDoc is the raw BSON subscriber document from the xcloud.subscribers collection.
-// We use bson.M for flexible access since xcloud documents have variable schemas.
-type xcloudSubscriberDoc struct {
-	ID                            bson.ObjectID `bson:"_id,omitempty"`
-	IMSI                          string        `bson:"imsi"`
-	MSISDN                        []string      `bson:"msisdn"`
-	AccessRestrictionData         any           `bson:"access_restriction_data"`
-	NetworkAccessMode             any           `bson:"network_access_mode"`
-	SubscriberStatus              any           `bson:"subscriber_status"`
-	OperatorID                    any           `bson:"operator_id"`
-	SequenceNumber                any           `bson:"sequence_number"`
-	AuthenticationManagementField any           `bson:"authentication_management_field"`
-	MobileCountryCode             any           `bson:"mobile_country_code"`
-	MobileNetworkCode             any           `bson:"mobile_network_code"`
-	RAND                          any           `bson:"rand"`
-	WebuiMeta                     any           `bson:"webui_meta"`
-}
-
-// ocsSubscriberDoc is the raw BSON document from xcloud.ocs_subscribers.
-type ocsSubscriberDoc struct {
-	IMSI     string `bson:"imsi"`
-	MSISDN   string `bson:"msisdn"`
-	Status   string `bson:"status"`
-	PlanID   string `bson:"plan_id"`
-	UpdateAt any    `bson:"updated_at"`
-	CreateAt any    `bson:"created_at"`
-}
-
-// ocsBalanceDoc is the raw BSON document from xcloud.ocs_balances.
-type ocsBalanceDoc struct {
-	IMSI           string `bson:"imsi"`
-	DataTotal      any    `bson:"data_total"`
-	DataUsed       any    `bson:"data_used"`
-	DataReserved   any    `bson:"data_reserved"`
-	DataAvailable  any    `bson:"data_available"`
-	VoiceTotal     any    `bson:"voice_total"`
-	VoiceUsed      any    `bson:"voice_used"`
-	VoiceReserved  any    `bson:"voice_reserved"`
-	VoiceAvailable any    `bson:"voice_available"`
-	SmsTotal       any    `bson:"sms_total"`
-	SmsUsed        any    `bson:"sms_used"`
-	SmsAvailable   any    `bson:"sms_available"`
-	UpdateAt       any    `bson:"updated_at"`
-}
-
-// ocsTariffPlanDoc is the raw BSON document from xcloud.ocs_tariff_plans.
-type ocsTariffPlanDoc struct {
-	PlanID string `bson:"plan_id"`
-	Name   string `bson:"name"`
-	Status string `bson:"status"`
-}
 
 // profileDoc is the raw BSON document from xcloud_ops.app_profiles.
 type profileDoc struct {
