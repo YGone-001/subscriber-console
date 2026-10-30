@@ -1,33 +1,38 @@
 /*
  * Topology URL state.
  *
- * One workspace has two primary views (graph / ledger) and the graph has three
- * evidence sources (declared / runtime / reference). All of that lives in the
- * query string so a copied link restores the same evidence context.
+ * The workspace has three modes, each answering one question:
  *
- * An absent `view` selects the graph with runtime evidence, because that is the
- * only source that is populated without operator data entry.
+ *   graph         the environment topology (evidence layer: declared / runtime)
+ *   ledger        the declared-relationship ledger
+ *   architecture  the static 3GPP reference skeleton projected onto live
+ *                 Inventory / Health / Topology / runtime authorities
  *
- * The legacy `view` values remain valid entry points:
+ * `architecture` is deliberately not a graph evidence source: it is a teaching
+ * skeleton with live bindings, not an observed link set. Keeping it in its own
+ * mode prevents "reference" from being read as a third kind of measurement.
  *
- *   actual       -> graph + declared
- *   architecture -> graph + reference
- *   relationships-> ledger
- *   runtime      -> graph + runtime + runtime hierarchy
+ * Legacy entry points remain readable and are canonicalised on mount:
+ *
+ *   (absent)      -> graph + runtime (evidence that exists without data entry)
+ *   actual        -> graph + declared
+ *   runtime       -> graph + runtime + runtime hierarchy
+ *   relationships -> ledger
+ *   architecture  -> architecture
+ *   source=reference -> architecture
  *
  * The resolver never throws and never leaves an unknown value in the state: an
- * unrecognised view falls back to the graph with the declared source, so an
- * explicit but invalid `view` never silently changes evidence, and an
- * unrecognised source falls back to the legacy-derived source.
+ * unrecognised mode falls back to the graph, and an unrecognised source falls
+ * back to runtime evidence.
  */
 import { useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { applyOperationsPatch, sanitizeOperationsValue } from '../operations/operations-url-state';
 
-export const TOPOLOGY_PRIMARY_VIEWS = ['actual', 'ledger'] as const;
+export const TOPOLOGY_PRIMARY_VIEWS = ['graph', 'ledger', 'architecture'] as const;
 export type TopologyPrimaryView = (typeof TOPOLOGY_PRIMARY_VIEWS)[number];
 
-export const TOPOLOGY_GRAPH_SOURCES = ['declared', 'runtime', 'reference'] as const;
+export const TOPOLOGY_GRAPH_SOURCES = ['declared', 'runtime'] as const;
 export type TopologyGraphSource = (typeof TOPOLOGY_GRAPH_SOURCES)[number];
 
 export const TOPOLOGY_RUNTIME_SCOPES = ['config', 'hierarchy'] as const;
@@ -52,7 +57,7 @@ export type TopologyViewState = {
 };
 
 export const DEFAULT_TOPOLOGY_VIEW_STATE: TopologyViewState = {
-  primary: 'actual',
+  primary: 'graph',
   source: 'runtime',
   runtimeScope: 'config',
 };
@@ -69,21 +74,17 @@ function toParams(search: string | URLSearchParams): URLSearchParams {
  * Resolve the workspace state from a query string.
  *
  * Precedence: an explicit valid `source` is more specific than the source
- * implied by a legacy view alias, so `view=architecture&source=runtime` shows
- * runtime evidence. A `scope` only applies to the runtime source.
+ * implied by a legacy view alias, so `view=actual&source=runtime` shows runtime
+ * evidence inside the graph. A `scope` only applies to runtime evidence.
  */
 export function resolveTopologyViewState(search: string | URLSearchParams): TopologyViewState {
   const params = toParams(search);
   const view = sanitizeOperationsValue(params.get(TOPOLOGY_VIEW_PARAM));
   const requestedSource = sanitizeOperationsValue(params.get(TOPOLOGY_SOURCE_PARAM));
   const requestedScope = sanitizeOperationsValue(params.get(TOPOLOGY_SCOPE_PARAM));
-  /* An omitted `view` is the operator entry point and lands on runtime evidence;
-   * a present but unrecognised `view` is a hand-edited link and keeps the
-   * historical declared fallback. */
-  const hasViewParam = (params.get(TOPOLOGY_VIEW_PARAM) ?? '').trim() !== '';
 
-  let primary: TopologyPrimaryView = 'actual';
-  let source: TopologyGraphSource = hasViewParam ? 'declared' : 'runtime';
+  let primary: TopologyPrimaryView = 'graph';
+  let source: TopologyGraphSource = 'runtime';
   let runtimeScope: TopologyRuntimeScope = 'config';
 
   switch (view) {
@@ -92,27 +93,35 @@ export function resolveTopologyViewState(search: string | URLSearchParams): Topo
       primary = 'ledger';
       break;
     case 'architecture':
-      source = 'reference';
+      primary = 'architecture';
+      break;
+    case 'actual':
+      source = 'declared';
       break;
     case 'runtime':
       source = 'runtime';
       runtimeScope = 'hierarchy';
       break;
-    case 'actual':
     case 'graph':
       break;
     default:
-      // Missing or unknown view: the graph with declared evidence is the default.
+      // Missing or unknown view: the graph with runtime evidence is the entry
+      // point, because it is the only layer populated without operator data.
       break;
   }
 
-  if (primary === 'actual' && includes(TOPOLOGY_GRAPH_SOURCES, requestedSource)) {
+  /* A legacy `source=reference` link is an architecture link, not a third
+   * evidence layer. */
+  if (requestedSource === 'reference' && primary === 'graph') {
+    primary = 'architecture';
+  } else if (primary === 'graph' && includes(TOPOLOGY_GRAPH_SOURCES, requestedSource)) {
     source = requestedSource;
   }
-  if (source === 'runtime' && includes(TOPOLOGY_RUNTIME_SCOPES, requestedScope)) {
+
+  if (primary === 'graph' && source === 'runtime' && includes(TOPOLOGY_RUNTIME_SCOPES, requestedScope)) {
     runtimeScope = requestedScope;
   }
-  if (primary === 'ledger' || source !== 'runtime') {
+  if (primary !== 'graph' || source !== 'runtime') {
     runtimeScope = 'config';
   }
 
@@ -142,8 +151,12 @@ export function canonicalizeTopologyViewSearch(
     params.set(TOPOLOGY_VIEW_PARAM, 'ledger');
     params.delete(TOPOLOGY_SOURCE_PARAM);
     params.delete(TOPOLOGY_SCOPE_PARAM);
+  } else if (state.primary === 'architecture') {
+    params.set(TOPOLOGY_VIEW_PARAM, 'architecture');
+    params.delete(TOPOLOGY_SOURCE_PARAM);
+    params.delete(TOPOLOGY_SCOPE_PARAM);
   } else {
-    params.set(TOPOLOGY_VIEW_PARAM, 'actual');
+    params.set(TOPOLOGY_VIEW_PARAM, 'graph');
     params.set(TOPOLOGY_SOURCE_PARAM, state.source);
     if (state.source === 'runtime' && state.runtimeScope === 'hierarchy') {
       params.set(TOPOLOGY_SCOPE_PARAM, 'hierarchy');
@@ -165,8 +178,15 @@ export function topologyViewStatePatch(state: TopologyViewState): Record<string,
       [TOPOLOGY_SCOPE_PARAM]: null,
     };
   }
+  if (state.primary === 'architecture') {
+    return {
+      [TOPOLOGY_VIEW_PARAM]: 'architecture',
+      [TOPOLOGY_SOURCE_PARAM]: null,
+      [TOPOLOGY_SCOPE_PARAM]: null,
+    };
+  }
   return {
-    [TOPOLOGY_VIEW_PARAM]: 'actual',
+    [TOPOLOGY_VIEW_PARAM]: 'graph',
     [TOPOLOGY_SOURCE_PARAM]: state.source,
     [TOPOLOGY_SCOPE_PARAM]: state.source === 'runtime' && state.runtimeScope === 'hierarchy'
       ? 'hierarchy'
@@ -221,7 +241,7 @@ export function useTopologyViewState(extraKeys: readonly string[] = []): Topolog
 
   const setSource = useCallback(
     (source: TopologyGraphSource) => applyState({
-      primary: 'actual',
+      primary: 'graph',
       source,
       runtimeScope: source === 'runtime' ? state.runtimeScope : 'config',
     }),
@@ -229,7 +249,7 @@ export function useTopologyViewState(extraKeys: readonly string[] = []): Topolog
   );
 
   const setRuntimeScope = useCallback(
-    (runtimeScope: TopologyRuntimeScope) => applyState({ primary: 'actual', source: 'runtime', runtimeScope }),
+    (runtimeScope: TopologyRuntimeScope) => applyState({ primary: 'graph', source: 'runtime', runtimeScope }),
     [applyState],
   );
 

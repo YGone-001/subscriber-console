@@ -42,10 +42,26 @@
     "mode": "read",
     "source": "frontend/src/features/inventory/InventoryPage.tsx",
     "readEndpoints": [
-      "GET /api/inventory/meta",
-      "GET /api/inventory/resources",
       "GET /api/operations/resources",
       "GET /api/operations/summary?sections=inventory,health"
+    ]
+  },
+  {
+    "route": "/inventory/assets",
+    "mode": "read",
+    "source": "frontend/src/features/inventory/InventoryAssetsPage.tsx",
+    "readEndpoints": [
+      "GET /api/inventory/meta",
+      "GET /api/inventory/resources"
+    ]
+  },
+  {
+    "route": "/inventory/runtime",
+    "mode": "read",
+    "source": "frontend/src/features/inventory/InventoryRuntimePage.tsx",
+    "readEndpoints": [
+      "GET /api/runtime/observations",
+      "GET /api/runtime/meta"
     ]
   },
   {

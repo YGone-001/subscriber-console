@@ -63,29 +63,28 @@ import {
 
 const PAGE_LIMIT = 20;
 
-/* Two primary views share one canonical `/topology` route. The graph keeps the
- * legacy `actual` URL value; the ledger adds `ledger`. */
+/* Three exclusive modes share one canonical `/topology` route. The graph keeps
+ * the legacy `actual` URL alias; the ledger adds `ledger`; the static 3GPP
+ * skeleton projected onto live authorities is its own `architecture` mode. */
 const PRIMARY_LABEL_KEY: Record<TopologyPrimaryView, string> = {
-  actual: 'topology_primary_graph',
+  graph: 'topology_primary_graph',
   ledger: 'topology_primary_ledger',
+  architecture: 'topology_primary_architecture',
 };
 
 const SOURCE_LABEL_KEY: Record<TopologyGraphSource, string> = {
   declared: 'topology_source_declared',
   runtime: 'topology_source_runtime',
-  reference: 'topology_source_reference',
 };
 
 const SOURCE_EVIDENCE_KEY: Record<TopologyGraphSource, string> = {
   declared: 'topology_source_evidence_declared',
   runtime: 'topology_source_evidence_runtime',
-  reference: 'topology_source_evidence_reference',
 };
 
 const SOURCE_NOTE_KEY: Record<TopologyGraphSource, string> = {
   declared: 'topology_source_note_declared',
   runtime: 'topology_source_note_runtime',
-  reference: 'topology_source_note_reference',
 };
 
 const RUNTIME_SCOPE_LABEL_KEY: Record<TopologyRuntimeScope, string> = {
@@ -367,7 +366,7 @@ export function TopologyPage() {
         ) : undefined
       }
     >
-      {primary === 'actual' ? (
+      {primary === 'graph' ? (
         <>
           <section
             className={styles.graphBar}
@@ -428,10 +427,10 @@ export function TopologyPage() {
               />
             )
           ) : null}
-
-          {source === 'reference' ? <ArchitectureView /> : null}
         </>
       ) : null}
+
+      {primary === 'architecture' ? <ArchitectureView /> : null}
 
       {primary === 'ledger' ? (
         <>

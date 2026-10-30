@@ -382,7 +382,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
                     <RefreshCw size={15} />
                     {t('retry')}
                   </button>
-                  <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
+                  <Link className="btn btn-secondary" to="/topology?view=architecture">
                     {t('topology_live_open_architecture')}
                   </Link>
                 </div>
@@ -547,7 +547,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
               * sits in the status rail instead of costing the toolbar a wrapped
               * line above the canvas.
              */}
-            <Link className={styles.liveLegendLink} to="/topology?view=actual&source=reference">
+            <Link className={styles.liveLegendLink} to="/topology?view=architecture">
               {t('topology_live_open_architecture')}
             </Link>
           </>
@@ -720,7 +720,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
                     <RefreshCw size={15} />
                     {t('retry')}
                   </button>
-                  <Link className="btn btn-secondary" to="/topology?view=actual&source=reference">
+                  <Link className="btn btn-secondary" to="/topology?view=architecture">
                     {t('topology_live_open_architecture')}
                   </Link>
                 </div>

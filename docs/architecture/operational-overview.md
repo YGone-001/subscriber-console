@@ -375,7 +375,11 @@ that the projection model does not already define.
   not monitored, and never counted as faults; management happens only through
   the governed runtime bootstrap in the runtime view.
 
-`/inventory` accepts a `view` query parameter (`network` as default, `list`,
-`runtime`) so a specific presentation is linkable. Every unavailable value on
-these surfaces remains an explicit unavailable state, never a zero and never a
+`/inventory` is the network-element overview; `density=table|cards` selects the
+presentation of the same projection. The resource ledger lives at
+`/inventory/assets` and local runtime discovery at `/inventory/runtime`, so each
+task owns a route instead of a peer `view` token. Pre-split
+`/inventory?view=network|cards|assets|list|runtime` links redirect once to the
+canonical route or density and are never emitted again. Every unavailable value
+on these surfaces remains an explicit unavailable state, never a zero and never a
 positive health claim.

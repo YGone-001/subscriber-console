@@ -22,6 +22,8 @@ import { UsersPage } from '../features/users/UsersPage';
 import { UserDetailPage } from '../features/users/UserDetailPage';
 import { UserCreatePage } from '../features/users/UserCreatePage';
 import { InventoryPage } from '../features/inventory/InventoryPage';
+import { InventoryAssetsPage } from '../features/inventory/InventoryAssetsPage';
+import { InventoryRuntimePage } from '../features/inventory/InventoryRuntimePage';
 import { InventoryDetailPage } from '../features/inventory/InventoryDetailPage';
 import { InventoryCreatePage } from '../features/inventory/InventoryCreatePage';
 import { TopologyPage } from '../features/topology/TopologyPage';
@@ -41,6 +43,8 @@ import { RetentionPage } from '../features/retention/RetentionPage';
 const pages: Record<string, ReactNode> = {
   '/': <DashboardPage />,
   '/inventory': <InventoryPage />,
+  '/inventory/assets': <InventoryAssetsPage />,
+  '/inventory/runtime': <InventoryRuntimePage />,
   '/inventory/:resourceId': <InventoryDetailPage />,
   '/inventory/create': <InventoryCreatePage />,
   '/topology': <TopologyPage />,

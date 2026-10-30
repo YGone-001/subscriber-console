@@ -58,13 +58,14 @@ function renderTopology(path: string): string {
 
 /* --------------------------------------------------------------- views -- */
 
-test('the topology page defaults to the runtime graph because it is the populated source', () => {
+test('the topology page defaults to the runtime graph because it is the populated layer', () => {
   const markup = renderTopology('/topology');
-  assert.ok(markup.includes('data-topology-view="actual"'), 'the graph view must be present in the switch');
-  assert.ok(markup.includes('data-topology-view="ledger"'), 'the ledger view must be present in the switch');
-  assert.ok(markup.includes('data-topology-source-bar="runtime"'), 'the runtime source must be selected by default');
-  assert.ok(markup.includes('data-topology-source="runtime"'), 'the source switch must render');
-  assert.ok(markup.includes('aria-pressed="true"'), 'the default view must be pressed');
+  assert.ok(markup.includes('data-topology-view="graph"'), 'the graph mode must be present in the switch');
+  assert.ok(markup.includes('data-topology-view="ledger"'), 'the ledger mode must be present in the switch');
+  assert.ok(markup.includes('data-topology-view="architecture"'), 'the architecture mode must be present in the switch');
+  assert.ok(markup.includes('data-topology-source-bar="runtime"'), 'the runtime layer must be selected by default');
+  assert.ok(markup.includes('data-topology-source="runtime"'), 'the layer switch must render');
+  assert.ok(markup.includes('aria-pressed="true"'), 'the default mode must be pressed');
   assert.ok(markup.includes('data-runtime-scope="config"'), 'the configured runtime projection must render by default');
   assert.ok(!markup.includes('id="actual-topology-title"'), 'the declared canvas must not render by default');
   assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render by default');
@@ -110,23 +111,22 @@ test('the runtime hierarchy remains a sub-view of the runtime source', () => {
   assert.ok(!config.includes('data-testid="runtime-hierarchy"'), 'the configured projection is the default runtime sub-view');
 });
 
-test('the reference source keeps the architecture canvas on its own source', () => {
-  for (const path of ['/topology?view=architecture', '/topology?view=actual&source=reference']) {
+test('the architecture reference is its own mode, not a third evidence layer', () => {
+  for (const path of ['/topology?view=architecture', '/topology?source=reference']) {
     const markup = renderTopology(path);
-    assert.ok(markup.includes('data-topology-source-bar="reference"'), `${path} must select the reference source`);
-    assert.ok(markup.includes('id="architecture-title"'), 'the reference canvas must render');
+    assert.ok(markup.includes('id="architecture-title"'), `${path} must render the architecture canvas`);
+    assert.ok(!markup.includes('data-topology-source-bar'), `${path} must not render the graph evidence bar`);
     assert.ok(!markup.includes('id="actual-topology-title"'), 'the declared graph must not render behind it');
   }
 });
 
-test('each graph source states its evidence and offers expandable data notes', () => {
+test('each graph evidence layer states its evidence and offers expandable data notes', () => {
   const cases = [
     ['declared', 'Inventory nodes + persisted Topology edges'],
     ['runtime', 'Runtime observation + explicit configuration'],
-    ['reference', 'Standard reference, not deployment fact'],
   ];
   for (const [source, evidence] of cases) {
-    const markup = renderTopology(`/topology?view=actual&source=${source}`);
+    const markup = renderTopology(`/topology?view=graph&source=${source}`);
     assert.ok(markup.includes(`data-evidence-badge="${source}"`), `${source} must carry an evidence badge`);
     assert.ok(markup.includes(evidence), `${source} must name its evidence`);
     assert.ok(markup.includes(`data-source-notes="${source}"`), `${source} must expose the data notes`);
@@ -134,10 +134,9 @@ test('each graph source states its evidence and offers expandable data notes', (
   }
 });
 
-test('an unknown view falls back to the declared graph instead of an empty page', () => {
+test('an unknown view falls back to the populated graph instead of an empty page', () => {
   const markup = renderTopology('/topology?view=unknown&source=unknown');
-  assert.ok(markup.includes('data-topology-source-bar="declared"'));
-  assert.ok(markup.includes('id="actual-topology-title"'));
+  assert.ok(markup.includes('data-topology-source-bar="runtime"'));
   assert.ok(!markup.includes('id="architecture-title"'));
 });
 
@@ -145,7 +144,7 @@ test('every topology view keeps one compact navigation entry and one refresh con
   const paths = [
     '/topology',
     '/topology?view=ledger',
-    '/topology?view=actual&source=runtime',
+    '/topology?view=graph&source=runtime',
     '/topology?view=architecture',
   ];
   for (const path of paths) {

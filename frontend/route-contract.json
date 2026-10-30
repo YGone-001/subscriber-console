@@ -12,6 +12,14 @@
     "dynamicParameters": []
   },
   {
+    "route": "/inventory/assets",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/inventory/runtime",
+    "dynamicParameters": []
+  },
+  {
     "route": "/inventory/:resourceId",
     "dynamicParameters": [
       "resourceId"

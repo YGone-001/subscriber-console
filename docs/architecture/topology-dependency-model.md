@@ -893,12 +893,25 @@ surface contains no mutation control.
 
 ### 9.10 Graph workbench UI
 
-`/topology` keeps one graph workbench with two primary views (graph and
-relationship ledger) and three graph sources (declared, runtime/configured,
-reference). Source evidence is part of the page header: a declared edge means a
-persisted Topology relationship, a configured edge means explicit NF config
-evidence, and a reference interface means standard knowledge only. None of them
-claims connectivity, traffic or service health.
+`/topology` keeps one workbench with three exclusive modes:
+
+```text
+graph         the environment topology, with one evidence layer at a time
+              (declared relationships or runtime/configured evidence)
+ledger        the declared relationship ledger
+architecture  the static 3GPP skeleton projected onto live authorities
+```
+
+`architecture` is a mode, not a third evidence layer: its skeleton is standard
+knowledge and its bindings/state come from Inventory, NF Health, Topology and
+the runtime scanner. Legacy links stay readable
+(`view=actual` -> graph + declared, `view=runtime` -> graph + runtime hierarchy,
+`view=relationships` -> ledger, `source=reference` -> architecture) and are
+canonicalised to `view=graph|ledger|architecture` on mount. Evidence is part of
+the graph bar: a declared edge means a persisted Topology relationship, a
+configured edge means explicit NF config evidence, and an architecture interface
+means standard knowledge only. None of them claims connectivity, traffic or
+service health.
 
 Canvas behavior:
 

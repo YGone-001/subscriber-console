@@ -29,7 +29,7 @@ import {
 import { useOperationsUrlState } from '../src/features/operations/use-operations-url-state';
 import { createOperationsRefreshRegistry } from '../src/features/operations/operations-refresh';
 import { TopologyPage } from '../src/features/topology/TopologyPage';
-import { InventoryPage } from '../src/features/inventory/InventoryPage';
+import { InventoryAssetsPage } from '../src/features/inventory/InventoryAssetsPage';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -206,6 +206,8 @@ test('running an empty registry is a no-op', async () => {
 
 const OPERATIONS_PAGES = [
   'src/features/inventory/InventoryPage.tsx',
+  'src/features/inventory/InventoryAssetsPage.tsx',
+  'src/features/inventory/InventoryRuntimePage.tsx',
   'src/features/topology/TopologyPage.tsx',
   'src/features/discovery/DiscoveryPage.tsx',
   'src/features/nf-health/NfHealthPage.tsx',
@@ -222,10 +224,27 @@ test('every operations page renders inside the shared frame', () => {
 });
 
 test('every operations page exposes exactly one refresh entry', () => {
+  /* Two routes delegate the single refresh entry to their section loader
+   * instead of registering a page-level loader: passing onRefresh as well would
+   * issue the same reads twice. */
+  const delegated: Record<string, string> = {
+    'src/features/inventory/InventoryPage.tsx': 'src/features/inventory/NetworkElementView.tsx',
+    'src/features/inventory/InventoryRuntimePage.tsx': 'src/features/runtime/RuntimeDiscovery.tsx',
+  };
   for (const page of OPERATIONS_PAGES) {
     const source = read(`../${page}`);
     assert.ok(!source.includes('RefreshCw'), `${page} must not draw its own refresh icon`);
-    assert.match(source, /onRefresh=/, `${page} must register its loader with the frame`);
+    const registrant = delegated[page];
+    if (registrant) {
+      assert.match(source, /OperationsPageFrame/, `${page} must stay inside the frame`);
+      assert.match(
+        read(`../${registrant}`),
+        /useRegisterOperationsRefresh\(/,
+        `${page} must delegate its refresh entry to ${registrant}`,
+      );
+    } else {
+      assert.match(source, /onRefresh=/, `${page} must register its loader with the frame`);
+    }
   }
 });
 
@@ -255,14 +274,16 @@ test('the runtime discovery panel keeps its control only outside a page frame', 
   assert.match(source, /onClick=\{refresh\}/);
 });
 
-test('the inventory view switch is URL state, not component-only state', () => {
+test('the inventory density is URL state, not component-only state', () => {
   const source = read('../src/features/inventory/InventoryPage.tsx');
   assert.ok(
     !source.includes('new URLSearchParams(window.location.search)'),
-    'the view must not be read once from window.location at mount',
+    'the density must not be read once from window.location at mount',
   );
   assert.match(source, /useOperationsUrlState\(\{/);
-  assert.match(source, /views: INVENTORY_VIEWS/);
+  assert.match(source, /INVENTORY_URL_KEYS/);
+  assert.match(source, /readInventoryDensity/);
+  assert.match(source, /data-density/);
 });
 
 test('canvas mode is opt-in and the default frame keeps the full tab strip', () => {
@@ -316,7 +337,7 @@ test('a rendered operations page exposes one compact navigation entry and one re
   }
 });
 
-test('a rendered inventory page honours the view from the URL', () => {
+test('a rendered inventory asset page keeps the standard chrome', () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (() => {
     throw new Error('page rendering must not perform network access');
@@ -328,18 +349,16 @@ test('a rendered inventory page honours the view from the URL', () => {
         null,
         createElement(
           MemoryRouter,
-          { initialEntries: ['/inventory?view=assets'] },
+          { initialEntries: ['/inventory/assets'] },
           createElement(
             AuthProvider,
             null,
-            createElement(Routes, null, createElement(Route, { path: '/inventory', element: createElement(InventoryPage) })),
+            createElement(Routes, null, createElement(Route, { path: '/inventory/assets', element: createElement(InventoryAssetsPage) })),
           ),
         ),
       ),
     );
-    assert.ok(markup.includes('aria-pressed="true"'), 'the active view switch must be pressed');
-    assert.ok(markup.includes('data-view-mode="assets"'), 'the ledger view switch must render');
-    assert.ok(markup.includes('type="search"'), 'the ledger workspace must render for view=assets');
+    assert.ok(markup.includes('type="search"'), 'the ledger workspace must render');
     assert.ok(markup.includes('data-workspace-mode="standard"'), 'inventory must keep the standard chrome');
     assert.equal(markup.split('data-operations-nav="workbench"').length - 1, 1, 'inventory keeps the full tab strip');
     assert.equal(markup.split('data-operations-nav="compact"').length - 1, 0, 'inventory must not use the compact menu');

@@ -1534,8 +1534,7 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
   const keys = [
     'nav_topology', 'topology_title', 'topology_create_relationship', 'topology_declared_notice',
     'topology_rel_depends_on', 'topology_state_retired', 'topology_stale_revision_body',
-    'topology_view_actual', 'topology_actual_node_count', 'topology_actual_coverage_hint',
-    'topology_actual_partial_notice',
+    'topology_actual_node_count', 'topology_actual_coverage_hint', 'topology_actual_partial_notice',
     'topology_search_matches', 'topology_search_no_match',
     'topology_actual_unavailable_title', 'topology_actual_unavailable_body',
     'topology_actual_support_show', 'topology_actual_support_hide', 'topology_actual_hidden_support',
@@ -1543,11 +1542,11 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_actual_empty_declared_title', 'topology_actual_empty_declared_body',
     'topology_actual_open_runtime',
     'topology_primary_view_label', 'topology_primary_graph', 'topology_primary_ledger',
+    'topology_primary_architecture',
     'topology_source_label', 'topology_source_declared', 'topology_source_runtime',
-    'topology_source_reference', 'topology_source_evidence_declared',
-    'topology_source_evidence_runtime', 'topology_source_evidence_reference',
+    'topology_source_evidence_declared', 'topology_source_evidence_runtime',
     'topology_source_notes', 'topology_source_note_declared', 'topology_source_note_runtime',
-    'topology_source_note_reference', 'topology_runtime_scope_label',
+    'topology_runtime_scope_label',
     'topology_runtime_scope_config', 'topology_runtime_scope_hierarchy',
     'topology_inspector_label', 'topology_close_inspector',
     'topology_runtime_label',
@@ -1627,9 +1626,10 @@ test('the relationship presentation covers exactly the nine canonical types', ()
 test('the topology page defaults to the runtime graph and still renders', () => {
   const markup = renderPage(createElement(TopologyPage));
   assert.ok(markup.includes('Topology'), 'the page title must render');
-  assert.ok(markup.includes('data-topology-view="actual"'), 'the graph view must render');
-  assert.ok(markup.includes('data-topology-view="ledger"'), 'the primary view switch must render');
-  assert.ok(markup.includes('data-topology-source-bar="runtime"'), 'the runtime source must be selected');
+  assert.ok(markup.includes('data-topology-view="graph"'), 'the graph mode must render');
+  assert.ok(markup.includes('data-topology-view="ledger"'), 'the mode switch must render');
+  assert.ok(markup.includes('data-topology-view="architecture"'), 'the architecture mode must render');
+  assert.ok(markup.includes('data-topology-source-bar="runtime"'), 'the runtime layer must be selected');
   assert.ok(markup.includes('data-runtime-scope="config"'), 'the configured runtime projection must be rendered');
   // The relationship ledger and declared canvas are explicit, non-default views.
   assert.ok(!markup.includes('topology-filter-from'), 'the ledger must not render behind the graph');
@@ -1645,8 +1645,8 @@ test('the relationship ledger renders on its own view', () => {
 
 test('the reference architecture stays reachable without replacing the graph', () => {
   const markup = renderPage(createElement(TopologyPage), '/topology?view=architecture');
-  assert.ok(markup.includes('id="architecture-title"'), 'the reference canvas must render on its own source');
-  assert.ok(markup.includes('data-topology-source-bar="reference"'), 'the source switch must name the evidence');
+  assert.ok(markup.includes('id="architecture-title"'), 'the reference canvas must render in its own mode');
+  assert.ok(!markup.includes('data-topology-source-bar'), 'the architecture mode is not an evidence layer');
   assert.ok(!markup.includes('id="actual-topology-title"'), 'the declared graph must not render behind it');
 });
 

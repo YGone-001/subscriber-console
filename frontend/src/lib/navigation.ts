@@ -1,4 +1,4 @@
-import { Activity, BellRing, BookOpen, Boxes, Briefcase, CreditCard, DatabaseBackup, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, ScrollText, Settings, Smartphone, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { Activity, BellRing, BookOpen, Boxes, Briefcase, CreditCard, Cpu, DatabaseBackup, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, ScrollText, Settings, Smartphone, Table2, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 import type { CanonicalRole } from '../types/auth';
 import { hasNavigationPermission } from './permissions';
 
@@ -17,6 +17,8 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/', targetRoute: '/', dynamicParameters: [], labelKey: 'nav_dashboard', icon: LayoutDashboard, visible: true },
   { route: '/login', targetRoute: '/login', dynamicParameters: [], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/inventory', targetRoute: '/inventory', dynamicParameters: [], labelKey: 'nav_inventory', icon: Boxes, group: 'network', visible: true },
+  { route: '/inventory/assets', targetRoute: '/inventory/assets', dynamicParameters: [], labelKey: 'nav_inventory_assets', icon: Table2, group: 'network', visible: true },
+  { route: '/inventory/runtime', targetRoute: '/inventory/runtime', dynamicParameters: [], labelKey: 'nav_inventory_runtime', icon: Cpu, group: 'network', visible: true },
   { route: '/inventory/:resourceId', targetRoute: '/inventory/:resourceId', dynamicParameters: ['resourceId'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/inventory/create', targetRoute: '/inventory/create', dynamicParameters: [], labelKey: 'nav_inventory_create', icon: Boxes },
   { route: '/topology', targetRoute: '/topology', dynamicParameters: [], labelKey: 'nav_topology', icon: Network, group: 'network', visible: true },
@@ -143,7 +145,7 @@ export type SidebarGroup = {
  * list sort last so a newly added surface never displaces a canonical entry.
  */
 const BUSINESS_CHILD_ORDER = ['/subscribers', '/profile', '/ocs/tariffs', '/ocs/contracts', '/ocs/balances'];
-const NETWORK_CHILD_ORDER = ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info'];
+const NETWORK_CHILD_ORDER = ['/inventory', '/inventory/assets', '/inventory/runtime', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info'];
 const PLATFORM_CHILD_ORDER = ['/system-health', '/system/retention', '/users', '/logs', '/knowledge'];
 
 /**

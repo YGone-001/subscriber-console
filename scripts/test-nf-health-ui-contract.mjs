@@ -360,8 +360,9 @@ check(
 check(
   'OPS-UI-03',
   /NetworkElementView/.test(inventoryPageSource) &&
-    /viewMode/.test(inventoryPageSource) &&
-    /ops_view_network/.test(inventoryPageSource),
+    /data-density/.test(inventoryPageSource) &&
+    /density/.test(inventoryPageSource) &&
+    /\/inventory\/assets/.test(readFileSync(resolve(root, 'frontend/src/router/router.tsx'), 'utf8')),
   'ops_network_view=integrated_into_inventory_route',
 );
 check(

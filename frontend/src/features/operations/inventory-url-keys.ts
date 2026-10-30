@@ -1,12 +1,11 @@
 /*
- * Shared URL key set for the Inventory route.
+ * Shared URL key set for the Inventory routes.
  *
- * The route has two views that read and write the same query string: the asset
- * ledger and the network-element master-detail view. Each view owns a subset
- * (`state` is the ledger's lifecycle filter, `monitoring`/`node` belong to the
- * network view), but both must declare the full set: a patch keeps only
- * allow-listed keys, so a view that omitted the other view's keys would silently
- * erase them when the operator switches.
+ * The overview, the asset ledger and the runtime view read and write the same
+ * query vocabulary: the overview owns `density`, `monitoring` and `node`, the
+ * ledger owns `kind`, `domain` and `state`. Each surface declares the full set
+ * because a patch keeps only allow-listed keys; a route that omitted another
+ * surface's keys would erase them when the operator navigates.
  */
 export const INVENTORY_URL_KEYS = [
   'q',
@@ -15,6 +14,7 @@ export const INVENTORY_URL_KEYS = [
   'state',
   'monitoring',
   'node',
+  'density',
 ] as const;
 
 export type InventoryUrlKey = (typeof INVENTORY_URL_KEYS)[number];

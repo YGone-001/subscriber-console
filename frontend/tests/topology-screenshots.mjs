@@ -269,7 +269,7 @@ async function main() {
         locale: 'en',
         session: 'operator',
       });
-      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}/topology?view=architecture`, { waitUntil: 'domcontentloaded' });
       await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
       await settle(page);
 
@@ -327,7 +327,7 @@ async function main() {
       await assertNoRawKeys(page, `architecture-${sizeName}`);
       await assertNoHorizontalOverflow(page, `architecture-${sizeName}`);
       await capture(page, `topology-architecture-${sizeName}.png`, {
-        route: '/topology?view=actual&source=reference',
+        route: '/topology?view=architecture',
         viewportWidth: viewport.width,
         viewportHeight: viewport.height,
         theme: 'light',
@@ -399,7 +399,7 @@ async function main() {
         allowedConsoleErrors: stateCase.allowedConsoleErrors ?? [],
       });
       await stateCase.prepare(page);
-      await page.goto(`${origin}/topology?view=actual&source=declared`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}/topology?view=graph&source=declared`, { waitUntil: 'domcontentloaded' });
       await page.locator(stateCase.selector).waitFor({ state: 'visible', timeout: 30000 });
       await settle(page);
       if (stateCase.waitForText) {
@@ -408,7 +408,7 @@ async function main() {
       await assertNoRawKeys(page, `state-${stateCase.name}`);
       await assertNoHorizontalOverflow(page, `state-${stateCase.name}`);
       await capture(page, `topology-${stateCase.name}-desktop-light.png`, {
-        route: '/topology?view=actual&source=declared',
+        route: '/topology?view=graph&source=declared',
         viewportWidth: VIEWPORTS.desktop.width,
         viewportHeight: VIEWPORTS.desktop.height,
         theme: 'light',
@@ -432,7 +432,7 @@ async function main() {
         locale: 'en',
         session: 'operator',
       });
-      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}/topology?view=architecture`, { waitUntil: 'domcontentloaded' });
       await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
       await settle(page);
 
@@ -441,7 +441,7 @@ async function main() {
       check(`architecture_overview_cards:${theme}`, (await page.locator('[data-overview-view]').count()) === 3, 'cards');
       await assertNoRawKeys(page, `overview-${theme}`);
       await capture(page, `topology-overview-desktop-${theme}.png`, {
-        route: '/topology?view=actual&source=reference',
+        route: '/topology?view=architecture',
         viewportWidth: VIEWPORTS.desktop.width,
         viewportHeight: VIEWPORTS.desktop.height,
         theme,
@@ -454,7 +454,7 @@ async function main() {
       await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 15000 });
       check(`architecture_epc_lanes:${theme}`, (await page.locator('[data-architecture-lane]').count()) === 5, '5 lanes');
       await capture(page, `topology-epc-desktop-${theme}.png`, {
-        route: '/topology?view=actual&source=reference',
+        route: '/topology?view=architecture',
         viewportWidth: VIEWPORTS.desktop.width,
         viewportHeight: VIEWPORTS.desktop.height,
         theme,
@@ -468,7 +468,7 @@ async function main() {
       await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 15000 });
       check(`architecture_nsa_lanes:${theme}`, (await page.locator('[data-architecture-lane]').count()) === 3, '3 lanes');
       await capture(page, `topology-nsa-desktop-${theme}.png`, {
-        route: '/topology?view=actual&source=reference',
+        route: '/topology?view=architecture',
         viewportWidth: VIEWPORTS.desktop.width,
         viewportHeight: VIEWPORTS.desktop.height,
         theme,
@@ -488,7 +488,7 @@ async function main() {
         session: 'operator',
       });
       await page.route('**/api/operations/resources**', (route) => route.fulfill({ json: ARCHITECTURE_STATE_RESOURCES }));
-      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}/topology?view=architecture`, { waitUntil: 'domcontentloaded' });
       await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
       await settle(page);
       check(
@@ -502,7 +502,7 @@ async function main() {
         'ambiguous legend',
       );
       await capture(page, `topology-architecture-state-desktop-${theme}.png`, {
-        route: '/topology?view=actual&source=reference',
+        route: '/topology?view=architecture',
         viewportWidth: VIEWPORTS.desktop.width,
         viewportHeight: VIEWPORTS.desktop.height,
         theme,
@@ -520,11 +520,11 @@ async function main() {
         locale: 'en',
         session: 'operator',
       });
-      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}/topology?view=architecture`, { waitUntil: 'domcontentloaded' });
       await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
       await settle(page);
       await capture(page, 'topology-architecture-desktop-dark.png', {
-        route: '/topology?view=actual&source=reference',
+        route: '/topology?view=architecture',
         viewportWidth: VIEWPORTS.desktop.width,
         viewportHeight: VIEWPORTS.desktop.height,
         theme: 'dark',
@@ -544,7 +544,7 @@ async function main() {
         locale: 'en',
         session: 'operator',
       });
-      await page.goto(`${origin}/topology?view=actual&source=reference`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}/topology?view=architecture`, { waitUntil: 'domcontentloaded' });
       await page.locator('[data-architecture-viewport]').waitFor({ state: 'visible', timeout: 30000 });
       await settle(page);
       await page.locator('[data-architecture-viewport]').scrollIntoViewIfNeeded();
@@ -556,7 +556,7 @@ async function main() {
       );
       await assertNoHorizontalOverflow(page, 'architecture-zoom200');
       await capture(page, 'topology-architecture-zoom200-desktop-light.png', {
-        route: '/topology?view=actual&source=reference',
+        route: '/topology?view=architecture',
         viewportWidth: zoomViewport.width,
         viewportHeight: zoomViewport.height,
         theme: 'light',
