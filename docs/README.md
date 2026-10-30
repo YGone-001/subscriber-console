@@ -48,6 +48,7 @@ Canonical frontend SPA source     -> frontend/src/
 - [Runtime discovery](architecture/runtime-discovery.md) - CNMS-compatible local process recognition, runtime status semantics and the governed monitoring bootstrap.
 - [Knowledge base](architecture/knowledge-base.md) - fault phenomena, root causes and resolutions with secure local attachment storage.
 - [Architecture evolution roadmap](architecture/architecture-evolution-roadmap.md) - planned architecture evolution authority; it distinguishes future targets from current production behavior.
+- [Scale capacity triggers](architecture/scale-capacity-triggers.md) - measured list benchmark, quantified warning/hard triggers, index verification and the actions required when a trigger is reached.
 - [Frontend-backend boundary](architecture/frontend-backend-boundary.md)
 - [Security model](architecture/security-model.md)
 - [Governance design](architecture/governance-design.md)

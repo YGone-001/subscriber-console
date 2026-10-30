@@ -13,7 +13,7 @@ import (
 
 // ocsTestRepo creates a test repository connected to a test database.
 // Returns the repo and a cleanup function.
-func ocsTestRepo(t *testing.T) (*Repository, func()) {
+func ocsTestRepo(t testing.TB) (*Repository, func()) {
 	t.Helper()
 
 	uri := os.Getenv("MONGODB_URI")

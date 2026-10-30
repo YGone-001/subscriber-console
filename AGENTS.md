@@ -897,7 +897,7 @@ BUSINESS_STATEFUL_READ
 
 ### 8.3 性能
 
-正确性优先，但要检测明显的 N+1。若可避免，不要用逐订阅者的 OCS/Profile 查询替代批量查询。发现索引缺失时报告 `PERFORMANCE_FINDING`；不要在读路径变更中顺带创建索引。
+正确性优先，但要检测明显的 N+1。若可避免，不要用逐订阅者的 OCS/Profile 查询替代批量查询。发现索引缺失时报告 `PERFORMANCE_FINDING`；不要在读路径变更中顺带创建索引。容量触发线、基准与各表面的重写动作见 `docs/architecture/scale-capacity-triggers.md`；到达硬触发线前不得提前改写为服务端聚合/游标，也不得以延长缓存替代物化计数。只读检查：`npm run check:scale`；订阅者列表基准：`go test -run '^$' -bench BenchmarkSubscriberListRows -benchtime=10x ./internal/subscriber`。
 
 ---
 

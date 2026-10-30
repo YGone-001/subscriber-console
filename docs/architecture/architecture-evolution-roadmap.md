@@ -162,7 +162,7 @@ The balance list computes its filtered records, total and summary in one aggrega
 ### Route and Scale Boundaries
 
 - Redirect-only routes remain compatibility aliases. No OCS dashboard, session, usage or rating page is planned; the subscriber rating link targets the concrete tariff plan.
-- The subscriber list remains on the current implementation at the current ~10k population. Server-side aggregation and keyset pagination are deferred behind a documented capacity trigger and benchmark.
+- The subscriber list remains on the current implementation at the current ~10k population. Server-side aggregation and keyset pagination are deferred behind the quantified triggers and benchmark in `docs/architecture/scale-capacity-triggers.md`; the same document covers template counts, template bulk actions, contract summaries and balance aggregation.
 
 ### Acceptance Evidence
 
