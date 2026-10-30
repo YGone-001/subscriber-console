@@ -201,7 +201,7 @@ test('the runtime surface renders its localized shell without network access', (
     ),
   );
   assert.ok(html.includes('data-testid="runtime-discovery"'), 'runtime surface must render');
-  assert.ok(html.includes('Local runtime discovery'), 'the surface must carry its localized title');
+  assert.ok(html.includes('Local runtime observation'), 'the surface must carry its localized title');
 });
 
 test('the embedded runtime surface leaves the panel title to its parent', () => {
@@ -217,5 +217,5 @@ test('the embedded runtime surface leaves the panel title to its parent', () => 
     ),
   );
   assert.ok(html.includes('data-testid="runtime-discovery-embedded"'), 'embedded surface must render');
-  assert.ok(!html.includes('Local runtime discovery'), 'embedded surface must not repeat the panel title');
+  assert.ok(!html.includes('Local runtime observation'), 'embedded surface must not repeat the panel title');
 });

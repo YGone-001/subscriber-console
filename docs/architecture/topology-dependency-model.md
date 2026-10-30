@@ -510,13 +510,12 @@ Honesty rules:
 - The ledger is read as one bounded page (`200`). A truncated read sets
   `complete: false`, which caps the diff at a floor rather than a total.
 - A ledger read failure sets `available: false` with
-  `reason: ledger_unavailable` and leaves the projection itself intact; the UI
-  renders "no reconciliation available" and never renders zeros as "nothing to
-  reconcile".
+  `reason: ledger_unavailable` and leaves the projection itself intact; zero
+  counts are never presented as a completed reconciliation.
 
-The UI surfaces this as one read-only panel in the live view. Its only control
-selects the configured link so its existing controls, including the explicit
-register action, become reachable. Reconciliation never registers, updates or
+The projection remains available to API consumers, but the live topology view
+does not render a reconciliation panel. The graph canvas and its inspector are
+the only relationship surface; reconciliation never registers, updates or
 retires an edge by itself.
 
 ## 7. Metadata Validation and Security
@@ -864,8 +863,7 @@ configured links     explicit NF-to-NF config evidence count
 config status        complete / incomplete / manifest unconfigured
 unresolved peers     configured peers that match no recognized component
 canvas               every runtime component, even when it has no link
-relationships table  from / to / interface / state / evidence / endpoints
-reconciliation       advisory diff against the persisted ledger
+inspector            selected component or configured relationship detail
 ```
 
 Runtime status is rendered as text and as a dot; stopped and not-detected
@@ -878,13 +876,10 @@ Inventory link. Configured links use a dashed edge and an explicit `configured`
 evidence marker so they cannot be mistaken for declared edges. Interface names
 are the preferred edge label, followed by protocol.
 
-The reconciliation panel names the difference between the ledger and this
-evidence: matched count, configured links with no active declaration, and active
-declarations with no configured link. A retired decision is labelled as such
-instead of being re-offered as work, a partial ledger read is labelled partial,
-and an unreadable ledger states that no reconciliation is available rather than
-showing zeros. Its only control selects the configured link; registering stays an
-explicit operator action in the link inspector.
+The view does not duplicate the graph with a node table, a configured-edge table
+or a reconciliation panel. Node and configured-edge inspection stays on the
+canvas itself, and the contextual inspector carries the detail; registering
+stays an explicit operator action in the link inspector.
 
 Unknown or unreadable config sources are listed under `Sources`; the view never
 falls back to a reference config copy. An API failure renders an explicit

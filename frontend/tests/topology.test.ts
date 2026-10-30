@@ -1557,7 +1557,7 @@ test('topology locale keys exist in English and Chinese and are distinct', () =>
     'topology_live_unresolved_peers', 'topology_live_selected', 'topology_live_process',
     'topology_live_detail_empty',
     'topology_live_type_domain', 'topology_live_listeners', 'topology_live_no_listeners',
-    'topology_live_open_inventory', 'topology_live_edges_title', 'topology_live_no_edges',
+    'topology_live_open_inventory',
     'topology_live_unresolved_title', 'topology_live_open_architecture',
     'topology_live_error_title', 'topology_live_error_body', 'topology_live_endpoint',
     'topology_live_evidence', 'topology_live_state', 'topology_live_sources',

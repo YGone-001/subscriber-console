@@ -3,7 +3,7 @@
  *
  * The default inventory surface: one master-detail network-element view that
  * answers "what do I run, and what is wrong". The resource ledger lives at
- * /inventory/assets and local runtime discovery at /inventory/runtime, so each
+ * /inventory/assets and local runtime observation at /inventory/runtime, so each
  * task owns one route instead of hiding behind a peer `view` token.
  *
  * Table and card wall are presentations of the same projection, not two

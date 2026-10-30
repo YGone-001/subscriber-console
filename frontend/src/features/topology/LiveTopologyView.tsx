@@ -36,17 +36,13 @@ import {
   liveDirectory,
   liveEdges,
   presentRuntimeStates,
-  reconciliationSummary,
 } from './live-topology-model';
 import type {
   LiveEdge,
   LiveEndpoint,
   LiveNode,
-  LiveReconciliation,
-  LiveReconciliationItem,
   LiveTopologyResponse,
 } from './live-topology-types';
-import type { ReconciliationSummary } from './live-topology-model';
 import type { RegisterRelationshipDraft } from './topology-types';
 import { buildDeclaredDraftFromLink } from './topology-builders';
 import styles from '../../styles/modules/architecture.module.css';
@@ -129,9 +125,6 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
   const selected = data?.nodes.find((node) => node.componentId === selectedComponentId);
   const selectedEdge = data?.edges.find((edge) => edge.edgeId === selectedEdgeId);
   const unresolved = data?.unresolvedPeers ?? [];
-  const reconciliation = reconciliationSummary(data);
-  const reconciliationUnavailable = Boolean(data?.reconciliation && !data.reconciliation.available);
-  const reconciliationBlock = data?.reconciliation;
 
   const announcement = useMemo(() => {
     if (live.isLoading && !data) return t('topology_announce_loading');
@@ -339,12 +332,6 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
     }
   };
 
-  const liveStateLabel = (state: string) => {
-    const key = `topology_live_state_${state}`;
-    const translated = t(key);
-    return translated === key ? state : translated;
-  };
-
   if (live.isLoading && !data) {
     return (
       <div className={styles.liveSection}>
@@ -402,7 +389,6 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
   const runtimeStates = presentRuntimeStates(runtime);
   const completeness = liveConfigCompleteness(config);
   const unavailableSources = config.unavailable ?? [];
-  const nodeById = new Map(data.nodes.map((node) => [node.componentId, node]));
 
   return (
     <div className={styles.liveSection} data-live-topology="true">
@@ -573,140 +559,24 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
             </span>
           </span>
         )}
-        footer={(
-          <>
-            <section className={styles.topologyListSection} aria-labelledby="live-nodes-title">
-              <h3 id="live-nodes-title">{t('topology_list_nodes')}</h3>
-              <div className={styles.topologyListScroll}>
-                <table className={styles.topologyListTable}>
-                  <caption className="sr-only">{t('topology_list_nodes')}</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('topology_list_name')}</th>
-                      <th scope="col">{t('topology_live_type_domain')}</th>
-                      <th scope="col">{t('topology_runtime_label')}</th>
-                      <th scope="col">{t('topology_list_state')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.nodes.map((node) => {
-                      const runtimeKey = `runtime_status_${node.runtimeStatus}`;
-                      const runtimeText = t(runtimeKey);
-                      return (
-                        <tr key={node.componentId} data-live-node-row={node.componentId}>
-                          <th scope="row">
-                            <button
-                              type="button"
-                              className={styles.linkBtn}
-                              data-list-node={node.componentId}
-                              onFocus={() => setFocusedResourceId(node.componentId)}
-                              onBlur={() => setFocusedResourceId(undefined)}
-                              onClick={() => selectNode(node.componentId)}
-                            >
-                              {node.displayName || node.componentId}
-                            </button>
-                          </th>
-                          <td>{[node.nfType || node.role || '-', node.domain || '-'].join(' / ')}</td>
-                          <td>{runtimeText === runtimeKey ? node.runtimeStatus : runtimeText}</td>
-                          <td>{node.inventoryResourceId ? t('arch_binding_bound') : t('arch_binding_unbound')}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className={styles.liveEdges} aria-labelledby="live-edges-title">
-              <h3 id="live-edges-title">{t('topology_live_edges_title')}</h3>
-              {data.edges.length === 0 ? (
-                <p className={styles.liveMuted}>{t('topology_live_no_edges')}</p>
-              ) : (
-                <div className={styles.liveTableScroll}>
-                  <table className={styles.liveTable}>
-                    <caption className="sr-only">{t('topology_live_edges_title')}</caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">{t('topology_from_resource')}</th>
-                        <th scope="col">{t('topology_to_resource')}</th>
-                        <th scope="col">{t('topology_interfaces')}</th>
-                        <th scope="col">{t('topology_live_state')}</th>
-                        <th scope="col">{t('topology_live_evidence')}</th>
-                        <th scope="col">{t('topology_live_endpoint')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.edges.map((edge) => {
-                        const from = nodeById.get(edge.fromComponentId);
-                        const to = nodeById.get(edge.toComponentId);
-                        return (
-                          <tr key={edge.edgeId} data-live-edge-id={edge.edgeId} data-evidence={edge.evidence}>
-                            <td>
-                              <button
-                                type="button"
-                                className={styles.linkBtn}
-                                data-list-edge={edge.edgeId}
-                                onFocus={() => setFocusedEdgeId(edge.edgeId)}
-                                onBlur={() => setFocusedEdgeId(undefined)}
-                                onClick={() => selectEdge(edge.edgeId)}
-                              >
-                                {from?.displayName || edge.fromComponentId}
-                              </button>
-                            </td>
-                            <td>{to?.displayName || edge.toComponentId}</td>
-                            <td>{edge.interfaceNames.length > 0 ? edge.interfaceNames.join(' / ') : edge.protocol}</td>
-                            <td>{liveStateLabel(edge.state)}</td>
-                            <td>{t('topology_live_evidence_configured')}</td>
-                            <td>
-                              <code>{endpointLabel(edge.fromEndpoint)}</code>
-                              {' -> '}
-                              <code>{endpointLabel(edge.toEndpoint)}</code>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-
-            {unresolved.length > 0 ? (
-              <details className={styles.liveUnresolved}>
-                <summary>{t('topology_live_unresolved_title')}</summary>
-                <ul>
-                  {unresolved.map((item, index) => (
-                    <li key={`${item.componentId}-${item.protocol}-${item.peer}-${index}`}>
-                      <strong>{item.componentId}</strong>
-                      {' · '}
-                      {item.protocol}
-                      {' · '}
-                      {item.peer}
-                      {' · '}
-                      {item.reason}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            ) : null}
-
-            {reconciliation && reconciliationBlock ? (
-              <LiveReconciliationPanel
-                summary={reconciliation}
-                block={reconciliationBlock}
-                nodes={data.nodes}
-                onSelectEdge={selectEdge}
-              />
-            ) : reconciliationUnavailable ? (
-              <section className={styles.liveReconcile} aria-labelledby="live-reconcile-title" data-live-reconciliation="unavailable">
-                <h3 id="live-reconcile-title">{t('topology_live_reconcile_title')}</h3>
-                <p className={styles.liveMuted} data-reconcile-unavailable="true">
-                  {t('topology_live_reconcile_unavailable')}
-                </p>
-              </section>
-            ) : null}
-          </>
-        )}
+        footer={unresolved.length > 0 ? (
+          <details className={styles.liveUnresolved}>
+            <summary>{t('topology_live_unresolved_title')}</summary>
+            <ul>
+              {unresolved.map((item, index) => (
+                <li key={`${item.componentId}-${item.protocol}-${item.peer}-${index}`}>
+                  <strong>{item.componentId}</strong>
+                  {' · '}
+                  {item.protocol}
+                  {' · '}
+                  {item.peer}
+                  {' · '}
+                  {item.reason}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : undefined}
       >
         {layout.nodes.length === 0 ? (
           <div className={styles.statePanel} data-state-panel="empty" data-state-source="topology-live">
@@ -978,92 +848,6 @@ function LiveEdgeDetail({
         </div>
       ) : null}
     </div>
-  );
-}
-
-/*
- * Advisory diff between the persisted ledger and the configured evidence of this
- * projection. It never claims a relationship is wrong and never writes: the only
- * control offered selects the configured link so its existing controls,
- * including registration, become reachable.
- */
-function LiveReconciliationPanel({
-  summary,
-  block,
-  nodes,
-  onSelectEdge,
-}: {
-  summary: ReconciliationSummary;
-  block: LiveReconciliation;
-  nodes: LiveNode[];
-  onSelectEdge: (edgeId: string) => void;
-}) {
-  const { t } = useI18n();
-  const label = (item: LiveReconciliationItem) => {
-    const named = (componentId?: string) => {
-      if (!componentId) return '';
-      return nodes.find((node) => node.componentId === componentId)?.displayName || componentId;
-    };
-    return `${named(item.fromComponentId) || item.fromResourceId} -> ${named(item.toComponentId) || item.toResourceId}`;
-  };
-  const clear = summary.undeclared === 0 && summary.unevidenced === 0;
-
-  return (
-    <section className={styles.liveReconcile} aria-labelledby="live-reconcile-title" data-live-reconciliation="available">
-      <h3 id="live-reconcile-title">{t('topology_live_reconcile_title')}</h3>
-      <p className={styles.liveMuted} data-reconcile-summary="true">
-        {t('topology_live_reconcile_summary', {
-          matched: summary.matched,
-          undeclared: summary.undeclared,
-          unevidenced: summary.unevidenced,
-        })}
-        {summary.differing > 0 ? (
-          <span data-reconcile-differs="true">{` · ${t('topology_live_reconcile_differs', { count: summary.differing })}`}</span>
-        ) : null}
-        {!summary.complete ? (
-          <span data-reconcile-partial="true">{` · ${t('topology_live_reconcile_partial')}`}</span>
-        ) : null}
-      </p>
-      {clear ? (
-        <p className={styles.liveMuted} data-reconcile-clear="true">{t('topology_live_reconcile_clear')}</p>
-      ) : (
-        <ul className={styles.liveReconcileList}>
-          {block.undeclaredEvidence.map((item) => {
-            const configuredEdgeId = item.configuredEdgeId;
-            const key = `undeclared-${configuredEdgeId || `${item.fromResourceId}-${item.toResourceId}`}`;
-            return (
-              <li key={key} data-reconcile-kind="undeclared-evidence">
-                {configuredEdgeId ? (
-                  <button
-                    type="button"
-                    className={styles.linkBtn}
-                    data-reconcile-link={configuredEdgeId}
-                    onClick={() => onSelectEdge(configuredEdgeId)}
-                  >
-                    {label(item)}
-                  </button>
-                ) : (
-                  <span>{label(item)}</span>
-                )}
-                {item.interfaceNames && item.interfaceNames.length > 0 ? <code>{item.interfaceNames.join(' / ')}</code> : null}
-                <span className={styles.liveMuted}>
-                  {item.retired ? t('topology_live_reconcile_retired') : t('topology_live_reconcile_undeclared')}
-                </span>
-              </li>
-            );
-          })}
-          {block.unevidencedDeclarations.map((item) => (
-            <li key={`unevidenced-${item.edgeId || `${item.fromResourceId}-${item.toResourceId}`}`} data-reconcile-kind="unevidenced-declaration">
-              <span>{label(item)}</span>
-              {item.declaredInterfaceNames && item.declaredInterfaceNames.length > 0 ? (
-                <code>{item.declaredInterfaceNames.join(' / ')}</code>
-              ) : null}
-              <span className={styles.liveMuted}>{t('topology_live_reconcile_unevidenced')}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 

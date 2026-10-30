@@ -377,7 +377,7 @@ that the projection model does not already define.
 
 `/inventory` is the network-element overview; `density=table|cards` selects the
 presentation of the same projection. The resource ledger lives at
-`/inventory/assets` and local runtime discovery at `/inventory/runtime`, so each
+`/inventory/assets` and local runtime observation at `/inventory/runtime`, so each
 task owns a route instead of a peer `view` token. Pre-split
 `/inventory?view=network|cards|assets|list|runtime` links redirect once to the
 canonical route or density and are never emitted again. Every unavailable value

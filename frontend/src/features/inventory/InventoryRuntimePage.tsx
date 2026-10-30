@@ -1,5 +1,5 @@
 /*
- * Runtime discovery (/inventory/runtime).
+ * Runtime observation (/inventory/runtime).
  *
  * The local process plane is its own route: it answers "which expected
  * components are running on this host", a question that does not belong to the

@@ -5,7 +5,7 @@
  *
  *   /inventory          network-element overview (table or card density)
  *   /inventory/assets   resource ledger
- *   /inventory/runtime  local runtime discovery
+ *   /inventory/runtime  local runtime observation
  *
  * Pre-split links carried the task in a `view` query value. They stay readable
  * through one redirect table and are never emitted by the UI again. Density is

@@ -1898,36 +1898,6 @@
   overflow-wrap: anywhere;
 }
 
-.liveReconcile {
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-panel);
-  background: var(--sys-color-surface-panel);
-  color: var(--text-muted);
-  font-size: 0.72rem;
-}
-
-.liveReconcile h3 {
-  color: var(--text-primary, inherit);
-  font-size: 0.78rem;
-}
-
-.liveReconcileList {
-  display: grid;
-  gap: var(--space-4);
-  margin: var(--space-8) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.liveReconcileList li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-8);
-  overflow-wrap: anywhere;
-}
-
 .liveDomainFilter select {
   min-height: calc(var(--control-height) - 4px);
   padding: 0 var(--space-8);
@@ -2009,14 +1979,6 @@
 .liveLegendLine {
   width: 18px;
   border-top: 1px dashed var(--sys-color-action-primary);
-}
-
-.liveEdges {
-  min-width: 0;
-  padding: var(--space-12);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-panel);
-  background: var(--sys-color-surface-panel);
 }
 
 .liveDetailBody {
@@ -2106,52 +2068,6 @@
   margin: 0;
   color: var(--text-muted);
   font-size: 0.74rem;
-}
-
-.liveEdges h3 {
-  margin: 0 0 var(--space-8);
-  color: var(--text-primary, inherit);
-  font-size: 0.8rem;
-}
-
-.liveTableScroll {
-  overflow-x: auto;
-}
-
-.liveTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.74rem;
-}
-
-.liveTable th {
-  padding: var(--space-8);
-  border-bottom: 1px solid var(--surface-border);
-  color: var(--text-muted);
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-align: start;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.liveTable td {
-  padding: var(--space-8);
-  border-bottom: 1px solid var(--surface-border);
-  color: var(--text-primary, inherit);
-  vertical-align: top;
-}
-
-.liveTable tr:last-child td {
-  border-bottom: 0;
-}
-
-.liveTable code {
-  color: var(--text-muted);
-  font-family: var(--font-data);
-  font-size: 0.7rem;
-  overflow-wrap: anywhere;
 }
 
 @media (max-width: 900px) {

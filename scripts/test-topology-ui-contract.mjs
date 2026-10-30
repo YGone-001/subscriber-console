@@ -241,8 +241,9 @@ check(
   'TOP-UI-52',
   pageSource.includes('topology_source_evidence_declared')
     && pageSource.includes('topology_source_evidence_runtime')
-    && pageSource.includes('topology_source_evidence_reference'),
-  'evidence_badges=all_three_sources',
+    && architectureSource.includes('arch_evidence_label')
+    && architectureSource.includes('data-evidence-legend'),
+  'evidence_badges=declared_runtime_and_architecture_legend',
 );
 check('TOP-UI-53', actualCanvasSource.includes('actualLinkFocused') && actualCanvasSource.includes('actualNodeFocusRelated'), 'focus_highlight=one_hop');
 check('TOP-UI-54', liveSource.includes('LABEL_DETAIL_MIN_ZOOM') && liveSource.includes('beginPan'), 'canvas_controls=labels_and_pan');

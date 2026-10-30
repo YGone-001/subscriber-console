@@ -182,7 +182,7 @@ test('the announcer exposes a polite live status', () => {
   assert.ok(markup.includes('Loaded 5 nodes'));
 });
 
-test('every canvas provides equivalent node and relationship lists with announcements', () => {
+test('every canvas keeps an accessible channel without duplicating the runtime graph below it', () => {
   const actual = read('../src/features/topology/ActualTopologyView.tsx');
   const live = read('../src/features/topology/LiveTopologyView.tsx');
   const architecture = read('../src/features/topology/ArchitectureView.tsx');
@@ -201,8 +201,9 @@ test('every canvas provides equivalent node and relationship lists with announce
     assert.ok(actual.includes(key), `declared relationship list needs ${key}`);
   }
 
-  assert.match(live, /data-list-node=/, 'runtime nodes must be listed');
-  assert.match(live, /data-list-edge=/, 'configured relationships must be listed');
+  assert.ok(!live.includes('data-list-node='), 'runtime nodes must not be duplicated below the graph');
+  assert.ok(!live.includes('data-list-edge='), 'configured relationships must not be duplicated below the graph');
+  assert.match(live, /<ActualTopologyCanvas/, 'the runtime canvas is the single node and relationship surface');
 
   assert.match(architecture, /data-architecture-relationship-list/, 'reference relationships need a list');
 });
