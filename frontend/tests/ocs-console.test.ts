@@ -33,6 +33,7 @@ import {
 } from '../src/features/ocs/ocs-view-models';
 import { attachmentFileName } from '../src/lib/api/download';
 import { hasActiveOcsFilters } from '../src/features/ocs/use-ocs-query-state';
+import { currentListLocation, resolveReturnTo, withReturnTo } from '../src/lib/return-to';
 
 const testsDir = dirname(fileURLToPath(import.meta.url));
 
@@ -316,6 +317,35 @@ test('contracts can be filtered by MSISDN as well as IMSI', () => {
   const detail = readFileSync(resolve(testsDir, '../src/components/ocs/contracts/OcsContractDetail.tsx'), 'utf8');
   assert.match(detail, /ocs_contract_operations_title/);
   assert.match(detail, /ocs_contract_operations_unavailable/);
+});
+
+test('returnTo preserves list state but rejects external and foreign destinations', () => {
+  const list = currentListLocation('/ocs/contracts', '?status=active&page=2');
+  assert.equal(list, '/ocs/contracts?status=active&page=2');
+  const href = withReturnTo('/ocs/contracts/460001234567890', list);
+  const search = href.slice(href.indexOf('?'));
+  assert.equal(resolveReturnTo(search, '/ocs/contracts', ['/ocs/contracts']), list);
+
+  assert.equal(resolveReturnTo('?returnTo=https%3A%2F%2Fevil.example', '/ocs/contracts', ['/ocs/contracts']), '/ocs/contracts');
+  assert.equal(resolveReturnTo('?returnTo=%2F%2Fevil.example', '/ocs/contracts', ['/ocs/contracts']), '/ocs/contracts');
+  assert.equal(resolveReturnTo('?returnTo=%2Fsubscribers', '/ocs/contracts', ['/ocs/contracts']), '/ocs/contracts');
+  assert.equal(resolveReturnTo('', '/ocs/contracts', ['/ocs/contracts']), '/ocs/contracts');
+});
+
+test('list links carry the filtered list URL and detail pages resolve it', () => {
+  const pairs = [
+    ['../src/components/ocs/contracts/OcsContractsPanel.tsx', '../src/components/ocs/contracts/OcsContractDetail.tsx'],
+    ['../src/components/ocs/balances/OcsBalancePlaceholder.tsx', '../src/components/ocs/balances/OcsBalanceDetail.tsx'],
+    ['../src/components/ocs/tariffs/OcsTariffGovernancePanel.tsx', '../src/components/ocs/tariffs/OcsTariffDetail.tsx'],
+    ['../src/features/subscribers/SubscribersPage.tsx', '../src/features/subscribers/SubscriberDetailPage.tsx'],
+    ['../src/features/profiles/ProfilesPage.tsx', '../src/features/profiles/ProfileDetailPage.tsx'],
+  ];
+  for (const [listFile, detailFile] of pairs) {
+    const list = readFileSync(resolve(testsDir, listFile), 'utf8');
+    const detail = readFileSync(resolve(testsDir, detailFile), 'utf8');
+    assert.match(list, /withReturnTo/, `${listFile} must pass returnTo to detail links`);
+    assert.match(detail, /resolveReturnTo/, `${detailFile} must resolve only its own list returnTo`);
+  }
 });
 
 test('suspend, resume and terminate all require a confirmation with a reason', () => {

@@ -13,12 +13,14 @@
  */
 import { useState } from 'react';
 import { useSWRConfig } from 'swr';
-import { ArrowLeft, BatteryCharging, Copy, CreditCard, Layers, Pencil, Save, Trash2 } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { ArrowLeft, BatteryCharging, Copy, CreditCard, Layers, Pencil, Save, Trash2, Wallet } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useAppParam, useAppRouter } from '../../lib/ui-compat/router';
 import { copyText } from '../../lib/clipboard';
+import { resolveReturnTo } from '../../lib/return-to';
 import PageHeader from '../../components/ui/PageHeader';
 import { ConfirmActionPanel, OperationNotice } from '../../components/ui/OperationFeedback';
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/ui/UnsavedChangesGuard';
@@ -58,7 +60,9 @@ export function SubscriberDetailPage() {
     );
   };
 
-  const goToList = () => router.push('/subscribers');
+  const location = useLocation();
+  const returnTo = resolveReturnTo(location.search, '/subscribers', ['/subscribers']);
+  const goToList = () => router.push(returnTo);
 
   const { state, actions } = useSubscriberForm(
     imsi,
@@ -173,6 +177,24 @@ export function SubscriberDetailPage() {
               </button>
             ) : (
               <>
+                {!isLoading && state.hasOcsContract && (
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => router.push(`/ocs/contracts/${encodeURIComponent(imsi || '')}`)}
+                  >
+                    <CreditCard size={16} /> {t('sub_open_contract')}
+                  </button>
+                )}
+                {!isLoading && state.hasOcsBalance && (
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => router.push(`/ocs/balances/${encodeURIComponent(imsi || '')}`)}
+                  >
+                    <Wallet size={16} /> {t('sub_open_balance')}
+                  </button>
+                )}
                 {canAssignPlan && !state.hasOcsContract && !isLoading && (
                   <button type="button" className="btn btn-outline" onClick={() => setIsCreateContractOpen(true)}>
                     <CreditCard size={16} /> {t('ocs_contract_create_action')}

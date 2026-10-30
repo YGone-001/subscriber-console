@@ -735,8 +735,8 @@ test('the subscriber detail is a route page, not a modal', () => {
   assert.match(detail, /actions\.discardDraft\(\)/);
 
   const list = read('../src/features/subscribers/SubscribersPage.tsx');
-  assert.match(list, /router\.push\(`\/subscribers\/\$\{encodeURIComponent\(imsi\)\}`\)/);
-  assert.match(list, /router\.push\('\/subscribers\/new'\)/);
+  assert.match(list, /withReturnTo\(`\/subscribers\/\$\{encodeURIComponent\(imsi\)\}`, listLocation\)/);
+  assert.match(list, /withReturnTo\('\/subscribers\/new', listLocation\)/);
   assert.ok(!list.includes('SubscriberModal'), 'the list must navigate instead of opening a modal');
 
   const components = readdirSync(new URL('../src/components', import.meta.url));
@@ -828,7 +828,7 @@ test('the empty template list offers one create affordance, not two', () => {
   const emptyIndex = page.indexOf('<EmptyState');
   assert.ok(emptyIndex > 0, 'the list must keep its empty state');
   assert.ok(!page.slice(emptyIndex).includes('/profile/new'), 'the empty state must not repeat the create button');
-  assert.match(page, /onClick=\{\(\) => router\.push\('\/profile\/new'\)\}/);
+  assert.match(page, /onClick=\{\(\) => router\.push\(withReturnTo\('\/profile\/new', listLocation\)\)\}/);
 });
 
 test('an AMBR unit of zero is a real unit, not an absent one', () => {

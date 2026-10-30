@@ -21,7 +21,7 @@
  *     either widens the search or fails the request outright.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { CheckCircle, Copy, Eye, SlidersHorizontal, Wallet } from 'lucide-react';
 import { DataTablePagination } from '../../ui/DataTablePagination';
 import { DataTableStateRow } from '../../ui/DataTableState';
@@ -53,6 +53,7 @@ import {
   sanitizeImsiInput,
 } from '../../../features/ocs/ocs-format';
 import { hasActiveOcsFilters, useOcsQueryState, type OcsQueryState } from '../../../features/ocs/use-ocs-query-state';
+import { currentListLocation, withReturnTo } from '../../../lib/return-to';
 
 type BalanceSortField = 'imsi' | 'data_available' | 'updated_at';
 
@@ -77,6 +78,8 @@ export default function OcsBalancePlaceholder() {
   const { user } = useAuth();
   const canAdjust = hasPermission(user, 'ocs.balance.adjust');
 
+  const location = useLocation();
+  const listLocation = currentListLocation(location.pathname, location.search);
   const { state, update, reset } = useOcsQueryState(QUERY_DEFAULTS);
   const page = Math.max(1, Number.parseInt(state.page, 10) || 1);
   const limit = Math.max(1, Math.min(100, Number.parseInt(state.limit, 10) || 20));
@@ -303,7 +306,7 @@ export default function OcsBalancePlaceholder() {
                         className="ocs-action-btn"
                         title={t('ocs_balance_view_detail')}
                         aria-label={t('ocs_balance_view_detail')}
-                        to={`/ocs/balances/${encodeURIComponent(imsi)}`}
+                        to={withReturnTo(`/ocs/balances/${encodeURIComponent(imsi)}`, listLocation)}
                       >
                         <Eye size={14} aria-hidden="true" />
                       </Link>

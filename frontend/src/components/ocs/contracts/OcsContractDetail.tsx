@@ -12,7 +12,7 @@
  * is a lifecycle resurrection rather than a resume.
  */
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, ArrowLeftRight, FileText, History, Pause, Play, Trash2, Users, Wallet } from 'lucide-react';
 import PageHeader from '../../ui/PageHeader';
 import RefreshButton from '../../ui/RefreshButton';
@@ -32,6 +32,7 @@ import {
   type TariffPlanViewModel,
 } from '../../../features/ocs/ocs-view-models';
 import { formatOcsBytes, formatOcsSeconds, formatOcsTime, sanitizeImsiInput } from '../../../features/ocs/ocs-format';
+import { resolveReturnTo } from '../../../lib/return-to';
 
 interface OcsContractDetailProps {
   imsi: string;
@@ -98,7 +99,9 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
     return [status, plan].filter(Boolean).join(' \u00b7 ') || '\u2014';
   };
 
-  const backTo = { to: '/ocs/contracts', label: t('ocs_back_to_list') };
+  const location = useLocation();
+  const returnTo = resolveReturnTo(location.search, '/ocs/contracts', ['/ocs/contracts']);
+  const backTo = { to: returnTo, label: t('ocs_back_to_list') };
 
   const run = async (action: string, fn: () => Promise<unknown>) => {
     setBusy(action);
@@ -181,7 +184,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
             <Link to={`/ocs/balances/${encodeURIComponent(contract.imsi ?? '')}`} className="ocs-btn ocs-btn-secondary">
               <Wallet size={14} aria-hidden="true" /> {t('ocs_contract_view_balance')}
             </Link>
-            <Link to={`/subscribers?q=${encodeURIComponent(contract.imsi ?? '')}`} className="ocs-btn ocs-btn-secondary">
+            <Link to={`/subscribers/${encodeURIComponent(contract.imsi ?? '')}`} className="ocs-btn ocs-btn-secondary">
               {t('ocs_balance_view_subscriber')}
             </Link>
             <RefreshButton loading={loading} onClick={() => void refresh()} label={t('refresh')} className="ocs-btn" />

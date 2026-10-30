@@ -9,6 +9,7 @@
  * the URL so a filtered view survives reload and back/forward.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useI18n } from '../../providers/I18nProvider';
 import { ArrowDown, ArrowUp, ArrowUpDown, Boxes, Download, Eye, Gauge, Link2Off, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { EmptyState, LoadingRows, ConfirmActionPanel, OperationNotice } from '../../components/ui/OperationFeedback';
@@ -20,6 +21,7 @@ import { useRead } from '../../lib/api/use-read';
 import { getBlob, getJson } from '../../lib/api/read-client';
 import { deleteJson } from '../../lib/api/mutation-client';
 import { useAppRouter } from '../../lib/ui-compat/router';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { formatAmbrPairCompact } from './profile-format';
 import {
@@ -76,6 +78,8 @@ function useProfilesListOrder() {
 export function ProfilesPage() {
   const { t, formatDateTime } = useI18n();
   const router = useAppRouter();
+  const location = useLocation();
+  const listLocation = currentListLocation(location.pathname, location.search);
   const { url, sortField, sortDirection, applySort } = useProfilesListOrder();
   const { user } = useAuth();
   const canEditTemplates = hasPermission(user, 'profiles.write');
@@ -188,7 +192,7 @@ export function ProfilesPage() {
   };
 
   const openTemplate = (name: string) => {
-    router.push(`/profile/${encodeURIComponent(name)}`);
+    router.push(withReturnTo(`/profile/${encodeURIComponent(name)}`, listLocation));
   };
 
   const hasActiveFilter = searchQuery.trim() !== '' || listFilter !== 'all' || includeArchived;
@@ -443,7 +447,7 @@ export function ProfilesPage() {
         </div>
         {canEditTemplates && (
           <div className="page-action-buttons">
-            <button className="btn btn-primary" onClick={() => router.push('/profile/new')} title={t("prof_btn_create")}>
+            <button className="btn btn-primary" onClick={() => router.push(withReturnTo('/profile/new', listLocation))} title={t("prof_btn_create")}>
               <Plus size={16} /> {t("prof_new_profile")}
             </button>
           </div>

@@ -8,6 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSWRConfig } from 'swr';
+import { useLocation } from 'react-router-dom';
 import { ArrowLeft, Boxes, Copy, Download, Pencil, Save, Trash2, UserPlus, Users } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
@@ -18,6 +19,7 @@ import { buildProfileApplyPreviewRequest, buildProfileApplyRequest } from '../su
 import { ProfileApplyPreviewNotice } from './components/ProfileApplyPreviewNotice';
 import type { ProfileApplyPreview } from './profile-apply-preview';
 import { useAppParam, useAppRouter, useAppSearchParam } from '../../lib/ui-compat/router';
+import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
 import { hasPermission } from '../../lib/permissions';
 import PageHeader from '../../components/ui/PageHeader';
 import { ErrorState } from '../../components/ui/StatePanel';
@@ -72,6 +74,9 @@ export function ProfileDetailPage() {
   const isCreate = !profileName;
   const { t, formatDateTime } = useI18n();
   const router = useAppRouter();
+  const location = useLocation();
+  const returnTo = resolveReturnTo(location.search, '/profile', ['/profile']);
+  const goToList = () => router.push(returnTo);
   const { mutate: globalMutate } = useSWRConfig();
   const { user } = useAuth();
 
@@ -291,7 +296,7 @@ export function ProfileDetailPage() {
       setNotice({ type: 'success', text: committedAsNoEffect ? t('prof_msg_no_effect') : t('prof_msg_saved') });
       await globalMutate('/api/profiles');
       if (isCreate) {
-        router.replace(`/profile/${encodeURIComponent(targetName)}?created=1`);
+        router.replace(withReturnTo(`/profile/${encodeURIComponent(targetName)}?created=1`, returnTo));
         return;
       }
       await mutateDetail();
@@ -345,7 +350,7 @@ export function ProfileDetailPage() {
         await mutateVersions();
         return;
       }
-      router.push('/profile');
+      goToList();
     } catch (err) {
       setIsDeleteConfirmOpen(false);
       const message = err instanceof Error ? err.message : t('prof_err_delete');
@@ -486,7 +491,7 @@ export function ProfileDetailPage() {
       setCloneKey('');
       setCloneTitle('');
       await globalMutate('/api/profiles');
-      router.push(`/profile/${encodeURIComponent(created?.name || target)}`);
+      router.push(withReturnTo(`/profile/${encodeURIComponent(created?.name || target)}`, returnTo));
     } catch (err) {
       setIsCloneOpen(false);
       setError(err instanceof Error ? err.message : t('prof_clone_err'));
@@ -518,7 +523,7 @@ export function ProfileDetailPage() {
 
   const resetDraftAndExit = () => {
     if (isCreate || !profile) {
-      router.push('/profile');
+      goToList();
       return;
     }
     setDraft(createDraftFromProfile(profile, profileName || ''));
@@ -531,7 +536,7 @@ export function ProfileDetailPage() {
       setDiscardTarget('leave');
       return;
     }
-    router.push('/profile');
+    goToList();
   };
 
   const requestCancelEditing = () => {
@@ -830,7 +835,7 @@ export function ProfileDetailPage() {
             const action = discardTarget;
             setDiscardTarget(null);
             if (action === 'leave') {
-              router.push('/profile');
+              goToList();
               return;
             }
             if (action === 'restore') {

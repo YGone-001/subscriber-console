@@ -15,7 +15,7 @@
  * rejected instead of silently overwritten.
  */
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Database, History, MessageSquare, Phone, ShieldCheck, SlidersHorizontal, Wallet } from 'lucide-react';
 import PageHeader from '../../ui/PageHeader';
 import RefreshButton from '../../ui/RefreshButton';
@@ -29,6 +29,7 @@ import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
 import { toBalanceViewModel, toAdjustmentListViewModel, type OcsAdjustmentViewModel } from '../../../features/ocs/ocs-view-models';
 import { formatOcsBytes, formatOcsNumber, formatOcsTime } from '../../../features/ocs/ocs-format';
+import { resolveReturnTo } from '../../../lib/return-to';
 
 interface OcsBalanceDetailProps {
   imsi: string;
@@ -54,7 +55,9 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
 
   const balance = toBalanceViewModel(data);
   const adjustments = toAdjustmentListViewModel(adjustmentsData).records;
-  const backTo = { to: '/ocs/balances', label: t('ocs_back_to_list') };
+  const location = useLocation();
+  const returnTo = resolveReturnTo(location.search, '/ocs/balances', ['/ocs/balances']);
+  const backTo = { to: returnTo, label: t('ocs_back_to_list') };
 
   const bucketLabel = (bucket: string | null): string => {
     if (bucket === 'data') return t('ocs_bucket_data');
@@ -127,7 +130,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
             <Link to={`/ocs/contracts/${encodeURIComponent(balance.imsi ?? '')}`} className="ocs-btn ocs-btn-secondary">
               {t('ocs_balance_view_contract')}
             </Link>
-            <Link to={`/subscribers?q=${encodeURIComponent(balance.imsi ?? '')}`} className="ocs-btn ocs-btn-secondary">
+            <Link to={`/subscribers/${encodeURIComponent(balance.imsi ?? '')}`} className="ocs-btn ocs-btn-secondary">
               {t('ocs_balance_view_subscriber')}
             </Link>
             <RefreshButton loading={loading} onClick={() => void refresh()} label={t('refresh')} className="ocs-btn" />

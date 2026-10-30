@@ -22,7 +22,7 @@
  *     available and had no entry point.
  */
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   CheckCircle,
   Copy,
@@ -55,6 +55,7 @@ import { toTariffListViewModel, type TariffPlanViewModel } from '../../../featur
 import { downloadTariffPlanExport } from '../../../features/ocs/ocs-export';
 import { formatOcsBytes, formatOcsDate, formatOcsSeconds } from '../../../features/ocs/ocs-format';
 import { hasActiveOcsFilters, useOcsQueryState, type OcsQueryState } from '../../../features/ocs/use-ocs-query-state';
+import { currentListLocation, withReturnTo } from '../../../lib/return-to';
 
 interface ActionFeedback {
   type: 'success' | 'error';
@@ -108,6 +109,8 @@ export default function OcsTariffGovernancePanel() {
 
   const canWrite = hasPermission(user, 'ocs.tariff.write');
 
+  const location = useLocation();
+  const listLocation = currentListLocation(location.pathname, location.search);
   const { state, update, reset } = useOcsQueryState(QUERY_DEFAULTS);
   const query = state.q.trim().toLowerCase();
   const status = state.status;
@@ -355,7 +358,7 @@ export default function OcsTariffGovernancePanel() {
                           className="ocs-action-btn"
                           title={t('ocs_tariff_view_detail')}
                           aria-label={t('ocs_tariff_view_detail')}
-                          to={`/ocs/tariffs/${encodeURIComponent(planId)}`}
+                          to={withReturnTo(`/ocs/tariffs/${encodeURIComponent(planId)}`, listLocation)}
                         >
                           <Eye size={14} aria-hidden="true" />
                         </Link>

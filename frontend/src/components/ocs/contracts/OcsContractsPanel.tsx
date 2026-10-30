@@ -22,7 +22,7 @@
  *   - page, filters and sort live in the URL.
  */
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeftRight, Copy, Eye, Pause, Play, Plus, Trash2, Users } from 'lucide-react';
 import { DataTablePagination } from '../../ui/DataTablePagination';
 import { DataTableStateRow } from '../../ui/DataTableState';
@@ -50,6 +50,7 @@ import {
 } from '../../../features/ocs/ocs-view-models';
 import { formatOcsBytes, formatOcsSeconds, formatOcsTime, pageCountFor, sanitizeImsiInput } from '../../../features/ocs/ocs-format';
 import { hasActiveOcsFilters, useOcsQueryState, type OcsQueryState } from '../../../features/ocs/use-ocs-query-state';
+import { currentListLocation, withReturnTo } from '../../../lib/return-to';
 
 type ContractSortField = 'imsi' | 'plan_id' | 'status' | 'updated_at';
 
@@ -75,6 +76,8 @@ export default function OcsContractsPanel() {
   const { user } = useAuth();
   const canManage = hasPermission(user, 'ocs.plan.assign');
 
+  const location = useLocation();
+  const listLocation = currentListLocation(location.pathname, location.search);
   const { state, update, reset } = useOcsQueryState(QUERY_DEFAULTS);
   const page = Math.max(1, Number.parseInt(state.page, 10) || 1);
   const limit = Math.max(1, Math.min(100, Number.parseInt(state.limit, 10) || 20));
@@ -401,7 +404,7 @@ export default function OcsContractsPanel() {
                         className="ocs-action-btn"
                         title={t('ocs_contract_view_detail')}
                         aria-label={t('ocs_contract_view_detail')}
-                        to={`/ocs/contracts/${encodeURIComponent(imsi)}`}
+                        to={withReturnTo(`/ocs/contracts/${encodeURIComponent(imsi)}`, listLocation)}
                       >
                         <Eye size={14} aria-hidden="true" />
                       </Link>

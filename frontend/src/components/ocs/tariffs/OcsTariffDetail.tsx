@@ -14,7 +14,7 @@
  * rule inventory with conflicts, the bound contracts, and the governance trail.
  */
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Download, FileText, History, ListChecks, Pencil, Users } from 'lucide-react';
 import PageHeader from '../../ui/PageHeader';
 import RefreshButton from '../../ui/RefreshButton';
@@ -29,6 +29,7 @@ import { toTariffDetailViewModel, type TariffPlanViewModel } from '../../../feat
 import { downloadTariffPlanExport } from '../../../features/ocs/ocs-export';
 import { formatOcsBytes, formatOcsRuleQuota, formatOcsSeconds, formatOcsTime } from '../../../features/ocs/ocs-format';
 import { asArray, asNumber, asRecord, asString } from '../../../lib/api/envelope';
+import { resolveReturnTo } from '../../../lib/return-to';
 
 interface OcsTariffDetailProps {
   planId: string;
@@ -130,7 +131,9 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
     }
   };
 
-  const backTo = { to: '/ocs/tariffs', label: t('ocs_back_to_list') };
+  const location = useLocation();
+  const returnTo = resolveReturnTo(location.search, '/ocs/tariffs', ['/ocs/tariffs']);
+  const backTo = { to: returnTo, label: t('ocs_back_to_list') };
 
   if (isLoading && !data) {
     return (

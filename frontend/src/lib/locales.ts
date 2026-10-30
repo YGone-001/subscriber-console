@@ -192,6 +192,8 @@ const LEGACY_EN: Record<string, string> = {
   ocs_contract_ops_reason: 'Reason',
   ocs_contract_ops_result: 'Result',
   ocs_search_msisdn: 'Search MSISDN',
+  sub_open_contract: 'Billing contract',
+  sub_open_balance: 'Balance account',
   sub_err_auth_not_applied: 'The K/OPc you entered cannot be applied: this service refuses to change authentication material (K/OPc/AMF/SQN) on a record that already exists.',
   sub_err_auth_change_rejected: 'This service refuses to change authentication material (K/OPc/AMF/SQN) on an existing subscriber.',
   /* Shown beside the read-only authentication fields when editing an existing subscriber. */
@@ -383,6 +385,8 @@ const LEGACY_ZH: Record<string, string> = {
   ocs_contract_ops_reason: '原因',
   ocs_contract_ops_result: '结果',
   ocs_search_msisdn: '搜索 MSISDN',
+  sub_open_contract: '计费合约',
+  sub_open_balance: '余额账户',
   sub_err_auth_not_applied: '您填写的 K/OPc 无法写入：该服务不允许在已存在的记录上修改鉴权材料（K/OPc/AMF/SQN）。',
   sub_err_auth_change_rejected: '该服务不允许修改已有订阅用户的鉴权材料（K/OPc/AMF/SQN）。',
   /* 编辑既有订阅用户时，显示在只读鉴权字段旁。 */

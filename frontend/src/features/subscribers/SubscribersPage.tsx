@@ -19,7 +19,7 @@
  * model, the summary strip, the toolbar, the table and the modals — is unchanged.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ArrowUpDown, Layers } from 'lucide-react';
 import BatchCreateModal from '../../components/BatchCreateModal';
 import SubscriberBatchUpdateModal from '../../components/SubscriberBatchUpdateModal';
@@ -40,6 +40,7 @@ import { copyText } from '../../lib/clipboard';
 import { useRead } from '../../lib/api/use-read';
 import { deleteJson, postJson } from '../../lib/api/mutation-client';
 import { useAppRouter } from '../../lib/ui-compat/router';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { buildProfileApplyPreviewRequest, buildProfileApplyRequest } from './mutation-contract';
 import { ProfileApplyPreviewNotice } from '../profiles/components/ProfileApplyPreviewNotice';
 import type { ProfileApplyPreview } from '../profiles/profile-apply-preview';
@@ -108,6 +109,8 @@ export function SubscribersPage() {
 
   /* Template drill-down arrives as ?profile=<name> from the template detail page. */
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const listLocation = currentListLocation(location.pathname, location.search);
   const profileDrillDown = searchParams.get('profile') ?? '';
 
   const timeAgo = (dateStr: string) => {
@@ -190,12 +193,12 @@ export function SubscribersPage() {
   const canAdjustBalance = hasPermission(user, 'ocs.balance.adjust');
 
   const handleOpenNew = () => {
-    router.push('/subscribers/new');
+    router.push(withReturnTo('/subscribers/new', listLocation));
   };
 
   const handleOpenView = (imsi: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    router.push(`/subscribers/${encodeURIComponent(imsi)}`);
+    router.push(withReturnTo(`/subscribers/${encodeURIComponent(imsi)}`, listLocation));
   };
 
   const handleDelete = (imsi: string, e?: React.MouseEvent) => {
