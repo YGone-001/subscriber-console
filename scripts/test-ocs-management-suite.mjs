@@ -386,9 +386,17 @@ try {
 
   // 2.3 Contract Suspend and Resume
   {
+    const missingReason = await requestViaGo(`/api/ocs/subscribers/${imsiContract}/suspend`, {
+      method: 'POST',
+      token: tokens.super_admin,
+    });
+    assert.equal(missingReason.status, 400, 'Lifecycle writes must require a reason');
+    assert.equal(missingReason.data?.code, 'CONTRACT_REASON_REQUIRED');
+
     const suspendRes = await requestViaGo(`/api/ocs/subscribers/${imsiContract}/suspend`, {
       method: 'POST',
       token: tokens.super_admin,
+      body: { reason: 'acceptance suspend' },
     });
     assert([200, 202].includes(suspendRes.status));
     let doc = await xcloud.collection('ocs_subscribers').findOne({ imsi: imsiContract });
@@ -401,6 +409,7 @@ try {
     const resumeRes = await requestViaGo(`/api/ocs/subscribers/${imsiContract}/resume`, {
       method: 'POST',
       token: tokens.super_admin,
+      body: { reason: 'acceptance resume' },
     });
     assert([200, 202].includes(resumeRes.status));
     doc = await xcloud.collection('ocs_subscribers').findOne({ imsi: imsiContract });
@@ -434,6 +443,8 @@ try {
     // Boundary check: strictly NO charging sessions or diameter properties
     assert.equal(sub.session_id, undefined);
     assert.equal(sub.rating_group, undefined);
+    assert.equal(listRes.data?.summary?.total, 2, 'KPI summary must describe the collection');
+    assert.equal(listRes.data?.summary?.active, 2);
     recordCheck('contract.read_and_boundary_integrity');
   }
 
@@ -442,7 +453,7 @@ try {
     const terminateRes = await requestViaGo(`/api/ocs/subscribers/${imsiContract}`, {
       method: 'PATCH',
       token: tokens.super_admin,
-      body: { status: 'terminated' },
+      body: { status: 'terminated', reason: 'acceptance terminate' },
     });
     assert([200, 202].includes(terminateRes.status), `Expected 200/202 terminating, got ${terminateRes.status}`);
 

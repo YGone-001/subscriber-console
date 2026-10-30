@@ -552,8 +552,12 @@ Charging plane (frozen, excluded from the management plane):
 OCS 管理 UI：
 
 - `GET /api/ocs/subscribers` — Go read implementation
-- OCS Dashboard UI（`/ocs/dashboard`）— 4 张 KPI 卡、余额池、资费计划
-- OCS Subscribers UI（`/ocs/subscribers`）— 分页表格、状态过滤、搜索
+- OCS Contracts UI（`/ocs/contracts`）— 合约列表/详情、生命周期操作、已有订阅者开通合约
+- OCS Balances UI（`/ocs/balances`）— 余额列表/详情、调整与状态筛选
+- OCS Tariffs UI（`/ocs/tariffs`）— 资费列表/详情与规则
+- `/ocs/dashboard`、`/ocs/sessions`、`/ocs/usage`、`/rating*` 仅为兼容重定向，不建设独立页面；订阅者详情的评分入口直接打开具体套餐 `/ocs/tariffs/{planId}`，不再指向 `/rating`
+- 余额列表 `GET /api/ocs/balances`：`invariantStatus=valid|broken`、状态与套餐筛选、分页 `total` 与 `summary` 在同一条聚合管道内基于同一筛选结果集计算，summary 描述筛选后的集合；缺失额度字段的记录归入 unknown，绝不进入 valid/broken；合约状态/套餐为权威，余额文档中的同名字段仅作无合约时的回退。
+- 合约列表 `GET /api/ocs/subscribers` 的 envelope 携带 `summary`（`total`/`active`/`suspended`/`terminated` 全集合计数，聚合失败时省略 summary 而非补零），KPI 不再发起 3 个额外 `limit=1` 请求；suspend/resume/terminate 必须二次确认并填写原因（至少 3 字符，缺失返回 400 `CONTRACT_REASON_REQUIRED`），原因写入审计；套餐变更预览当前/目标套餐的额度、有效期，并说明变更立即生效且不重算已授予额度。
 
 ### 6.3 资费写入
 

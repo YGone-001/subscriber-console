@@ -22,6 +22,12 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   danger?: boolean;
   loading?: boolean;
+  reason?: string;
+  reasonLabel?: string;
+  reasonPlaceholder?: string;
+  reasonRequired?: boolean;
+  reasonMinLength?: number;
+  onReasonChange?: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -32,6 +38,12 @@ export default function ConfirmDialog({
   confirmLabel,
   danger,
   loading,
+  reason,
+  reasonLabel,
+  reasonPlaceholder,
+  reasonRequired,
+  reasonMinLength = 3,
+  onReasonChange,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -52,6 +64,22 @@ export default function ConfirmDialog({
         <h3 id="ocs-confirm-title">{title}</h3>
       </div>
       <p className="ocs-dialog-body">{message}</p>
+      {onReasonChange ? (
+        <div className="ocs-form-group">
+          <label className="ocs-form-label" htmlFor="ocs-confirm-reason">
+            {reasonLabel || t('ocs_lifecycle_reason')}
+          </label>
+          <textarea
+            id="ocs-confirm-reason"
+            className="ocs-form-textarea"
+            rows={2}
+            value={reason ?? ''}
+            onChange={(event) => onReasonChange(event.target.value)}
+            placeholder={reasonPlaceholder || t('ocs_lifecycle_reason_hint')}
+            disabled={loading}
+          />
+        </div>
+      ) : null}
       <div className="ocs-dialog-actions">
         <button
           type="button"
@@ -65,7 +93,7 @@ export default function ConfirmDialog({
           type="button"
           className={`ocs-btn ${danger ? 'ocs-btn-danger' : 'ocs-btn-primary'}`}
           onClick={onConfirm}
-          disabled={loading}
+          disabled={loading || (reasonRequired && (reason ?? '').trim().length < reasonMinLength)}
         >
           {confirmLabel || t('confirm')}
         </button>

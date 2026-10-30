@@ -145,6 +145,85 @@ func TestRepository_AdjustBalanceCAS_Conflict(t *testing.T) {
 	}
 }
 
+func TestListBalances_InvariantFilterAndSummaryShareOneResultSet(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	if repo == nil {
+		return
+	}
+	defer cleanup()
+	ctx := context.Background()
+
+	docs := []bson.M{
+		{
+			"imsi": "417019999999021", "plan_id": "plan_a", "status": "active", "version": int64(1),
+			"data_total": int64(100), "data_used": int64(0), "data_reserved": int64(0), "data_available": int64(100),
+			"voice_total": int64(10), "voice_used": int64(0), "voice_reserved": int64(0), "voice_available": int64(10),
+			"sms_total": int64(5), "sms_used": int64(0), "sms_available": int64(5),
+		},
+		{
+			"imsi": "417019999999022", "plan_id": "plan_a", "status": "active", "version": int64(1),
+			"data_total": int64(100), "data_used": int64(0), "data_reserved": int64(0), "data_available": int64(40),
+			"voice_total": int64(10), "voice_used": int64(0), "voice_reserved": int64(0), "voice_available": int64(10),
+			"sms_total": int64(5), "sms_used": int64(0), "sms_available": int64(5),
+		},
+		{
+			"imsi": "417019999999023", "plan_id": "plan_b", "status": "suspended", "version": int64(1),
+			"data_total": int64(50), "data_used": int64(0), "data_reserved": int64(0), "data_available": int64(50),
+			"voice_total": int64(0), "voice_used": int64(0), "voice_reserved": int64(0), "voice_available": int64(0),
+			"sms_total": int64(0), "sms_used": int64(0), "sms_available": int64(0),
+		},
+		{
+			"imsi": "417019999999024", "plan_id": "plan_a", "status": "active", "version": int64(1),
+		},
+	}
+	for _, doc := range docs {
+		if _, err := repo.balances.InsertOne(ctx, doc); err != nil {
+			t.Fatalf("seed balance: %v", err)
+		}
+	}
+
+	all, err := repo.ListBalances(ctx, BalanceQueryOptions{Page: 1, Limit: 20})
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	if all.Total != 4 {
+		t.Errorf("total = %d, want 4", all.Total)
+	}
+	if all.Summary.TotalSubscribers != 4 || all.Summary.TotalDataAllocated != 250 {
+		t.Errorf("summary = %+v, want 4 accounts and 250 allocated", all.Summary)
+	}
+
+	valid, err := repo.ListBalances(ctx, BalanceQueryOptions{Page: 1, Limit: 1, InvariantStatus: "valid"})
+	if err != nil {
+		t.Fatalf("list valid: %v", err)
+	}
+	if valid.Total != 2 || valid.TotalPages != 2 || len(valid.Records) != 1 {
+		t.Errorf("valid page = total %d pages %d records %d, want 2/2/1", valid.Total, valid.TotalPages, len(valid.Records))
+	}
+	if valid.Summary.TotalSubscribers != 2 || valid.Summary.TotalDataAllocated != 150 {
+		t.Errorf("valid summary = %+v, want the filtered 2 accounts and 150", valid.Summary)
+	}
+
+	broken, err := repo.ListBalances(ctx, BalanceQueryOptions{Page: 1, Limit: 20, InvariantStatus: "broken"})
+	if err != nil {
+		t.Fatalf("list broken: %v", err)
+	}
+	if broken.Total != 1 || broken.Records[0].IMSI != "417019999999022" {
+		t.Errorf("broken result = %+v, want only 417019999999022", broken)
+	}
+
+	activePlanA, err := repo.ListBalances(ctx, BalanceQueryOptions{Page: 1, Limit: 20, Status: "active", PlanID: "plan_a"})
+	if err != nil {
+		t.Fatalf("list filtered: %v", err)
+	}
+	if activePlanA.Total != 3 {
+		t.Errorf("active plan_a total = %d, want 3", activePlanA.Total)
+	}
+	if activePlanA.Summary.TotalSubscribers != 3 {
+		t.Errorf("filtered summary = %+v, want 3 accounts", activePlanA.Summary)
+	}
+}
+
 func TestMapBalanceView_ContractIsStatusAndPlanAuthority(t *testing.T) {
 	const imsi = "417019999999010"
 	balance := bson.M{

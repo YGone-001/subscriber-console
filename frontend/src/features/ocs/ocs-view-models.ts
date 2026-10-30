@@ -18,6 +18,7 @@ import {
   asIdString,
   asNumber,
   asRecord,
+  asRecordOrNull,
   asString,
   asText,
   asTimestamp,
@@ -76,6 +77,24 @@ export type OcsPageViewModel = {
   limit: number | null;
   totalPages: number | null;
 };
+
+export type OcsContractSummaryViewModel = {
+  total: number | null;
+  active: number | null;
+  suspended: number | null;
+  terminated: number | null;
+};
+
+export function toContractSummaryViewModel(payload: unknown): OcsContractSummaryViewModel | null {
+  const summary = asRecordOrNull(asRecord(payload).summary);
+  if (!summary) return null;
+  return {
+    total: field(summary, 'total', asNumber),
+    active: field(summary, 'active', asNumber),
+    suspended: field(summary, 'suspended', asNumber),
+    terminated: field(summary, 'terminated', asNumber),
+  };
+}
 
 /**
  * The `summary` block the balance list envelope already carries. It describes

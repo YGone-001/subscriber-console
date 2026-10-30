@@ -207,6 +207,17 @@ type SubscriberListResponse struct {
 	Page       int                `json:"page"`
 	Limit      int                `json:"limit"`
 	TotalPages int                `json:"totalPages"`
+	Summary    *SubscriberSummary `json:"summary,omitempty"`
+}
+
+// SubscriberSummary is the collection-wide lifecycle count carried by the
+// contract list envelope. It is deliberately independent of the current page
+// and filters: the KPI strip acts as a filter selector.
+type SubscriberSummary struct {
+	Total      int64 `json:"total"`
+	Active     int64 `json:"active"`
+	Suspended  int64 `json:"suspended"`
+	Terminated int64 `json:"terminated"`
 }
 
 // SubscriberRecord matches OCS subscriber (billing contract).

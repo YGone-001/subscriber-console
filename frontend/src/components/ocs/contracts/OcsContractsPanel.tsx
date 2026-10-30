@@ -11,10 +11,8 @@
  *
  * This rewrite keeps the same endpoints and request bodies:
  *
- *   - KPI counts are collection-wide. `total` comes from the list envelope and
- *     the per-status counts come from three bounded `limit=1` reads, because the
- *     contract list envelope has no `summary` block and this change must not
- *     alter the read contract.
+ *   - KPI counts are collection-wide and come from the list envelope's `summary`
+ *     block, so a page load no longer fans out into four extra status reads.
  *   - the pager count is derived from `total` rather than trusted from
  *     `totalPages` (the server answers `floor(total/limit) + 1`).
  *   - a terminated contract exposes read-only actions only. `POST /resume` on a
@@ -45,12 +43,12 @@ import { useI18n } from '../../../providers/I18nProvider';
 import { copyText } from '../../../lib/clipboard';
 import {
   toContractListViewModel,
-  toOcsPageViewModel,
+  toContractSummaryViewModel,
   toTariffListViewModel,
   type OcsContractViewModel,
   type TariffPlanViewModel,
 } from '../../../features/ocs/ocs-view-models';
-import { formatOcsBytes, formatOcsTime, pageCountFor, sanitizeImsiInput } from '../../../features/ocs/ocs-format';
+import { formatOcsBytes, formatOcsSeconds, formatOcsTime, pageCountFor, sanitizeImsiInput } from '../../../features/ocs/ocs-format';
 import { hasActiveOcsFilters, useOcsQueryState, type OcsQueryState } from '../../../features/ocs/use-ocs-query-state';
 
 type ContractSortField = 'imsi' | 'plan_id' | 'status' | 'updated_at';
@@ -71,10 +69,6 @@ function readSortField(value: string): ContractSortField {
   return (SORT_FIELDS as string[]).includes(value) ? (value as ContractSortField) : 'updated_at';
 }
 
-function statusCount(data: unknown): number | null {
-  return toOcsPageViewModel(data).total;
-}
-
 export default function OcsContractsPanel() {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -89,7 +83,11 @@ export default function OcsContractsPanel() {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [copiedImsi, setCopiedImsi] = useState<string | null>(null);
-  const [confirmTerminate, setConfirmTerminate] = useState<string | null>(null);
+  const [lifecyclePrompt, setLifecyclePrompt] = useState<{
+    imsi: string;
+    status: 'suspended' | 'active' | 'terminated';
+    reason: string;
+  } | null>(null);
   const [tariffTarget, setTariffTarget] = useState<OcsContractViewModel | null>(null);
   const [tariffDraft, setTariffDraft] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -109,13 +107,9 @@ export default function OcsContractsPanel() {
 
   const { data, error, isLoading: loading, mutate: refresh } = useRead<unknown>(url);
   const { data: tariffs } = useRead<unknown>('/api/tariff-plans');
-  /* Four bounded counts, one per lifecycle state. The list envelope carries no
-   * summary block, and this change must not alter the read contract, so the KPI
-   * strip is fed by `limit=1` reads rather than by the current page's rows. */
-  const allRead = useRead<unknown>('/api/ocs/subscribers?page=1&limit=1');
-  const activeRead = useRead<unknown>('/api/ocs/subscribers?status=active&page=1&limit=1');
-  const suspendedRead = useRead<unknown>('/api/ocs/subscribers?status=suspended&page=1&limit=1');
-  const terminatedRead = useRead<unknown>('/api/ocs/subscribers?status=terminated&page=1&limit=1');
+  /* The list envelope carries collection-wide lifecycle counts, so the KPI strip
+   * no longer needs four `limit=1` reads. Missing counts stay em dashes. */
+  const summary = toContractSummaryViewModel(data);
 
   const list = toContractListViewModel(data);
   const records = list.records;
@@ -176,7 +170,6 @@ export default function OcsContractsPanel() {
       await run();
       setFeedback({ type: 'success', message: t('ocs_contract_action_success') });
       await refresh();
-      await Promise.all([allRead.mutate(), activeRead.mutate(), suspendedRead.mutate(), terminatedRead.mutate()]);
     } catch (failure) {
       setFeedback({
         type: 'error',
@@ -187,11 +180,26 @@ export default function OcsContractsPanel() {
     }
   };
 
-  const handleSuspend = (imsi: string) =>
-    executeAction(imsi, 'suspend', () => postJson(`/api/ocs/subscribers/${encodeURIComponent(imsi)}/suspend`));
+  const openLifecyclePrompt = (imsi: string, status: 'suspended' | 'active' | 'terminated') =>
+    setLifecyclePrompt({ imsi, status, reason: '' });
 
-  const handleResume = (imsi: string) =>
-    executeAction(imsi, 'resume', () => postJson(`/api/ocs/subscribers/${encodeURIComponent(imsi)}/resume`));
+  const confirmLifecycle = () => {
+    if (!lifecyclePrompt) return;
+    const { imsi, status } = lifecyclePrompt;
+    const reason = lifecyclePrompt.reason.trim();
+    if (reason.length < 3) return;
+    setLifecyclePrompt(null);
+    const encoded = encodeURIComponent(imsi);
+    if (status === 'terminated') {
+      void executeAction(imsi, status, () => patchJson(`/api/ocs/subscribers/${encoded}`, { status: 'terminated', reason }));
+      return;
+    }
+    if (status === 'suspended') {
+      void executeAction(imsi, status, () => postJson(`/api/ocs/subscribers/${encoded}/suspend`, { reason }));
+      return;
+    }
+    void executeAction(imsi, status, () => postJson(`/api/ocs/subscribers/${encoded}/resume`, { reason }));
+  };
 
   const requestChangeTariff = (record: OcsContractViewModel) => {
     setTariffTarget(record);
@@ -216,7 +224,7 @@ export default function OcsContractsPanel() {
         {
           key: 'all',
           label: t('ocs_filter_all'),
-          value: error ? '\u2014' : statusCount(allRead.data) ?? total,
+          value: error ? '\u2014' : summary?.total ?? '\u2014',
           icon: <Users size={20} />,
           active: state.status === '',
           onClick: () => update({ status: '', page: '1' }),
@@ -225,7 +233,7 @@ export default function OcsContractsPanel() {
         {
           key: 'active',
           label: t('ocs_contract_active'),
-          value: error ? '\u2014' : statusCount(activeRead.data) ?? '\u2014',
+          value: error ? '\u2014' : summary?.active ?? '\u2014',
           icon: <Users size={20} />,
           active: state.status === 'active',
           onClick: () => applyStatusFilter('active'),
@@ -234,7 +242,7 @@ export default function OcsContractsPanel() {
         {
           key: 'suspended',
           label: t('ocs_contract_suspended'),
-          value: error ? '\u2014' : statusCount(suspendedRead.data) ?? '\u2014',
+          value: error ? '\u2014' : summary?.suspended ?? '\u2014',
           icon: <Pause size={20} />,
           active: state.status === 'suspended',
           onClick: () => applyStatusFilter('suspended'),
@@ -243,7 +251,7 @@ export default function OcsContractsPanel() {
         {
           key: 'terminated',
           label: t('ocs_contract_status_terminated'),
-          value: error ? '\u2014' : statusCount(terminatedRead.data) ?? '\u2014',
+          value: error ? '\u2014' : summary?.terminated ?? '\u2014',
           icon: <Play size={20} />,
           active: state.status === 'terminated',
           onClick: () => applyStatusFilter('terminated'),
@@ -407,7 +415,7 @@ export default function OcsContractsPanel() {
                               title={t('ocs_sub_action_suspend')}
                               aria-label={t('ocs_sub_action_suspend')}
                               disabled={actionLoading === `${imsi}:suspend`}
-                              onClick={() => void handleSuspend(imsi)}
+                              onClick={() => openLifecyclePrompt(imsi, 'suspended')}
                             >
                               <Pause size={14} aria-hidden="true" />
                             </button>
@@ -418,7 +426,7 @@ export default function OcsContractsPanel() {
                               title={t('ocs_sub_action_resume')}
                               aria-label={t('ocs_sub_action_resume')}
                               disabled={actionLoading === `${imsi}:resume`}
-                              onClick={() => void handleResume(imsi)}
+                              onClick={() => openLifecyclePrompt(imsi, 'active')}
                             >
                               <Play size={14} aria-hidden="true" />
                             </button>
@@ -429,7 +437,7 @@ export default function OcsContractsPanel() {
                             title={t('ocs_sub_action_terminate')}
                             aria-label={t('ocs_sub_action_terminate')}
                             disabled={actionLoading === `${imsi}:terminate`}
-                            onClick={() => setConfirmTerminate(imsi)}
+                            onClick={() => openLifecyclePrompt(imsi, 'terminated')}
                           >
                             <Trash2 size={14} aria-hidden="true" />
                           </button>
@@ -468,7 +476,13 @@ export default function OcsContractsPanel() {
   );
 
   const selectedPlan = tariffDraft ? planById.get(tariffDraft) : undefined;
+  const currentPlan = tariffTarget?.planId ? planById.get(tariffTarget.planId) : undefined;
   const tariffUnchanged = !tariffDraft || tariffDraft === tariffTarget?.planId;
+  const planSummary = (plan?: TariffPlanViewModel) => (
+    plan
+      ? `${plan.name || plan.planId} · ${formatOcsBytes(plan.quotaPerGrant)}${plan.validityTime ? ` · ${formatOcsSeconds(plan.validityTime)}` : ''}`
+      : '—'
+  );
 
   return (
     <>
@@ -478,13 +492,7 @@ export default function OcsContractsPanel() {
         readonly={false}
         description={t('ocs_contracts_desc')}
         loading={loading}
-        onRefresh={() => {
-          void refresh();
-          void allRead.mutate();
-          void activeRead.mutate();
-          void suspendedRead.mutate();
-          void terminatedRead.mutate();
-        }}
+        onRefresh={() => { void refresh(); }}
         kpiGrid={kpiGrid}
         controls={controls}
         tableContent={tableContent}
@@ -500,26 +508,38 @@ export default function OcsContractsPanel() {
             message: t(balanceAdopted ? 'ocs_contract_create_success_adopted' : 'ocs_contract_create_success', { imsi }),
           });
           void refresh();
-          void allRead.mutate();
-          void activeRead.mutate();
-          void suspendedRead.mutate();
-          void terminatedRead.mutate();
         }}
       />
-      {confirmTerminate && (
+      {lifecyclePrompt && (
         <ConfirmDialog
-          title={t('ocs_confirm_terminate_title')}
-          message={t('ocs_sub_confirm_terminate').replace('{imsi}', confirmTerminate)}
-          confirmLabel={t('ocs_sub_action_terminate')}
-          danger
+          title={
+            lifecyclePrompt.status === 'terminated'
+              ? t('ocs_confirm_terminate_title')
+              : lifecyclePrompt.status === 'suspended'
+                ? t('ocs_confirm_suspend_title')
+                : t('ocs_confirm_resume_title')
+          }
+          message={(
+            lifecyclePrompt.status === 'terminated'
+              ? t('ocs_sub_confirm_terminate')
+              : lifecyclePrompt.status === 'suspended'
+                ? t('ocs_confirm_suspend_message')
+                : t('ocs_confirm_resume_message')
+          ).replace('{imsi}', lifecyclePrompt.imsi)}
+          confirmLabel={
+            lifecyclePrompt.status === 'terminated'
+              ? t('ocs_sub_action_terminate')
+              : lifecyclePrompt.status === 'suspended'
+                ? t('ocs_sub_action_suspend')
+                : t('ocs_sub_action_resume')
+          }
+          danger={lifecyclePrompt.status === 'terminated'}
           loading={Boolean(actionLoading)}
-          onConfirm={() => {
-            const imsi = confirmTerminate;
-            setConfirmTerminate(null);
-            void executeAction(imsi, 'terminate', () =>
-              patchJson(`/api/ocs/subscribers/${encodeURIComponent(imsi)}`, { status: 'terminated' }));
-          }}
-          onCancel={() => setConfirmTerminate(null)}
+          reason={lifecyclePrompt.reason}
+          reasonRequired
+          onReasonChange={(reason) => setLifecyclePrompt((current) => (current ? { ...current, reason } : current))}
+          onConfirm={confirmLifecycle}
+          onCancel={() => setLifecyclePrompt(null)}
         />
       )}
       <Dialog
@@ -550,9 +570,11 @@ export default function OcsContractsPanel() {
             ))}
           </select>
           {selectedPlan ? (
-            <span className="ocs-form-hint">
-              {t('ocs_tariff_col_quota')}: {formatOcsBytes(selectedPlan.quotaPerGrant)}
-            </span>
+            <div className="ocs-dialog-copy">
+              <div>{t('ocs_contract_plan_current')}: <span className="ocs-mono">{planSummary(currentPlan)}</span></div>
+              <div>{t('ocs_contract_plan_target')}: <span className="ocs-mono">{planSummary(selectedPlan)}</span></div>
+              <span className="ocs-form-hint">{t('ocs_contract_plan_effective_now')}</span>
+            </div>
           ) : null}
         </div>
         <div className="ocs-dialog-actions">

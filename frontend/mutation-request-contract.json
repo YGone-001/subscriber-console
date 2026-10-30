@@ -420,10 +420,12 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/ocs/handler_write.go",
     "productionReference": "frontend/src/features/ocs/contracts/ContractsPage.tsx",
-    "requiredBodyKeys": [
-      "plan_id"
+    "requiredBodyKeys": [],
+    "optionalBodyKeys": [
+      "plan_id",
+      "status",
+      "reason"
     ],
-    "optionalBodyKeys": [],
     "forbiddenBodyKeys": [],
     "responseSemantics": "mutation-result"
   },
@@ -434,7 +436,9 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/ocs/handler_write.go",
     "productionReference": "frontend/src/features/ocs/contracts/ContractsPage.tsx",
-    "requiredBodyKeys": [],
+    "requiredBodyKeys": [
+      "reason"
+    ],
     "optionalBodyKeys": [],
     "forbiddenBodyKeys": [],
     "responseSemantics": "mutation-result"
@@ -446,7 +450,9 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/ocs/handler_write.go",
     "productionReference": "frontend/src/features/ocs/contracts/ContractsPage.tsx",
-    "requiredBodyKeys": [],
+    "requiredBodyKeys": [
+      "reason"
+    ],
     "optionalBodyKeys": [],
     "forbiddenBodyKeys": [],
     "responseSemantics": "mutation-result"
@@ -458,7 +464,9 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/ocs/handler_write.go",
     "productionReference": "frontend/src/features/ocs/contracts/ContractsPage.tsx",
-    "requiredBodyKeys": [],
+    "requiredBodyKeys": [
+      "reason"
+    ],
     "optionalBodyKeys": [],
     "forbiddenBodyKeys": [],
     "responseSemantics": "mutation-result"

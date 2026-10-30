@@ -121,6 +121,7 @@ correction. The charging plane remains frozen and excluded.
 - Subscriber deletion is rejected while an active or suspended contract exists. After termination, deleting the subscriber identity does not cascade-delete OCS contract or balance history.
 - An existing subscriber can be provisioned with a contract through the insert-only `POST /api/ocs/subscribers`: the subscriber identity must exist, the plan must be explicit and active, the contract is always created active, and only the supplied quota buckets are written. An existing balance account is adopted without rewriting its buckets; a plan mismatch or non-active account is refused. Retained terminated history is refused with 409 `OCS_CONTRACT_RETAINED`.
 - The contract is the lifecycle and plan authority. Suspend, resume, terminate and plan changes mirror into the balance account, and balance reads prefer the contract's status/plan when both records exist; terminated contracts reject balance adjustments even if the cached account status is stale.
+- Contract lifecycle actions require confirmation and a recorded reason. The list envelope carries collection-wide lifecycle counts for the KPI strip, and tariff reassignment previews the current and target quota/validity before applying immediately.
 
 ### Retention and Permanent Cleanup
 
@@ -138,6 +139,8 @@ Permanent cleanup is a data-retention operation, not a contract-row action.
 Read projections return `null` or explicit unavailability for missing measurements. They must not substitute 0, a default plan, a default status or default QoS values. Explicit zero remains a real value. Write paths treat an omitted field as "no change" and an explicit zero as a value; they do not coerce blanks to zero.
 
 This covers OCS balance buckets, plan/status joins, subscriber traffic totals, AMBR and QoS fields, and adjustment-history reads.
+
+The balance list computes its filtered records, total and summary in one aggregation pipeline. `invariantStatus` is applied before pagination, records with missing bucket operands are `unknown` and belong to neither valid nor broken, and the summary describes the same filtered set as the page and total rather than the whole collection.
 
 ### Template Apply and Onboarding
 

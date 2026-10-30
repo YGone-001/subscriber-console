@@ -37,23 +37,12 @@ func (r *Repository) ListBalances(ctx context.Context, opts BalanceQueryOptions)
 	limit := clampLimit(opts.Limit)
 	skip := int64((page - 1) * limit)
 
-	filter := bson.M{}
+	match := bson.M{}
 	if opts.IMSI != "" {
 		/* Escape the needle: the client sends an IMSI, not a pattern. A literal
 		 * fragment keeps the historical substring lookup while a metacharacter can
 		 * no longer widen the match or fail the query with an invalid regex. */
-		filter["imsi"] = bson.M{"$regex": regexp.QuoteMeta(opts.IMSI), "$options": "i"}
-	}
-	if opts.PlanID != "" {
-		filter["plan_id"] = opts.PlanID
-	}
-	if opts.Status != "" {
-		filter["status"] = opts.Status
-	}
-
-	totalCount, err := r.balances.CountDocuments(ctx, filter)
-	if err != nil {
-		return BalanceListResponse{}, err
+		match["imsi"] = bson.M{"$regex": regexp.QuoteMeta(opts.IMSI), "$options": "i"}
 	}
 
 	sortKey := mapSortField(opts.SortField, map[string]string{
@@ -69,80 +58,116 @@ func (r *Repository) ListBalances(ctx context.Context, opts BalanceQueryOptions)
 	}, "updated_at")
 	sortDir := sortDirection(opts.SortOrder)
 
-	cursor, err := r.balances.Find(ctx, filter, options.Find().
-		SetSort(bson.D{{Key: sortKey, Value: sortDir}, {Key: "_id", Value: -1}}).
-		SetSkip(skip).
-		SetLimit(int64(limit)))
+	/* The contract is the lifecycle authority. Resolve it in the same pipeline
+	 * that filters and aggregates the page, so status/plan filters, invariant
+	 * filters, total and summary all describe the same result set. */
+	effectivePlan := bson.M{"$ifNull": bson.A{
+		bson.M{"$arrayElemAt": bson.A{"$_contract.plan_id", 0}},
+		"$plan_id",
+	}}
+	effectiveStatus := bson.M{"$ifNull": bson.A{
+		bson.M{"$arrayElemAt": bson.A{"$_contract.status", 0}},
+		"$status",
+	}}
+	addFields := bson.D{{Key: "$addFields", Value: bson.M{
+		"_effectivePlanId": effectivePlan,
+		"_effectiveStatus": effectiveStatus,
+		"plan_id":          effectivePlan,
+		"status":           effectiveStatus,
+		"_invariantState":  invariantStateExpression(),
+	}}}
+
+	if opts.PlanID != "" {
+		match["_effectivePlanId"] = opts.PlanID
+	}
+	if opts.Status != "" {
+		match["_effectiveStatus"] = opts.Status
+	}
+	switch opts.InvariantStatus {
+	case "valid":
+		match["_invariantState"] = "valid"
+	case "broken":
+		match["_invariantState"] = "broken"
+	}
+
+	facet := bson.D{{Key: "$facet", Value: bson.M{
+		"records": mongo.Pipeline{
+			bson.D{{Key: "$sort", Value: bson.D{
+				{Key: sortKey, Value: sortDir},
+				{Key: "_id", Value: -1},
+			}}},
+			bson.D{{Key: "$skip", Value: skip}},
+			bson.D{{Key: "$limit", Value: int64(limit)}},
+		},
+		"meta": mongo.Pipeline{
+			bson.D{{Key: "$count", Value: "total"}},
+		},
+		"summary": mongo.Pipeline{
+			bson.D{{Key: "$group", Value: bson.M{
+				"_id":                nil,
+				"totalSubscribers":   bson.M{"$sum": int64(1)},
+				"totalDataAllocated": bson.M{"$sum": "$data_total"},
+				"totalDataUsed":      bson.M{"$sum": "$data_used"},
+				"totalDataReserved":  bson.M{"$sum": "$data_reserved"},
+				"totalDataAvailable": bson.M{"$sum": "$data_available"},
+			}}},
+		},
+	}}}
+
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$lookup", Value: bson.M{
+			"from":         "ocs_subscribers",
+			"localField":   "imsi",
+			"foreignField": "imsi",
+			"as":           "_contract",
+		}}},
+		addFields,
+		bson.D{{Key: "$match", Value: match}},
+		facet,
+	}
+
+	cursor, err := r.balances.Aggregate(ctx, pipeline)
 	if err != nil {
 		return BalanceListResponse{}, err
 	}
 	defer cursor.Close(ctx)
 
-	var rawDocs []bson.M
-	if err := cursor.All(ctx, &rawDocs); err != nil {
+	var results []struct {
+		Records []bson.M `bson:"records"`
+		Meta    []bson.M `bson:"meta"`
+		Summary []bson.M `bson:"summary"`
+	}
+	if err := cursor.All(ctx, &results); err != nil {
 		return BalanceListResponse{}, err
 	}
 
-	// Enrich from ocs_subscribers
-	imsiSet := make(map[string]struct{})
-	for _, doc := range rawDocs {
-		if imsi, ok := doc["imsi"].(string); ok && imsi != "" {
-			imsiSet[imsi] = struct{}{}
-		}
+	var rawRecords []bson.M
+	var summaryRows []bson.M
+	if len(results) > 0 {
+		rawRecords = results[0].Records
+		summaryRows = results[0].Summary
 	}
 
-	subMap := make(map[string]bson.M)
-	if len(imsiSet) > 0 && r.subscribers != nil {
-		imsiList := make(bson.A, 0, len(imsiSet))
-		for imsi := range imsiSet {
-			imsiList = append(imsiList, imsi)
-		}
-		subCursor, err := r.subscribers.Find(ctx, bson.M{"imsi": bson.M{"$in": imsiList}})
-		if err == nil {
-			defer subCursor.Close(ctx)
-			for subCursor.Next(ctx) {
-				var sub bson.M
-				if subCursor.Decode(&sub) == nil {
-					if imsi, ok := sub["imsi"].(string); ok {
-						subMap[imsi] = sub
-					}
-				}
-			}
-		}
+	totalCount := int64(0)
+	if len(results) > 0 && len(results[0].Meta) > 0 {
+		totalCount = numericInt64(results[0].Meta[0]["total"])
 	}
 
-	records := make([]BalanceRecordView, 0, len(rawDocs))
-	for _, doc := range rawDocs {
-		records = append(records, mapBalanceView(doc, subMap))
+	records := make([]BalanceRecordView, 0, len(rawRecords))
+	for _, doc := range rawRecords {
+		records = append(records, mapBalanceView(doc, nil))
 	}
 
-	// Apply invariant filter. A record whose conservation fields are absent is
-	// neither valid nor broken, so it belongs to neither subset.
-	if opts.InvariantStatus == "valid" {
-		filtered := make([]BalanceRecordView, 0)
-		for _, rec := range records {
-			if rec.InvariantOk != nil && *rec.InvariantOk {
-				filtered = append(filtered, rec)
-			}
+	summary := BalanceSummary{}
+	if len(summaryRows) > 0 {
+		row := summaryRows[0]
+		summary = BalanceSummary{
+			TotalSubscribers:   numericInt64(row["totalSubscribers"]),
+			TotalDataAllocated: numericInt64(row["totalDataAllocated"]),
+			TotalDataUsed:      numericInt64(row["totalDataUsed"]),
+			TotalDataReserved:  numericInt64(row["totalDataReserved"]),
+			TotalDataAvailable: numericInt64(row["totalDataAvailable"]),
 		}
-		records = filtered
-	} else if opts.InvariantStatus == "broken" {
-		filtered := make([]BalanceRecordView, 0)
-		for _, rec := range records {
-			if rec.InvariantOk != nil && !*rec.InvariantOk {
-				filtered = append(filtered, rec)
-			}
-		}
-		records = filtered
-	}
-
-	if records == nil {
-		records = []BalanceRecordView{}
-	}
-
-	summary, err := r.computeBalanceSummary(ctx)
-	if err != nil {
-		summary = BalanceSummary{}
 	}
 
 	totalPages := int(totalCount) / limit
@@ -357,40 +382,45 @@ func numericInt64Ptr(doc bson.M, key string) *int64 {
 	return &converted
 }
 
-func (r *Repository) computeBalanceSummary(ctx context.Context) (BalanceSummary, error) {
-	pipeline := mongo.Pipeline{
-		{{Key: "$group", Value: bson.M{
-			"_id":                nil,
-			"totalDataAllocated": bson.M{"$sum": "$data_total"},
-			"totalDataUsed":      bson.M{"$sum": "$data_used"},
-			"totalDataReserved":  bson.M{"$sum": "$data_reserved"},
-			"totalDataAvailable": bson.M{"$sum": "$data_available"},
-			"totalSubscribers":   bson.M{"$sum": 1},
-		}}},
-	}
+// invariantStateExpression classifies a balance document as valid, broken or
+// unknown. A bucket whose operands are not all numeric is unknown rather than
+// broken, matching the nullable projection used by the API.
+func invariantStateExpression() bson.M {
+	data := []string{"data_total", "data_used", "data_reserved", "data_available"}
+	voice := []string{"voice_total", "voice_used", "voice_reserved", "voice_available"}
+	sms := []string{"sms_total", "sms_used", "sms_available"}
 
-	cursor, err := r.balances.Aggregate(ctx, pipeline)
-	if err != nil {
-		return BalanceSummary{}, err
-	}
-	defer cursor.Close(ctx)
+	known := bson.M{"$and": bson.A{
+		allFieldsNumeric(data...),
+		allFieldsNumeric(voice...),
+		allFieldsNumeric(sms...),
+	}}
+	conserved := bson.M{"$and": bson.A{
+		conservationExpression("data_total", "data_used", "data_reserved", "data_available"),
+		conservationExpression("voice_total", "voice_used", "voice_reserved", "voice_available"),
+		conservationExpression("sms_total", "sms_used", "sms_available"),
+	}}
+	return bson.M{"$cond": bson.A{
+		known,
+		bson.M{"$cond": bson.A{conserved, "valid", "broken"}},
+		"unknown",
+	}}
+}
 
-	var results []bson.M
-	if err := cursor.All(ctx, &results); err != nil {
-		return BalanceSummary{}, err
+func allFieldsNumeric(fields ...string) bson.M {
+	checks := make(bson.A, 0, len(fields))
+	for _, field := range fields {
+		checks = append(checks, bson.M{"$isNumber": "$" + field})
 	}
+	return bson.M{"$and": checks}
+}
 
-	if len(results) == 0 {
-		return BalanceSummary{}, nil
+func conservationExpression(total string, parts ...string) bson.M {
+	sumParts := make(bson.A, 0, len(parts))
+	for _, part := range parts {
+		sumParts = append(sumParts, "$"+part)
 	}
-	row := results[0]
-	return BalanceSummary{
-		TotalSubscribers:   numericInt64(row["totalSubscribers"]),
-		TotalDataAllocated: numericInt64(row["totalDataAllocated"]),
-		TotalDataUsed:      numericInt64(row["totalDataUsed"]),
-		TotalDataReserved:  numericInt64(row["totalDataReserved"]),
-		TotalDataAvailable: numericInt64(row["totalDataAvailable"]),
-	}, nil
+	return bson.M{"$eq": bson.A{"$" + total, bson.M{"$add": sumParts}}}
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

@@ -164,9 +164,10 @@ Target Collection: `xcloud.ocs_subscribers`
      cascade-deleted.
 
 ### 4.3 Console Surface (`/ocs/contracts`)
-- KPI strip: all / active / suspended / terminated. `total` comes from the list
-  envelope; the per-status counts come from bounded `limit=1` reads, so they
-  describe the collection rather than the current page.
+- KPI strip: all / active / suspended / terminated. The counts come from the
+  list envelope's `summary` block and describe the collection, not the current
+  page or the active filters. If the summary aggregation is unavailable the
+  counts render as em dashes; they are never fabricated as zero.
 - Filters: IMSI (digits only) and status, plus a tariff-plan filter. Sort, page
   and page size live in the URL.
 - The toolbar exposes "Provision contract" for operators with
@@ -176,9 +177,12 @@ Target Collection: `xcloud.ocs_subscribers`
 - The pager derives its page count from `total`. The list envelope's `totalPages`
   is `floor(total/limit) + 1`, which advertises a trailing empty page whenever the
   total is an exact multiple of the page size.
+- Suspend, resume and terminate each require a confirmation with a reason
+  (at least 3 characters); the reason is recorded in the audit record.
 - Tariff reassignment lists active plans plus the contract's current plan, and
-  shows each plan's quota. A disabled plan is never offered: the API rejects it
-  with `OCS_TARIFF_DISABLED`.
+  previews the current and target quota/validity before applying. The change
+  takes effect immediately and does not recalculate quota already granted. A
+  disabled plan is never offered: the API rejects it with `OCS_TARIFF_DISABLED`.
 - Detail page: identity, billing (plan name, quota, status), timestamps, and the
   same lifecycle actions with confirmation. A missing identifier renders the
   "not found" state; it never falls back to a neighbouring record.
@@ -227,9 +231,13 @@ To adjust quota for a subscriber:
 
 ### 5.2.1 Console Surface (`/ocs/balances`)
 - KPI strip: account count, data allocated, data used and data available, read
-  from the `summary` block of the list envelope (collection-wide, not per page).
+  from the `summary` block of the list envelope. The summary describes the
+  current filter result set, not the whole collection, and is computed in the
+  same aggregation as the page and `total`.
 - Filters: IMSI (digits only), status and tariff plan; sortable IMSI / available
-  data / last update. Page, filters and sort live in the URL.
+  data / last update. Page, filters and sort live in the URL. The optional
+  `invariantStatus=valid|broken` filter is applied before pagination; records
+  whose bucket operands are missing are `unknown` and belong to neither subset.
 - The table shows the plan name, the three available buckets, the money balance,
   the conservation-invariant badge and the last update. A value the API did not
   report renders as an em dash, never as `0`.
@@ -326,6 +334,7 @@ To confirm a request reached the Go backend:
 | `CONTRACT_NOT_SUSPENDED` | 409 | Resume attempted from a state other than suspended | Only `suspended -> active` is allowed. |
 | `CONTRACT_NOT_ACTIVE` | 409 | Suspend attempted from a state other than active | Only `active -> suspended` is allowed. |
 | `CONTRACT_NOT_TERMINATABLE` | 409 | Termination attempted from an undefined state | Inspect the contract status before terminating. |
+| `CONTRACT_REASON_REQUIRED` | 400 | Suspend/resume/terminate omitted the required reason | Provide a reason with at least 3 characters; it is recorded in the audit trail. |
 | `OCS_CONTRACT_EXISTS` | 409 | Contract provisioning attempted for an IMSI that already has a contract | Open the existing contract; create is insert-only. |
 | `OCS_CONTRACT_RETAINED` | 409 | IMSI still has terminated contract history inside the retention window | Purge the retained history through Data Retention before reusing the IMSI. |
 | `SUBSCRIBER_NOT_FOUND` | 404 | Contract provisioning requested for an IMSI without a subscriber identity | Create the subscriber first. |

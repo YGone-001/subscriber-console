@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -77,6 +78,21 @@ type createContractBody struct {
 type updateTariffBody struct {
 	PlanID string `json:"plan_id"`
 	Status string `json:"status"`
+	Reason string `json:"reason"`
+}
+
+type lifecycleBody struct {
+	Reason string `json:"reason"`
+}
+
+func decodeOptionalBody(r *http.Request, target any) error {
+	if r.Body == nil || r.ContentLength == 0 {
+		return nil
+	}
+	if err := json.NewDecoder(r.Body).Decode(target); err != nil && err != io.EOF {
+		return err
+	}
+	return nil
 }
 
 // ── Create ─────────────────────────────────────────────────────────────────
@@ -272,7 +288,7 @@ func (h *SubscriberWriteHandler) UpdateTariff(w http.ResponseWriter, r *http.Req
 			response.Error(w, http.StatusBadRequest, "Only the terminated status is accepted here", "OCS_INVALID_STATUS")
 			return
 		}
-		h.terminateContract(w, r)
+		h.terminateContract(w, r, strings.TrimSpace(body.Reason))
 		return
 	}
 	if planID == "" {
@@ -345,12 +361,14 @@ func (h *SubscriberWriteHandler) UpdateTariff(w http.ResponseWriter, r *http.Req
 		Action:   "UPDATE",
 		Module:   "ocs-subscribers",
 		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
+		Reason:   strings.TrimSpace(body.Reason),
 		Before:   before,
 		After:    after,
 		Result:   "success",
 		Metadata: map[string]interface{}{
 			"operation": string(OpContractUpdate),
 			"actorRole": fresh.NormalizedRole,
+			"planId":    planID,
 		},
 	}, fresh)
 
@@ -393,6 +411,17 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 	}
 
 	if !h.limiter.Enforce(w, r, "ocs-subscribers:status:"+p.Username, 20, 60) {
+		return
+	}
+
+	var body lifecycleBody
+	if err := decodeOptionalBody(r, &body); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid request body", "INVALID_REQUEST")
+		return
+	}
+	reason := strings.TrimSpace(body.Reason)
+	if len(reason) < 3 {
+		response.Error(w, http.StatusBadRequest, "A reason with at least 3 characters is required", "CONTRACT_REASON_REQUIRED")
 		return
 	}
 
@@ -468,6 +497,7 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 		Action:   "UPDATE",
 		Module:   "ocs-subscribers",
 		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
+		Reason:   reason,
 		Before:   before,
 		After:    after,
 		Result:   "success",
@@ -489,16 +519,26 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 
 // Terminate handles DELETE /api/ocs/subscribers/{imsi}
 func (h *SubscriberWriteHandler) Terminate(w http.ResponseWriter, r *http.Request) {
-	h.terminateContract(w, r)
+	var body lifecycleBody
+	if err := decodeOptionalBody(r, &body); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid request body", "INVALID_REQUEST")
+		return
+	}
+	h.terminateContract(w, r, strings.TrimSpace(body.Reason))
 }
 
 // terminateContract moves a contract into the terminal state without deleting
 // the contract or its balance. DELETE keeps this route for compatibility; the
 // console uses PATCH {"status":"terminated"}.
-func (h *SubscriberWriteHandler) terminateContract(w http.ResponseWriter, r *http.Request) {
+func (h *SubscriberWriteHandler) terminateContract(w http.ResponseWriter, r *http.Request, reason string) {
 	imsi := r.PathValue("imsi")
 	if imsi == "" || !imsiRegex.MatchString(imsi) {
 		response.Error(w, http.StatusBadRequest, "Valid IMSI is required", "OCS_INVALID_IMSI")
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if len(reason) < 3 {
+		response.Error(w, http.StatusBadRequest, "A reason with at least 3 characters is required", "CONTRACT_REASON_REQUIRED")
 		return
 	}
 
@@ -580,6 +620,7 @@ func (h *SubscriberWriteHandler) terminateContract(w http.ResponseWriter, r *htt
 		Action:   "UPDATE",
 		Module:   "ocs-subscribers",
 		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
+		Reason:   reason,
 		Before:   before,
 		After:    after,
 		Result:   "success",

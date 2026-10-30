@@ -24,7 +24,12 @@ import {
   pageCountFor,
   sanitizeImsiInput,
 } from '../src/features/ocs/ocs-format';
-import { toAdjustmentListViewModel, toBalanceListViewModel, toBalanceSummaryViewModel } from '../src/features/ocs/ocs-view-models';
+import {
+  toAdjustmentListViewModel,
+  toBalanceListViewModel,
+  toBalanceSummaryViewModel,
+  toContractSummaryViewModel,
+} from '../src/features/ocs/ocs-view-models';
 import { attachmentFileName } from '../src/lib/api/download';
 import { hasActiveOcsFilters } from '../src/features/ocs/use-ocs-query-state';
 
@@ -248,4 +253,41 @@ test('the balance status filter includes retained terminated accounts', () => {
     'utf8',
   );
   assert.match(placeholder, /value: 'terminated'/);
+});
+
+test('the subscriber rating entry opens the concrete tariff plan, not the retired rating redirect', () => {
+  const panel = readFileSync(
+    resolve(testsDir, '../src/features/subscribers/components/subscriber/RatingRuleLinkPanel.tsx'),
+    'utf8',
+  );
+  assert.match(panel, /\/ocs\/tariffs\/\$\{encodeURIComponent\(planId\)\}/);
+  assert.doesNotMatch(panel, /href="\/rating"/);
+});
+
+test('the contract KPI strip reads the envelope summary instead of four status requests', () => {
+  const panel = readFileSync(resolve(testsDir, '../src/components/ocs/contracts/OcsContractsPanel.tsx'), 'utf8');
+  assert.match(panel, /toContractSummaryViewModel/);
+  assert.doesNotMatch(panel, /allRead|activeRead|suspendedRead|terminatedRead/, 'the list must not fan out into per-status KPI reads');
+});
+
+test('the contract summary keeps missing counts missing', () => {
+  assert.deepEqual(toContractSummaryViewModel({ summary: { total: 3, active: 2, suspended: 1, terminated: 0 } }), {
+    total: 3,
+    active: 2,
+    suspended: 1,
+    terminated: 0,
+  });
+  assert.equal(toContractSummaryViewModel({ records: [] }), null);
+});
+
+test('suspend, resume and terminate all require a confirmation with a reason', () => {
+  const list = readFileSync(resolve(testsDir, '../src/components/ocs/contracts/OcsContractsPanel.tsx'), 'utf8');
+  const detail = readFileSync(resolve(testsDir, '../src/components/ocs/contracts/OcsContractDetail.tsx'), 'utf8');
+  for (const source of [list, detail]) {
+    assert.match(source, /openLifecyclePrompt|setLifecyclePrompt/);
+    assert.match(source, /reasonRequired/);
+    assert.match(source, /reason: reason\.trim\(\)|reason \}/);
+  }
+  assert.doesNotMatch(list, /onClick=\{\(\) => void handleSuspend/);
+  assert.doesNotMatch(list, /onClick=\{\(\) => void handleResume/);
 });

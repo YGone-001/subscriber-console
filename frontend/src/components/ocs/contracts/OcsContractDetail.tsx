@@ -30,7 +30,7 @@ import {
   toTariffListViewModel,
   type TariffPlanViewModel,
 } from '../../../features/ocs/ocs-view-models';
-import { formatOcsBytes, formatOcsTime, sanitizeImsiInput } from '../../../features/ocs/ocs-format';
+import { formatOcsBytes, formatOcsSeconds, formatOcsTime, sanitizeImsiInput } from '../../../features/ocs/ocs-format';
 
 interface OcsContractDetailProps {
   imsi: string;
@@ -44,7 +44,10 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
   const requested = sanitizeImsiInput(imsi);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [confirmTerminate, setConfirmTerminate] = useState(false);
+  const [lifecyclePrompt, setLifecyclePrompt] = useState<{
+    status: 'suspended' | 'active' | 'terminated';
+    reason: string;
+  } | null>(null);
   const [tariffOpen, setTariffOpen] = useState(false);
   const [tariffDraft, setTariffDraft] = useState('');
 
@@ -75,6 +78,14 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
       }));
   }, [contract?.planId, plans]);
 
+  const selectedPlan = tariffDraft ? planById.get(tariffDraft) : undefined;
+  const currentPlan = contract?.planId ? planById.get(contract.planId) : undefined;
+  const planSummary = (plan?: TariffPlanViewModel) => (
+    plan
+      ? `${plan.name || plan.planId} · ${formatOcsBytes(plan.quotaPerGrant)}${plan.validityTime ? ` · ${formatOcsSeconds(plan.validityTime)}` : ''}`
+      : '—'
+  );
+
   const backTo = { to: '/ocs/contracts', label: t('ocs_back_to_list') };
 
   const run = async (action: string, fn: () => Promise<unknown>) => {
@@ -92,6 +103,24 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
     } finally {
       setBusy(null);
     }
+  };
+
+  const confirmLifecycle = () => {
+    if (!lifecyclePrompt || !contract?.imsi) return;
+    const reason = lifecyclePrompt.reason.trim();
+    if (reason.length < 3) return;
+    const status = lifecyclePrompt.status;
+    setLifecyclePrompt(null);
+    const encoded = encodeURIComponent(contract.imsi);
+    if (status === 'terminated') {
+      void run('terminate', () => patchJson(`/api/ocs/subscribers/${encoded}`, { status: 'terminated', reason }));
+      return;
+    }
+    if (status === 'suspended') {
+      void run('suspend', () => postJson(`/api/ocs/subscribers/${encoded}/suspend`, { reason }));
+      return;
+    }
+    void run('resume', () => postJson(`/api/ocs/subscribers/${encoded}/resume`, { reason }));
   };
 
   if (loading && !contract) {
@@ -162,7 +191,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
                     type="button"
                     className="ocs-btn ocs-btn-secondary"
                     disabled={Boolean(busy)}
-                    onClick={() => void run('suspend', () => postJson(`/api/ocs/subscribers/${encodeURIComponent(contract.imsi ?? '')}/suspend`))}
+                    onClick={() => setLifecyclePrompt({ status: 'suspended', reason: '' })}
                   >
                     <Pause size={14} aria-hidden="true" /> {t('ocs_sub_action_suspend')}
                   </button>
@@ -171,7 +200,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
                     type="button"
                     className="ocs-btn ocs-btn-secondary"
                     disabled={Boolean(busy)}
-                    onClick={() => void run('resume', () => postJson(`/api/ocs/subscribers/${encodeURIComponent(contract.imsi ?? '')}/resume`))}
+                    onClick={() => setLifecyclePrompt({ status: 'active', reason: '' })}
                   >
                     <Play size={14} aria-hidden="true" /> {t('ocs_sub_action_resume')}
                   </button>
@@ -180,7 +209,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
                   type="button"
                   className="ocs-btn ocs-btn-danger"
                   disabled={Boolean(busy)}
-                  onClick={() => setConfirmTerminate(true)}
+                  onClick={() => setLifecyclePrompt({ status: 'terminated', reason: '' })}
                 >
                   <Trash2 size={14} aria-hidden="true" /> {t('ocs_sub_action_terminate')}
                 </button>
@@ -274,6 +303,13 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
+          {selectedPlan ? (
+            <div className="ocs-dialog-copy">
+              <div>{t('ocs_contract_plan_current')}: <span className="ocs-mono">{planSummary(currentPlan)}</span></div>
+              <div>{t('ocs_contract_plan_target')}: <span className="ocs-mono">{planSummary(selectedPlan)}</span></div>
+              <span className="ocs-form-hint">{t('ocs_contract_plan_effective_now')}</span>
+            </div>
+          ) : null}
         </div>
         <div className="ocs-dialog-actions">
           <button type="button" className="ocs-btn ocs-btn-secondary" onClick={() => setTariffOpen(false)} disabled={Boolean(busy)}>
@@ -295,19 +331,36 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
         </div>
       </Dialog>
 
-      {confirmTerminate && (
+      {lifecyclePrompt && (
         <ConfirmDialog
-          title={t('ocs_confirm_terminate_title')}
-          message={t('ocs_sub_confirm_terminate').replace('{imsi}', contract.imsi ?? '')}
-          confirmLabel={t('ocs_sub_action_terminate')}
-          danger
+          title={
+            lifecyclePrompt.status === 'terminated'
+              ? t('ocs_confirm_terminate_title')
+              : lifecyclePrompt.status === 'suspended'
+                ? t('ocs_confirm_suspend_title')
+                : t('ocs_confirm_resume_title')
+          }
+          message={(
+            lifecyclePrompt.status === 'terminated'
+              ? t('ocs_sub_confirm_terminate')
+              : lifecyclePrompt.status === 'suspended'
+                ? t('ocs_confirm_suspend_message')
+                : t('ocs_confirm_resume_message')
+          ).replace('{imsi}', contract.imsi ?? '')}
+          confirmLabel={
+            lifecyclePrompt.status === 'terminated'
+              ? t('ocs_sub_action_terminate')
+              : lifecyclePrompt.status === 'suspended'
+                ? t('ocs_sub_action_suspend')
+                : t('ocs_sub_action_resume')
+          }
+          danger={lifecyclePrompt.status === 'terminated'}
           loading={Boolean(busy)}
-          onConfirm={() => {
-            setConfirmTerminate(false);
-            void run('terminate', () =>
-              patchJson(`/api/ocs/subscribers/${encodeURIComponent(contract.imsi ?? '')}`, { status: 'terminated' }));
-          }}
-          onCancel={() => setConfirmTerminate(false)}
+          reason={lifecyclePrompt.reason}
+          reasonRequired
+          onReasonChange={(reason) => setLifecyclePrompt((current) => (current ? { ...current, reason } : current))}
+          onConfirm={confirmLifecycle}
+          onCancel={() => setLifecyclePrompt(null)}
         />
       )}
     </div>

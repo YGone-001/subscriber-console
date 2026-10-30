@@ -479,6 +479,8 @@ func (r *Repository) ListSubscribers(ctx context.Context, opts SubscriberQueryOp
 		totalPages++
 	}
 
+	summary := contractStatusSummary(ctx, r.subscribers)
+
 	return SubscriberListResponse{
 		OK:         true,
 		Records:    records,
@@ -486,7 +488,44 @@ func (r *Repository) ListSubscribers(ctx context.Context, opts SubscriberQueryOp
 		Page:       page,
 		Limit:      limit,
 		TotalPages: totalPages,
+		Summary:    summary,
 	}, nil
+}
+
+// contractStatusSummary counts contracts by lifecycle state for the KPI strip.
+// It ignores list filters on purpose; a failed aggregation omits the summary
+// rather than returning a fabricated zero count.
+func contractStatusSummary(ctx context.Context, collection *mongo.Collection) *SubscriberSummary {
+	cursor, err := collection.Aggregate(ctx, mongo.Pipeline{
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":   "$status",
+			"count": bson.M{"$sum": int64(1)},
+		}}},
+	})
+	if err != nil {
+		return nil
+	}
+	defer cursor.Close(ctx)
+
+	summary := &SubscriberSummary{}
+	var rows []bson.M
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil
+	}
+	for _, row := range rows {
+		status, _ := row["_id"].(string)
+		count := numericInt64(row["count"])
+		summary.Total += count
+		switch status {
+		case "active":
+			summary.Active = count
+		case "suspended":
+			summary.Suspended = count
+		case "terminated":
+			summary.Terminated = count
+		}
+	}
+	return summary
 }
 
 // GetSubscriberRecord returns one OCS subscriber contract, or nil when absent.

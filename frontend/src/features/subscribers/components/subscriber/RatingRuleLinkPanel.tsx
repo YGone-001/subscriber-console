@@ -138,7 +138,7 @@ export default function RatingRuleLinkPanel({
           </div>
         </div>
         <a
-          href="/rating"
+          href={planId ? `/ocs/tariffs/${encodeURIComponent(planId)}` : '/ocs/tariffs'}
           target="_blank"
           rel="noreferrer"
           className="btn btn-outline rating-panel-btn"
