@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -28,12 +29,20 @@ type RateLimiter interface {
 	Enforce(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool
 }
 
+// ContractProvisioner provisions a billing contract and balance account for a
+// subscriber identity that already exists. The implementation lives with the
+// subscriber repository so the OCS collections have one provisioning writer.
+type ContractProvisioner interface {
+	ProvisionContractForExistingSubscriber(ctx context.Context, imsi, planID, requestedMsisdn string, ocsTraffic map[string]any) (contract bson.M, balanceAdopted bool, err error)
+}
+
 // SubscriberWriteHandler provides HTTP handlers for OCS subscriber contract write endpoints.
 type SubscriberWriteHandler struct {
-	repo        *Repository
-	limiter     RateLimiter
-	userRepo    UserRepository
-	auditWriter *audit.Writer
+	repo                *Repository
+	limiter             RateLimiter
+	userRepo            UserRepository
+	auditWriter         *audit.Writer
+	contractProvisioner ContractProvisioner
 }
 
 // NewSubscriberWriteHandler creates a new OCS subscriber write handler.
@@ -46,13 +55,23 @@ func NewSubscriberWriteHandler(repo *Repository, limiter RateLimiter, userRepo U
 	}
 }
 
+// UseContractProvisioner wires the shared subscriber/OCS provisioning writer.
+// Without it the create endpoint fails closed instead of falling back to the
+// historical upsert.
+func (h *SubscriberWriteHandler) UseContractProvisioner(provisioner ContractProvisioner) {
+	h.contractProvisioner = provisioner
+}
+
 // ── Request bodies ─────────────────────────────────────────────────────────
 
 type createContractBody struct {
-	IMSI   string `json:"imsi"`
-	MSISDN string `json:"msisdn"`
-	PlanID string `json:"plan_id"`
-	Status string `json:"status"`
+	IMSI        string         `json:"imsi"`
+	MSISDN      string         `json:"msisdn"`
+	PlanID      string         `json:"plan_id"`
+	PlanIDAlias string         `json:"planId"`
+	Status      string         `json:"status"`
+	OcsTraffic  map[string]any `json:"ocsTraffic"`
+	Reason      string         `json:"reason"`
 }
 
 type updateTariffBody struct {
@@ -63,7 +82,8 @@ type updateTariffBody struct {
 // ── Create ─────────────────────────────────────────────────────────────────
 
 // Create handles POST /api/ocs/subscribers
-// Creates an OCS subscriber contract with governance: super_admin/root → DIRECT, operator → APPROVAL.
+// Provisions a contract and its balance account for a subscriber identity that
+// already exists. Governance is DIRECT for every authorized role.
 func (h *SubscriberWriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
@@ -93,21 +113,22 @@ func (h *SubscriberWriteHandler) Create(w http.ResponseWriter, r *http.Request) 
 
 	planID := strings.TrimSpace(body.PlanID)
 	if planID == "" {
-		planID = "plan_default_10gb"
+		planID = strings.TrimSpace(body.PlanIDAlias)
 	}
-
-	// Validate tariff plan exists and is active
-	tariffStatus, err := h.repo.GetTariffPlanStatus(r.Context(), planID)
-	if err != nil {
-		if err.Error() == "OCS_TARIFF_NOT_FOUND" {
-			response.Error(w, http.StatusBadRequest, "Tariff plan not found", "OCS_TARIFF_NOT_FOUND")
-			return
-		}
-		response.InternalError(w)
+	if planID == "" {
+		response.Error(w, http.StatusBadRequest, "plan_id is required", "OCS_PLAN_ID_REQUIRED")
 		return
 	}
-	if tariffStatus == "disabled" {
-		response.Error(w, http.StatusBadRequest, "Cannot bind to disabled tariff plan", "OCS_TARIFF_DISABLED")
+
+	/* Creation always yields an active contract. Lifecycle changes have their
+	 * own governed transitions; accepting a status here would bypass them. */
+	if requestedStatus := strings.TrimSpace(body.Status); requestedStatus != "" && requestedStatus != "active" {
+		response.Error(w, http.StatusBadRequest, "Contracts are created active; use suspend or terminate to change lifecycle", "OCS_INVALID_STATUS")
+		return
+	}
+
+	if h.contractProvisioner == nil {
+		response.InternalError(w)
 		return
 	}
 
@@ -123,20 +144,11 @@ func (h *SubscriberWriteHandler) Create(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	doc := bson.M{
-		"imsi":    imsi,
-		"msisdn":  strings.TrimSpace(body.MSISDN),
-		"plan_id": planID,
-		"status":  nonEmptyStr(body.Status, "active"),
-	}
-
-	// Direct execution
-	if err := h.repo.CreateSubscriberContract(r.Context(), doc); err != nil {
-		if err.Error() == "OCS_SUBSCRIBER_EXISTS" {
-			response.Error(w, http.StatusConflict, "OCS subscriber contract already exists", "OCS_SUBSCRIBER_EXISTS")
-			return
-		}
-		response.InternalError(w)
+	contract, balanceAdopted, err := h.contractProvisioner.ProvisionContractForExistingSubscriber(
+		r.Context(), imsi, planID, strings.TrimSpace(body.MSISDN), body.OcsTraffic,
+	)
+	if err != nil {
+		writeProvisionFailure(w, err)
 		return
 	}
 
@@ -144,19 +156,78 @@ func (h *SubscriberWriteHandler) Create(w http.ResponseWriter, r *http.Request) 
 		Action:   "CREATE",
 		Module:   "ocs-subscribers",
 		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
-		After:    doc,
+		Reason:   strings.TrimSpace(body.Reason),
+		After:    contract,
 		Result:   "success",
 		Metadata: map[string]interface{}{
-			"operation": string(OpContractCreate),
-			"actorRole": fresh.NormalizedRole,
+			"operation":       string(OpContractCreate),
+			"actorRole":       fresh.NormalizedRole,
+			"planId":          planID,
+			"balanceAdopted":  balanceAdopted,
+			"provisionSource": "subscriber_contract",
 		},
 	}, fresh)
 
 	response.JSON(w, http.StatusCreated, map[string]any{
-		"outcome": "success",
-		"message": "operation completed",
-		"imsi":    imsi,
+		"outcome":        "success",
+		"message":        "operation completed",
+		"imsi":           imsi,
+		"plan_id":        planID,
+		"balanceAdopted": balanceAdopted,
 	})
+}
+
+// codedProvisionError is implemented by the subscriber provisioning writer.
+// The interface keeps the OCS package independent of that package's error type.
+type codedProvisionError interface {
+	ErrorCode() string
+	ErrorDetails() map[string]any
+}
+
+func writeProvisionFailure(w http.ResponseWriter, err error) {
+	if coded, ok := err.(codedProvisionError); ok {
+		details := coded.ErrorDetails()
+		switch coded.ErrorCode() {
+		case "VALIDATION_ERROR":
+			message := "Invalid request body"
+			if detail, ok := details["message"].(string); ok && detail != "" {
+				message = detail
+			}
+			response.Error(w, http.StatusBadRequest, message, "VALIDATION_ERROR")
+		case "SUBSCRIBER_NOT_FOUND":
+			response.Error(w, http.StatusNotFound, "Subscriber identity not found", "SUBSCRIBER_NOT_FOUND")
+		case "OCS_CONTRACT_EXISTS":
+			response.Error(w, http.StatusConflict, "OCS subscriber contract already exists", "OCS_CONTRACT_EXISTS")
+		case "OCS_CONTRACT_RETAINED":
+			response.Error(w, http.StatusConflict, "IMSI still has terminated OCS contract history; purge it through retention before reuse", "OCS_CONTRACT_RETAINED")
+		case "OCS_PLAN_ID_REQUIRED":
+			response.Error(w, http.StatusBadRequest, "plan_id is required", "OCS_PLAN_ID_REQUIRED")
+		case "OCS_PLAN_NOT_FOUND":
+			response.Error(w, http.StatusBadRequest, "Tariff plan not found", "OCS_TARIFF_NOT_FOUND")
+		case "OCS_PLAN_DISABLED":
+			response.Error(w, http.StatusBadRequest, "Cannot bind to disabled tariff plan", "OCS_TARIFF_DISABLED")
+		case "OCS_PLAN_MISMATCH":
+			response.Error(w, http.StatusBadRequest, "ocsTraffic plan must match plan_id", "OCS_PLAN_MISMATCH")
+		case "MSISDN_MISMATCH":
+			response.Error(w, http.StatusBadRequest, "msisdn must match the subscriber primary number", "MSISDN_MISMATCH")
+		case "INVALID_MSISDN":
+			response.Error(w, http.StatusBadRequest, "MSISDN must contain digits only", "INVALID_MSISDN")
+		case "OCS_BALANCE_PLAN_MISMATCH":
+			response.Error(w, http.StatusConflict, "Existing balance account belongs to another tariff plan", "OCS_BALANCE_PLAN_MISMATCH")
+		case "OCS_BALANCE_STATUS_INCONSISTENT":
+			response.Error(w, http.StatusConflict, "Existing balance account is not active; reconcile it before creating a contract", "OCS_BALANCE_STATUS_INCONSISTENT")
+		case "OCS_BALANCE_EXISTS":
+			response.Error(w, http.StatusConflict, "A balance account already exists for this IMSI", "OCS_BALANCE_EXISTS")
+		case "OCS_CONTRACT_CREATE_PARTIAL_WRITE":
+			response.Error(w, http.StatusInternalServerError, "Contract provisioning failed and could not be rolled back", "OCS_CONTRACT_CREATE_PARTIAL_WRITE")
+		case "OCS_CONTRACT_CREATE_FAILED":
+			response.Error(w, http.StatusInternalServerError, "Contract provisioning failed; no contract was created", "OCS_CONTRACT_CREATE_FAILED")
+		default:
+			response.InternalError(w)
+		}
+		return
+	}
+	response.InternalError(w)
 }
 
 // ── Update Tariff Binding ──────────────────────────────────────────────────
@@ -246,8 +317,19 @@ func (h *SubscriberWriteHandler) UpdateTariff(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	/* Mirror the binding into the account before changing the contract. If the
+	 * contract write then fails, put the account back so the two do not drift. */
+	previousPlan, _ := before["plan_id"].(string)
+	if err := h.repo.SyncBalancePlan(r.Context(), imsi, planID); err != nil {
+		response.InternalError(w)
+		return
+	}
+
 	// Direct execution
 	if err := h.repo.UpdateTariffBinding(r.Context(), imsi, planID); err != nil {
+		if revertErr := h.repo.SyncBalancePlan(r.Context(), imsi, previousPlan); revertErr != nil {
+			slog.Error("failed to revert balance plan after contract update failure", "imsi", imsi, "error", revertErr)
+		}
 		if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
 			response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
 			return
@@ -342,9 +424,12 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// No-op if already in target status
+	// No-op if already in target status. Repair a stale account while here.
 	currentStatus, _ := before["status"].(string)
 	if currentStatus == status {
+		if err := h.repo.SyncBalanceStatus(r.Context(), imsi, status); err != nil {
+			slog.Error("failed to sync balance status while contract was already in target state", "imsi", imsi, "status", status, "error", err)
+		}
 		response.JSON(w, http.StatusOK, map[string]any{
 			"outcome": "executed",
 			"message": fmt.Sprintf("OCS subscriber contract already %s", status),
@@ -358,7 +443,16 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 		return
 	}
 
+	if err := h.repo.SyncBalanceStatus(r.Context(), imsi, status); err != nil {
+		response.InternalError(w)
+		return
+	}
 	if err := h.repo.SetContractStatus(r.Context(), imsi, status); err != nil {
+		if currentStatus != "" {
+			if revertErr := h.repo.SyncBalanceStatus(r.Context(), imsi, currentStatus); revertErr != nil {
+				slog.Error("failed to revert balance status after contract update failure", "imsi", imsi, "error", revertErr)
+			}
+		}
 		if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
 			response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
 			return
@@ -446,6 +540,9 @@ func (h *SubscriberWriteHandler) terminateContract(w http.ResponseWriter, r *htt
 
 	currentStatus, _ := before["status"].(string)
 	if currentStatus == "terminated" {
+		if err := h.repo.SyncBalanceStatus(r.Context(), imsi, "terminated"); err != nil {
+			slog.Error("failed to sync balance status while contract was already terminated", "imsi", imsi, "error", err)
+		}
 		response.JSON(w, http.StatusOK, map[string]any{
 			"outcome": "executed",
 			"message": "OCS subscriber contract already terminated",
@@ -458,7 +555,16 @@ func (h *SubscriberWriteHandler) terminateContract(w http.ResponseWriter, r *htt
 		return
 	}
 
+	if err := h.repo.SyncBalanceStatus(r.Context(), imsi, "terminated"); err != nil {
+		response.InternalError(w)
+		return
+	}
 	if err := h.repo.SetContractStatus(r.Context(), imsi, "terminated"); err != nil {
+		if currentStatus != "" {
+			if revertErr := h.repo.SyncBalanceStatus(r.Context(), imsi, currentStatus); revertErr != nil {
+				slog.Error("failed to revert balance status after termination failure", "imsi", imsi, "error", revertErr)
+			}
+		}
 		if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
 			response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
 			return
@@ -540,13 +646,6 @@ func (h *SubscriberWriteHandler) writeSubscriberAudit(r *http.Request, input aud
 
 func isSubscriberOpExecutable(result governance.Result) bool {
 	return result.Decision != governance.Disabled && result.Decision != governance.RuntimeOnly
-}
-
-func nonEmptyStr(s, fallback string) string {
-	if s != "" {
-		return s
-	}
-	return fallback
 }
 
 func capitalizeStr(s string) string {

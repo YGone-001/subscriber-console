@@ -254,6 +254,17 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusConflict, "Balance record version is not reported; refresh before adjusting", "BALANCE_VERSION_MISSING")
 		return
 	}
+	/* The contract is authoritative even if the account's cached status is
+	 * stale, so read it directly before allowing a write. */
+	contractStatus, err := h.repo.GetContractStatus(r.Context(), imsi)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if contractStatus == "terminated" {
+		response.Error(w, http.StatusConflict, "Terminated contracts cannot be adjusted", "CONTRACT_TERMINATED")
+		return
+	}
 	if view.Status != nil && *view.Status == "terminated" {
 		response.Error(w, http.StatusConflict, "Terminated contracts cannot be adjusted", "CONTRACT_TERMINATED")
 		return

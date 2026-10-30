@@ -1690,3 +1690,47 @@
   color: var(--text-secondary);
   font-size: var(--ref-font-size-body-small);
 }
+
+/* Contract provisioning dialog: lookup row, loaded identity summary and the
+ * quota grid. Values use the shared tokens; no surface-specific colors. */
+.ocs-contract-create-lookup {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ocs-contract-create-lookup .ocs-form-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ocs-contract-create-subscriber {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  font-size: var(--ref-font-size-body-small);
+}
+
+.ocs-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.ocs-contract-create-quota {
+  border: 0;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+@media (max-width: 640px) {
+  .ocs-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -189,6 +189,7 @@ export default function OcsBalancePlaceholder() {
           { value: '', label: t('ocs_filter_all') },
           { value: 'active', label: t('ocs_status_active') },
           { value: 'suspended', label: t('ocs_status_suspended') },
+          { value: 'terminated', label: t('ocs_contract_status_terminated') },
         ]}
       />
       <OcsFilterSelect

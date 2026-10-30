@@ -128,19 +128,26 @@ Target Collection: `xcloud.ocs_subscribers`
 > It is strictly decoupled from `xcloud.subscribers` (which manages 3GPP network SIM provisioning, OPc/K keys, and HSS/EPC AMBR speed limits).
 
 ### 4.2 Standard Procedures
-1. **Contract Provisioning**:
-   - Submit `POST /api/ocs/subscribers` with `imsi`, `msisdn`, and `plan_id`.
-   - The selected `plan_id` must exist in `xcloud.ocs_tariff_plans` and be in `active` state.
-2. **Plan Reassignment**:
+1. **Contract Provisioning (existing subscriber)**:
+   - Submit `POST /api/ocs/subscribers` with `imsi`, an explicit `plan_id`, optional `ocsTraffic` and `reason`.
+   - The subscriber identity must exist in `xcloud.subscribers`; the contract's MSISDN is the subscriber's primary number (an optional `msisdn` must match it).
+   - The selected `plan_id` must exist in `xcloud.ocs_tariff_plans` and be in `active` state. There is no default plan.
+   - The contract is created `active`; the endpoint accepts no client-chosen lifecycle status and is insert-only. An existing contract answers `409 OCS_CONTRACT_EXISTS`; retained terminated history answers `409 OCS_CONTRACT_RETAINED`.
+   - The same call creates the balance account. Only the supplied quota buckets are written; a pre-existing account is adopted untouched (its buckets are never rewritten), and its plan/status must be compatible or the call answers `OCS_BALANCE_PLAN_MISMATCH` / `OCS_BALANCE_STATUS_INCONSISTENT`.
+   - The console entry points are the "Provision contract" button on `/ocs/contracts` and the action shown on a subscriber detail page whose contract is missing.
+2. **Lifecycle propagation**:
+   - Suspend, resume, terminate and plan reassignment update the contract first-class record and mirror status/plan into `xcloud.ocs_balances` (with a version increment).
+   - Balance reads prefer the contract's status/plan over the account's cached copies; the adjust endpoint refuses a terminated contract even if the cached account status is stale.
+3. **Plan Reassignment**:
    - Submit `PATCH /api/ocs/subscribers/{imsi}` with new `plan_id`.
-3. **Contract Suspension**:
+4. **Contract Suspension**:
    - Submit `POST /api/ocs/subscribers/{imsi}/suspend`.
    - Sets status to `suspended`. Rating engine halts usage grants for suspended contracts.
-4. **Contract Resumption**:
+5. **Contract Resumption**:
    - Submit `POST /api/ocs/subscribers/{imsi}/resume`.
    - Allowed only from `suspended`; a terminated contract answers
      `CONTRACT_TERMINATED` and is never resurrected.
-5. **Contract Termination**:
+6. **Contract Termination**:
    - Submit `PATCH /api/ocs/subscribers/{imsi}` with `{"status":"terminated"}`.
    - Moves the contract to the terminal `terminated` state and preserves both the
      contract and its balance records. `DELETE /api/ocs/subscribers/{imsi}` is a
@@ -162,6 +169,10 @@ Target Collection: `xcloud.ocs_subscribers`
   describe the collection rather than the current page.
 - Filters: IMSI (digits only) and status, plus a tariff-plan filter. Sort, page
   and page size live in the URL.
+- The toolbar exposes "Provision contract" for operators with
+  `ocs.plan.assign`; it opens the shared provisioning dialog (subscriber
+  lookup, explicit plan, optional quota buckets and a reason). The same dialog
+  is available from a subscriber detail page whose contract is missing.
 - The pager derives its page count from `total`. The list envelope's `totalPages`
   is `floor(total/limit) + 1`, which advertises a trailing empty page whenever the
   total is an exact multiple of the page size.
@@ -315,6 +326,15 @@ To confirm a request reached the Go backend:
 | `CONTRACT_NOT_SUSPENDED` | 409 | Resume attempted from a state other than suspended | Only `suspended -> active` is allowed. |
 | `CONTRACT_NOT_ACTIVE` | 409 | Suspend attempted from a state other than active | Only `active -> suspended` is allowed. |
 | `CONTRACT_NOT_TERMINATABLE` | 409 | Termination attempted from an undefined state | Inspect the contract status before terminating. |
+| `OCS_CONTRACT_EXISTS` | 409 | Contract provisioning attempted for an IMSI that already has a contract | Open the existing contract; create is insert-only. |
+| `OCS_CONTRACT_RETAINED` | 409 | IMSI still has terminated contract history inside the retention window | Purge the retained history through Data Retention before reusing the IMSI. |
+| `SUBSCRIBER_NOT_FOUND` | 404 | Contract provisioning requested for an IMSI without a subscriber identity | Create the subscriber first. |
+| `OCS_PLAN_ID_REQUIRED` | 400 | Contract provisioning omitted `plan_id` | Select an explicit active plan; there is no default plan. |
+| `MSISDN_MISMATCH` | 400 | Requested `msisdn` differs from the subscriber primary number | Omit `msisdn` or send the subscriber's primary number. |
+| `OCS_BALANCE_PLAN_MISMATCH` | 409 | Existing balance account belongs to another plan | Reconcile the account before provisioning the contract. |
+| `OCS_BALANCE_STATUS_INCONSISTENT` | 409 | Existing balance account is not active | Reconcile the account before provisioning the contract. |
+| `OCS_CONTRACT_CREATE_PARTIAL_WRITE` | 500 | Contract provisioning failed and compensation could not remove the inserted contract | Inspect `ocs_subscribers`/`ocs_balances` for the IMSI and reconcile. |
+| `OCS_CONTRACT_CREATE_FAILED` | 500 | Contract provisioning failed; no contract remains | Retry after checking the service logs. |
 
 ### 7.4 Internal Operation Log Inquiries
 All operations append internal operational records to `xcloud_ops.app_audit_logs` for troubleshooting, traceability, and operational evidence.  

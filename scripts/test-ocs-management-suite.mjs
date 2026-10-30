@@ -323,6 +323,12 @@ try {
   // ══════════════════════════════════════════════════════════════════
   console.log('\n2. Contract Subscriber Governance Matrix');
 
+  /* Contract provisioning requires an existing subscriber identity; the
+   * contract's MSISDN is derived from that identity. */
+  for (const [imsi, msisdn] of [['460020000009901', '8613800009901'], ['460020000009902', '8613800009902']]) {
+    await xcloud.collection('subscribers').insertOne({ imsi, msisdn: [msisdn] });
+  }
+
   const imsiContract = '460020000009901';
 
   // 2.1 Direct Contract Creation by super_admin
@@ -387,6 +393,9 @@ try {
     assert([200, 202].includes(suspendRes.status));
     let doc = await xcloud.collection('ocs_subscribers').findOne({ imsi: imsiContract });
     assert.equal(doc.status, 'suspended');
+    const suspendedBalance = await xcloud.collection('ocs_balances').findOne({ imsi: imsiContract });
+    assert(suspendedBalance, 'Contract provisioning must create the balance account');
+    assert.equal(suspendedBalance.status, 'suspended', 'Lifecycle status must mirror into the balance account');
     recordCheck('contract.suspend_contract');
 
     const resumeRes = await requestViaGo(`/api/ocs/subscribers/${imsiContract}/resume`, {
@@ -396,6 +405,8 @@ try {
     assert([200, 202].includes(resumeRes.status));
     doc = await xcloud.collection('ocs_subscribers').findOne({ imsi: imsiContract });
     assert.equal(doc.status, 'active');
+    const resumedBalance = await xcloud.collection('ocs_balances').findOne({ imsi: imsiContract });
+    assert.equal(resumedBalance.status, 'active', 'Lifecycle status must mirror into the balance account');
     recordCheck('contract.resume_contract');
   }
 
@@ -424,6 +435,30 @@ try {
     assert.equal(sub.session_id, undefined);
     assert.equal(sub.rating_group, undefined);
     recordCheck('contract.read_and_boundary_integrity');
+  }
+
+  // 2.6 Contract Termination Propagates and Blocks Balance Adjustment
+  {
+    const terminateRes = await requestViaGo(`/api/ocs/subscribers/${imsiContract}`, {
+      method: 'PATCH',
+      token: tokens.super_admin,
+      body: { status: 'terminated' },
+    });
+    assert([200, 202].includes(terminateRes.status), `Expected 200/202 terminating, got ${terminateRes.status}`);
+
+    const contract = await xcloud.collection('ocs_subscribers').findOne({ imsi: imsiContract });
+    assert.equal(contract.status, 'terminated');
+    const terminalBalance = await xcloud.collection('ocs_balances').findOne({ imsi: imsiContract });
+    assert.equal(terminalBalance.status, 'terminated', 'Termination must mirror into the balance account');
+
+    const adjustRes = await requestViaGo(`/api/ocs/balances/${imsiContract}/adjust`, {
+      method: 'POST',
+      token: tokens.super_admin,
+      body: { bucket: 'data', operation: 'credit', amount: 1, reason: 'must be refused' },
+    });
+    assert.equal(adjustRes.status, 409, `Terminated contract adjustment must be refused, got ${adjustRes.status}`);
+    assert.equal(adjustRes.data?.code, 'CONTRACT_TERMINATED');
+    recordCheck('contract.terminate_and_balance_adjust_refused');
   }
 
   // ══════════════════════════════════════════════════════════════════

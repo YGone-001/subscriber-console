@@ -243,6 +243,192 @@ func TestCreateSubscriberWithConfiguration_UsesSub4GListAsMsisdnAuthority(t *tes
 	}
 }
 
+func insertSubscriberIdentity(t *testing.T, repo *Repository, imsi, msisdn string) {
+	t.Helper()
+	doc := bson.M{"imsi": imsi}
+	if msisdn != "" {
+		doc["msisdn"] = bson.A{msisdn}
+	}
+	if _, err := repo.subscribers.InsertOne(context.Background(), doc); err != nil {
+		t.Fatalf("insert subscriber identity %s: %v", imsi, err)
+	}
+}
+
+// Provisioning a contract for an existing subscriber writes both the contract
+// and its strict balance account in one flow, with the subscriber identity as
+// the IMSI/MSISDN authority.
+func TestProvisionContractForExistingSubscriber_CreatesContractAndStrictBalance(t *testing.T) {
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+	seedTariffPlan(t, repo, "plan_contract")
+
+	const imsi = "417010000000201"
+	const msisdn = "963900000201"
+	insertSubscriberIdentity(t, repo, imsi, msisdn)
+
+	contract, adopted, err := repo.ProvisionContractForExistingSubscriber(ctx, imsi, "plan_contract", msisdn, map[string]any{
+		"traffic_total":   int64(1073741824),
+		"traffic_balance": int64(536870912),
+	})
+	if err != nil {
+		t.Fatalf("provision contract: %v", err)
+	}
+	if adopted {
+		t.Error("a new balance account must not be reported as adopted")
+	}
+	if contract["status"] != "active" || contract["plan_id"] != "plan_contract" || contract["msisdn"] != msisdn {
+		t.Errorf("contract = %v, want active/plan_contract/%s", contract, msisdn)
+	}
+
+	balance := readOcsBalance(t, repo, imsi)
+	if got := numericInt64(balance["data_total"]); got != 1073741824 {
+		t.Errorf("data_total = %d, want 1073741824", got)
+	}
+	if got := numericInt64(balance["data_available"]); got != 536870912 {
+		t.Errorf("data_available = %d, want 536870912", got)
+	}
+	if got := numericInt64(balance["data_used"]); got != 536870912 {
+		t.Errorf("data_used = %d, want 536870912", got)
+	}
+	for _, absent := range []string{"voice_total", "voice_available", "sms_total", "sms_available"} {
+		if _, present := balance[absent]; present {
+			t.Errorf("unsupplied bucket %q must stay unconfigured, got %v", absent, balance[absent])
+		}
+	}
+}
+
+func TestProvisionContractForExistingSubscriber_RefusesExistingContracts(t *testing.T) {
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+	seedTariffPlan(t, repo, defaultPlanID)
+
+	cases := []struct {
+		imsi    string
+		status  string
+		wantErr string
+	}{
+		{"417010000000202", "active", "OCS_CONTRACT_EXISTS"},
+		{"417010000000203", "terminated", "OCS_CONTRACT_RETAINED"},
+	}
+	for _, tc := range cases {
+		insertSubscriberIdentity(t, repo, tc.imsi, "")
+		if _, err := repo.ocsSubs.InsertOne(ctx, bson.M{
+			"imsi": tc.imsi, "status": tc.status, "plan_id": defaultPlanID,
+		}); err != nil {
+			t.Fatalf("seed contract %s: %v", tc.imsi, err)
+		}
+
+		_, _, err := repo.ProvisionContractForExistingSubscriber(ctx, tc.imsi, defaultPlanID, "", nil)
+		govErr, ok := err.(*SubscriberGovernanceError)
+		if !ok || govErr.Code != tc.wantErr {
+			t.Fatalf("%s: error = %v, want %s", tc.imsi, err, tc.wantErr)
+		}
+
+		subscribers, contracts, balances := countDocuments(t, repo, tc.imsi)
+		if subscribers != 1 || contracts != 1 || balances != 0 {
+			t.Errorf("%s: existing state must be untouched, got subscribers=%d contracts=%d balances=%d", tc.imsi, subscribers, contracts, balances)
+		}
+	}
+}
+
+// An account that already exists is adopted without rewriting its measured
+// buckets; only the missing identity fields are linked to the new contract.
+func TestProvisionContractForExistingSubscriber_AdoptsOrphanBalance(t *testing.T) {
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+	seedTariffPlan(t, repo, "plan_adopt")
+
+	const imsi = "417010000000204"
+	insertSubscriberIdentity(t, repo, imsi, "")
+	if _, err := repo.ocsBalances.InsertOne(ctx, bson.M{
+		"imsi": imsi, "plan_id": "plan_adopt", "status": "active",
+		"data_total": int64(1000), "data_used": int64(400), "data_reserved": int64(0), "data_available": int64(600),
+		"version": int64(7),
+	}); err != nil {
+		t.Fatalf("seed orphan balance: %v", err)
+	}
+
+	_, adopted, err := repo.ProvisionContractForExistingSubscriber(ctx, imsi, "plan_adopt", "", map[string]any{
+		"traffic_total": int64(999999),
+	})
+	if err != nil {
+		t.Fatalf("provision contract: %v", err)
+	}
+	if !adopted {
+		t.Error("existing balance must be reported as adopted")
+	}
+
+	balance := readOcsBalance(t, repo, imsi)
+	if got := numericInt64(balance["data_total"]); got != 1000 {
+		t.Errorf("adopted data_total = %d, want 1000 (must not be rewritten)", got)
+	}
+	if got := numericInt64(balance["data_available"]); got != 600 {
+		t.Errorf("adopted data_available = %d, want 600", got)
+	}
+	if got := numericInt64(balance["version"]); got != 7 {
+		t.Errorf("adopted version = %d, want 7 (no rewrite)", got)
+	}
+	if balance["plan_id"] != "plan_adopt" || balance["status"] != "active" {
+		t.Errorf("adopted identity fields = %v/%v", balance["plan_id"], balance["status"])
+	}
+}
+
+func TestProvisionContractForExistingSubscriber_RejectsInconsistentInputs(t *testing.T) {
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+	seedTariffPlan(t, repo, "plan_ok")
+
+	const imsi = "417010000000205"
+	insertSubscriberIdentity(t, repo, imsi, "963900000205")
+
+	cases := []struct {
+		name      string
+		planID    string
+		msisdn    string
+		traffic   map[string]any
+		seedOther bool
+		wantErr   string
+	}{
+		{"plan missing", "plan_missing", "", nil, false, "OCS_PLAN_NOT_FOUND"},
+		{"plan empty", "", "", nil, false, "OCS_PLAN_ID_REQUIRED"},
+		{"msisdn mismatch", "plan_ok", "963900000999", nil, false, "MSISDN_MISMATCH"},
+		{"traffic plan mismatch", "plan_ok", "", map[string]any{"planId": "plan_other"}, false, "OCS_PLAN_MISMATCH"},
+		{"balance plan mismatch", "plan_ok", "", nil, true, "OCS_BALANCE_PLAN_MISMATCH"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.seedOther {
+				if _, err := repo.ocsBalances.InsertOne(ctx, bson.M{
+					"imsi": imsi, "plan_id": "plan_other", "status": "active", "version": int64(1),
+				}); err != nil {
+					t.Fatalf("seed balance: %v", err)
+				}
+				defer func() {
+					_, _ = repo.ocsBalances.DeleteOne(ctx, bson.M{"imsi": imsi})
+				}()
+			}
+			_, _, err := repo.ProvisionContractForExistingSubscriber(ctx, imsi, tc.planID, tc.msisdn, tc.traffic)
+			govErr, ok := err.(*SubscriberGovernanceError)
+			if !ok || govErr.Code != tc.wantErr {
+				t.Fatalf("error = %v, want %s", err, tc.wantErr)
+			}
+			if contracts, err := repo.ocsSubs.CountDocuments(ctx, bson.M{"imsi": imsi}); err != nil || contracts != 0 {
+				t.Errorf("no contract must be created, got %d (%v)", contracts, err)
+			}
+		})
+	}
+
+	if _, _, err := repo.ProvisionContractForExistingSubscriber(ctx, "417010000000999", "plan_ok", "", nil); err == nil {
+		t.Fatal("missing subscriber identity must be refused")
+	} else if govErr, ok := err.(*SubscriberGovernanceError); !ok || govErr.Code != "SUBSCRIBER_NOT_FOUND" {
+		t.Fatalf("error = %v, want SUBSCRIBER_NOT_FOUND", err)
+	}
+}
+
 // A top-level msisdn that contradicts the sub4G list must be refused rather than
 // silently dropped, so the caller learns which number actually wins.
 func TestCreateSubscriberWithConfiguration_RejectsMismatchedMsisdn(t *testing.T) {

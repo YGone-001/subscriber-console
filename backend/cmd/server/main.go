@@ -189,6 +189,10 @@ func main() {
 	)
 	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter, auditWriter)
 
+	// Contract provisioning for an existing subscriber shares the subscriber
+	// repository's single OCS write path.
+	ocsSubscriberWriteHandler.UseContractProvisioner(subscriberRepo)
+
 	// Profile handler
 	profileHandler := profile.NewHandler(profileRepo, limiter, auditWriter, auditWriter)
 	profileHandler.UseUserRepository(userRepo)

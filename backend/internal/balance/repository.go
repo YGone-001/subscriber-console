@@ -214,6 +214,25 @@ func (r *Repository) GetBalanceViewByIMSI(ctx context.Context, imsi string) (*Ba
 	return &view, nil
 }
 
+// GetContractStatus returns the contract lifecycle status for an IMSI, or an
+// empty string when no contract exists. Adjustment governance reads it directly
+// so a stale balance status can never authorise a terminated contract.
+func (r *Repository) GetContractStatus(ctx context.Context, imsi string) (string, error) {
+	if r.subscribers == nil {
+		return "", nil
+	}
+	var contract bson.M
+	err := r.subscribers.FindOne(ctx, bson.M{"imsi": imsi}).Decode(&contract)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return "", nil
+		}
+		return "", err
+	}
+	status, _ := contract["status"].(string)
+	return status, nil
+}
+
 // ListAdjustments returns the governed adjustment trail for one balance account.
 //
 // The trail is the operation log, not a second balance store: every successful
@@ -581,14 +600,21 @@ func mapBalanceView(doc bson.M, subMap map[string]bson.M) BalanceRecordView {
 	smsUsed := numericInt64ValuePtr(doc, "sms_used")
 	smsAvailable := numericInt64ValuePtr(doc, "sms_available")
 
+	/* The contract is the lifecycle authority. Prefer its plan and status over
+	 * the account's cached copies so a stale denormalized field cannot present a
+	 * terminated contract as active. */
 	planID := stringValuePtr(doc, "plan_id")
-	if planID == nil && sub != nil {
-		planID = stringValuePtr(sub, "plan_id")
+	if sub != nil {
+		if contractPlan := stringValuePtr(sub, "plan_id"); contractPlan != nil {
+			planID = contractPlan
+		}
 	}
 
 	status := stringValuePtr(doc, "status")
-	if status == nil && sub != nil {
-		status = stringValuePtr(sub, "status")
+	if sub != nil {
+		if contractStatus := stringValuePtr(sub, "status"); contractStatus != nil {
+			status = contractStatus
+		}
 	}
 
 	createdAt := timeStr(doc, "created_at")

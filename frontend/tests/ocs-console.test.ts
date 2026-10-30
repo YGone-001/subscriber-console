@@ -9,6 +9,9 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../src/providers/I18nProvider';
@@ -24,6 +27,8 @@ import {
 import { toAdjustmentListViewModel, toBalanceListViewModel, toBalanceSummaryViewModel } from '../src/features/ocs/ocs-view-models';
 import { attachmentFileName } from '../src/lib/api/download';
 import { hasActiveOcsFilters } from '../src/features/ocs/use-ocs-query-state';
+
+const testsDir = dirname(fileURLToPath(import.meta.url));
 
 function render(element: ReturnType<typeof createElement>): string {
   return renderToStaticMarkup(createElement(I18nProvider, null, element));
@@ -198,4 +203,49 @@ test('detail states are announced by kind rather than collapsed into one empty p
 
   const loading = render(createElement(OcsDetailState, { kind: 'loading' }));
   assert.match(loading, /role="status"/);
+});
+
+test('contract create carries provisioning fields and forbids a client-chosen lifecycle status', () => {
+  const contracts = JSON.parse(readFileSync(resolve(testsDir, '../mutation-request-contract.json'), 'utf8')) as Array<{
+    name: string;
+    optionalBodyKeys: string[];
+    forbiddenBodyKeys: string[];
+  }>;
+  const contract = contracts.find((entry) => entry.name === 'contract create');
+  assert.ok(contract, 'the contract create request contract must exist');
+  assert.ok(contract.optionalBodyKeys.includes('ocsTraffic'));
+  assert.ok(contract.optionalBodyKeys.includes('reason'));
+  assert.ok(contract.forbiddenBodyKeys.includes('status'), 'lifecycle status must not be a create field');
+});
+
+test('the contract provisioning dialog uses the insert-only governed request', () => {
+  const dialog = readFileSync(
+    resolve(testsDir, '../src/components/ocs/contracts/CreateContractDialog.tsx'),
+    'utf8',
+  );
+  assert.match(dialog, /postJson[^\n]*\/api\/ocs\/subscribers/);
+  assert.match(dialog, /plan_id: planId/);
+  assert.match(dialog, /ocsTraffic/);
+  assert.match(dialog, /reason: reason\.trim\(\)/);
+  assert.match(dialog, /OCS_CONTRACT_RETAINED/);
+  assert.match(dialog, /OCS_CONTRACT_EXISTS/);
+  assert.doesNotMatch(dialog, /plan_default_10gb/, 'the dialog must not fall back to a default plan');
+  assert.doesNotMatch(dialog, /status:\s*['"]/, 'the dialog must not submit a lifecycle status');
+});
+
+test('both contract entry points open the provisioning dialog', () => {
+  const list = readFileSync(resolve(testsDir, '../src/components/ocs/contracts/OcsContractsPanel.tsx'), 'utf8');
+  const detail = readFileSync(resolve(testsDir, '../src/features/subscribers/SubscriberDetailPage.tsx'), 'utf8');
+  assert.match(list, /CreateContractDialog/);
+  assert.match(list, /ocs_contract_create_action/);
+  assert.match(detail, /CreateContractDialog/);
+  assert.match(detail, /ocs_contract_create_action/);
+});
+
+test('the balance status filter includes retained terminated accounts', () => {
+  const placeholder = readFileSync(
+    resolve(testsDir, '../src/components/ocs/balances/OcsBalancePlaceholder.tsx'),
+    'utf8',
+  );
+  assert.match(placeholder, /value: 'terminated'/);
 });

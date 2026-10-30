@@ -390,10 +390,28 @@
     ],
     "optionalBodyKeys": [
       "msisdn",
+      "ocsTraffic",
+      "reason"
+    ],
+    "forbiddenBodyKeys": [
       "status"
     ],
-    "forbiddenBodyKeys": [],
-    "responseSemantics": "mutation-result"
+    "responseSemantics": "mutation-result",
+    "nestedContracts": {
+      "ocsTraffic": {
+        "allowedKeys": [
+          "planId",
+          "plan_id",
+          "plmn",
+          "traffic_total",
+          "traffic_balance",
+          "voice_total",
+          "voice_balance",
+          "sms_total",
+          "sms_balance"
+        ]
+      }
+    }
   },
   {
     "name": "contract update tariff",

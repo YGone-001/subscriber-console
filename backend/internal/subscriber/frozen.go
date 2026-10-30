@@ -54,6 +54,13 @@ func (e *SubscriberGovernanceError) Error() string {
 	return e.Code
 }
 
+// ErrorCode and ErrorDetails let other domains (the OCS contract handler) map
+// provisioning failures without importing this package's error type.
+func (e *SubscriberGovernanceError) ErrorCode() string { return e.Code }
+
+// ErrorDetails returns the optional human-readable context for a coded error.
+func (e *SubscriberGovernanceError) ErrorDetails() map[string]any { return e.Details }
+
 // SubscriberLookupFn is a function that loads a subscriber document by IMSI.
 type SubscriberLookupFn func(ctx context.Context, imsi string) (bson.M, error)
 

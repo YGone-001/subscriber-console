@@ -217,6 +217,208 @@ func (r *Repository) rollbackCreate(ctx context.Context, imsi string, insertedID
 	return nil
 }
 
+// ProvisionContractForExistingSubscriber creates the billing contract and its
+// balance account for a subscriber identity that already exists.
+//
+// The write is insert-only: an existing contract (including retained terminated
+// history) is refused, and a balance account that already exists is adopted
+// without rewriting its buckets. A requested MSISDN, when supplied, must match
+// the subscriber's primary number; the contract's number always comes from the
+// subscriber identity. The returned bool reports whether an existing balance was
+// adopted rather than created.
+func (r *Repository) ProvisionContractForExistingSubscriber(ctx context.Context, imsi, planID, requestedMsisdn string, ocsTraffic map[string]any) (bson.M, bool, error) {
+	planID = strings.TrimSpace(planID)
+	if planID == "" {
+		return nil, false, &SubscriberGovernanceError{Code: "OCS_PLAN_ID_REQUIRED"}
+	}
+	if err := ValidateSubscriberUpdatePayload(UpdatePayload{OcsTraffic: ocsTraffic}); err != nil {
+		return nil, false, &SubscriberGovernanceError{
+			Code:    "VALIDATION_ERROR",
+			Details: map[string]any{"message": err.Error()},
+		}
+	}
+
+	subscriber, err := r.FindSubscriberByImsi(ctx, imsi)
+	if err != nil {
+		return nil, false, err
+	}
+	if subscriber == nil {
+		return nil, false, &SubscriberGovernanceError{Code: "SUBSCRIBER_NOT_FOUND"}
+	}
+
+	contractStatus, contractExists, err := r.GetOcsContractStatus(ctx, imsi)
+	if err != nil {
+		return nil, false, err
+	}
+	if contractExists {
+		if contractStatus == "terminated" {
+			return nil, false, &SubscriberGovernanceError{Code: "OCS_CONTRACT_RETAINED"}
+		}
+		return nil, false, &SubscriberGovernanceError{Code: "OCS_CONTRACT_EXISTS"}
+	}
+
+	plan, err := r.getTariffPlan(ctx, planID)
+	if err != nil {
+		return nil, false, err
+	}
+	if plan == nil {
+		return nil, false, &SubscriberGovernanceError{Code: "OCS_PLAN_NOT_FOUND"}
+	}
+	if status, _ := plan["status"].(string); status == "disabled" {
+		return nil, false, &SubscriberGovernanceError{Code: "OCS_PLAN_DISABLED"}
+	}
+	if trafficPlan := ocsTrafficPlanID(ocsTraffic); trafficPlan != "" && trafficPlan != planID {
+		return nil, false, &SubscriberGovernanceError{Code: "OCS_PLAN_MISMATCH"}
+	}
+
+	primaryMsisdn := primaryMsisdnFromSubscriber(subscriber)
+	requestedMsisdn = strings.TrimSpace(requestedMsisdn)
+	if requestedMsisdn != "" {
+		if err := validateMsisdnDigits(requestedMsisdn); err != nil {
+			return nil, false, err
+		}
+		if primaryMsisdn != "" && requestedMsisdn != primaryMsisdn {
+			return nil, false, &SubscriberGovernanceError{Code: "MSISDN_MISMATCH"}
+		}
+		if primaryMsisdn == "" {
+			primaryMsisdn = requestedMsisdn
+		}
+	}
+	if primaryMsisdn != "" {
+		if err := validateMsisdnDigits(primaryMsisdn); err != nil {
+			return nil, false, err
+		}
+	}
+
+	var existingBalance bson.M
+	balanceExists := true
+	if err := r.ocsBalances.FindOne(ctx, bson.M{"imsi": imsi}).Decode(&existingBalance); err != nil {
+		if err == mongo.ErrNoDocuments {
+			balanceExists = false
+		} else {
+			return nil, false, err
+		}
+	}
+	if balanceExists {
+		if balancePlan, _ := existingBalance["plan_id"].(string); strings.TrimSpace(balancePlan) != "" && balancePlan != planID {
+			return nil, false, &SubscriberGovernanceError{Code: "OCS_BALANCE_PLAN_MISMATCH"}
+		}
+		if balanceStatus, _ := existingBalance["status"].(string); strings.TrimSpace(balanceStatus) != "" && balanceStatus != "active" {
+			return nil, false, &SubscriberGovernanceError{Code: "OCS_BALANCE_STATUS_INCONSISTENT"}
+		}
+	}
+
+	now := time.Now().UTC()
+	contractDoc := bson.M{
+		"imsi":       imsi,
+		"msisdn":     primaryMsisdn,
+		"plan_id":    planID,
+		"status":     "active",
+		"created_at": now,
+		"updated_at": now,
+	}
+	insertResult, err := r.ocsSubs.InsertOne(ctx, contractDoc)
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, false, &SubscriberGovernanceError{Code: "OCS_CONTRACT_EXISTS"}
+		}
+		return nil, false, fmt.Errorf("insert ocs contract %s: %w", imsi, err)
+	}
+
+	if !balanceExists {
+		input := OcsProvisioningInput{IMSI: imsi, PlanID: &planID, Strict: true}
+		if primaryMsisdn != "" {
+			input.MSISDN = &primaryMsisdn
+		}
+		mapOcsTrafficToInput(ocsTraffic, &input)
+		if err := r.insertStrictBalance(ctx, input, now, planID); err != nil {
+			_, delErr := r.ocsSubs.DeleteOne(ctx, bson.M{"_id": insertResult.InsertedID})
+			if delErr != nil {
+				return nil, false, &SubscriberGovernanceError{Code: "OCS_CONTRACT_CREATE_PARTIAL_WRITE"}
+			}
+			if govErr, ok := err.(*SubscriberGovernanceError); ok {
+				return nil, false, govErr
+			}
+			return nil, false, &SubscriberGovernanceError{Code: "OCS_CONTRACT_CREATE_FAILED"}
+		}
+	} else {
+		// Adopt the existing account untouched, filling only identity fields it
+		// never reported so later status/plan filters can resolve it.
+		patch := bson.M{}
+		if balancePlan, _ := existingBalance["plan_id"].(string); strings.TrimSpace(balancePlan) == "" {
+			patch["plan_id"] = planID
+		}
+		if balanceStatus, _ := existingBalance["status"].(string); strings.TrimSpace(balanceStatus) == "" {
+			patch["status"] = "active"
+		}
+		if len(patch) > 0 {
+			patch["updated_at"] = now
+			if _, err := r.ocsBalances.UpdateOne(ctx, bson.M{"imsi": imsi}, bson.M{
+				"$set": patch,
+				"$inc": bson.M{"version": 1},
+			}); err != nil {
+				_, delErr := r.ocsSubs.DeleteOne(ctx, bson.M{"_id": insertResult.InsertedID})
+				if delErr != nil {
+					return nil, false, &SubscriberGovernanceError{Code: "OCS_CONTRACT_CREATE_PARTIAL_WRITE"}
+				}
+				return nil, false, &SubscriberGovernanceError{Code: "OCS_CONTRACT_CREATE_FAILED"}
+			}
+		}
+	}
+
+	var created bson.M
+	if err := r.ocsSubs.FindOne(ctx, bson.M{"imsi": imsi}).Decode(&created); err != nil {
+		return nil, false, fmt.Errorf("reload ocs contract %s: %w", imsi, err)
+	}
+	return created, balanceExists, nil
+}
+
+// ocsTrafficPlanID reports the plan alias carried inside ocsTraffic, if any.
+func ocsTrafficPlanID(ocsTraffic map[string]any) string {
+	for _, key := range []string{"planId", "plan_id"} {
+		if value, ok := ocsTraffic[key].(string); ok {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
+}
+
+// primaryMsisdnFromSubscriber returns the first persisted MSISDN, which is the
+// same number the update path treats as the OCS primary.
+func primaryMsisdnFromSubscriber(doc bson.M) string {
+	if doc == nil {
+		return ""
+	}
+	var list []any
+	switch value := doc["msisdn"].(type) {
+	case bson.A:
+		list = []any(value)
+	case []any:
+		list = value
+	case []string:
+		for _, item := range value {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				return trimmed
+			}
+		}
+		return ""
+	case string:
+		return strings.TrimSpace(value)
+	default:
+		return ""
+	}
+	for _, item := range list {
+		if value, ok := item.(string); ok {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
+}
+
 // UpdateSubscriberFromLegacy applies a payload to an existing subscriber document
 // using atomic CAS (replaceOne with full expected document filter minus _id).
 // Matches Node updateSubscriberFromLegacy() exactly.
@@ -803,9 +1005,10 @@ func (r *Repository) provisionOcsSubscriber(ctx context.Context, input OcsProvis
 	return nil
 }
 
-// provisionStrictBalance writes only the buckets the caller supplied. Missing
-// buckets stay absent rather than inheriting the legacy provisioning defaults.
-func (r *Repository) provisionStrictBalance(ctx context.Context, input OcsProvisioningInput, now time.Time, planId string) error {
+// strictBalanceDocument builds the balance projection used by the create
+// paths. created_at is applied by the writer, not here, so an upsert keeps the
+// original creation time.
+func strictBalanceDocument(input OcsProvisioningInput, now time.Time, planId string) bson.M {
 	balance := bson.M{
 		"imsi":           input.IMSI,
 		"plan_id":        planId,
@@ -832,7 +1035,13 @@ func (r *Repository) provisionStrictBalance(ctx context.Context, input OcsProvis
 		balance["sms_used"] = used
 		balance["sms_available"] = available
 	}
+	return balance
+}
 
+// provisionStrictBalance writes only the buckets the caller supplied. Missing
+// buckets stay absent rather than inheriting the legacy provisioning defaults.
+func (r *Repository) provisionStrictBalance(ctx context.Context, input OcsProvisioningInput, now time.Time, planId string) error {
+	balance := strictBalanceDocument(input, now, planId)
 	_, err := r.ocsBalances.UpdateOne(
 		ctx,
 		bson.M{"imsi": input.IMSI},
@@ -841,6 +1050,21 @@ func (r *Repository) provisionStrictBalance(ctx context.Context, input OcsProvis
 	)
 	if err != nil {
 		return fmt.Errorf("upsert strict ocs balance: %w", err)
+	}
+	return nil
+}
+
+// insertStrictBalance creates a new balance account without touching an
+// existing one. It is used when a contract is provisioned for an existing
+// subscriber: the account is either adopted untouched or created once.
+func (r *Repository) insertStrictBalance(ctx context.Context, input OcsProvisioningInput, now time.Time, planId string) error {
+	balance := strictBalanceDocument(input, now, planId)
+	balance["created_at"] = now
+	if _, err := r.ocsBalances.InsertOne(ctx, balance); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return &SubscriberGovernanceError{Code: "OCS_BALANCE_EXISTS"}
+		}
+		return fmt.Errorf("insert strict ocs balance: %w", err)
 	}
 	return nil
 }

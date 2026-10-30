@@ -6,7 +6,8 @@
  * counted only the current page in the KPI strip, advertised an extra empty page
  * whenever the total was an exact multiple of the page size, offered a
  * "resume" action on terminated contracts, and let an operator pick a disabled
- * plan only to have the write rejected.
+ * plan only to have the write rejected. Creation now opens the shared
+ * insert-only provisioning dialog for an existing subscriber.
  *
  * This rewrite keeps the same endpoints and request bodies:
  *
@@ -24,7 +25,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeftRight, Copy, Eye, Pause, Play, Trash2, Users } from 'lucide-react';
+import { ArrowLeftRight, Copy, Eye, Pause, Play, Plus, Trash2, Users } from 'lucide-react';
 import { DataTablePagination } from '../../ui/DataTablePagination';
 import { DataTableStateRow } from '../../ui/DataTableState';
 import { SortableTableHeader } from '../../ui/SortableTableHeader';
@@ -33,6 +34,7 @@ import MetricStrip from '../../ui/MetricStrip';
 import OcsPageShell from '../OcsPageShell';
 import OcsStatusBadge from '../common/OcsStatusBadge';
 import ConfirmDialog from '../common/ConfirmDialog';
+import CreateContractDialog from './CreateContractDialog';
 import OcsSortIcon from '../common/OcsSortIcon';
 import { OcsFilterSelect, OcsResetFilters, OcsSearchField, OcsToolbar } from '../common/OcsToolbar';
 import { useRead } from '../../../lib/api/use-read';
@@ -90,6 +92,7 @@ export default function OcsContractsPanel() {
   const [confirmTerminate, setConfirmTerminate] = useState<string | null>(null);
   const [tariffTarget, setTariffTarget] = useState<OcsContractViewModel | null>(null);
   const [tariffDraft, setTariffDraft] = useState('');
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const url = useMemo(() => {
     const params = new URLSearchParams({
@@ -252,7 +255,16 @@ export default function OcsContractsPanel() {
 
   const controls = (
     <OcsToolbar
-      actions={<OcsResetFilters active={filtersActive} onReset={reset} label={t('ocs_filters_reset')} />}
+      actions={
+        <>
+          {canManage ? (
+            <button type="button" className="ocs-btn ocs-btn-primary ocs-btn-compact-auto" onClick={() => setIsCreateOpen(true)}>
+              <Plus size={14} aria-hidden="true" /> {t('ocs_contract_create_action')}
+            </button>
+          ) : null}
+          <OcsResetFilters active={filtersActive} onReset={reset} label={t('ocs_filters_reset')} />
+        </>
+      }
     >
       <OcsSearchField
         value={state.q}
@@ -477,6 +489,22 @@ export default function OcsContractsPanel() {
         controls={controls}
         tableContent={tableContent}
         pagination={pagination}
+      />
+      <CreateContractDialog
+        open={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onCreated={(imsi, balanceAdopted) => {
+          setIsCreateOpen(false);
+          setFeedback({
+            type: 'success',
+            message: t(balanceAdopted ? 'ocs_contract_create_success_adopted' : 'ocs_contract_create_success', { imsi }),
+          });
+          void refresh();
+          void allRead.mutate();
+          void activeRead.mutate();
+          void suspendedRead.mutate();
+          void terminatedRead.mutate();
+        }}
       />
       {confirmTerminate && (
         <ConfirmDialog

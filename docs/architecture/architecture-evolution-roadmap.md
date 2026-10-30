@@ -119,6 +119,8 @@ correction. The charging plane remains frozen and excluded.
 - Termination preserves the contract and balance records; terminated contracts are read-only.
 - `resume` is allowed only from `suspended`; terminated contracts cannot be resumed, re-priced or adjusted.
 - Subscriber deletion is rejected while an active or suspended contract exists. After termination, deleting the subscriber identity does not cascade-delete OCS contract or balance history.
+- An existing subscriber can be provisioned with a contract through the insert-only `POST /api/ocs/subscribers`: the subscriber identity must exist, the plan must be explicit and active, the contract is always created active, and only the supplied quota buckets are written. An existing balance account is adopted without rewriting its buckets; a plan mismatch or non-active account is refused. Retained terminated history is refused with 409 `OCS_CONTRACT_RETAINED`.
+- The contract is the lifecycle and plan authority. Suspend, resume, terminate and plan changes mirror into the balance account, and balance reads prefer the contract's status/plan when both records exist; terminated contracts reject balance adjustments even if the cached account status is stale.
 
 ### Retention and Permanent Cleanup
 

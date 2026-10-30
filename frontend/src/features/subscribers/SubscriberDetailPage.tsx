@@ -13,7 +13,8 @@
  */
 import { useState } from 'react';
 import { useSWRConfig } from 'swr';
-import { ArrowLeft, BatteryCharging, Copy, Layers, Pencil, Save, Trash2 } from 'lucide-react';import { useI18n } from '../../providers/I18nProvider';
+import { ArrowLeft, BatteryCharging, Copy, CreditCard, Layers, Pencil, Save, Trash2 } from 'lucide-react';
+import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { useAppParam, useAppRouter } from '../../lib/ui-compat/router';
@@ -23,6 +24,7 @@ import { ConfirmActionPanel, OperationNotice } from '../../components/ui/Operati
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/ui/UnsavedChangesGuard';
 import ProfileSectionNav from '../profiles/components/ProfileSectionNav';
 import TrafficAdjustmentModal from '../../components/TrafficAdjustmentModal';
+import CreateContractDialog from '../../components/ocs/contracts/CreateContractDialog';
 import SubscriberViewMode from './components/subscriber/SubscriberViewMode';
 import SubscriberEditMode from './components/subscriber/SubscriberEditMode';
 import { SubscriberTemplateCard } from './components/SubscriberTemplateCard';
@@ -39,6 +41,7 @@ export function SubscriberDetailPage() {
   const imsi = routeParam && routeParam !== 'new' ? routeParam : null;
 
   const [isTrafficModalOpen, setIsTrafficModalOpen] = useState(false);
+  const [isCreateContractOpen, setIsCreateContractOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
@@ -82,6 +85,7 @@ export function SubscriberDetailPage() {
 
   const canEditSubscribers = hasPermission(user, 'subscribers.write');
   const canAdjustBalance = hasPermission(user, 'ocs.balance.adjust');
+  const canAssignPlan = hasPermission(user, 'ocs.plan.assign');
   const isCreate = imsi === null;
 
   /* Discarding edits on a record restores it in place; discarding a create
@@ -169,6 +173,11 @@ export function SubscriberDetailPage() {
               </button>
             ) : (
               <>
+                {canAssignPlan && !state.hasOcsContract && !isLoading && (
+                  <button type="button" className="btn btn-outline" onClick={() => setIsCreateContractOpen(true)}>
+                    <CreditCard size={16} /> {t('ocs_contract_create_action')}
+                  </button>
+                )}
                 {canAdjustBalance && state.hasOcsBalance && state.ocsContractStatus !== 'terminated' && (
                   <button type="button" className="btn btn-outline" onClick={() => setIsTrafficModalOpen(true)}>
                     <BatteryCharging size={16} /> {t('traffic_adjust')}
@@ -278,6 +287,20 @@ export function SubscriberDetailPage() {
           isWorking={isDeleting}
           onConfirm={() => { void confirmDelete(); }}
           onCancel={() => setIsDeleteOpen(false)}
+        />
+      )}
+
+      {!isCreate && imsi && (
+        <CreateContractDialog
+          open={isCreateContractOpen}
+          initialImsi={imsi}
+          onClose={() => setIsCreateContractOpen(false)}
+          onCreated={(createdImsi, balanceAdopted) => {
+            setIsCreateContractOpen(false);
+            setNotice(t(balanceAdopted ? 'ocs_contract_create_success_adopted' : 'ocs_contract_create_success', { imsi: createdImsi }));
+            refreshLists();
+            discardDraft();
+          }}
         />
       )}
 

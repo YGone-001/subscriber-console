@@ -145,6 +145,68 @@ func TestRepository_AdjustBalanceCAS_Conflict(t *testing.T) {
 	}
 }
 
+func TestMapBalanceView_ContractIsStatusAndPlanAuthority(t *testing.T) {
+	const imsi = "417019999999010"
+	balance := bson.M{
+		"imsi":            imsi,
+		"plan_id":         "plan_cached",
+		"status":          "active",
+		"data_total":      int64(1000),
+		"data_used":       int64(0),
+		"data_reserved":   int64(0),
+		"data_available":  int64(1000),
+		"voice_total":     int64(0),
+		"voice_used":      int64(0),
+		"voice_reserved":  int64(0),
+		"voice_available": int64(0),
+		"sms_total":       int64(0),
+		"sms_used":        int64(0),
+		"sms_available":   int64(0),
+		"version":         int64(3),
+	}
+
+	contract := bson.M{"imsi": imsi, "plan_id": "plan_contract", "status": "terminated"}
+	view := mapBalanceView(balance, map[string]bson.M{imsi: contract})
+	if view.PlanID == nil || *view.PlanID != "plan_contract" {
+		t.Errorf("plan = %v, want the contract's plan_contract", view.PlanID)
+	}
+	if view.Status == nil || *view.Status != "terminated" {
+		t.Errorf("status = %v, want the contract's terminated", view.Status)
+	}
+
+	orphan := mapBalanceView(balance, map[string]bson.M{})
+	if orphan.PlanID == nil || *orphan.PlanID != "plan_cached" || orphan.Status == nil || *orphan.Status != "active" {
+		t.Errorf("orphan projection = %v/%v, want the account's own cached values", orphan.PlanID, orphan.Status)
+	}
+}
+
+func TestRepository_GetContractStatus(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	if repo == nil {
+		return
+	}
+	defer cleanup()
+
+	ctx := context.Background()
+	const imsi = "417019999999011"
+	if _, err := repo.subscribers.InsertOne(ctx, bson.M{"imsi": imsi, "status": "terminated"}); err != nil {
+		t.Fatalf("seed contract: %v", err)
+	}
+
+	status, err := repo.GetContractStatus(ctx, imsi)
+	if err != nil {
+		t.Fatalf("get contract status: %v", err)
+	}
+	if status != "terminated" {
+		t.Errorf("status = %q, want terminated", status)
+	}
+
+	missing, err := repo.GetContractStatus(ctx, "417019999999012")
+	if err != nil || missing != "" {
+		t.Errorf("missing contract = %q, %v; want empty and nil", missing, err)
+	}
+}
+
 func TestRepository_AdjustBalanceCAS_InsufficientBalance(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	if repo == nil {
