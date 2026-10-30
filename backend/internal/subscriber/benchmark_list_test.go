@@ -14,7 +14,7 @@ import (
 // active OCS contract and one balance account per IMSI, plus the tariff plan the
 // contracts reference. Indexes mirror the declared production index set so the
 // measurement reflects the intended deployment rather than a collection scan.
-func seedListBenchmarkData(b *testing.B, repo *Repository, count int) {
+func seedListBenchmarkData(b testing.TB, repo *Repository, count int) {
 	b.Helper()
 	ctx := context.Background()
 
@@ -26,6 +26,7 @@ func seedListBenchmarkData(b *testing.B, repo *Repository, count int) {
 		{repo.subscribers, mongo.IndexModel{Keys: bson.D{{Key: "msisdn", Value: 1}}}},
 		{repo.ocsSubs, mongo.IndexModel{Keys: bson.D{{Key: "imsi", Value: 1}}, Options: options.Index().SetUnique(true)}},
 		{repo.ocsBalances, mongo.IndexModel{Keys: bson.D{{Key: "imsi", Value: 1}}, Options: options.Index().SetUnique(true)}},
+		{repo.tariffPlans, mongo.IndexModel{Keys: bson.D{{Key: "plan_id", Value: 1}}, Options: options.Index().SetUnique(true)}},
 	}
 	for _, index := range indexes {
 		if _, err := index.collection.Indexes().CreateOne(ctx, index.model); err != nil {

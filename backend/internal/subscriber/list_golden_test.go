@@ -17,22 +17,17 @@ import (
 // filters, facets and pagination in Go. Before that path is replaced by a Mongo
 // aggregation, these cases freeze its observable output: every row field, the
 // facet summary, pagination and MSISDN fallback metadata.
-//
-// Run with UPDATE_SUBSCRIBER_LIST_GOLDEN=1 to regenerate the fixture after an
-// intentional contract change; otherwise the test is a strict comparison.
-func TestSubscriberListGoldenBaseline(t *testing.T) {
-	repo, cleanup := ocsTestRepo(t)
-	defer cleanup()
-	seedListGoldenFixture(t, repo)
+type subscriberListGoldenCase struct {
+	name      string
+	query     string
+	filters   SubscriberListFilters
+	sortField string
+	sortOrder string
+	page, lim int
+}
 
-	cases := []struct {
-		name      string
-		query     string
-		filters   SubscriberListFilters
-		sortField string
-		sortOrder string
-		page, lim int
-	}{
+func subscriberListGoldenCases() []subscriberListGoldenCase {
+	return []subscriberListGoldenCase{
 		{name: "all", filters: SubscriberListFilters{SearchBy: "imsi", Status: "all"}, sortField: "imsi", sortOrder: "asc", page: 1, lim: 50},
 		{name: "status_active", filters: SubscriberListFilters{SearchBy: "imsi", Status: "active"}, sortField: "imsi", sortOrder: "asc", page: 1, lim: 50},
 		{name: "status_restricted", filters: SubscriberListFilters{SearchBy: "imsi", Status: "restricted"}, sortField: "imsi", sortOrder: "asc", page: 1, lim: 50},
@@ -60,6 +55,16 @@ func TestSubscriberListGoldenBaseline(t *testing.T) {
 		{name: "page_two", filters: SubscriberListFilters{SearchBy: "imsi", Status: "all"}, sortField: "imsi", sortOrder: "asc", page: 2, lim: 2},
 		{name: "sort_usage_desc", filters: SubscriberListFilters{SearchBy: "imsi", Status: "all"}, sortField: "usage", sortOrder: "desc", page: 1, lim: 50},
 	}
+}
+
+// Run with UPDATE_SUBSCRIBER_LIST_GOLDEN=1 to regenerate the fixture after an
+// intentional contract change; otherwise the test is a strict comparison.
+func TestSubscriberListGoldenBaseline(t *testing.T) {
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+	seedListGoldenFixture(t, repo)
+
+	cases := subscriberListGoldenCases()
 
 	type caseResult struct {
 		Name   string                              `json:"name"`
@@ -82,6 +87,11 @@ func TestSubscriberListGoldenBaseline(t *testing.T) {
 	}
 	payload = append(payload, '\n')
 	path := filepath.Join("testdata", "subscriber-list-baseline.json")
+	if dump := os.Getenv("DUMP_SUBSCRIBER_LIST_ACTUAL"); dump != "" {
+		if err := os.WriteFile(dump, payload, 0o644); err != nil {
+			t.Fatalf("write actual subscriber list: %v", err)
+		}
+	}
 	if os.Getenv("UPDATE_SUBSCRIBER_LIST_GOLDEN") == "1" {
 		if err := os.WriteFile(path, payload, 0o644); err != nil {
 			t.Fatalf("write golden fixture: %v", err)

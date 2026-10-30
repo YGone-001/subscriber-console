@@ -38,6 +38,19 @@ includes the fetch-all, enrichment, facet and in-memory pagination cost. The
 10k result is already at the warning line: the current implementation is usable
 at the current population but has little headroom.
 
+### Aggregation prototype gate (2026-10-30)
+
+A first Mongo aggregation implementation matched the golden fixture field for
+field, including filters, facets, pagination and MSISDN fallback, and reduced
+allocation from ~218 MB to ~0.86 MB per request. It was **not adopted**: 10k
+latency was ~536 ms versus ~307 ms for the current path, which fails the B4
+performance gate. Profiling showed the per-subscriber OCS lookups (especially
+the balance lookup) dominate; the plan lookup was replaced with a small plan
+snapshot, but the result remained slower than the baseline. The prototype is
+archived outside the repository; the next design must use bounded batch reads
+or a different enrichment strategy and beat the baseline before replacing the
+read path.
+
 ## Trigger table
 
 | Surface | Warning | Hard trigger | Required action when hard trigger is reached |
