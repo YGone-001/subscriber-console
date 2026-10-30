@@ -122,6 +122,7 @@ correction. The charging plane remains frozen and excluded.
 - An existing subscriber can be provisioned with a contract through the insert-only `POST /api/ocs/subscribers`: the subscriber identity must exist, the plan must be explicit and active, the contract is always created active, and only the supplied quota buckets are written. An existing balance account is adopted without rewriting its buckets; a plan mismatch or non-active account is refused. Retained terminated history is refused with 409 `OCS_CONTRACT_RETAINED`.
 - The contract is the lifecycle and plan authority. Suspend, resume, terminate and plan changes mirror into the balance account, and balance reads prefer the contract's status/plan when both records exist; terminated contracts reject balance adjustments even if the cached account status is stale.
 - Contract lifecycle actions require confirmation and a recorded reason. The list envelope carries collection-wide lifecycle counts for the KPI strip, and tariff reassignment previews the current and target quota/validity before applying immediately.
+- Contract lookup supports MSISDN as well as IMSI. The detail response carries a bounded operation-history projection with an explicit completeness flag, so an unreadable audit trail is shown as unavailable rather than as "no operations".
 
 ### Retention and Permanent Cleanup
 

@@ -13,7 +13,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowLeftRight, FileText, Pause, Play, Trash2, Users, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight, FileText, History, Pause, Play, Trash2, Users, Wallet } from 'lucide-react';
 import PageHeader from '../../ui/PageHeader';
 import RefreshButton from '../../ui/RefreshButton';
 import { Dialog } from '../../ui/Dialog';
@@ -26,6 +26,7 @@ import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
 import {
+  toContractOperationsViewModel,
   toContractViewModel,
   toTariffListViewModel,
   type TariffPlanViewModel,
@@ -60,6 +61,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
    * identifier can no longer fall back to a neighbouring record whose IMSI
    * merely contains the same digits. */
   const contract = toContractViewModel(data);
+  const operations = toContractOperationsViewModel(data);
 
   const plans = useMemo<TariffPlanViewModel[]>(() => toTariffListViewModel(tariffs).records, [tariffs]);
   const planById = useMemo(() => {
@@ -85,6 +87,16 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
       ? `${plan.name || plan.planId} · ${formatOcsBytes(plan.quotaPerGrant)}${plan.validityTime ? ` · ${formatOcsSeconds(plan.validityTime)}` : ''}`
       : '—'
   );
+
+  const operationChange = (record: (typeof operations.records)[number]) => {
+    const status = record.afterStatus && record.afterStatus !== record.beforeStatus
+      ? `${record.beforeStatus || '\u2014'} \u2192 ${record.afterStatus}`
+      : '';
+    const plan = record.afterPlanId && record.afterPlanId !== record.beforePlanId
+      ? `${record.beforePlanId || '\u2014'} \u2192 ${record.afterPlanId}`
+      : '';
+    return [status, plan].filter(Boolean).join(' \u00b7 ') || '\u2014';
+  };
 
   const backTo = { to: '/ocs/contracts', label: t('ocs_back_to_list') };
 
@@ -278,6 +290,43 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
               <span className="ocs-detail-value">{formatOcsTime(contract.updatedAt)}</span>
             </div>
           </div>
+        </div>
+
+        <div className="ocs-detail-section ocs-detail-section-full">
+          <h2><History size={16} aria-hidden="true" /> {t('ocs_contract_operations_title')}</h2>
+          {!operations.complete ? (
+            <p className="ocs-detail-hint" role="status">{t('ocs_contract_operations_unavailable')}</p>
+          ) : operations.records.length === 0 ? (
+            <p className="ocs-empty">{t('ocs_contract_operations_empty')}</p>
+          ) : (
+            <table className="ocs-table">
+              <caption className="sr-only">{t('ocs_contract_operations_title')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t('ocs_contract_ops_time')}</th>
+                  <th scope="col">{t('ocs_contract_ops_operation')}</th>
+                  <th scope="col">{t('ocs_contract_ops_actor')}</th>
+                  <th scope="col">{t('ocs_contract_ops_change')}</th>
+                  <th scope="col">{t('ocs_contract_ops_reason')}</th>
+                  <th scope="col">{t('ocs_contract_ops_result')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {operations.records.map((record, index) => (
+                  <tr key={record.id ?? `${record.timestamp ?? 'operation'}-${index}`}>
+                    <td data-label={t('ocs_contract_ops_time')} className="ocs-time-cell">{formatOcsTime(record.timestamp)}</td>
+                    <td data-label={t('ocs_contract_ops_operation')}><code className="ocs-mono">{record.operation || record.action || '\u2014'}</code></td>
+                    <td data-label={t('ocs_contract_ops_actor')}>
+                      {record.actor || '\u2014'}{record.role ? ` (${record.role})` : ''}
+                    </td>
+                    <td data-label={t('ocs_contract_ops_change')} className="ocs-mono">{operationChange(record)}</td>
+                    <td data-label={t('ocs_contract_ops_reason')}>{record.reason || '\u2014'}</td>
+                    <td data-label={t('ocs_contract_ops_result')}>{record.result || '\u2014'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 

@@ -194,6 +194,7 @@ func (h *Handler) Subscribers(w http.ResponseWriter, r *http.Request) {
 		Page:      intParam(q, "page", 1),
 		Limit:     intParam(q, "limit", 20),
 		IMSI:      firstNonEmpty(q.Get("imsi"), q.Get("q")),
+		MSISDN:    q.Get("msisdn"),
 		PlanID:    q.Get("planId"),
 		Status:    q.Get("status"),
 		SortField: firstNonEmpty(q.Get("sortField"), q.Get("sort")),
@@ -246,9 +247,17 @@ func (h *Handler) GetSubscriber(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	operations, operationsComplete, historyErr := h.repo.GetContractOperations(r.Context(), imsi, 20)
+	if historyErr != nil {
+		operations = []ContractOperation{}
+		operationsComplete = false
+	}
+
 	response.JSON(w, http.StatusOK, map[string]any{
-		"ok":     true,
-		"record": record,
+		"ok":                 true,
+		"record":             record,
+		"operations":         operations,
+		"operationsComplete": operationsComplete,
 	})
 }
 

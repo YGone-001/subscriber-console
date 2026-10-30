@@ -140,6 +140,7 @@ func main() {
 		mc.XCloud.Collection("ocs_subscribers"),
 		mc.XCloud.Collection("ocs_tariff_plans"),
 	)
+	ocsRepo.UseAuditLogs(mc.Ops.Collection("app_audit_logs"))
 	ocsHandler := ocs.NewHandlerWithAudit(ocsRepo, limiter, auditWriter)
 
 	// Auth/User reads (with audit writer for denial evidence)

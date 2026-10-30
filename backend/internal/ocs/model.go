@@ -220,6 +220,23 @@ type SubscriberSummary struct {
 	Terminated int64 `json:"terminated"`
 }
 
+// ContractOperation is one bounded audit entry shown on the contract detail
+// page. It exposes only the fields needed to reconstruct what changed.
+type ContractOperation struct {
+	ID           string `json:"id"`
+	Timestamp    string `json:"timestamp"`
+	Action       string `json:"action"`
+	Operation    string `json:"operation,omitempty"`
+	Actor        string `json:"actor,omitempty"`
+	Role         string `json:"role,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	Result       string `json:"result,omitempty"`
+	BeforeStatus string `json:"beforeStatus,omitempty"`
+	AfterStatus  string `json:"afterStatus,omitempty"`
+	BeforePlanID string `json:"beforePlanId,omitempty"`
+	AfterPlanID  string `json:"afterPlanId,omitempty"`
+}
+
 // SubscriberRecord matches OCS subscriber (billing contract).
 type SubscriberRecord struct {
 	ID        string `json:"id"`

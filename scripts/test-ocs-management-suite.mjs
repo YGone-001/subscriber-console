@@ -445,6 +445,23 @@ try {
     assert.equal(sub.rating_group, undefined);
     assert.equal(listRes.data?.summary?.total, 2, 'KPI summary must describe the collection');
     assert.equal(listRes.data?.summary?.active, 2);
+
+    const byMsisdn = await requestViaGo('/api/ocs/subscribers?msisdn=8613800009901', {
+      method: 'GET',
+      token: tokens.viewer,
+    });
+    assert.equal(byMsisdn.status, 200);
+    assert.equal(byMsisdn.data?.total, 1, 'MSISDN search must find the contract');
+    assert.equal(byMsisdn.data?.records?.[0]?.imsi, imsiContract);
+
+    const detailRes = await requestViaGo(`/api/ocs/subscribers/${imsiContract}`, {
+      method: 'GET',
+      token: tokens.viewer,
+    });
+    assert.equal(detailRes.status, 200);
+    assert.equal(detailRes.data?.operationsComplete, true);
+    assert(Array.isArray(detailRes.data?.operations) && detailRes.data.operations.length >= 1);
+    assert(detailRes.data.operations.some((entry) => entry.action === 'CREATE'), 'Contract history must include the create operation');
     recordCheck('contract.read_and_boundary_integrity');
   }
 

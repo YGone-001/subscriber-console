@@ -28,6 +28,7 @@ import {
   toAdjustmentListViewModel,
   toBalanceListViewModel,
   toBalanceSummaryViewModel,
+  toContractOperationsViewModel,
   toContractSummaryViewModel,
 } from '../src/features/ocs/ocs-view-models';
 import { attachmentFileName } from '../src/lib/api/download';
@@ -278,6 +279,43 @@ test('the contract summary keeps missing counts missing', () => {
     terminated: 0,
   });
   assert.equal(toContractSummaryViewModel({ records: [] }), null);
+});
+
+test('contract operations distinguish unavailable history from an empty history', () => {
+  const empty = toContractOperationsViewModel({ operations: [], operationsComplete: true });
+  assert.deepEqual(empty, { complete: true, records: [] });
+
+  const unavailable = toContractOperationsViewModel({ operations: [], operationsComplete: false });
+  assert.equal(unavailable.complete, false);
+
+  const parsed = toContractOperationsViewModel({
+    operationsComplete: true,
+    operations: [{
+      id: 'evt-1',
+      timestamp: '2026-10-30T10:00:00.000Z',
+      action: 'UPDATE',
+      operation: 'CONTRACT_TERMINATE',
+      actor: 'operator1',
+      role: 'operator',
+      reason: 'customer request',
+      result: 'success',
+      beforeStatus: 'active',
+      afterStatus: 'terminated',
+      beforePlanId: 'plan_a',
+      afterPlanId: 'plan_a',
+    }],
+  });
+  assert.equal(parsed.records[0].operation, 'CONTRACT_TERMINATE');
+  assert.equal(parsed.records[0].afterStatus, 'terminated');
+});
+
+test('contracts can be filtered by MSISDN as well as IMSI', () => {
+  const panel = readFileSync(resolve(testsDir, '../src/components/ocs/contracts/OcsContractsPanel.tsx'), 'utf8');
+  assert.match(panel, /msisdn: state\.msisdn/);
+  assert.match(panel, /ocs_search_msisdn/);
+  const detail = readFileSync(resolve(testsDir, '../src/components/ocs/contracts/OcsContractDetail.tsx'), 'utf8');
+  assert.match(detail, /ocs_contract_operations_title/);
+  assert.match(detail, /ocs_contract_operations_unavailable/);
 });
 
 test('suspend, resume and terminate all require a confirmation with a reason', () => {

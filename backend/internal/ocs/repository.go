@@ -20,6 +20,14 @@ type Repository struct {
 	usage        *mongo.Collection
 	subscribers  *mongo.Collection
 	plans        *mongo.Collection
+	auditLogs    *mongo.Collection
+}
+
+// UseAuditLogs wires the operation-log collection used for contract history.
+// It is optional so read-only constructors and tests keep working; history is
+// then reported as unavailable rather than fabricated.
+func (r *Repository) UseAuditLogs(collection *mongo.Collection) {
+	r.auditLogs = collection
 }
 
 // NewRepository creates a new OCS Repository.
@@ -435,6 +443,9 @@ func (r *Repository) ListSubscribers(ctx context.Context, opts SubscriberQueryOp
 		 * no longer widen the match or fail the query with an invalid regex. */
 		filter["imsi"] = bson.M{"$regex": regexp.QuoteMeta(opts.IMSI), "$options": "i"}
 	}
+	if opts.MSISDN != "" {
+		filter["msisdn"] = bson.M{"$regex": regexp.QuoteMeta(opts.MSISDN), "$options": "i"}
+	}
 	if opts.PlanID != "" {
 		filter["plan_id"] = opts.PlanID
 	}
@@ -490,6 +501,111 @@ func (r *Repository) ListSubscribers(ctx context.Context, opts SubscriberQueryOp
 		TotalPages: totalPages,
 		Summary:    summary,
 	}, nil
+}
+
+// GetContractOperations returns the bounded operation history for one contract.
+// It reads the operation log rather than a second history store. A nil audit
+// handle or a failed read is reported as unavailable (complete=false); the
+// detail response then shows an explicit unavailable state instead of an empty
+// history that would imply nothing ever happened.
+func (r *Repository) GetContractOperations(ctx context.Context, imsi string, limit int) ([]ContractOperation, bool, error) {
+	if r.auditLogs == nil {
+		return []ContractOperation{}, false, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	cursor, err := r.auditLogs.Find(ctx,
+		bson.M{"targetId": "ocs-subscriber:" + imsi},
+		options.Find().
+			SetSort(bson.D{{Key: "timestamp", Value: -1}}).
+			SetLimit(int64(limit)).
+			SetProjection(bson.M{
+				"id":                    1,
+				"eventId":               1,
+				"timestamp":             1,
+				"createdAt":             1,
+				"action":                1,
+				"result":                1,
+				"actor":                 1,
+				"reason":                1,
+				"actorContext.role":     1,
+				"metadata.operation":    1,
+				"metadata.statusChange": 1,
+				"metadata.planId":       1,
+				"oldData.status":        1,
+				"oldData.plan_id":       1,
+				"newData.status":        1,
+				"newData.plan_id":       1,
+			}),
+	)
+	if err != nil {
+		return []ContractOperation{}, false, err
+	}
+	defer cursor.Close(ctx)
+
+	operations := make([]ContractOperation, 0, limit)
+	for cursor.Next(ctx) {
+		var doc bson.M
+		if cursor.Decode(&doc) != nil {
+			continue
+		}
+		metadata := bsonM(doc["metadata"])
+		oldData := bsonM(doc["oldData"])
+		newData := bsonM(doc["newData"])
+		actorContext := bsonM(doc["actorContext"])
+
+		id := strWithDefault(doc, "id", "")
+		if id == "" {
+			id = strWithDefault(doc, "eventId", "")
+		}
+		timestamp := strWithDefault(doc, "timestamp", "")
+		if timestamp == "" {
+			timestamp = timeStr(doc, "createdAt")
+		}
+		beforeStatus := strWithDefault(oldData, "status", "")
+		afterStatus := strWithDefault(newData, "status", "")
+		beforePlan := strWithDefault(oldData, "plan_id", "")
+		afterPlan := strWithDefault(newData, "plan_id", "")
+		if afterPlan == "" {
+			afterPlan = strWithDefault(metadata, "planId", "")
+		}
+		operations = append(operations, ContractOperation{
+			ID:           id,
+			Timestamp:    strWithDefault(doc, "timestamp", ""),
+			Action:       strWithDefault(doc, "action", ""),
+			Operation:    strWithDefault(metadata, "operation", strWithDefault(metadata, "statusChange", "")),
+			Actor:        strWithDefault(doc, "actor", ""),
+			Role:         strWithDefault(actorContext, "role", ""),
+			Reason:       strWithDefault(doc, "reason", ""),
+			Result:       strWithDefault(doc, "result", ""),
+			BeforeStatus: beforeStatus,
+			AfterStatus:  afterStatus,
+			BeforePlanID: beforePlan,
+			AfterPlanID:  afterPlan,
+		})
+	}
+	return operations, true, nil
+}
+
+// bsonM normalizes a projected nested document. The driver may decode it as
+// bson.M or bson.D depending on the enclosing decode target.
+func bsonM(value any) bson.M {
+	switch doc := value.(type) {
+	case bson.M:
+		return doc
+	case bson.D:
+		out := make(bson.M, len(doc))
+		for _, entry := range doc {
+			out[entry.Key] = entry.Value
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 // contractStatusSummary counts contracts by lifecycle state for the KPI strip.
@@ -617,6 +733,7 @@ type SubscriberQueryOptions struct {
 	Page      int
 	Limit     int
 	IMSI      string
+	MSISDN    string
 	PlanID    string
 	Status    string
 	SortField string

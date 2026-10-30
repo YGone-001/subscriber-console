@@ -55,6 +55,7 @@ type ContractSortField = 'imsi' | 'plan_id' | 'status' | 'updated_at';
 
 const QUERY_DEFAULTS: OcsQueryState = {
   q: '',
+  msisdn: '',
   status: '',
   plan: '',
   sort: 'updated_at',
@@ -97,13 +98,14 @@ export default function OcsContractsPanel() {
       page: String(page),
       limit: String(limit),
       imsi: state.q.trim(),
+      msisdn: state.msisdn.trim(),
       status: state.status,
       planId: state.plan,
       sortField: sort,
       sortOrder: order,
     });
     return `/api/ocs/subscribers?${params.toString()}`;
-  }, [limit, order, page, sort, state.plan, state.q, state.status]);
+  }, [limit, order, page, sort, state.msisdn, state.plan, state.q, state.status]);
 
   const { data, error, isLoading: loading, mutate: refresh } = useRead<unknown>(url);
   const { data: tariffs } = useRead<unknown>('/api/tariff-plans');
@@ -279,6 +281,13 @@ export default function OcsContractsPanel() {
         onCommit={(value) => update({ q: value, page: '1' })}
         label={t('ocs_search_imsi')}
         placeholder={t('ocs_search_imsi')}
+        normalize={sanitizeImsiInput}
+      />
+      <OcsSearchField
+        value={state.msisdn}
+        onCommit={(value) => update({ msisdn: value, page: '1' })}
+        label={t('ocs_search_msisdn')}
+        placeholder={t('ocs_search_msisdn')}
         normalize={sanitizeImsiInput}
       />
       <OcsFilterSelect

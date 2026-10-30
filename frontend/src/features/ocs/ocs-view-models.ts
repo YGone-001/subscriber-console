@@ -85,6 +85,49 @@ export type OcsContractSummaryViewModel = {
   terminated: number | null;
 };
 
+export type OcsContractOperationViewModel = {
+  id: string | null;
+  timestamp: string | null;
+  action: string | null;
+  operation: string | null;
+  actor: string | null;
+  role: string | null;
+  reason: string | null;
+  result: string | null;
+  beforeStatus: string | null;
+  afterStatus: string | null;
+  beforePlanId: string | null;
+  afterPlanId: string | null;
+};
+
+export function toContractOperationsViewModel(payload: unknown): {
+  complete: boolean;
+  records: OcsContractOperationViewModel[];
+} {
+  const container = asRecord(payload);
+  const list = Array.isArray(container.operations) ? container.operations : [];
+  const records: OcsContractOperationViewModel[] = [];
+  for (const entry of list) {
+    const record = asRecordOrNull(entry);
+    if (!record) continue;
+    records.push({
+      id: field(record, 'id', asIdString),
+      timestamp: field(record, 'timestamp', asText),
+      action: field(record, 'action', asText),
+      operation: field(record, 'operation', asText),
+      actor: field(record, 'actor', asText),
+      role: field(record, 'role', asText),
+      reason: field(record, 'reason', asText),
+      result: field(record, 'result', asText),
+      beforeStatus: field(record, 'beforeStatus', asText),
+      afterStatus: field(record, 'afterStatus', asText),
+      beforePlanId: field(record, 'beforePlanId', asText),
+      afterPlanId: field(record, 'afterPlanId', asText),
+    });
+  }
+  return { complete: asBoolean(container.operationsComplete) === true, records };
+}
+
 export function toContractSummaryViewModel(payload: unknown): OcsContractSummaryViewModel | null {
   const summary = asRecordOrNull(asRecord(payload).summary);
   if (!summary) return null;

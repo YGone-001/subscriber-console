@@ -168,8 +168,8 @@ Target Collection: `xcloud.ocs_subscribers`
   list envelope's `summary` block and describe the collection, not the current
   page or the active filters. If the summary aggregation is unavailable the
   counts render as em dashes; they are never fabricated as zero.
-- Filters: IMSI (digits only) and status, plus a tariff-plan filter. Sort, page
-  and page size live in the URL.
+- Filters: IMSI (digits only), MSISDN (digits only), status and tariff plan.
+  Sort, page and page size live in the URL.
 - The toolbar exposes "Provision contract" for operators with
   `ocs.plan.assign`; it opens the shared provisioning dialog (subscriber
   lookup, explicit plan, optional quota buckets and a reason). The same dialog
@@ -183,9 +183,13 @@ Target Collection: `xcloud.ocs_subscribers`
   previews the current and target quota/validity before applying. The change
   takes effect immediately and does not recalculate quota already granted. A
   disabled plan is never offered: the API rejects it with `OCS_TARIFF_DISABLED`.
-- Detail page: identity, billing (plan name, quota, status), timestamps, and the
-  same lifecycle actions with confirmation. A missing identifier renders the
-  "not found" state; it never falls back to a neighbouring record.
+- Detail page: identity, billing (plan name, quota, status), timestamps, the
+  bounded operation history (last 20 audit projections: operation, actor, role,
+  status/plan change, reason, result) and the same lifecycle actions with
+  confirmation. If the audit read is unavailable the page says so explicitly;
+  it never presents an unreadable history as "no operations". A missing
+  identifier renders the "not found" state; it never falls back to a
+  neighbouring record.
 - The detail page reads one contract by its exact identifier with
   `GET /api/ocs/subscribers/{imsi}` (`ocs.read`). A malformed identifier answers
   `400 OCS_INVALID_IMSI`, an absent contract `404 OCS_SUBSCRIBER_NOT_FOUND`;
