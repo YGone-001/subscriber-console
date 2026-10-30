@@ -27,7 +27,7 @@ import { ErrorState } from '../../components/ui/StatePanel';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { fetchInventoryMeta, fetchInventoryResources } from './inventory-api';
-import NetworkElementView from '../operations/NetworkElementView';
+import NetworkElementView from './NetworkElementView';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { RuntimeDiscoveryView } from '../runtime/RuntimeDiscovery';

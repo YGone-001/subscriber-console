@@ -40,19 +40,19 @@ import {
   type DomainKey,
   type TreeNode,
   type TreeMode,
-} from './operational-model';
-import { useBoundedEdges } from './use-bounded-edges';
-import { useRegisterOperationsRefresh } from './operations-refresh';
-import { useOperationsUrlState } from './use-operations-url-state';
-import { INVENTORY_URL_KEYS } from './inventory-url-keys';
+} from '../operations/operational-model';
+import { useBoundedEdges } from '../operations/use-bounded-edges';
+import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
+import { useOperationsUrlState } from '../operations/use-operations-url-state';
+import { INVENTORY_URL_KEYS } from '../operations/inventory-url-keys';
 import {
   adaptCompleteness,
   adaptOperationsResources,
   operationsResourcesPath,
   OPERATIONS_RESOURCE_LIMIT,
   type OperationsResourcesResponse,
-} from './operations-resources';
-import type { OperationsSummaryResponse } from './operations-summary';
+} from '../operations/operations-resources';
+import type { OperationsSummaryResponse } from '../operations/operations-summary';
 import { NetworkElementCards } from './NetworkElementCards';
 import { ResourceDetailDrawer } from './ResourceDetailDrawer';
 import type { RuntimeComponent, RuntimeObservations } from '../runtime/runtime-types';

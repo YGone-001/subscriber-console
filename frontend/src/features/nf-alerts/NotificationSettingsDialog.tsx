@@ -138,6 +138,64 @@ export function NotificationSettingsDialog({ open, onClose, onChanged }: Props) 
   );
 }
 
+function RemoveConfirmDialog({
+  open,
+  titleId,
+  title,
+  body,
+  busy,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  titleId: string;
+  title: string;
+  body: string;
+  busy: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Dialog
+      open={open}
+      onClose={() => {
+        if (!busy) onCancel();
+      }}
+      overlayClassName="modal-overlay"
+      className="modal-content animate-fade-in"
+      labelledBy={titleId}
+      role="alertdialog"
+      closeOnOverlay={!busy}
+    >
+      <div className={styles.notifyDialog}>
+        <header className={styles.drawerHead}>
+          <h2 id={titleId} className={styles.drawerTitle}>
+            <Trash2 size={18} aria-hidden="true" />
+            {title}
+          </h2>
+        </header>
+        <p className={styles.probeEditorEmpty}>{body}</p>
+        {error ? (
+          <p className={styles.probeEditorEmpty} role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className={styles.formActions}>
+          <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
+            {t('cancel')}
+          </button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={busy}>
+            {busy ? t('loading') : t('delete')}
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 function ChannelSection({
   channels,
   loading,
@@ -156,6 +214,9 @@ function ChannelSection({
   const [url, setUrl] = useState('');
   const [secret, setSecret] = useState('');
   const [busy, setBusy] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<NotificationChannel | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -175,10 +236,25 @@ function ChannelSection({
     }
   };
 
-  const remove = async (channel: NotificationChannel) => {
-    await deleteNotificationChannel(channel.id);
-    onChanged();
-    onReload();
+  const requestRemove = (channel: NotificationChannel) => {
+    setRemoveError(null);
+    setPendingRemove(channel);
+  };
+
+  const confirmRemove = async () => {
+    if (!pendingRemove) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      await deleteNotificationChannel(pendingRemove.id);
+      setPendingRemove(null);
+      onChanged();
+      onReload();
+    } catch {
+      setRemoveError(t('nf_notify_remove_failed'));
+    } finally {
+      setRemoving(false);
+    }
   };
 
   return (
@@ -215,7 +291,7 @@ function ChannelSection({
                 {channel.enabled ? t('nf_notify_enabled') : t('nf_notify_disabled')}
               </span>
               {canConfigure ? (
-                <button type="button" className="btn btn-ghost" onClick={() => void remove(channel)} aria-label={t('nf_notify_channel_remove')}>
+                <button type="button" className="btn btn-ghost" onClick={() => requestRemove(channel)} aria-label={t('nf_notify_channel_remove')}>
                   <Trash2 size={14} aria-hidden="true" />
                 </button>
               ) : null}
@@ -223,6 +299,17 @@ function ChannelSection({
           ))}
         </ul>
       )}
+
+      <RemoveConfirmDialog
+        open={pendingRemove !== null}
+        titleId="notify-remove-channel-title"
+        title={t('nf_notify_remove_channel_title')}
+        body={pendingRemove ? t('nf_notify_remove_channel_body', { name: pendingRemove.name }) : ''}
+        busy={removing}
+        error={removeError}
+        onConfirm={() => void confirmRemove()}
+        onCancel={() => setPendingRemove(null)}
+      />
     </div>
   );
 }
@@ -249,6 +336,9 @@ function EscalationSection({
   const [delay, setDelay] = useState(0);
   const [escalateChannelIds, setEscalateChannelIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<Escalation | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const toggle = (list: EscalationSeverity[], value: EscalationSeverity) =>
     list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
@@ -279,10 +369,25 @@ function EscalationSection({
     }
   };
 
-  const remove = async (escalation: Escalation) => {
-    await deleteNotificationEscalation(escalation.id);
-    onChanged();
-    onReload();
+  const requestRemove = (escalation: Escalation) => {
+    setRemoveError(null);
+    setPendingRemove(escalation);
+  };
+
+  const confirmRemove = async () => {
+    if (!pendingRemove) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      await deleteNotificationEscalation(pendingRemove.id);
+      setPendingRemove(null);
+      onChanged();
+      onReload();
+    } catch {
+      setRemoveError(t('nf_notify_remove_failed'));
+    } finally {
+      setRemoving(false);
+    }
   };
 
   return (
@@ -355,7 +460,7 @@ function EscalationSection({
                 {escalation.enabled ? t('nf_notify_enabled') : t('nf_notify_disabled')}
               </span>
               {canConfigure ? (
-                <button type="button" className="btn btn-ghost" onClick={() => void remove(escalation)} aria-label={t('nf_notify_escalation_remove')}>
+                <button type="button" className="btn btn-ghost" onClick={() => requestRemove(escalation)} aria-label={t('nf_notify_escalation_remove')}>
                   <Trash2 size={14} aria-hidden="true" />
                 </button>
               ) : null}
@@ -363,6 +468,17 @@ function EscalationSection({
           ))}
         </ul>
       )}
+
+      <RemoveConfirmDialog
+        open={pendingRemove !== null}
+        titleId="notify-remove-escalation-title"
+        title={t('nf_notify_remove_escalation_title')}
+        body={pendingRemove ? t('nf_notify_remove_escalation_body', { name: pendingRemove.name }) : ''}
+        busy={removing}
+        error={removeError}
+        onConfirm={() => void confirmRemove()}
+        onCancel={() => setPendingRemove(null)}
+      />
     </div>
   );
 }

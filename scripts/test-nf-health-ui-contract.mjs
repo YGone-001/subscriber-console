@@ -326,12 +326,14 @@ check(
 // ---------------------------------------------------------------------------
 /* The overview's endpoint reads live in its data hook, not the component: the
  * component consumes the shared projection loader, so the source under test is
- * the union of both files. */
+ * the union of the live overview chain (page component, authority panels and
+ * the shared loader). */
 const overviewSource = [
-  readFileSync(resolve(root, 'frontend/src/features/operations/OperationalOverview.tsx'), 'utf8'),
+  readFileSync(resolve(root, 'frontend/src/features/operations/OperationsOverview.tsx'), 'utf8'),
+  readFileSync(resolve(root, 'frontend/src/features/operations/OverviewAuthorityPanels.tsx'), 'utf8'),
   readFileSync(resolve(root, 'frontend/src/features/operations/use-operational-overview-data.ts'), 'utf8'),
 ].join('\n');
-const networkSource = readFileSync(resolve(root, 'frontend/src/features/operations/NetworkElementView.tsx'), 'utf8');
+const networkSource = readFileSync(resolve(root, 'frontend/src/features/inventory/NetworkElementView.tsx'), 'utf8');
 const boundedEdgesSource = readFileSync(resolve(root, 'frontend/src/features/operations/use-bounded-edges.ts'), 'utf8');
 const urlStateSource = readFileSync(resolve(root, 'frontend/src/features/operations/operations-url-state.ts'), 'utf8');
 const resourceProjectionSource = readFileSync(resolve(root, 'frontend/src/features/operations/operations-resources.ts'), 'utf8');
@@ -417,7 +419,8 @@ check(
 );
 check(
   'OPS-UI-09',
-  /aria-expanded/.test(overviewSource) &&
+  /aria-labelledby/.test(overviewSource) &&
+    /aria-expanded/.test(networkSource) &&
     /aria-pressed/.test(networkSource) &&
     /scope="col"/.test(networkSource) &&
     /scope="row"/.test(networkSource) &&
@@ -450,7 +453,9 @@ check(
 check(
   'OPS-UI-12',
   /completeness\.inventory/.test(overviewSource) === false &&
-    /completeness\[dimension\]/.test(overviewSource) &&
+    /const inventory: DimensionCompleteness/.test(overviewSource) &&
+    /const monitoring: DimensionCompleteness/.test(overviewSource) &&
+    /const telemetry: DimensionCompleteness/.test(overviewSource) &&
     /completeness\[dimension\]/.test(networkSource) &&
     /ops_dimension_monitoring/.test(localeEn) &&
     /ops_dimension_topology/.test(localeZh) &&
@@ -463,7 +468,7 @@ check(
   // unmonitored.
   /association === 'unresolved'/.test(modelSource) &&
     /counts\.unresolved \+= 1/.test(modelSource) &&
-    /ops_card_unresolved/.test(overviewSource) &&
+    /ops_nf_panel_unresolved/.test(overviewSource) &&
     /ops_state_unresolved/.test(localeEn) &&
     /ops_state_unresolved/.test(localeZh) &&
     /ops_filter_unresolved/.test(networkSource),

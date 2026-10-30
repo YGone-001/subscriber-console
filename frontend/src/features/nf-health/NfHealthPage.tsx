@@ -593,29 +593,13 @@ export function NfHealthPage() {
                             {overallBadge(target, t)}
                           </div>
                           <div className={styles.targetCardBadges}>
-                            {layerBadge(
-                              target.coverage.l1Measured ? 'healthy' : 'unknown',
-                              t,
-                              styles,
-                              target.coverage.l1Measured,
-                              'L1',
-                            )}
-                            {layerBadge(
-                              target.coverage.l2Measured ? 'healthy' : 'unknown',
-                              t,
-                              styles,
-                              target.coverage.l2Measured,
-                              'L2',
-                            )}
-                            {layerBadge(
-                              target.coverage.l3Available
-                                ? target.coverage.l3Measured
-                                  ? 'healthy'
-                                  : 'unknown'
-                                : 'not_configured',
-                              t,
-                              styles,
+                            {coverageBadge(true, target.coverage.l1Measured, t, styles, 'L1')}
+                            {coverageBadge(true, target.coverage.l2Measured, t, styles, 'L2')}
+                            {coverageBadge(
+                              target.coverage.l3Available,
                               target.coverage.l3Measured,
+                              t,
+                              styles,
                               'L3',
                             )}
                           </div>
@@ -722,21 +706,17 @@ export function NfHealthPage() {
                         </code>
                       </td>
                       <td>
-                        {layerBadge(target.coverage.l1Measured ? 'healthy' : 'unknown', t, styles, target.coverage.l1Measured)}
+                        {coverageBadge(true, target.coverage.l1Measured, t, styles)}
                       </td>
                       <td>
-                        {layerBadge(target.coverage.l2Measured ? 'healthy' : 'unknown', t, styles, target.coverage.l2Measured)}
+                        {coverageBadge(true, target.coverage.l2Measured, t, styles)}
                       </td>
                       <td>
-                        {layerBadge(
-                          target.coverage.l3Available
-                            ? target.coverage.l3Measured
-                              ? 'healthy'
-                              : 'unknown'
-                            : 'not_configured',
+                        {coverageBadge(
+                          target.coverage.l3Available,
+                          target.coverage.l3Measured,
                           t,
                           styles,
-                          target.coverage.l3Measured,
                         )}
                       </td>
                       <td>{formatTimestamp(target.lastMeasuredAt)}</td>
@@ -931,7 +911,6 @@ function freshnessStateBadge(state: string, t: (key: string) => string): React.R
  * away. not_configured stays neutral: an interface that was never declared is
  * not a failure. */
 function matrixCell(cell: InterfaceCell, t: (key: string) => string): React.ReactElement {
-  const measured = cell.state !== 'not_configured' && cell.state !== 'unknown';
   const detail = [
     cell.httpStatus ? `HTTP ${cell.httpStatus}` : null,
     cell.responseMs != null ? `${cell.responseMs} ms` : null,
@@ -940,37 +919,52 @@ function matrixCell(cell: InterfaceCell, t: (key: string) => string): React.Reac
   ]
     .filter(Boolean)
     .join(' - ');
-  const badge = layerBadge(cell.state, t, styles, measured);
+  const badge = layerBadge(cell.state, t, styles);
   return detail ? <span title={detail}>{badge}</span> : badge;
 }
 
-function layerBadge(
-  state: LayerState,
+/* Coverage is a measurement fact, not a health verdict: an established
+ * measurement keeps the neutral evidence tone, an attempted-but-absent
+ * measurement says unknown, and a layer with no exporter says not configured. */
+function coverageBadge(
+  available: boolean,
+  measured: boolean,
   t: (key: string) => string,
   stylesRecord: Record<string, string>,
-  measured: boolean,
+  labelPrefix?: string,
+): React.ReactElement {
+  const state: LayerState | 'measured' = !available ? 'not_configured' : measured ? 'measured' : 'unknown';
+  return layerBadge(state, t, stylesRecord, labelPrefix);
+}
+
+function layerBadge(
+  state: LayerState | 'measured',
+  t: (key: string) => string,
+  stylesRecord: Record<string, string>,
   labelPrefix?: string,
 ): React.ReactElement {
   const className =
-    state === 'healthy'
-      ? stylesRecord.badgeHealthy
-      : state === 'degraded'
-        ? stylesRecord.badgeDegraded
-        : state === 'unhealthy'
-          ? stylesRecord.badgeUnhealthy
-          : state === 'not_configured'
-            ? stylesRecord.badgeNotConfigured
-            : state === 'stale'
-              ? stylesRecord.badgeStale
-              : stylesRecord.badgeUnknown;
+    state === 'measured'
+      ? stylesRecord.badgeMeasured
+      : state === 'healthy'
+        ? stylesRecord.badgeHealthy
+        : state === 'degraded'
+          ? stylesRecord.badgeDegraded
+          : state === 'unhealthy'
+            ? stylesRecord.badgeUnhealthy
+            : state === 'not_configured'
+              ? stylesRecord.badgeNotConfigured
+              : state === 'stale'
+                ? stylesRecord.badgeStale
+                : stylesRecord.badgeUnknown;
 
-  const labelKey = measured
-    ? state === 'healthy'
+  const labelKey =
+    state === 'measured'
       ? 'nf_health_layer_measured'
-      : `nf_health_state_${state}`
-    : state === 'not_configured'
-      ? 'nf_health_state_not_configured'
-      : 'nf_health_state_unknown';
+      : state === 'healthy' || state === 'degraded' || state === 'unhealthy' ||
+          state === 'stale' || state === 'not_configured'
+        ? `nf_health_state_${state}`
+        : 'nf_health_state_unknown';
 
   return <span className={className}>{labelPrefix ? `${labelPrefix} · ${t(labelKey)}` : t(labelKey)}</span>;
 }

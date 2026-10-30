@@ -20,7 +20,7 @@ import {
   formatBytes,
   memoryView,
   type OperationalResource,
-} from './operational-model';
+} from '../operations/operational-model';
 import styles from '../../styles/modules/operations.module.css';
 
 const KNOWN_STATES = [

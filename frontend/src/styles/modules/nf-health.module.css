@@ -284,6 +284,7 @@
 .badgeUnknown,
 .badgeNotConfigured,
 .badgeStale,
+.badgeMeasured,
 .badgeMuted {
   display: inline-flex;
   align-items: center;
@@ -325,6 +326,14 @@
 .badgeMuted {
   color: var(--text-muted);
   background: var(--surface-hover);
+}
+
+/* A measured layer is evidence, not a health verdict: it keeps the neutral
+ * information tone so an established measurement is never read as "healthy". */
+.badgeMeasured {
+  color: var(--status-info);
+  border-color: color-mix(in srgb, var(--status-info) 35%, var(--surface-border));
+  background: color-mix(in srgb, var(--status-info) 10%, transparent);
 }
 
 .stack {

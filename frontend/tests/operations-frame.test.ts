@@ -231,7 +231,7 @@ test('every operations page exposes exactly one refresh entry', () => {
 
 test('sections register their loaders instead of drawing a second refresh button', () => {
   const sections = [
-    'src/features/operations/NetworkElementView.tsx',
+    'src/features/inventory/NetworkElementView.tsx',
     'src/features/topology/ArchitectureView.tsx',
     'src/features/runtime/RuntimeDiscovery.tsx',
   ];
@@ -240,7 +240,7 @@ test('sections register their loaders instead of drawing a second refresh button
     assert.match(source, /useRegisterOperationsRefresh\(/, `${section} must register a loader`);
   }
   assert.ok(
-    !read('../src/features/operations/NetworkElementView.tsx').includes('RefreshCw'),
+    !read('../src/features/inventory/NetworkElementView.tsx').includes('RefreshCw'),
     'the network-element view must not keep its own refresh icon',
   );
   assert.ok(

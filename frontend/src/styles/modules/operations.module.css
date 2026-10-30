@@ -172,6 +172,39 @@
   color: var(--text-muted);
 }
 
+/* Six operational modules, one destination each. The overview is the
+ * aggregation hub; it links to each owning surface instead of embedding a
+ * second copy of its tables. */
+.moduleNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.moduleNavLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-body-compact);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.moduleNavLink:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--surface-border));
+  color: var(--primary);
+}
+
+.moduleNavLink:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .statusPanel {
   padding: var(--space-16);
   border: 1px solid var(--surface-border);

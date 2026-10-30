@@ -27,7 +27,7 @@ import {
   operationalStateToken,
   type DomainKey,
   type OperationalResource,
-} from './operational-model';
+} from '../operations/operational-model';
 import styles from '../../styles/modules/network-cards.module.css';
 
 function stateTone(state: string): string {

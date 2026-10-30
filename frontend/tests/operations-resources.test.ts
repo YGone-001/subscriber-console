@@ -21,7 +21,7 @@ import {
   type OperationsResourceDto,
   type OperationsResourcesResponse,
 } from '../src/features/operations/operations-resources';
-import { unmanagedComponents } from '../src/features/operations/NetworkElementView';
+import { unmanagedComponents } from '../src/features/inventory/NetworkElementView';
 import type { RuntimeComponent } from '../src/features/runtime/runtime-types';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
@@ -230,7 +230,7 @@ test('the inventory route declares the projection endpoint', () => {
 });
 
 test('the network-element view no longer assembles the join in the browser', () => {
-  const source = read('../src/features/operations/NetworkElementView.tsx');
+  const source = read('../src/features/inventory/NetworkElementView.tsx');
   assert.ok(
     !source.includes('/api/nf-health/targets?resourceIds='),
     'the two-stage resource/target assembly must be gone',
@@ -240,7 +240,7 @@ test('the network-element view no longer assembles the join in the browser', () 
 });
 
 test('the card wall and the table are mutually exclusive', () => {
-  const source = read('../src/features/operations/NetworkElementView.tsx');
+  const source = read('../src/features/inventory/NetworkElementView.tsx');
   assert.match(source, /presentation === 'cards' \? \(/, 'cards must be a separate branch');
   const cardsIndex = source.indexOf("presentation === 'cards' ? (");
   const tableIndex = source.indexOf('<table className={styles.neTable}>');
@@ -249,20 +249,20 @@ test('the card wall and the table are mutually exclusive', () => {
 });
 
 test('the tree node count is scoped instead of bare', () => {
-  const source = read('../src/features/operations/NetworkElementView.tsx');
+  const source = read('../src/features/inventory/NetworkElementView.tsx');
   assert.ok(source.includes("t('ops_tree_loaded'"), 'tree nodes must report loaded counts');
   assert.ok(!/treeResourceIds\(node\)\.length\}<\/span>/.test(source), 'a bare count must not be rendered');
 });
 
 test('filter changes clear the tree node in the same URL write without erasing a shared node on mount', () => {
-  const source = read('../src/features/operations/NetworkElementView.tsx');
+  const source = read('../src/features/inventory/NetworkElementView.tsx');
   assert.ok(source.includes('useRef<string | null>(null)'), 'the first URL render must establish, not clear, query state');
   assert.ok(source.includes('if (queryKeyRef.current === null)'), 'a shared node must survive the initial mount');
   assert.ok(source.includes('url.setFilters({ [key]: value, node: null })'), 'a filter transition must clear the node atomically');
 });
 
 test('the detail drawer preserves unresolved association semantics', () => {
-  const source = read('../src/features/operations/ResourceDetailDrawer.tsx');
+  const source = read('../src/features/inventory/ResourceDetailDrawer.tsx');
   assert.ok(source.includes("resource.association === 'unresolved'"));
   assert.ok(source.includes("t('ops_association_unresolved')"));
 });

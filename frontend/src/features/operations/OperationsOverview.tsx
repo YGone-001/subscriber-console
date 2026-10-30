@@ -12,9 +12,12 @@ import {
   Activity,
   AlertTriangle,
   BellRing,
+  Boxes,
   Network,
+  Radar,
   RefreshCw,
   Server,
+  Share2,
   ShieldCheck,
   Users,
 } from 'lucide-react';
@@ -39,6 +42,17 @@ const SUMMARY_SECTIONS = 'health,alerts';
 const SUMMARY_REFRESH_MS = 30000;
 const UE_SUMMARY_PATH = '/api/ue-info?summary=1';
 const RUNTIME_DETAIL_PATH = '/inventory?view=runtime';
+
+/* The overview aggregates the six operational modules; each entry is a link to
+ * the module's owning surface, never an embedded second copy of its tables. */
+const MODULE_LINKS = [
+  { key: 'inventory', path: '/inventory', label: 'nav_inventory', icon: <Boxes size={15} aria-hidden="true" /> },
+  { key: 'topology', path: '/topology', label: 'nav_topology', icon: <Share2 size={15} aria-hidden="true" /> },
+  { key: 'discovery', path: '/discovery', label: 'nav_discovery', icon: <Radar size={15} aria-hidden="true" /> },
+  { key: 'nf-health', path: '/nf-health', label: 'nav_nf_health', icon: <Activity size={15} aria-hidden="true" /> },
+  { key: 'nf-alerts', path: '/nf-alerts', label: 'nav_nf_alerts', icon: <BellRing size={15} aria-hidden="true" /> },
+  { key: 'ue-info', path: '/ue-info', label: 'nav_ue_info', icon: <Users size={15} aria-hidden="true" /> },
+];
 
 function runtimeTone(value: OperationsPosture['runtime']): MetricTone {
   if (value.running === null) return 'muted';
@@ -200,7 +214,7 @@ export default function OperationsOverview() {
             abnormal: (posture.monitored.degraded ?? 0) + (posture.monitored.unhealthy ?? 0),
           })),
       tone: managedTone(posture.monitored),
-      onClick: () => navigate('/inventory'),
+      onClick: () => navigate('/nf-health'),
     },
     {
       key: 'alerts',
@@ -231,6 +245,15 @@ export default function OperationsOverview() {
         ariaLabel={t('dashboard_title')}
         items={kpiItems}
       />
+
+      <nav className={styles.moduleNav} aria-label={t('ops_module_nav_label')}>
+        {MODULE_LINKS.map((item) => (
+          <Link key={item.key} to={item.path} className={styles.moduleNavLink}>
+            {item.icon}
+            {t(item.label)}
+          </Link>
+        ))}
+      </nav>
 
       <section className={styles.attentionPanel} aria-labelledby="operations-attention-title">
         <div className={styles.attentionHead}>
