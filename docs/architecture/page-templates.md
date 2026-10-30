@@ -40,6 +40,8 @@ container
   - `columns` 写入 `--metric-card-count` 并设置 `data-columns`，网格随之响应：`<= 1180px` 三列、`<= 640px` 双列、`<= 560px` 单列。
   - `tone` 表达指标语义（`primary / success / warning / danger / muted`）；`accent` 仅为 KPI 身份色（`--metric-accent`）。
   - `indicator`、`detail`、`compactValue` 用于趋势指示、辅助说明和大数值压缩。
+  - 运维页的全量口径 KPI 统一经 `features/operations/kpi-detail.tsx` 生成 detail：缺失计数显示不可用，已有计数标注全集合口径。
+- 页内互斥视图使用共享原语 `ViewSwitch`（`src/components/ui/ViewSwitch.tsx`）：单级 `value`、`aria-pressed`、`data-*` 钩子由调用方提供，值由 `useOperationsUrlState` 写入 URL；页面不得自绘 `role="group"` 切换按钮或分叉切换样式。
 - 图表必须经可视化层实现：调色板与网格/tooltip 令牌来自 `src/components/ui/chartPrimitives.tsx`；每张图提供 `ChartDataTable` 等价数据表。分类色板 `--chart-*` 只允许出现在图表标记上，不得用于图标、徽章、药丸或文本（见 [design-system-rules.md](design-system-rules.md) 第 4 节）。
 - 状态契约：加载时保留区块结构并使用骨架；空数据不绘制零值假图，数值缺失显示 `—`；错误态保留页头并提供重试。
 - 代表页：`/`（运维总览：全量口径态势 KPI、状态分布、本地运行时/纳管网元双视图；业务驾驶舱作为次级视图按需挂载）、`/system-health`（MetricStrip cards + 子系统卡片）、`/ocs/dashboard`。

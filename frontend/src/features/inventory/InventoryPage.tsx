@@ -28,6 +28,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { fetchInventoryMeta, fetchInventoryResources } from './inventory-api';
 import NetworkElementView from './NetworkElementView';
+import { ViewSwitch, type ViewSwitchOption } from '../../components/ui/ViewSwitch';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { RuntimeDiscoveryView } from '../runtime/RuntimeDiscovery';
@@ -40,6 +41,24 @@ const PAGE_LIMIT = 20;
 /* `cards` is the mutually exclusive card wall; `assets` is the ledger and
  * `list` stays as a compatible alias for links created before UX-2. */
 const INVENTORY_VIEWS = ['network', 'cards', 'assets', 'list', 'runtime'] as const;
+
+const INVENTORY_VIEW_LABELS: Record<(typeof INVENTORY_VIEWS)[number], string> = {
+  network: 'ops_view_network',
+  cards: 'ops_view_cards',
+  assets: 'ops_view_assets',
+  list: 'ops_view_assets',
+  runtime: 'runtime_view_mode',
+};
+
+/* The switch never emits the legacy `list` alias: it stays read-compatible for
+ * old links, while the visible ledger option always writes `assets`. */
+function inventoryViewOptions(t: (key: string) => string): ViewSwitchOption[] {
+  return (['network', 'cards', 'assets', 'runtime'] as const).map((value) => ({
+    value,
+    label: t(INVENTORY_VIEW_LABELS[value]),
+    data: { 'data-view-mode': value },
+  }));
+}
 
 export function InventoryPage() {
   const { t } = useI18n();
@@ -209,44 +228,12 @@ export function InventoryPage() {
       description={t('inventory_description')}
       icon={<Boxes size={23} />}
       viewSwitch={(
-        <div className={styles.viewToggle} role="group" aria-label={t('ops_view_mode')}>
-          <button
-            type="button"
-            data-view-mode="network"
-            className={viewMode === 'network' ? styles.viewToggleActive : undefined}
-            aria-pressed={viewMode === 'network'}
-            onClick={() => url.setView('network')}
-          >
-            {t('ops_view_network')}
-          </button>
-          <button
-            type="button"
-            data-view-mode="cards"
-            className={viewMode === 'cards' ? styles.viewToggleActive : undefined}
-            aria-pressed={viewMode === 'cards'}
-            onClick={() => url.setView('cards')}
-          >
-            {t('ops_view_cards')}
-          </button>
-          <button
-            type="button"
-            data-view-mode="assets"
-            className={assetsView ? styles.viewToggleActive : undefined}
-            aria-pressed={assetsView}
-            onClick={() => url.setView('assets')}
-          >
-            {t('ops_view_assets')}
-          </button>
-          <button
-            type="button"
-            data-view-mode="runtime"
-            className={viewMode === 'runtime' ? styles.viewToggleActive : undefined}
-            aria-pressed={viewMode === 'runtime'}
-            onClick={() => url.setView('runtime')}
-          >
-            {t('runtime_view_mode')}
-          </button>
-        </div>
+        <ViewSwitch
+          options={inventoryViewOptions(t)}
+          value={assetsView ? 'assets' : viewMode}
+          onChange={(value) => url.setView(value)}
+          ariaLabel={t('ops_view_mode')}
+        />
       )}
       onRefresh={assetsView ? () => loadResources(url.cursor) : undefined}
       actions={

@@ -8,9 +8,10 @@ Status: active policy for the business console surfaces.
    No component may introduce hardcoded `#hex`, `rgb()`, `rgba()` or spacing
    values; use the token variables.
 2. **Shared primitives** — `frontend/src/components/ui/*`:
-   `PageHeader`, `MetricStrip`, `DataTablePagination`, `DataTableState`,
-   `SortableTableHeader`, `Dialog`, `Field`, `RefreshButton`, `SectionHeader`,
-   `OperationFeedback`, `StatePanel`, `UnsavedChangesGuard`, chart primitives.
+   `PageHeader`, `MetricStrip`, `ViewSwitch`, `DataTablePagination`,
+   `DataTableState`, `SortableTableHeader`, `Dialog`, `Field`, `RefreshButton`,
+   `SectionHeader`, `OperationFeedback`, `StatePanel`, `UnsavedChangesGuard`,
+   chart primitives.
 3. **Domain presentations** — `components/ocs/*`, `components/analytics/*`,
    `features/subscribers/*`, `features/profiles/*`, `features/retention/*`.
    They compose shared primitives and add domain-specific badges, toolbars,
@@ -30,6 +31,29 @@ The OCS surfaces compose the shared primitives where the primitive exists:
 | Contract / balance / tariff lists | `MetricStrip`, `DataTablePagination`, `DataTableState`, `SortableTableHeader` |
 | All OCS dialogs | `Dialog` (through `ConfirmDialog` or the dialog-specific form) |
 | OCS feedback / empty states | `OperationFeedback` where the generic feedback contract fits; OCS-specific detail states remain domain-local |
+
+## Current operations ownership
+
+The operations surfaces compose the same primitives as the rest of the console:
+
+| Surface | Shared primitives |
+|---|---|
+| Operations page frame | `OperationsPageFrame` (one title, one refresh entry) |
+| In-page views (`/`, `/inventory`, `/topology`, `/discovery`, `/nf-health`, `/nf-alerts`) | `ViewSwitch` |
+| Operations KPI rows | `MetricStrip` `cards` variant with the shared scope detail |
+| List states / dialogs / feedback | `OperationFeedback`, `StatePanel`, `Dialog`, `Field` |
+
+- Every page-level view switch is the shared `ViewSwitch`; the active value is
+  persisted in the URL by `useOperationsUrlState`. A page never draws its own
+  switch markup or a second set of switch styles.
+- The topology workspace additionally exposes an evidence-source switch and a
+  runtime-scope switch inside its graph bar. Both reuse the same primitive and
+  are evidence selectors for the running graph, not a second navigation level.
+- A page-scoped count is never shown in a KPI card. Missing summary counts are
+  rendered as unavailable through the shared detail helper; the scope tag
+  states that the number describes the full collection.
+- The legacy `view=list` value remains readable for `/inventory`, but the
+  switch never emits it: the visible ledger option always writes `view=assets`.
 
 Domain-specific OCS components are intentional:
 

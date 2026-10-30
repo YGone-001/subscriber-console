@@ -29,6 +29,7 @@ const PRIMITIVES: Array<{ path: string; defaultExport?: string; namedExports: st
   { path: 'components/ui/SectionHeader.tsx', defaultExport: 'SectionHeader', namedExports: [] },
   { path: 'components/ui/SortableTableHeader.tsx', namedExports: ['SortableTableHeader'] },
   { path: 'components/ui/UnsavedChangesGuard.tsx', namedExports: ['UnsavedChangesDialog', 'useUnsavedChangesGuard'] },
+  { path: 'components/ui/ViewSwitch.tsx', namedExports: ['ViewSwitch', 'ViewSwitchOption'] },
   { path: 'components/ui/chartPrimitives.tsx', namedExports: ['CHART_SERIES_COLORS', 'ChartSummary'] },
   { path: 'components/ui/useDialogFocus.ts', namedExports: ['useDialogFocus'] },
   { path: 'components/ocs/OcsPageShell.tsx', defaultExport: 'OcsPageShell', namedExports: [] },
@@ -134,6 +135,35 @@ test('PageHeader consumers resolve through the module in either export form', ()
     read('components/ui/PageHeader.tsx'),
     /export function PageHeader\(/,
   );
+});
+
+test('operations surfaces compose the shared view switch and KPI strip', () => {
+  const surfaces = [
+    'features/inventory/InventoryPage.tsx',
+    'features/discovery/DiscoveryPage.tsx',
+    'features/nf-health/NfHealthPage.tsx',
+    'features/nf-alerts/NfAlertsPage.tsx',
+    'features/operations/OperationsOverviewPage.tsx',
+    'features/topology/TopologyPage.tsx',
+  ];
+  for (const surface of surfaces) {
+    const source = read(surface);
+    assert.match(source, /from '\.\.\/\.\.\/components\/ui\/ViewSwitch'/, `${surface} must import the shared switch`);
+    assert.match(source, /ViewSwitch/, `${surface} must render the shared switch`);
+    assert.doesNotMatch(source, /styles\.viewToggle/, `${surface} must not fork the switch markup`);
+  }
+
+  const kpiSurfaces = [
+    'features/inventory/NetworkElementView.tsx',
+    'features/discovery/DiscoveryPage.tsx',
+    'features/nf-health/NfHealthPage.tsx',
+    'features/nf-alerts/NfAlertsPage.tsx',
+  ];
+  for (const surface of kpiSurfaces) {
+    const source = read(surface);
+    assert.match(source, /MetricStrip/, `${surface} must render KPIs through MetricStrip`);
+    assert.doesNotMatch(source, /styles\.kpiCard|styles\.kpiStrip/, `${surface} must not fork KPI cards`);
+  }
 });
 
 test('OCS business surfaces compose shared primitives instead of duplicating them', () => {

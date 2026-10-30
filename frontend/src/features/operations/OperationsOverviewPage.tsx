@@ -10,6 +10,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Activity, RadioTower } from 'lucide-react';
 import AnalyticsCockpit from '../../components/AnalyticsCockpit';
 import PageHeader from '../../components/ui/PageHeader';
+import { ViewSwitch, type ViewSwitchOption } from '../../components/ui/ViewSwitch';
 import { useI18n } from '../../providers/I18nProvider';
 import OperationsOverview from './OperationsOverview';
 import styles from '../../styles/modules/operations.module.css';
@@ -28,6 +29,11 @@ export function OperationsOverviewPage() {
     setSearchParams(params, { replace: true });
   }, [searchParams, setSearchParams]);
 
+  const viewOptions: ViewSwitchOption<OverviewView>[] = [
+    { value: 'operations', label: t('ops_view_operations') },
+    { value: 'business', label: t('ops_view_business') },
+  ];
+
   return (
     <div className="container animate-fade-in">
       <PageHeader
@@ -36,22 +42,12 @@ export function OperationsOverviewPage() {
         title={t('dashboard_title')}
         description={t('ops_overview_page_subtitle')}
         actions={(
-          <div className={styles.viewToggle} role="group" aria-label={t('ops_view_label')}>
-            {(['operations', 'business'] as const).map((option) => {
-              const active = option === 'business' ? business : !business;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  className={active ? styles.viewToggleActive : undefined}
-                  aria-pressed={active}
-                  onClick={() => setView(option)}
-                >
-                  {t(option === 'operations' ? 'ops_view_operations' : 'ops_view_business')}
-                </button>
-              );
-            })}
-          </div>
+          <ViewSwitch
+            options={viewOptions}
+            value={business ? 'business' : 'operations'}
+            onChange={setView}
+            ariaLabel={t('ops_view_label')}
+          />
         )}
       />
       {business ? (

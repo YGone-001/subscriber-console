@@ -24,6 +24,9 @@ import { Bell, BellRing, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
+import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
+import { ViewSwitch, type ViewSwitchOption } from '../../components/ui/ViewSwitch';
+import { scopeKpiDetail } from '../operations/kpi-detail';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import {
@@ -50,6 +53,7 @@ import {
   alertListQuery,
   alertView,
   readAlertFilters,
+  type AlertView,
 } from './nf-alert-views';
 import type {
   Alert,
@@ -293,6 +297,50 @@ export function NfAlertsPage() {
   // page arrays.
   const kpis = useMemo(() => alertsKpisFromSummary(summary ?? undefined), [summary]);
 
+  const viewOptions = useMemo<ViewSwitchOption<AlertView>[]>(
+    () => ALERT_VIEWS.map((option) => ({
+      value: option,
+      label: option === 'open'
+        ? t('nf_alerts_view_open')
+        : option === 'history'
+          ? t('nf_alerts_view_history')
+          : t('nf_alerts_view_rules'),
+      data: { 'data-nf-alert-view': option },
+    })),
+    [t],
+  );
+
+  const kpiItems = useMemo<MetricStripItem[]>(() => [
+    {
+      key: 'rules',
+      label: t('nf_alerts_kpi_rules'),
+      value: kpis.rules ?? '-',
+      detail: scopeKpiDetail(kpis.rules, t),
+      tone: kpis.rules === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'active',
+      label: t('nf_alerts_kpi_active'),
+      value: kpis.active ?? '-',
+      detail: scopeKpiDetail(kpis.active, t),
+      tone: kpis.active === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'acknowledged',
+      label: t('nf_alerts_kpi_acknowledged'),
+      value: kpis.acknowledged ?? '-',
+      detail: scopeKpiDetail(kpis.acknowledged, t),
+      tone: kpis.acknowledged === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'critical-open',
+      label: t('nf_alerts_kpi_critical_open'),
+      value: kpis.criticalOpen ?? '-',
+      detail: scopeKpiDetail(kpis.criticalOpen, t),
+      tone: kpis.criticalOpen === null ? 'muted' : 'primary',
+    },
+  ], [kpis, t]);
+
   const alertsPageIndex = alertsHistory.length + 1;
   const rulesPageIndex = rulesHistory.length + 1;
 
@@ -324,24 +372,12 @@ export function NfAlertsPage() {
       description={t('nf_alerts_description')}
       icon={<BellRing size={23} />}
       viewSwitch={(
-        <div className={styles.viewToggle} role="group" aria-label={t('nf_alerts_view_label')}>
-          {ALERT_VIEWS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              data-nf-alert-view={option}
-              className={view === option ? styles.viewToggleActive : undefined}
-              aria-pressed={view === option}
-              onClick={() => url.setView(option)}
-            >
-              {option === 'open'
-                ? t('nf_alerts_view_open')
-                : option === 'history'
-                  ? t('nf_alerts_view_history')
-                  : t('nf_alerts_view_rules')}
-            </button>
-          ))}
-        </div>
+        <ViewSwitch
+          options={viewOptions}
+          value={view}
+          onChange={(option) => url.setView(option)}
+          ariaLabel={t('nf_alerts_view_label')}
+        />
       )}
       onRefresh={handleRefresh}
       actions={
@@ -376,52 +412,12 @@ export function NfAlertsPage() {
       {summaryLoading && kpis.active === null ? (
         <SkeletonKpiStrip count={4} />
       ) : (
-        <section className={styles.kpiStrip} aria-label={t('nf_alerts_kpi_label')}>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('nf_alerts_kpi_rules')}</span>
-            <strong className={styles.kpiValue}>{kpis.rules ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.rules === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('nf_alerts_kpi_active')}</span>
-            <strong className={styles.kpiValue}>{kpis.active ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.active === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('nf_alerts_kpi_acknowledged')}</span>
-            <strong className={styles.kpiValue}>{kpis.acknowledged ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.acknowledged === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('nf_alerts_kpi_critical_open')}</span>
-            <strong className={styles.kpiValue}>{kpis.criticalOpen ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.criticalOpen === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-        </section>
+        <MetricStrip
+          variant="cards"
+          columns={4}
+          ariaLabel={t('nf_alerts_kpi_label')}
+          items={kpiItems}
+        />
       )}
 
       {view === 'rules' ? (

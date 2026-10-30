@@ -24,7 +24,10 @@ import { hasPermission } from '../../lib/permissions';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
 import { OperationFeedback } from '../../components/ui/OperationFeedback';
+import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
+import { ViewSwitch, type ViewSwitchOption } from '../../components/ui/ViewSwitch';
 import { SkeletonKpiStrip } from '../../components/ui/LoadingSkeleton';
+import { scopeKpiDetail } from '../operations/kpi-detail';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
@@ -276,6 +279,46 @@ export function DiscoveryPage() {
   // total (full-collection scope/completeness contract).
   const kpis = useMemo(() => discoveryKpisFromSummary(summary ?? undefined), [summary]);
 
+  const viewOptions = useMemo<ViewSwitchOption<DiscoveryView>[]>(
+    () => DISCOVERY_VIEWS.map((value) => ({
+      value,
+      label: t(DISCOVERY_VIEW_LABEL[value]),
+      data: { 'data-discovery-view': value },
+    })),
+    [t],
+  );
+
+  const kpiItems = useMemo<MetricStripItem[]>(() => [
+    {
+      key: 'sources',
+      label: t('discovery_kpi_sources'),
+      value: kpis.sources ?? '-',
+      detail: scopeKpiDetail(kpis.sources, t),
+      tone: kpis.sources === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'seen',
+      label: t('discovery_kpi_seen'),
+      value: kpis.seen ?? '-',
+      detail: scopeKpiDetail(kpis.seen, t),
+      tone: kpis.seen === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'missing',
+      label: t('discovery_kpi_missing'),
+      value: kpis.missing ?? '-',
+      detail: scopeKpiDetail(kpis.missing, t),
+      tone: kpis.missing === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'linked',
+      label: t('discovery_kpi_linked'),
+      value: kpis.linked ?? '-',
+      detail: scopeKpiDetail(kpis.linked, t),
+      tone: kpis.linked === null ? 'muted' : 'primary',
+    },
+  ], [kpis, t]);
+
   const candidatesFilters = useMemo(
     () => ({ sourceId: sourceIdFilter, state: observationFilter, nfType: nfTypeFilter }),
     [sourceIdFilter, observationFilter, nfTypeFilter],
@@ -287,20 +330,12 @@ export function DiscoveryPage() {
       description={t('discovery_description')}
       icon={<Radar size={23} />}
       viewSwitch={(
-        <div className={styles.viewToggle} role="group" aria-label={t('discovery_view_label')}>
-          {DISCOVERY_VIEWS.map((view) => (
-            <button
-              key={view}
-              type="button"
-              data-discovery-view={view}
-              className={discoveryView === view ? styles.viewToggleActive : undefined}
-              aria-pressed={discoveryView === view}
-              onClick={() => url.setView(view)}
-            >
-              {t(DISCOVERY_VIEW_LABEL[view])}
-            </button>
-          ))}
-        </div>
+        <ViewSwitch
+          options={viewOptions}
+          value={discoveryView}
+          onChange={(value) => url.setView(value)}
+          ariaLabel={t('discovery_view_label')}
+        />
       )}
       onRefresh={async () => {
         // Mounted views register their own loaders with the frame. Keep the
@@ -329,52 +364,12 @@ export function DiscoveryPage() {
       {summaryLoading && kpis.sources === null ? (
         <SkeletonKpiStrip count={4} />
       ) : (
-        <section className={styles.kpiStrip} aria-label={t('discovery_kpi_label')}>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('discovery_kpi_sources')}</span>
-            <strong className={styles.kpiValue}>{kpis.sources ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.sources === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('discovery_kpi_seen')}</span>
-            <strong className={styles.kpiValue}>{kpis.seen ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.seen === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('discovery_kpi_missing')}</span>
-            <strong className={styles.kpiValue}>{kpis.missing ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.missing === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('discovery_kpi_linked')}</span>
-            <strong className={styles.kpiValue}>{kpis.linked ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.linked === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-        </section>
+        <MetricStrip
+          variant="cards"
+          columns={4}
+          ariaLabel={t('discovery_kpi_label')}
+          items={kpiItems}
+        />
       )}
 
       {readDenied ? (

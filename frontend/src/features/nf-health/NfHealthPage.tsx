@@ -26,6 +26,9 @@ import {
 import { hasPermission } from '../../lib/permissions';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
+import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
+import { ViewSwitch, type ViewSwitchOption } from '../../components/ui/ViewSwitch';
+import { scopeKpiDetail } from '../operations/kpi-detail';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import {
@@ -341,6 +344,50 @@ export function NfHealthPage() {
   // total (scope/completeness contract).
   const kpis = useMemo(() => healthKpisFromSummary(summary ?? undefined), [summary]);
 
+  const viewOptions = useMemo<ViewSwitchOption<string>[]>(
+    () => HEALTH_VIEWS.map((option) => ({
+      value: option,
+      label: option === 'cards'
+        ? t('nf_health_view_cards')
+        : option === 'table'
+          ? t('nf_health_view_table')
+          : t('nf_health_view_interfaces'),
+      data: { 'data-nf-health-view': option },
+    })),
+    [t],
+  );
+
+  const kpiItems = useMemo<MetricStripItem[]>(() => [
+    {
+      key: 'configured',
+      label: t('nf_health_kpi_configured'),
+      value: kpis.configured ?? '-',
+      detail: scopeKpiDetail(kpis.configured, t),
+      tone: kpis.configured === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'fresh',
+      label: t('nf_health_kpi_fresh'),
+      value: kpis.fresh ?? '-',
+      detail: scopeKpiDetail(kpis.fresh, t),
+      tone: kpis.fresh === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'failed',
+      label: t('nf_health_kpi_degraded'),
+      value: kpis.failed ?? '-',
+      detail: scopeKpiDetail(kpis.failed, t),
+      tone: kpis.failed === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'stale',
+      label: t('nf_health_kpi_stale'),
+      value: kpis.staleUnknown ?? '-',
+      detail: scopeKpiDetail(kpis.staleUnknown, t),
+      tone: kpis.staleUnknown === null ? 'muted' : 'primary',
+    },
+  ], [kpis, t]);
+
   const filtersActive = hasHealthFilters(filters);
 
   return (
@@ -349,24 +396,12 @@ export function NfHealthPage() {
       description={t('nf_health_description')}
       icon={<Activity size={23} />}
       viewSwitch={(
-        <div className={styles.viewToggle} role="group" aria-label={t('nf_health_view_label')}>
-          {HEALTH_VIEWS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              data-nf-health-view={option}
-              className={view === option ? styles.viewToggleActive : undefined}
-              aria-pressed={view === option}
-              onClick={() => url.setView(option)}
-            >
-              {option === 'cards'
-                ? t('nf_health_view_cards')
-                : option === 'table'
-                  ? t('nf_health_view_table')
-                  : t('nf_health_view_interfaces')}
-            </button>
-          ))}
-        </div>
+        <ViewSwitch
+          options={viewOptions}
+          value={view}
+          onChange={(option) => url.setView(option)}
+          ariaLabel={t('nf_health_view_label')}
+        />
       )}
       onRefresh={() => loadAll(url.cursor)}
       actions={
@@ -390,52 +425,12 @@ export function NfHealthPage() {
       {loading && summaryLoading && targets.length === 0 ? (
         <SkeletonKpiStrip count={4} />
       ) : (
-        <section className={styles.kpiStrip} aria-label={t('nf_health_kpi_label')}>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('nf_health_kpi_configured')}</span>
-            <strong className={styles.kpiValue}>{kpis.configured ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.configured === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('nf_health_kpi_fresh')}</span>
-            <strong className={styles.kpiValue}>{kpis.fresh ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.fresh === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('nf_health_kpi_degraded')}</span>
-            <strong className={styles.kpiValue}>{kpis.failed ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.failed === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-          <article className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>{t('nf_health_kpi_stale')}</span>
-            <strong className={styles.kpiValue}>{kpis.staleUnknown ?? '-'}</strong>
-            <span className={styles.kpiMeta}>
-              {kpis.staleUnknown === null ? (
-                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
-              ) : (
-                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
-              )}
-            </span>
-          </article>
-        </section>
+        <MetricStrip
+          variant="cards"
+          columns={4}
+          ariaLabel={t('nf_health_kpi_label')}
+          items={kpiItems}
+        />
       )}
 
       <section className="dash-card" data-nf-health-panel={view}>

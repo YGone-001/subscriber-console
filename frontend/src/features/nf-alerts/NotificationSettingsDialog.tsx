@@ -109,7 +109,7 @@ export function NotificationSettingsDialog({ open, onClose, onChanged }: Props) 
               role="tab"
               aria-selected={tab === option}
               data-notify-tab={option}
-              className={tab === option ? styles.viewToggleActive : undefined}
+              className={tab === option ? styles.notifyTabActive : undefined}
               onClick={() => setTab(option)}
             >
               {t(`nf_notify_tab_${option}`)}

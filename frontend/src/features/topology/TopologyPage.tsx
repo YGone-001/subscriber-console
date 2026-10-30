@@ -21,6 +21,7 @@ import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
+import { ViewSwitch, type ViewSwitchOption } from '../../components/ui/ViewSwitch';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import {
@@ -338,20 +339,16 @@ export function TopologyPage() {
       icon={<GitBranch size={23} />}
       workspaceMode="canvas"
       viewSwitch={(
-        <div className={styles.viewToggle} role="group" aria-label={t('topology_primary_view_label')}>
-          {TOPOLOGY_PRIMARY_VIEWS.map((view) => (
-            <button
-              key={view}
-              type="button"
-              data-topology-view={view}
-              className={primary === view ? styles.viewToggleActive : undefined}
-              aria-pressed={primary === view}
-              onClick={() => topology.setPrimaryView(view)}
-            >
-              {t(PRIMARY_LABEL_KEY[view])}
-            </button>
-          ))}
-        </div>
+        <ViewSwitch
+          options={TOPOLOGY_PRIMARY_VIEWS.map((view): ViewSwitchOption<TopologyPrimaryView> => ({
+            value: view,
+            label: t(PRIMARY_LABEL_KEY[view]),
+            data: { 'data-topology-view': view },
+          }))}
+          value={primary}
+          onChange={topology.setPrimaryView}
+          ariaLabel={t('topology_primary_view_label')}
+        />
       )}
       onRefresh={primary === 'ledger' ? () => loadEdges(url.cursor) : undefined}
       actions={
@@ -377,35 +374,27 @@ export function TopologyPage() {
             aria-label={t('topology_source_label')}
             data-topology-source-bar={source}
           >
-            <div className={styles.sourceToggle} role="group" aria-label={t('topology_source_label')}>
-              {TOPOLOGY_GRAPH_SOURCES.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  data-topology-source={value}
-                  className={source === value ? styles.viewToggleActive : undefined}
-                  aria-pressed={source === value}
-                  onClick={() => topology.setSource(value)}
-                >
-                  {t(SOURCE_LABEL_KEY[value])}
-                </button>
-              ))}
-            </div>
+            <ViewSwitch
+              options={TOPOLOGY_GRAPH_SOURCES.map((value): ViewSwitchOption<TopologyGraphSource> => ({
+                value,
+                label: t(SOURCE_LABEL_KEY[value]),
+                data: { 'data-topology-source': value },
+              }))}
+              value={source}
+              onChange={topology.setSource}
+              ariaLabel={t('topology_source_label')}
+            />
             {source === 'runtime' ? (
-              <div className={styles.sourceToggle} role="group" aria-label={t('topology_runtime_scope_label')}>
-                {TOPOLOGY_RUNTIME_SCOPES.map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    data-runtime-scope={value}
-                    className={runtimeScope === value ? styles.viewToggleActive : undefined}
-                    aria-pressed={runtimeScope === value}
-                    onClick={() => topology.setRuntimeScope(value)}
-                  >
-                    {t(RUNTIME_SCOPE_LABEL_KEY[value])}
-                  </button>
-                ))}
-              </div>
+              <ViewSwitch
+                options={TOPOLOGY_RUNTIME_SCOPES.map((value): ViewSwitchOption<TopologyRuntimeScope> => ({
+                  value,
+                  label: t(RUNTIME_SCOPE_LABEL_KEY[value]),
+                  data: { 'data-runtime-scope': value },
+                }))}
+                value={runtimeScope}
+                onChange={topology.setRuntimeScope}
+                ariaLabel={t('topology_runtime_scope_label')}
+              />
             ) : null}
             <span className={styles.evidenceBadge} data-evidence-badge={source}>
               {t(SOURCE_EVIDENCE_KEY[source])}

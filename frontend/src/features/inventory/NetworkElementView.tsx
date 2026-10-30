@@ -27,6 +27,8 @@ import { Check, ChevronDown, ChevronRight, Search, Server, X } from 'lucide-reac
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
+import MetricStrip from '../../components/ui/MetricStrip';
+import { scopeKpiDetail } from '../operations/kpi-detail';
 import {
   buildResourceTree,
   cpuView,
@@ -194,30 +196,6 @@ function TreeBranch({
         </ul>
       ) : null}
     </li>
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  unavailableLabel,
-  scopeLabel,
-}: {
-  label: string;
-  value: number | null;
-  unavailableLabel: string;
-  scopeLabel: string;
-}) {
-  return (
-    <article className={styles.kpiCard}>
-      <span className={styles.kpiLabel}>{label}</span>
-      <strong className={styles.kpiValue}>{value ?? '-'}</strong>
-      <span className={styles.kpiMeta}>
-        {value === null
-          ? <span className={styles.kpiUnavailable}>{unavailableLabel}</span>
-          : <span className={styles.kpiScope}>{scopeLabel}</span>}
-      </span>
-    </article>
   );
 }
 
@@ -418,16 +396,27 @@ export default function NetworkElementView({ presentation = 'table' }: { present
     : null;
   const configuredTargets = healthSection?.completeness === 'complete' ? (healthSection.targets?.configured ?? null) : null;
   const failedTargets = healthSection?.completeness === 'complete' ? (healthSection.targets?.failed ?? null) : null;
-  const scopeLabel = t('ops_kpi_scope_full_collection');
+
+  const kpiItems = [
+    { key: 'resources', label: t('ops_kpi_resources'), value: totalResources },
+    { key: 'network-functions', label: t('ops_kpi_network_functions'), value: networkFunctions },
+    { key: 'monitored', label: t('ops_kpi_monitored'), value: configuredTargets },
+    { key: 'failed', label: t('ops_kpi_failed'), value: failedTargets },
+  ].map((item) => ({
+    ...item,
+    value: item.value ?? '-',
+    detail: scopeKpiDetail(item.value, t),
+    tone: (item.value === null ? 'muted' : 'primary') as 'muted' | 'primary',
+  }));
 
   return (
     <div className={styles.neView}>
-      <div className={styles.kpiStrip} aria-label={t('ops_overview_title')}>
-        <KpiCard label={t('ops_kpi_resources')} value={totalResources} unavailableLabel={t('ops_kpi_unavailable')} scopeLabel={scopeLabel} />
-        <KpiCard label={t('ops_kpi_network_functions')} value={networkFunctions} unavailableLabel={t('ops_kpi_unavailable')} scopeLabel={scopeLabel} />
-        <KpiCard label={t('ops_kpi_monitored')} value={configuredTargets} unavailableLabel={t('ops_kpi_unavailable')} scopeLabel={scopeLabel} />
-        <KpiCard label={t('ops_kpi_failed')} value={failedTargets} unavailableLabel={t('ops_kpi_unavailable')} scopeLabel={scopeLabel} />
-      </div>
+      <MetricStrip
+        variant="cards"
+        columns={4}
+        ariaLabel={t('ops_overview_title')}
+        items={kpiItems}
+      />
 
       <div className={styles.neToolbar}>
         <form className={styles.neSearch} onSubmit={submitSearch} role="search">

@@ -258,46 +258,6 @@
   white-space: nowrap;
 }
 
-.viewToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-control);
-  background: var(--surface-field);
-}
-
-.viewToggle button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: calc(var(--control-height) - 6px);
-  padding: 0 0.65rem;
-  border: 0;
-  border-radius: var(--ref-radius-small);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--ref-font-size-data);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.viewToggle button:hover {
-  color: inherit;
-}
-
-.viewToggle button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-.viewToggleActive {
-  background: var(--surface) !important;
-  color: inherit !important;
-  box-shadow: inset 0 0 0 1px var(--surface-border);
-}
-
 .statusBody {
   padding-top: var(--space-12);
 }
@@ -857,10 +817,6 @@
     width: 100%;
   }
 
-  .viewToggle {
-    flex: 1 1 auto;
-  }
-
   .nfRow {
     flex-direction: column;
     align-items: flex-start;
@@ -949,45 +905,13 @@
 }
 
 /* ---------------------------------------------------------------- UX-2 ---- */
-/* Master-detail inventory surface: KPI strip, compact table, detail drawer. */
+/* KPI strip geometry for the overview cards. The cards themselves are the
+ * shared MetricStrip primitive. */
 
 .kpiStrip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: var(--space-8);
-}
-
-.kpiCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-panel);
-  background: var(--surface-field);
-}
-
-.kpiLabel {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-.kpiValue {
-  font-size: 1.15rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.kpiMeta {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-}
-
-.kpiScope {
-  opacity: 0.85;
-}
-
-.kpiUnavailable {
-  color: var(--sys-color-status-warning, var(--text-muted));
 }
 
 .filterScope {
