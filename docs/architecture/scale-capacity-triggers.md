@@ -101,11 +101,18 @@ Audit on 2026-10-30 (lab):
 - No duplicate values existed for `subscribers.imsi`, `ocs_subscribers.imsi`,
   `ocs_balances.imsi` or `app_profiles.name`.
 - The index-only dry-run reported seven creates and no conflicts.
+- The seven indexes were applied on 2026-10-30; a second dry-run reports
+  `actions=0` (idempotent). `mongo:perf` now shows `IXSCAN` on
+  `subscribers.page.sort_imsi`, `subscribers.search.imsi_prefix` and
+  `subscribers.lookup.msisdn` (`subscriber_msisdn`).
+- `subscribers.filter.profile` still uses `uniq_imsi`: the four-field template
+  attribution predicate has no dedicated index. B0 will decide whether the
+  aggregation path needs one; do not add it opportunistically.
 
-`mongo:perf` on the same database reported `COLLSCAN` for subscriber page,
+`mongo:perf` before the migration reported `COLLSCAN` for subscriber page,
 MSISDN lookup and profile filter queries. This is an operational finding, not a
-reason to add indexes opportunistically in a read path. Do not create indexes
-from request handlers.
+reason to add indexes in a read path. Do not create indexes from request
+handlers.
 
 ## Non-goals before a trigger
 
