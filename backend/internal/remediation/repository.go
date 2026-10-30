@@ -344,18 +344,18 @@ func (r *Repository) provisionOcsSubscriber(
 		version = toInt64(existingBalance["version"], 0) + 1
 	}
 
-	cycleStartAt := now
-	cycleResetAt := now
+	// Preserve the stored billing cycle window verbatim. The driver decodes a
+	// BSON date as bson.DateTime and xCloud also stores RFC 3339 strings, so a
+	// time.Time-only reader matched neither and reset the cycle to the heal
+	// instant on every remediation.
+	cycleStartAt := any(now)
+	cycleResetAt := any(now)
 	if existingBalance != nil {
-		if cs, ok := existingBalance["cycle_start_at"]; ok && cs != nil {
-			if t, ok := cs.(time.Time); ok {
-				cycleStartAt = t
-			}
+		if stored, ok := existingBalance["cycle_start_at"]; ok && stored != nil {
+			cycleStartAt = stored
 		}
-		if cr, ok := existingBalance["cycle_reset_at"]; ok && cr != nil {
-			if t, ok := cr.(time.Time); ok {
-				cycleResetAt = t
-			}
+		if stored, ok := existingBalance["cycle_reset_at"]; ok && stored != nil {
+			cycleResetAt = stored
 		}
 	}
 
