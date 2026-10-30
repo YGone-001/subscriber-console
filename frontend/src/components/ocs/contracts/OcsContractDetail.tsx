@@ -178,7 +178,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
         description={contract.msisdn || ''}
         actions={
           <div className="ocs-header-actions">
-            <Link to="/ocs/contracts" className="ocs-btn ocs-btn-secondary">
+            <Link to={backTo.to} className="ocs-btn ocs-btn-secondary">
               <ArrowLeft size={14} aria-hidden="true" /> {t('ocs_back_to_list')}
             </Link>
             <Link to={`/ocs/balances/${encodeURIComponent(contract.imsi ?? '')}`} className="ocs-btn ocs-btn-secondary">

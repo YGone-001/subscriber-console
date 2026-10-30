@@ -175,7 +175,7 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
         description={plan.description || ''}
         actions={
           <div className="ocs-header-actions">
-            <Link to="/ocs/tariffs" className="ocs-btn ocs-btn-secondary">
+            <Link to={backTo.to} className="ocs-btn ocs-btn-secondary">
               <ArrowLeft size={14} aria-hidden="true" /> {t('ocs_back_to_list')}
             </Link>
             <RefreshButton loading={isLoading} onClick={() => void refresh()} label={t('refresh')} className="ocs-btn" />

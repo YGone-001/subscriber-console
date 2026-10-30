@@ -124,7 +124,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
         description={t('ocs_balance_detail_desc')}
         actions={
           <div className="ocs-header-actions">
-            <Link to="/ocs/balances" className="ocs-btn ocs-btn-secondary">
+            <Link to={backTo.to} className="ocs-btn ocs-btn-secondary">
               <ArrowLeft size={14} aria-hidden="true" /> {t('ocs_back_to_list')}
             </Link>
             <Link to={`/ocs/contracts/${encodeURIComponent(balance.imsi ?? '')}`} className="ocs-btn ocs-btn-secondary">

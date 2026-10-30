@@ -346,6 +346,15 @@ test('list links carry the filtered list URL and detail pages resolve it', () =>
     assert.match(list, /withReturnTo/, `${listFile} must pass returnTo to detail links`);
     assert.match(detail, /resolveReturnTo/, `${detailFile} must resolve only its own list returnTo`);
   }
+
+  for (const detailFile of [
+    '../src/components/ocs/contracts/OcsContractDetail.tsx',
+    '../src/components/ocs/balances/OcsBalanceDetail.tsx',
+    '../src/components/ocs/tariffs/OcsTariffDetail.tsx',
+  ]) {
+    const detail = readFileSync(resolve(testsDir, detailFile), 'utf8');
+    assert.match(detail, /to=\{backTo\.to\}/, `${detailFile} must use the resolved back target`);
+  }
 });
 
 test('suspend, resume and terminate all require a confirmation with a reason', () => {
