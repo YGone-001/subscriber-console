@@ -3,10 +3,12 @@ package ocs
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"subscriber/internal/audit"
@@ -156,6 +158,23 @@ func TestContractCreate_SurfacesValidationDetails(t *testing.T) {
 	w := postContractCreate(t, h, `{"imsi":"417010000000305","plan_id":"plan_a"}`)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "ocsTraffic.traffic_total must be non-negative") {
 		t.Fatalf("status = %d, body=%s; want 400 with the validation detail", w.Code, w.Body.String())
+	}
+}
+
+func TestContractAuditSnapshotIsSerializableAndBounded(t *testing.T) {
+	snapshot := contractAuditSnapshot(bson.M{
+		"imsi": "417010000000307", "msisdn": "963900000307",
+		"plan_id": "plan_a", "status": "active",
+		"created_at": time.Now(), "_id": bson.NewObjectID(),
+	})
+	if _, err := json.Marshal(snapshot); err != nil {
+		t.Fatalf("audit snapshot must be serializable: %v", err)
+	}
+	if snapshot["imsi"] != "417010000000307" || snapshot["status"] != "active" || snapshot["plan_id"] != "plan_a" {
+		t.Errorf("snapshot = %v, want identity and lifecycle fields", snapshot)
+	}
+	if _, ok := snapshot["created_at"]; ok {
+		t.Error("snapshot must not carry time/ObjectID fields")
 	}
 }
 

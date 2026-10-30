@@ -186,10 +186,12 @@ Target Collection: `xcloud.ocs_subscribers`
 - Detail page: identity, billing (plan name, quota, status), timestamps, the
   bounded operation history (last 20 audit projections: operation, actor, role,
   status/plan change, reason, result) and the same lifecycle actions with
-  confirmation. If the audit read is unavailable the page says so explicitly;
-  it never presents an unreadable history as "no operations". A missing
-  identifier renders the "not found" state; it never falls back to a
-  neighbouring record.
+  confirmation. Lifecycle audit snapshots store only identity and
+  plan/status fields, never raw BSON/time/ObjectID; older records without a
+  change field render an em dash. If the audit read is unavailable the page
+  says so explicitly; it never presents an unreadable history as "no
+  operations". A missing identifier renders the "not found" state; it never
+  falls back to a neighbouring record.
 - The detail page reads one contract by its exact identifier with
   `GET /api/ocs/subscribers/{imsi}` (`ocs.read`). A malformed identifier answers
   `400 OCS_INVALID_IMSI`, an absent contract `404 OCS_SUBSCRIBER_NOT_FOUND`;

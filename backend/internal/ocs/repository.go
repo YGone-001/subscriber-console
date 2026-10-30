@@ -536,6 +536,10 @@ func (r *Repository) GetContractOperations(ctx context.Context, imsi string, lim
 				"metadata.operation":    1,
 				"metadata.statusChange": 1,
 				"metadata.planId":       1,
+				"metadata.beforeStatus": 1,
+				"metadata.afterStatus":  1,
+				"metadata.beforePlanId": 1,
+				"metadata.afterPlanId":  1,
 				"oldData.status":        1,
 				"oldData.plan_id":       1,
 				"newData.status":        1,
@@ -566,13 +570,10 @@ func (r *Repository) GetContractOperations(ctx context.Context, imsi string, lim
 		if timestamp == "" {
 			timestamp = timeStr(doc, "createdAt")
 		}
-		beforeStatus := strWithDefault(oldData, "status", "")
-		afterStatus := strWithDefault(newData, "status", "")
-		beforePlan := strWithDefault(oldData, "plan_id", "")
-		afterPlan := strWithDefault(newData, "plan_id", "")
-		if afterPlan == "" {
-			afterPlan = strWithDefault(metadata, "planId", "")
-		}
+		beforeStatus := strWithDefault(oldData, "status", strWithDefault(metadata, "beforeStatus", ""))
+		afterStatus := strWithDefault(newData, "status", strWithDefault(metadata, "afterStatus", strWithDefault(metadata, "statusChange", "")))
+		beforePlan := strWithDefault(oldData, "plan_id", strWithDefault(metadata, "beforePlanId", ""))
+		afterPlan := strWithDefault(newData, "plan_id", strWithDefault(metadata, "afterPlanId", strWithDefault(metadata, "planId", "")))
 		operations = append(operations, ContractOperation{
 			ID:           id,
 			Timestamp:    strWithDefault(doc, "timestamp", ""),

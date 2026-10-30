@@ -173,12 +173,14 @@ func (h *SubscriberWriteHandler) Create(w http.ResponseWriter, r *http.Request) 
 		Module:   "ocs-subscribers",
 		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
 		Reason:   strings.TrimSpace(body.Reason),
-		After:    contract,
+		After:    contractAuditSnapshot(contract),
 		Result:   "success",
 		Metadata: map[string]interface{}{
 			"operation":       string(OpContractCreate),
 			"actorRole":       fresh.NormalizedRole,
 			"planId":          planID,
+			"afterPlanId":     planID,
+			"afterStatus":     "active",
 			"balanceAdopted":  balanceAdopted,
 			"provisionSource": "subscriber_contract",
 		},
@@ -354,7 +356,7 @@ func (h *SubscriberWriteHandler) UpdateTariff(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	after := copyBson(before)
+	after := contractAuditSnapshot(before)
 	after["plan_id"] = planID
 
 	h.writeSubscriberAudit(r, audit.WriteAuditInput{
@@ -362,13 +364,14 @@ func (h *SubscriberWriteHandler) UpdateTariff(w http.ResponseWriter, r *http.Req
 		Module:   "ocs-subscribers",
 		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
 		Reason:   strings.TrimSpace(body.Reason),
-		Before:   before,
+		Before:   contractAuditSnapshot(before),
 		After:    after,
 		Result:   "success",
 		Metadata: map[string]interface{}{
-			"operation": string(OpContractUpdate),
-			"actorRole": fresh.NormalizedRole,
-			"planId":    planID,
+			"operation":    string(OpContractUpdate),
+			"actorRole":    fresh.NormalizedRole,
+			"beforePlanId": previousPlan,
+			"afterPlanId":  planID,
 		},
 	}, fresh)
 
@@ -490,7 +493,7 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 		return
 	}
 
-	after := copyBson(before)
+	after := contractAuditSnapshot(before)
 	after["status"] = status
 
 	h.writeSubscriberAudit(r, audit.WriteAuditInput{
@@ -498,13 +501,15 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 		Module:   "ocs-subscribers",
 		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
 		Reason:   reason,
-		Before:   before,
+		Before:   contractAuditSnapshot(before),
 		After:    after,
 		Result:   "success",
 		Metadata: map[string]interface{}{
 			"operation":    string(op),
 			"actorRole":    fresh.NormalizedRole,
 			"statusChange": status,
+			"beforeStatus": currentStatus,
+			"afterStatus":  status,
 		},
 	}, fresh)
 
@@ -613,7 +618,7 @@ func (h *SubscriberWriteHandler) terminateContract(w http.ResponseWriter, r *htt
 		return
 	}
 
-	after := copyBson(before)
+	after := contractAuditSnapshot(before)
 	after["status"] = "terminated"
 
 	h.writeSubscriberAudit(r, audit.WriteAuditInput{
@@ -621,13 +626,15 @@ func (h *SubscriberWriteHandler) terminateContract(w http.ResponseWriter, r *htt
 		Module:   "ocs-subscribers",
 		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
 		Reason:   reason,
-		Before:   before,
+		Before:   contractAuditSnapshot(before),
 		After:    after,
 		Result:   "success",
 		Metadata: map[string]interface{}{
 			"operation":    string(OpContractTerminate),
 			"actorRole":    fresh.NormalizedRole,
 			"statusChange": "terminated",
+			"beforeStatus": currentStatus,
+			"afterStatus":  "terminated",
 		},
 	}, fresh)
 
@@ -696,12 +703,20 @@ func capitalizeStr(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-func copyBson(src bson.M) bson.M {
-	dst := make(bson.M, len(src))
-	for k, v := range src {
-		dst[k] = v
+// contractAuditSnapshot keeps audit evidence serializable and limited to the
+// fields an operator needs to reconstruct a lifecycle change. Passing the raw
+// contract document (time.Time, ObjectID, BSON internals) made the audit
+// sanitizer store "[UNSERIALIZABLE]" and left the history change column empty.
+func contractAuditSnapshot(doc bson.M) bson.M {
+	if doc == nil {
+		return nil
 	}
-	return dst
+	return bson.M{
+		"imsi":    strWithDefault(doc, "imsi", ""),
+		"msisdn":  strWithDefault(doc, "msisdn", ""),
+		"plan_id": strWithDefault(doc, "plan_id", ""),
+		"status":  strWithDefault(doc, "status", ""),
+	}
 }
 
 // freshActor is local to the OCS write handler.

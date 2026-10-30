@@ -557,7 +557,7 @@ OCS 管理 UI：
 - OCS Tariffs UI（`/ocs/tariffs`）— 资费列表/详情与规则
 - `/ocs/dashboard`、`/ocs/sessions`、`/ocs/usage`、`/rating*` 仅为兼容重定向，不建设独立页面；订阅者详情的评分入口直接打开具体套餐 `/ocs/tariffs/{planId}`，不再指向 `/rating`
 - 余额列表 `GET /api/ocs/balances`：`invariantStatus=valid|broken`、状态与套餐筛选、分页 `total` 与 `summary` 在同一条聚合管道内基于同一筛选结果集计算，summary 描述筛选后的集合；缺失额度字段的记录归入 unknown，绝不进入 valid/broken；合约状态/套餐为权威，余额文档中的同名字段仅作无合约时的回退。
-- 合约列表 `GET /api/ocs/subscribers` 的 envelope 携带 `summary`（`total`/`active`/`suspended`/`terminated` 全集合计数，聚合失败时省略 summary 而非补零），KPI 不再发起 3 个额外 `limit=1` 请求；支持 `msisdn` 精确/子串筛选（服务端转义）；suspend/resume/terminate 必须二次确认并填写原因（至少 3 字符，缺失返回 400 `CONTRACT_REASON_REQUIRED`），原因写入审计；套餐变更预览当前/目标套餐的额度、有效期，并说明变更立即生效且不重算已授予额度。合约详情 `GET /api/ocs/subscribers/{imsi}` 附加最近 20 条操作历史投影（`operations`）与 `operationsComplete`；审计不可用或读取失败时显式返回 `false`，绝不把“读不到”渲染成“没有操作”。
+- 合约列表 `GET /api/ocs/subscribers` 的 envelope 携带 `summary`（`total`/`active`/`suspended`/`terminated` 全集合计数，聚合失败时省略 summary 而非补零），KPI 不再发起 3 个额外 `limit=1` 请求；支持 `msisdn` 精确/子串筛选（服务端转义）；suspend/resume/terminate 必须二次确认并填写原因（至少 3 字符，缺失返回 400 `CONTRACT_REASON_REQUIRED`），原因写入审计；套餐变更预览当前/目标套餐的额度、有效期，并说明变更立即生效且不重算已授予额度。合约详情 `GET /api/ocs/subscribers/{imsi}` 附加最近 20 条操作历史投影（`operations`）与 `operationsComplete`；审计不可用或读取失败时显式返回 `false`，绝不把“读不到”渲染成“没有操作”；生命周期审计快照仅写入 `imsi`/`msisdn`/`plan_id`/`status`，禁止写入原始 BSON（`time.Time`/ObjectID 会被审计清洗器记为 `[UNSERIALIZABLE]`），历史读取以 `oldData`/`newData` 为主并以 `metadata.beforeStatus`/`afterStatus`/`beforePlanId`/`afterPlanId` 兜底。
 
 ### 6.3 资费写入
 
