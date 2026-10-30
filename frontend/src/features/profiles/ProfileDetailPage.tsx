@@ -138,8 +138,8 @@ export function ProfileDetailPage() {
   useEffect(() => {
     if (!createdFlag || isCreate || !profileName) return;
     setNotice({ type: 'success', text: t('prof_msg_created') });
-    router.replace(`/profile/${encodeURIComponent(profileName)}`);
-  }, [createdFlag, isCreate, profileName, router, t]);
+    router.replace(withReturnTo(`/profile/${encodeURIComponent(profileName)}`, returnTo));
+  }, [createdFlag, isCreate, profileName, returnTo, router, t]);
 
   const planId = String(draft.ocsDefaults.planId || '').trim();
   const ratingsPath = planId ? `/api/ratings?planId=${encodeURIComponent(planId)}` : null;
