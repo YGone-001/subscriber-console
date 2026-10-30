@@ -667,8 +667,12 @@ func (r *Repository) ListSubscriberRowsFiltered(ctx context.Context, page, limit
 		}, nil
 	}
 
-	// Fetch all matching subscribers (sorted by IMSI)
-	cursor, err := r.subscribers.Find(ctx, filter, options.Find().SetSort(bson.M{"imsi": 1}))
+	// Fetch only the subscriber fields the row projection and filters actually
+	// read. Full documents (security, slices, sessions, unknown fields) are not
+	// materialized for the whole collection.
+	cursor, err := r.subscribers.Find(ctx, filter, options.Find().
+		SetProjection(subscriberListProjection()).
+		SetSort(bson.M{"imsi": 1}))
 	if err != nil {
 		return SubscriberListResult[SubscriberRow]{}, fmt.Errorf("find subscribers: %w", err)
 	}
@@ -812,7 +816,21 @@ func getPlanID(ocsSub bson.M) string {
 	return defaultPlanID
 }
 
-// fetchOcsProvisioning fetches OCS subscribers, balances, and tariff plans for a set of IMSIs.
+func subscriberListProjection() bson.M {
+	return bson.M{
+		"imsi":                    1,
+		"msisdn":                  1,
+		"access_restriction_data": 1,
+		"webui_meta":              1,
+		"profile_name":            1,
+		"profile":                 1,
+		"updated_at":              1,
+		"created_at":              1,
+	}
+}
+
+// fetchOcsProvisioning fetches the bounded OCS fields needed by the list row
+// and filters. It intentionally does not load full contract/balance documents.
 func (r *Repository) fetchOcsProvisioning(ctx context.Context, imsis []string) (
 	ocsSubMap map[string]bson.M,
 	balanceMap map[string]bson.M,
@@ -824,7 +842,9 @@ func (r *Repository) fetchOcsProvisioning(ctx context.Context, imsis []string) (
 	tariffPlanMap = make(map[string]bson.M)
 
 	// Fetch OCS subscribers
-	ocsCursor, err := r.ocsSubs.Find(ctx, bson.M{"imsi": bson.M{"$in": imsis}})
+	ocsCursor, err := r.ocsSubs.Find(ctx, bson.M{"imsi": bson.M{"$in": imsis}}, options.Find().SetProjection(bson.M{
+		"imsi": 1, "status": 1, "plan_id": 1, "msisdn": 1, "updated_at": 1, "created_at": 1,
+	}))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("find ocs subscribers: %w", err)
 	}
@@ -841,7 +861,10 @@ func (r *Repository) fetchOcsProvisioning(ctx context.Context, imsis []string) (
 	}
 
 	// Fetch balances
-	balCursor, err := r.ocsBalances.Find(ctx, bson.M{"imsi": bson.M{"$in": imsis}})
+	balCursor, err := r.ocsBalances.Find(ctx, bson.M{"imsi": bson.M{"$in": imsis}}, options.Find().SetProjection(bson.M{
+		"imsi": 1, "data_total": 1, "data_used": 1, "data_available": 1,
+		"sms_total": 1, "sms_used": 1, "sms_available": 1, "updated_at": 1,
+	}))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("find ocs balances: %w", err)
 	}
@@ -875,7 +898,9 @@ func (r *Repository) fetchOcsProvisioning(ctx context.Context, imsis []string) (
 	}
 
 	// Fetch tariff plans
-	planCursor, err := r.tariffPlans.Find(ctx, bson.M{"plan_id": bson.M{"$in": planIDs}})
+	planCursor, err := r.tariffPlans.Find(ctx, bson.M{"plan_id": bson.M{"$in": planIDs}}, options.Find().SetProjection(bson.M{
+		"plan_id": 1, "name": 1, "status": 1, "volume_threshold": 1,
+	}))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("find tariff plans: %w", err)
 	}

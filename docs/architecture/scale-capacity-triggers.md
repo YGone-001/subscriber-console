@@ -51,6 +51,16 @@ archived outside the repository; the next design must use bounded batch reads
 or a different enrichment strategy and beat the baseline before replacing the
 read path.
 
+### Compact batch projection (2026-10-30)
+
+The current read path now projects only the subscriber and OCS fields the list
+row and filters actually read, instead of loading full subscriber, contract and
+balance documents for every match. Measured at 10k: ~262 ms and ~191 MB
+allocated (baseline ~307 ms / ~218 MB). This meets the latency target but still
+misses the allocated-memory target (~64 MB); the next iteration should decode
+bounded OCS rows into typed structs rather than bson.M maps. The golden baseline
+still passes unchanged.
+
 ## Trigger table
 
 | Surface | Warning | Hard trigger | Required action when hard trigger is reached |
