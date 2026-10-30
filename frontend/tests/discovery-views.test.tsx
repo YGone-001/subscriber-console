@@ -44,6 +44,11 @@ import {
   previousScroll,
 } from '../src/features/discovery/discovery-pager';
 import { fetchDiscoveryCandidates } from '../src/features/discovery/discovery-api';
+import {
+  buildCreateSourceRequest,
+  buildUpdateSourceRequest,
+  validateScanInterval,
+} from '../src/features/discovery/discovery-validation';
 import { discoveryKpisFromSummary } from '../src/features/operations/operations-summary';
 import type { PageInfo } from '../src/features/discovery/discovery-types';
 
@@ -604,6 +609,33 @@ test('KPIs are indifferent to which page is displayed', () => {
     candidates: { seen: 41, missing: 12, stale: 7, linked: 33, unlinked: 27 },
   });
   assert.deepEqual(partial, { sources: null, seen: null, missing: null, linked: null });
+});
+
+test('scan interval validation mirrors the backend bounds', () => {
+  assert.equal(validateScanInterval(0), null, '0 is the explicit manual-only value');
+  assert.equal(validateScanInterval(60), null, 'the minimum scheduled interval is accepted');
+  assert.equal(validateScanInterval(86400), null, 'the maximum scheduled interval is accepted');
+  assert.ok(validateScanInterval(30), 'below-minimum values are rejected');
+  assert.ok(validateScanInterval(86401), 'above-maximum values are rejected');
+  assert.ok(validateScanInterval(12.5), 'non-integer values are rejected');
+
+  const created = buildCreateSourceRequest({
+    name: 'nrf',
+    adapterType: 'nrf',
+    baseUrl: 'http://127.0.0.10:7777',
+    transportMode: 'h2c',
+    scanIntervalSeconds: 0,
+  });
+  assert.equal(created.scanIntervalSeconds, 0, 'an explicit manual-only interval reaches the request');
+
+  const updated = buildUpdateSourceRequest(1, {
+    name: 'nrf',
+    baseUrl: 'http://127.0.0.10:7777',
+    transportMode: 'h2c',
+    enabled: true,
+    scanIntervalSeconds: 300,
+  });
+  assert.equal(updated.source.scanIntervalSeconds, 300, 'updates carry the interval');
 });
 
 test('the candidates view renders its toolbar and bounded pager chrome', () => {

@@ -8,7 +8,7 @@
     "productionBuilder": "frontend/src/features/discovery/discovery-validation.ts",
     "productionReference": "frontend/src/features/discovery/DiscoveryPage.tsx",
     "requiredBodyKeys": ["name", "adapterType", "baseUrl", "transportMode"],
-    "optionalBodyKeys": ["enabled"],
+    "optionalBodyKeys": ["enabled", "scanIntervalSeconds"],
     "forbiddenBodyKeys": [
       "sourceId",
       "schemaVersion",
@@ -19,6 +19,7 @@
       "updatedBy",
       "lastSuccessAt",
       "lastScanAt",
+      "nextScanAt",
       "lastError"
     ],
     "responseSemantics": "mutation-result"
@@ -44,12 +45,13 @@
       "updatedBy",
       "lastSuccessAt",
       "lastScanAt",
+      "nextScanAt",
       "lastError"
     ],
     "nestedContracts": {
       "source": {
-        "requiredKeys": ["name", "baseUrl", "transportMode", "enabled"],
-        "allowedKeys": ["name", "baseUrl", "transportMode", "enabled"],
+        "requiredKeys": ["name", "baseUrl", "transportMode", "enabled", "scanIntervalSeconds"],
+        "allowedKeys": ["name", "baseUrl", "transportMode", "enabled", "scanIntervalSeconds"],
         "forbiddenKeys": ["sourceId", "adapterType", "schemaVersion", "revision"]
       }
     },

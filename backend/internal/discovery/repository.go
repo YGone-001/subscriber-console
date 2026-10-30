@@ -70,19 +70,24 @@ func (r *Repository) CreateSource(ctx context.Context, req *CreateSourceRequest,
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
+	scanInterval := DefaultScanIntervalSeconds
+	if req.ScanIntervalSeconds != nil {
+		scanInterval = *req.ScanIntervalSeconds
+	}
 	src := &DiscoverySource{
-		SourceID:      audit.GenerateUUID(),
-		SchemaVersion: SchemaVersion,
-		Name:          strings.TrimSpace(req.Name),
-		AdapterType:   req.AdapterType,
-		BaseURL:       strings.TrimSpace(req.BaseURL),
-		Enabled:       enabled,
-		TransportMode: req.TransportMode,
-		Revision:      1,
-		CreatedAt:     now,
-		CreatedBy:     actor,
-		UpdatedAt:     now,
-		UpdatedBy:     actor,
+		SourceID:            audit.GenerateUUID(),
+		SchemaVersion:       SchemaVersion,
+		Name:                strings.TrimSpace(req.Name),
+		AdapterType:         req.AdapterType,
+		BaseURL:             strings.TrimSpace(req.BaseURL),
+		Enabled:             enabled,
+		TransportMode:       req.TransportMode,
+		ScanIntervalSeconds: scanInterval,
+		Revision:            1,
+		CreatedAt:           now,
+		CreatedBy:           actor,
+		UpdatedAt:           now,
+		UpdatedBy:           actor,
 	}
 	if _, err := r.sources.InsertOne(ctx, src); err != nil {
 		return nil, fmt.Errorf("failed to insert discovery source: %w", err)
@@ -138,6 +143,46 @@ func (r *Repository) ListSources(ctx context.Context, filter SourceListFilter) (
 	return paginateSources(items, limit)
 }
 
+// ListScheduledSources returns enabled sources that carry a positive scan
+// interval, oldest scan basis first. The bounded batch is the scheduler's due
+// window; sorting by lastScanAt keeps a never-scanned source (missing field,
+// which sorts first) from being starved by recently scanned ones.
+func (r *Repository) ListScheduledSources(ctx context.Context, limit int) ([]DiscoverySource, error) {
+	if limit <= 0 || limit > MaxScheduledSources {
+		limit = MaxScheduledSources
+	}
+	filter := bson.M{
+		"enabled":             true,
+		"scanIntervalSeconds": bson.M{"$gte": MinScanIntervalSeconds},
+	}
+	opts := options.Find().
+		SetSort(bson.D{
+			{Key: "lastScanAt", Value: 1},
+			{Key: "createdAt", Value: 1},
+			{Key: "_id", Value: 1},
+		}).
+		SetLimit(int64(limit))
+
+	cur, err := r.sources.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query scheduled discovery sources: %w", err)
+	}
+	defer cur.Close(ctx)
+
+	items := []DiscoverySource{}
+	for cur.Next(ctx) {
+		var item DiscoverySource
+		if err := cur.Decode(&item); err != nil {
+			return nil, fmt.Errorf("failed to decode scheduled discovery source: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := cur.Err(); err != nil {
+		return nil, fmt.Errorf("cursor iteration error: %w", err)
+	}
+	return items, nil
+}
+
 // UpdateSource applies a CAS-protected source update.
 func (r *Repository) UpdateSource(ctx context.Context, sourceID string, req *UpdateSourceRequest, actor string) (*DiscoverySource, *DiscoverySource, error) {
 	before, err := r.GetSource(ctx, sourceID)
@@ -148,12 +193,13 @@ func (r *Repository) UpdateSource(ctx context.Context, sourceID string, req *Upd
 	res := r.sources.FindOneAndUpdate(ctx,
 		bson.M{"_id": sourceID, "revision": req.ExpectedRevision},
 		bson.M{"$set": bson.M{
-			"name":          strings.TrimSpace(req.Source.Name),
-			"baseUrl":       strings.TrimSpace(req.Source.BaseURL),
-			"transportMode": req.Source.TransportMode,
-			"enabled":       req.Source.Enabled,
-			"updatedAt":     now,
-			"updatedBy":     actor,
+			"name":                strings.TrimSpace(req.Source.Name),
+			"baseUrl":             strings.TrimSpace(req.Source.BaseURL),
+			"transportMode":       req.Source.TransportMode,
+			"enabled":             req.Source.Enabled,
+			"scanIntervalSeconds": req.Source.ScanIntervalSeconds,
+			"updatedAt":           now,
+			"updatedBy":           actor,
 		}, "$inc": bson.M{"revision": 1}},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)

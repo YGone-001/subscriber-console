@@ -41,10 +41,14 @@ func newMockRepo() *mockRepo {
 }
 
 func (m *mockRepo) CreateSource(ctx context.Context, req *CreateSourceRequest, actor string) (*DiscoverySource, error) {
+	interval := DefaultScanIntervalSeconds
+	if req.ScanIntervalSeconds != nil {
+		interval = *req.ScanIntervalSeconds
+	}
 	src := &DiscoverySource{
 		SourceID: "11111111-1111-4111-8111-111111111111", SchemaVersion: 1,
 		Name: req.Name, AdapterType: req.AdapterType, BaseURL: req.BaseURL,
-		TransportMode: req.TransportMode, Enabled: true, Revision: 1,
+		TransportMode: req.TransportMode, Enabled: true, ScanIntervalSeconds: interval, Revision: 1,
 		CreatedAt: CurrentTimestamp(), CreatedBy: actor, UpdatedAt: CurrentTimestamp(), UpdatedBy: actor,
 	}
 	m.sources[src.SourceID] = src
@@ -79,6 +83,7 @@ func (m *mockRepo) UpdateSource(ctx context.Context, id string, req *UpdateSourc
 	s.BaseURL = req.Source.BaseURL
 	s.TransportMode = req.Source.TransportMode
 	s.Enabled = req.Source.Enabled
+	s.ScanIntervalSeconds = req.Source.ScanIntervalSeconds
 	s.Revision++
 	after := *s
 	return &before, &after, nil
@@ -227,7 +232,8 @@ func newTestHandler(repo *mockRepo, adapter Adapter, resolver InventoryResolver)
 	aud := &dummyAudit{}
 	reg := NewAdapterRegistry(adapter)
 	allow := NewDestinationAllowlist("127.0.0.10:7777")
-	h := NewHandler(repo, nil, aud, reg, allow, resolver)
+	scanner := NewScanner(repo, reg, aud)
+	h := NewHandler(repo, scanner, nil, aud, allow, resolver)
 	return h, aud
 }
 
@@ -239,6 +245,83 @@ func TestMetaRequiresReadPermission(t *testing.T) {
 	h.Meta(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("viewer read meta status = %d", w.Code)
+	}
+}
+
+func TestMetaExposesScanIntervalBounds(t *testing.T) {
+	repo := newMockRepo()
+	h, _ := newTestHandler(repo, &mockAdapter{}, &mockResolver{})
+	req := withPrincipal(httptest.NewRequest(http.MethodGet, "/api/discovery/meta", nil), "viewer")
+	w := httptest.NewRecorder()
+	h.Meta(w, req)
+
+	var meta MetaResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &meta); err != nil {
+		t.Fatalf("decode meta: %v", err)
+	}
+	if meta.MinScanIntervalSeconds != MinScanIntervalSeconds ||
+		meta.DefaultScanIntervalSeconds != DefaultScanIntervalSeconds ||
+		meta.MaxScanIntervalSeconds != MaxScanIntervalSeconds {
+		t.Fatalf("meta intervals = %+v", meta)
+	}
+}
+
+func TestCreateSourceDefaultsScanInterval(t *testing.T) {
+	repo := newMockRepo()
+	h, _ := newTestHandler(repo, &mockAdapter{}, &mockResolver{})
+	body := []byte(`{"name":"nrf","adapterType":"nrf","baseUrl":"http://127.0.0.10:7777","transportMode":"h2c"}`)
+	req := withPrincipal(httptest.NewRequest(http.MethodPost, "/api/discovery/sources", bytes.NewReader(body)), "operator")
+	w := httptest.NewRecorder()
+	h.CreateSource(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
+	}
+	var src DiscoverySource
+	if err := json.Unmarshal(w.Body.Bytes(), &src); err != nil {
+		t.Fatalf("decode source: %v", err)
+	}
+	if src.ScanIntervalSeconds != DefaultScanIntervalSeconds {
+		t.Fatalf("scanIntervalSeconds = %d, want default", src.ScanIntervalSeconds)
+	}
+	if src.NextScanAt == "" {
+		t.Fatal("a scheduled source must project nextScanAt")
+	}
+}
+
+func TestCreateSourceExplicitManualOnlyInterval(t *testing.T) {
+	repo := newMockRepo()
+	h, _ := newTestHandler(repo, &mockAdapter{}, &mockResolver{})
+	body := []byte(`{"name":"nrf","adapterType":"nrf","baseUrl":"http://127.0.0.10:7777","transportMode":"h2c","scanIntervalSeconds":0}`)
+	req := withPrincipal(httptest.NewRequest(http.MethodPost, "/api/discovery/sources", bytes.NewReader(body)), "operator")
+	w := httptest.NewRecorder()
+	h.CreateSource(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
+	}
+	var src DiscoverySource
+	_ = json.Unmarshal(w.Body.Bytes(), &src)
+	if src.ScanIntervalSeconds != 0 {
+		t.Fatalf("scanIntervalSeconds = %d, want manual-only", src.ScanIntervalSeconds)
+	}
+	if src.NextScanAt != "" {
+		t.Fatalf("manual-only source projected nextScanAt = %q", src.NextScanAt)
+	}
+}
+
+func TestCreateSourceRejectsOutOfRangeInterval(t *testing.T) {
+	repo := newMockRepo()
+	h, _ := newTestHandler(repo, &mockAdapter{}, &mockResolver{})
+	body := []byte(`{"name":"nrf","adapterType":"nrf","baseUrl":"http://127.0.0.10:7777","transportMode":"h2c","scanIntervalSeconds":30}`)
+	req := withPrincipal(httptest.NewRequest(http.MethodPost, "/api/discovery/sources", bytes.NewReader(body)), "operator")
+	w := httptest.NewRecorder()
+	h.CreateSource(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var payload map[string]string
+	_ = json.Unmarshal(w.Body.Bytes(), &payload)
+	if payload["code"] != "INVALID_SCAN_INTERVAL" {
+		t.Fatalf("code = %q", payload["code"])
 	}
 }
 
@@ -371,6 +454,9 @@ func TestScanPersistsCandidatesIdempotently(t *testing.T) {
 	if first.DiscoveredCount != 2 || first.CreatedCount != 2 {
 		t.Fatalf("first run = %+v", first)
 	}
+	if first.Trigger != ScanTriggerManual || first.InitiatedBy != "tester" {
+		t.Fatalf("manual run trigger/initiator = %q/%q", first.Trigger, first.InitiatedBy)
+	}
 	if len(repo.candidates) != 2 {
 		t.Fatalf("candidates = %d", len(repo.candidates))
 	}
@@ -381,7 +467,7 @@ func TestScanPersistsCandidatesIdempotently(t *testing.T) {
 		idsBefore[id] = true
 	}
 	// Reset rate-limit bookkeeping for the deterministic unit test.
-	h.lastScanAt = map[string]time.Time{}
+	h.scanner.lastScanAt = map[string]time.Time{}
 	second := runScan()
 	if second.UnchangedCount != 2 {
 		t.Fatalf("second run = %+v", second)

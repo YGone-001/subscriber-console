@@ -126,6 +126,10 @@ POST   /api/discovery/candidates/{candidateId}/unlink
 - Mutations require `core.configure`.
 - Link and unlink write discovery metadata only. They never create, update or
   delete Inventory resources and never create Topology edges.
+- Scheduled scanning is additive: no route is added, and source responses gain
+  `scanIntervalSeconds` plus the derived `nextScanAt`; runs gain `trigger`.
+  Older clients that omit `scanIntervalSeconds` on create receive the server
+  default, while pre-existing source documents remain manual-only.
 
 ## 4. Security Boundary
 
@@ -141,14 +145,44 @@ POST   /api/discovery/candidates/{candidateId}/unlink
 
 ## 5. Scan Semantics
 
-- One active scan per source and globally.
-- Per-source minimum scan interval 60 seconds. Repeat scans return HTTP 429
-  `DISCOVERY_SCAN_RATE_LIMITED` with `Retry-After`.
+- One active scan per source and globally, shared by manual and scheduled
+  scans through a single in-process scanner.
+- Per-source minimum scan interval 60 seconds. Repeat manual scans return HTTP
+  429 `DISCOVERY_SCAN_RATE_LIMITED` with `Retry-After`.
 - `MarkMissing` runs only when the scan batch is complete.
 - Truncated scans record `partial` and explicitly state that absence was not
   inferred.
 
-### 5.1 Observation and scan timestamps
+### 5.1 Scheduled scanning
+
+Each source carries `scanIntervalSeconds`:
+
+```text
+0                    manual only; the scheduler never starts a scan
+60 .. 86400          scheduled cadence in seconds
+omitted on create    server default 300 seconds
+existing documents   decode as 0, so deployment never starts silent egress;
+                     an operator opts in by setting an interval
+```
+
+The scheduler is part of the existing Go process, not a second daemon. It ticks
+every 30 seconds and starts at most one scan per tick, because the global
+live-scan bound is one. Due-ness is evaluated per source from the persisted
+`lastScanAt` (or `createdAt` when never scanned) plus the interval; the
+scheduler never scans early after a restart. A disabled source and a source with
+interval 0 are never due. The scheduler calls the same scanner as the manual
+endpoint, so per-source and global single-flight always hold across both entry
+points.
+
+`nextScanAt` is a response-only projection of that same cadence basis. It is
+never persisted, and it is absent for disabled or manual-only sources. A
+scheduled run records `trigger=scheduled` and `initiatedBy=scheduler`; a manual
+run records `trigger=manual` and the operator identity. Scheduled runs do not
+write the per-request user audit stream; the run document is their execution
+evidence. Failed and truncated scheduled scans follow the same rules as manual
+scans and never infer absence.
+
+### 5.2 Observation and scan timestamps
 
 ```text
 lastSeenAt     moves only when an NF is actually observed again
@@ -168,7 +202,7 @@ distinguishable through the run status (`partial` versus `failed`) and through
 the source `lastError` value (`scan truncated; absence not inferred` versus the
 classified failure summary).
 
-### 5.2 Build toolchain
+### 5.3 Build toolchain
 
 The discovery backend is verified on Linux with the module-declared toolchain:
 
@@ -189,10 +223,14 @@ Discovery is a native xCloud module:
 - Bilingual locale keys under `nav_discovery` / `discovery_*`.
 - Observation state is rendered separately from registry status and never as a
   health flag.
+- The source list and edit form expose the scan interval; the detail surface
+  shows the derived next scan time; scan history distinguishes manual from
+  scheduled triggers. Interval `0` is labelled as manual-only, not as an error.
 
 ## 7. Explicit Non-Goals
 
-This foundation does not implement recurring discovery workers, NF health
+This foundation implements one in-process scheduler, but does not implement a
+separate discovery worker process or daemon, NF health
 monitoring, KPI telemetry, PCAP/HEP capture, tracing, alarm correlation, AIOps
 RCA, remote shell execution, automated Inventory provisioning, automated
 Topology rewriting, or closed-loop operations.

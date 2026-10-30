@@ -10,6 +10,7 @@ export type DiscoveryAdapterType = 'nrf';
 export type DiscoveryTransportMode = 'h2c' | 'h2_tls';
 export type DiscoveryRunStatus = 'running' | 'success' | 'partial' | 'failed';
 export type DiscoveryObservationState = 'seen' | 'missing' | 'stale';
+export type DiscoveryScanTrigger = 'manual' | 'scheduled';
 
 export interface DiscoveryMetaResponse {
   schemaVersion: number;
@@ -18,6 +19,8 @@ export interface DiscoveryMetaResponse {
   runStatuses: DiscoveryRunStatus[];
   observationStates: DiscoveryObservationState[];
   minScanIntervalSeconds: number;
+  defaultScanIntervalSeconds: number;
+  maxScanIntervalSeconds: number;
   requestTimeoutSeconds: number;
   totalScanDeadlineSeconds: number;
   maxNfProfiles: number;
@@ -31,6 +34,13 @@ export interface DiscoverySource {
   baseUrl: string;
   enabled: boolean;
   transportMode: DiscoveryTransportMode;
+  /** Scheduled scan cadence in seconds. 0 means manual-only. */
+  scanIntervalSeconds: number;
+  /**
+   * Read-only next scan projection (last attempt or creation + interval).
+   * Absent for disabled or manual-only sources; never persisted.
+   */
+  nextScanAt?: string;
   revision: number;
   createdAt: string;
   createdBy: string;
@@ -55,6 +65,8 @@ export interface DiscoveryRun {
   missingCount: number;
   errorCode?: string;
   errorSummary?: string;
+  /** Execution origin. Runs written before this field existed have no value. */
+  trigger?: DiscoveryScanTrigger;
   initiatedBy: string;
 }
 
@@ -154,6 +166,8 @@ export interface CreateDiscoverySourceRequest {
   baseUrl: string;
   transportMode: DiscoveryTransportMode;
   enabled?: boolean;
+  /** Optional server default when omitted; 0 explicitly opts out. */
+  scanIntervalSeconds?: number;
 }
 
 export interface MutableSourceForm {
@@ -161,6 +175,7 @@ export interface MutableSourceForm {
   baseUrl: string;
   transportMode: DiscoveryTransportMode;
   enabled: boolean;
+  scanIntervalSeconds: number;
 }
 
 export interface UpdateDiscoverySourceRequest {

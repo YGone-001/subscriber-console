@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
@@ -27,22 +25,18 @@ type AuditWriter interface {
 	WriteBestEffort(input audit.WriteAuditInput)
 }
 
-// Repository surface used by the handler.
+// Repository surface used by the handler. Scan execution lives in the shared
+// Scanner, so the handler only reads and writes configuration and evidence.
 type RepositoryAPI interface {
 	CreateSource(ctx context.Context, req *CreateSourceRequest, actor string) (*DiscoverySource, error)
 	GetSource(ctx context.Context, sourceID string) (*DiscoverySource, error)
 	ListSources(ctx context.Context, filter SourceListFilter) ([]DiscoverySource, *string, bool, error)
 	UpdateSource(ctx context.Context, sourceID string, req *UpdateSourceRequest, actor string) (*DiscoverySource, *DiscoverySource, error)
-	InsertRun(ctx context.Context, run *DiscoveryRun) error
-	CompleteRun(ctx context.Context, run *DiscoveryRun) error
 	GetRun(ctx context.Context, runID string) (*DiscoveryRun, error)
 	ListRuns(ctx context.Context, filter RunListFilter) ([]DiscoveryRun, *string, bool, error)
-	UpsertObservation(ctx context.Context, sourceID, adapterType string, profile *NormalizedProfile, now string) (bool, bool, bool, error)
-	MarkMissing(ctx context.Context, sourceID string, seenIDs map[string]struct{}, now string) (int, error)
 	GetCandidate(ctx context.Context, candidateID string) (*NFObservation, error)
 	ListCandidates(ctx context.Context, filter CandidateListFilter) ([]NFObservation, *string, bool, error)
 	SetCandidateLink(ctx context.Context, candidateID string, expectedRevision int64, resourceID *string, actor string) (*NFObservation, error)
-	UpdateSourceScanMeta(ctx context.Context, sourceID, completedAt, lastError string) error
 	CountSources(ctx context.Context) (int, error)
 	CountCandidates(ctx context.Context, sourceID, linkedOnly string) (int, error)
 	LatestRun(ctx context.Context) (*DiscoveryRun, error)
@@ -52,9 +46,9 @@ type RepositoryAPI interface {
 // Handler serves the discovery API surface.
 type Handler struct {
 	repo        RepositoryAPI
+	scanner     *Scanner
 	limiter     RateLimiter
 	auditWriter AuditWriter
-	adapters    *AdapterRegistry
 	allowlist   *DestinationAllowlist
 	resolver    InventoryResolver
 	// monitoringResolver projects the candidate-resource-target chain onto
@@ -62,31 +56,25 @@ type Handler struct {
 	// SetMonitoringResolver); an unwired handler serves unprojected pages
 	// instead of guessing an association.
 	monitoringResolver MonitoringAssociationResolver
-
-	scanMu      sync.Mutex
-	activeScans map[string]string // sourceId -> runId
-	lastScanAt  map[string]time.Time
-	globalScan  bool
 }
 
-// NewHandler constructs the discovery HTTP handler.
-func NewHandler(repo RepositoryAPI, limiter RateLimiter, auditWriter AuditWriter, adapters *AdapterRegistry, allowlist *DestinationAllowlist, resolver InventoryResolver) *Handler {
+// NewHandler constructs the discovery HTTP handler. The scanner is the same
+// instance the scheduler uses; sharing it is what enforces the documented
+// single-flight bounds across manual and scheduled scans.
+func NewHandler(repo RepositoryAPI, scanner *Scanner, limiter RateLimiter, auditWriter AuditWriter, allowlist *DestinationAllowlist, resolver InventoryResolver) *Handler {
 	return &Handler{
 		repo:        repo,
+		scanner:     scanner,
 		limiter:     limiter,
 		auditWriter: auditWriter,
-		adapters:    adapters,
 		allowlist:   allowlist,
 		resolver:    resolver,
-		activeScans: map[string]string{},
-		lastScanAt:  map[string]time.Time{},
 	}
 }
 
 // SetMonitoringResolver wires the read-only monitoring association
-// projection. The resolver is optional: an unwired handler returns
-// unprojected candidate pages. The constructor signature is unchanged so
-// existing callers keep compiling.
+// projection. The resolver is optional: an unwired handler returns unprojected
+// candidate pages, and late wiring keeps it out of the constructor.
 func (h *Handler) SetMonitoringResolver(resolver MonitoringAssociationResolver) {
 	h.monitoringResolver = resolver
 }
@@ -185,15 +173,17 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, MetaResponse{
-		SchemaVersion:            SchemaVersion,
-		AdapterTypes:             CanonicalAdapterTypes,
-		TransportModes:           CanonicalTransportModes,
-		RunStatuses:              CanonicalRunStatuses,
-		ObservedStates:           CanonicalObservationStates,
-		MinScanIntervalSeconds:   MinScanIntervalSeconds,
-		RequestTimeoutSeconds:    RequestTimeoutSeconds,
-		TotalScanDeadlineSeconds: TotalScanDeadlineSec,
-		MaxNFProfiles:            MaxNFProfiles,
+		SchemaVersion:              SchemaVersion,
+		AdapterTypes:               CanonicalAdapterTypes,
+		TransportModes:             CanonicalTransportModes,
+		RunStatuses:                CanonicalRunStatuses,
+		ObservedStates:             CanonicalObservationStates,
+		MinScanIntervalSeconds:     MinScanIntervalSeconds,
+		DefaultScanIntervalSeconds: DefaultScanIntervalSeconds,
+		MaxScanIntervalSeconds:     MaxScanIntervalSeconds,
+		RequestTimeoutSeconds:      RequestTimeoutSeconds,
+		TotalScanDeadlineSeconds:   TotalScanDeadlineSec,
+		MaxNFProfiles:              MaxNFProfiles,
 	})
 }
 
@@ -227,6 +217,9 @@ func (h *Handler) ListSources(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, err.Error(), "INVALID_CURSOR")
 		return
 	}
+	for i := range items {
+		items[i].NextScanAt = SourceNextScanAt(&items[i])
+	}
 	response.JSON(w, http.StatusOK, ListSourcesResponse{
 		Sources: items,
 		Page:    PageInfo{Limit: limit, NextCursor: next, HasMore: hasMore},
@@ -256,6 +249,7 @@ func (h *Handler) GetSource(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w)
 		return
 	}
+	src.NextScanAt = SourceNextScanAt(src)
 	response.JSON(w, http.StatusOK, src)
 }
 
@@ -283,7 +277,9 @@ func (h *Handler) CreateSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auditWrite(p, "discovery.source.create", src.SourceID, nil, src)
-	response.JSON(w, http.StatusCreated, src)
+	created := *src
+	created.NextScanAt = SourceNextScanAt(&created)
+	response.JSON(w, http.StatusCreated, &created)
 }
 
 // UpdateSource handles PUT /api/discovery/sources/{sourceId}.
@@ -323,7 +319,9 @@ func (h *Handler) UpdateSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auditWrite(p, "discovery.source.update", sourceID, before, after)
-	response.JSON(w, http.StatusOK, after)
+	updated := *after
+	updated.NextScanAt = SourceNextScanAt(&updated)
+	response.JSON(w, http.StatusOK, &updated)
 }
 
 // ScanSource handles POST /api/discovery/sources/{sourceId}/scan.
@@ -355,158 +353,46 @@ func (h *Handler) ScanSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	adapter, err := h.adapters.Get(src.AdapterType)
+	run, err := h.scanner.Scan(r.Context(), src, ScanTriggerManual, p.Username, p.Role)
 	if err != nil {
-		response.Error(w, http.StatusUnprocessableEntity, "unsupported adapter type", "DISCOVERY_PROTOCOL_ERROR")
-		return
-	}
-
-	// One active scan per source and globally.
-	h.scanMu.Lock()
-	if h.globalScan {
-		h.scanMu.Unlock()
-		response.Error(w, http.StatusConflict, "a discovery scan is already in progress", "DISCOVERY_SCAN_IN_PROGRESS")
-		return
-	}
-	if _, busy := h.activeScans[sourceID]; busy {
-		h.scanMu.Unlock()
-		response.Error(w, http.StatusConflict, "a discovery scan is already in progress", "DISCOVERY_SCAN_IN_PROGRESS")
-		return
-	}
-	if last, ok := h.lastScanAt[sourceID]; ok {
-		if time.Since(last) < time.Duration(MinScanIntervalSeconds)*time.Second {
-			h.scanMu.Unlock()
+		switch {
+		case errors.Is(err, ErrUnsupportedAdapter):
+			response.Error(w, http.StatusUnprocessableEntity, "unsupported adapter type", "DISCOVERY_PROTOCOL_ERROR")
+		case errors.Is(err, ErrSourceDisabled):
+			response.Error(w, http.StatusConflict, "Discovery source is disabled", "DISCOVERY_SOURCE_DISABLED")
+		case errors.Is(err, ErrScanInProgress):
+			response.Error(w, http.StatusConflict, "a discovery scan is already in progress", "DISCOVERY_SCAN_IN_PROGRESS")
+		case errors.Is(err, ErrScanRateLimited):
 			w.Header().Set("Retry-After", strconv.Itoa(MinScanIntervalSeconds))
 			response.Error(w, http.StatusTooManyRequests, "discovery scan rate limited", "DISCOVERY_SCAN_RATE_LIMITED")
-			return
-		}
-	}
-
-	run := &DiscoveryRun{
-		RunID:         audit.GenerateUUID(),
-		SchemaVersion: SchemaVersion,
-		SourceID:      sourceID,
-		StartedAt:     CurrentTimestamp(),
-		Status:        RunStatusRunning,
-		InitiatedBy:   p.Username,
-	}
-	h.activeScans[sourceID] = run.RunID
-	h.globalScan = true
-	h.lastScanAt[sourceID] = time.Now()
-	h.scanMu.Unlock()
-
-	defer func() {
-		h.scanMu.Lock()
-		delete(h.activeScans, sourceID)
-		h.globalScan = false
-		h.scanMu.Unlock()
-	}()
-
-	if err := h.repo.InsertRun(r.Context(), run); err != nil {
-		response.InternalError(w)
-		return
-	}
-	h.auditWrite(p, "discovery.scan.request", sourceID, nil, map[string]any{"runId": run.RunID})
-
-	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(TotalScanDeadlineSec)*time.Second)
-	defer cancel()
-
-	batch, scanErr := adapter.Discover(ctx, *src)
-	completedAt := CurrentTimestamp()
-	run.CompletedAt = completedAt
-
-	if scanErr != nil {
-		run.Status = RunStatusFailed
-		run.ErrorCode, run.ErrorSummary = classifyScanError(scanErr)
-		_ = h.repo.UpdateSourceScanMeta(context.Background(), sourceID, completedAt, run.ErrorSummary)
-		_ = h.repo.CompleteRun(context.Background(), run)
-		h.auditWrite(p, "discovery.scan.complete", sourceID, nil, map[string]any{
-			"runId":     run.RunID,
-			"outcome":   "failed",
-			"errorCode": run.ErrorCode,
-		})
-		// Never report an NRF failure as a successful empty discovery.
-		status := http.StatusBadGateway
-		switch run.ErrorCode {
-		case "DISCOVERY_SCAN_RATE_LIMITED":
-			status = http.StatusTooManyRequests
-		case "DISCOVERY_RESPONSE_LIMIT_EXCEEDED":
-			status = http.StatusUnprocessableEntity
-		case "DISCOVERY_TARGET_NOT_ALLOWED":
-			status = http.StatusForbidden
-		case "DISCOVERY_RESPONSE_INVALID":
-			status = http.StatusUnprocessableEntity
-		}
-		response.Error(w, status, run.ErrorSummary, run.ErrorCode)
-		return
-	}
-
-	seen := map[string]struct{}{}
-	for _, profile := range batch.Profiles {
-		seen[profile.ExternalNfInstanceID] = struct{}{}
-		created, updated, _, upsertErr := h.repo.UpsertObservation(context.Background(), sourceID, src.AdapterType, profile, completedAt)
-		if upsertErr != nil {
-			run.Status = RunStatusFailed
-			run.ErrorCode = "DISCOVERY_RESPONSE_INVALID"
-			run.ErrorSummary = SanitizeSummary(upsertErr.Error())
-			_ = h.repo.UpdateSourceScanMeta(context.Background(), sourceID, completedAt, run.ErrorSummary)
-			_ = h.repo.CompleteRun(context.Background(), run)
+		default:
+			var failure *ScanFailure
+			if errors.As(err, &failure) {
+				// Never report an NRF failure as a successful empty discovery.
+				response.Error(w, scanFailureStatus(failure.Code), failure.Summary, failure.Code)
+				return
+			}
 			response.InternalError(w)
-			return
 		}
-		run.DiscoveredCount++
-		if created {
-			run.CreatedCount++
-		} else if updated {
-			run.UpdatedCount++
-		} else {
-			run.UnchangedCount++
-		}
+		return
 	}
-
-	// Missing is inferred only from a complete, untruncated successful scan.
-	// lastSuccessAt likewise moves only on that path: partial and failed attempts
-	// refresh lastScanAt and record lastError without claiming a success time.
-	if batch.Complete {
-		missing, missErr := h.repo.MarkMissing(context.Background(), sourceID, seen, completedAt)
-		if missErr == nil {
-			run.MissingCount = missing
-		}
-		run.Status = RunStatusSuccess
-		_ = h.repo.UpdateSourceScanMeta(context.Background(), sourceID, completedAt, "")
-	} else {
-		run.Status = RunStatusPartial
-		run.ErrorCode = "DISCOVERY_RESPONSE_LIMIT_EXCEEDED"
-		run.ErrorSummary = "scan truncated; absence not inferred"
-		_ = h.repo.UpdateSourceScanMeta(context.Background(), sourceID, completedAt, run.ErrorSummary)
-	}
-
-	_ = h.repo.CompleteRun(context.Background(), run)
-	h.auditWrite(p, "discovery.scan.complete", sourceID, nil, map[string]any{
-		"runId":      run.RunID,
-		"outcome":    run.Status,
-		"discovered": run.DiscoveredCount,
-	})
 	response.JSON(w, http.StatusOK, ScanResult{Run: *run})
 }
 
-func classifyScanError(err error) (string, string) {
-	msg := SanitizeSummary(err.Error())
-	switch {
-	case errors.Is(err, ErrDestinationNotAllowed):
-		return "DISCOVERY_TARGET_NOT_ALLOWED", msg
-	case errors.Is(err, ErrResponseTooLarge):
-		return "DISCOVERY_RESPONSE_LIMIT_EXCEEDED", msg
-	case errors.Is(err, ErrProtocol):
-		return "DISCOVERY_PROTOCOL_ERROR", msg
-	case errors.Is(err, ErrSourceDisabled):
-		return "DISCOVERY_SOURCE_DISABLED", msg
-	case strings.Contains(msg, "transport error") || strings.Contains(msg, "connection refused") || strings.Contains(msg, "timeout"):
-		return "DISCOVERY_TRANSPORT_ERROR", msg
-	case strings.Contains(msg, "status"):
-		return "DISCOVERY_PROTOCOL_ERROR", msg
+func scanFailureStatus(code string) int {
+	switch code {
+	case "DISCOVERY_SCAN_RATE_LIMITED":
+		return http.StatusTooManyRequests
+	case "DISCOVERY_RESPONSE_LIMIT_EXCEEDED":
+		return http.StatusUnprocessableEntity
+	case "DISCOVERY_TARGET_NOT_ALLOWED":
+		return http.StatusForbidden
+	case "DISCOVERY_RESPONSE_INVALID":
+		return http.StatusUnprocessableEntity
+	case "DISCOVERY_SOURCE_DISABLED":
+		return http.StatusConflict
 	default:
-		return "DISCOVERY_RESPONSE_INVALID", msg
+		return http.StatusBadGateway
 	}
 }
 

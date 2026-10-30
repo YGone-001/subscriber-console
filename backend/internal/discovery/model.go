@@ -24,6 +24,14 @@ const (
 	RunStatusFailed  = "failed"
 )
 
+// Scan trigger values. A run records whether an operator requested it or the
+// in-process scheduler started it. The trigger is evidence only; it never
+// changes scan semantics.
+const (
+	ScanTriggerManual    = "manual"
+	ScanTriggerScheduled = "scheduled"
+)
+
 // Observation state values. Observation state is deliberately distinct from
 // NRF registry status and from any future operational health signal.
 const (
@@ -63,17 +71,30 @@ var CanonicalTransportModes = []string{TransportH2C, TransportH2TLS}
 var CanonicalRunStatuses = []string{RunStatusRunning, RunStatusSuccess, RunStatusPartial, RunStatusFailed}
 var CanonicalObservationStates = []string{ObservationSeen, ObservationMissing, ObservationStale}
 
-// Execution bounds for operator-triggered discovery scans.
+// Execution bounds for operator-triggered and scheduled discovery scans.
+//
+// A source scan interval of 0 means manual-only: the scheduler never starts a
+// scan for it. Values above 0 are bounded by MinScanIntervalSeconds and
+// MaxScanIntervalSeconds. A source created without an explicit interval receives
+// DefaultScanIntervalSeconds; documents written before the interval existed
+// decode as 0 and therefore stay manual until an operator opts in.
 const (
-	MinScanIntervalSeconds = 60
-	MaxGlobalLiveScans     = 1
-	MaxPerSourceLiveScans  = 1
-	RequestTimeoutSeconds  = 5
-	TotalScanDeadlineSec   = 20
-	MaxNFProfiles          = 256
-	MaxNFServicesPerInst   = 64
-	MaxLinkTraversal       = 256
-	MaxResponseBytes       = 2 << 20 // 2 MiB bounded response body
+	MinScanIntervalSeconds     = 60
+	MaxScanIntervalSeconds     = 86400
+	DefaultScanIntervalSeconds = 300
+	// SchedulerTickSeconds bounds how long after its due instant a source can
+	// be picked up. The scheduler starts at most one scan per tick because the
+	// global live-scan bound is one.
+	SchedulerTickSeconds  = 30
+	MaxScheduledSources   = 200
+	MaxGlobalLiveScans    = 1
+	MaxPerSourceLiveScans = 1
+	RequestTimeoutSeconds = 5
+	TotalScanDeadlineSec  = 20
+	MaxNFProfiles         = 256
+	MaxNFServicesPerInst  = 64
+	MaxLinkTraversal      = 256
+	MaxResponseBytes      = 2 << 20 // 2 MiB bounded response body
 )
 
 // Pagination defaults shared with Inventory/Topology list contracts.
@@ -113,14 +134,21 @@ type DiscoverySource struct {
 	BaseURL       string `json:"baseUrl" bson:"baseUrl"`
 	Enabled       bool   `json:"enabled" bson:"enabled"`
 	TransportMode string `json:"transportMode" bson:"transportMode"`
-	Revision      int64  `json:"revision" bson:"revision"`
-	CreatedAt     string `json:"createdAt" bson:"createdAt"`
-	CreatedBy     string `json:"createdBy" bson:"createdBy"`
-	UpdatedAt     string `json:"updatedAt" bson:"updatedAt"`
-	UpdatedBy     string `json:"updatedBy" bson:"updatedBy"`
-	LastSuccessAt string `json:"lastSuccessAt,omitempty" bson:"lastSuccessAt,omitempty"`
-	LastScanAt    string `json:"lastScanAt,omitempty" bson:"lastScanAt,omitempty"`
-	LastError     string `json:"lastError,omitempty" bson:"lastError,omitempty"`
+	// ScanIntervalSeconds is the scheduled scan cadence. 0 means manual-only.
+	ScanIntervalSeconds int    `json:"scanIntervalSeconds" bson:"scanIntervalSeconds"`
+	Revision            int64  `json:"revision" bson:"revision"`
+	CreatedAt           string `json:"createdAt" bson:"createdAt"`
+	CreatedBy           string `json:"createdBy" bson:"createdBy"`
+	UpdatedAt           string `json:"updatedAt" bson:"updatedAt"`
+	UpdatedBy           string `json:"updatedBy" bson:"updatedBy"`
+	LastSuccessAt       string `json:"lastSuccessAt,omitempty" bson:"lastSuccessAt,omitempty"`
+	LastScanAt          string `json:"lastScanAt,omitempty" bson:"lastScanAt,omitempty"`
+	LastError           string `json:"lastError,omitempty" bson:"lastError,omitempty"`
+	// NextScanAt is a response-only projection derived from the last attempt
+	// (or creation time) plus the configured interval. It is never persisted:
+	// the scheduler derives due-ness from the same inputs, so a stored copy
+	// could only drift.
+	NextScanAt string `json:"nextScanAt,omitempty" bson:"-"`
 }
 
 // CreateSourceRequest defines the body for POST /api/discovery/sources.
@@ -130,6 +158,9 @@ type CreateSourceRequest struct {
 	BaseURL       string `json:"baseUrl"`
 	TransportMode string `json:"transportMode"`
 	Enabled       *bool  `json:"enabled,omitempty"`
+	// ScanIntervalSeconds is optional. Omitted means the server default;
+	// explicit 0 opts out of scheduled scanning.
+	ScanIntervalSeconds *int `json:"scanIntervalSeconds,omitempty"`
 }
 
 // UpdateSourceRequest defines the body for PUT /api/discovery/sources/{sourceId}.
@@ -140,10 +171,11 @@ type UpdateSourceRequest struct {
 
 // MutableSource is the operator-mutable projection of a discovery source.
 type MutableSource struct {
-	Name          string `json:"name"`
-	BaseURL       string `json:"baseUrl"`
-	TransportMode string `json:"transportMode"`
-	Enabled       bool   `json:"enabled"`
+	Name                string `json:"name"`
+	BaseURL             string `json:"baseUrl"`
+	TransportMode       string `json:"transportMode"`
+	Enabled             bool   `json:"enabled"`
+	ScanIntervalSeconds int    `json:"scanIntervalSeconds"`
 }
 
 // DiscoveryRun records one bounded operator-triggered discovery execution.
@@ -161,6 +193,7 @@ type DiscoveryRun struct {
 	MissingCount    int    `json:"missingCount" bson:"missingCount"`
 	ErrorCode       string `json:"errorCode,omitempty" bson:"errorCode,omitempty"`
 	ErrorSummary    string `json:"errorSummary,omitempty" bson:"errorSummary,omitempty"`
+	Trigger         string `json:"trigger,omitempty" bson:"trigger,omitempty"`
 	InitiatedBy     string `json:"initiatedBy" bson:"initiatedBy"`
 }
 
@@ -226,15 +259,17 @@ type PageInfo struct {
 
 // MetaResponse is the payload for GET /api/discovery/meta.
 type MetaResponse struct {
-	SchemaVersion            int      `json:"schemaVersion"`
-	AdapterTypes             []string `json:"adapterTypes"`
-	TransportModes           []string `json:"transportModes"`
-	RunStatuses              []string `json:"runStatuses"`
-	ObservedStates           []string `json:"observationStates"`
-	MinScanIntervalSeconds   int      `json:"minScanIntervalSeconds"`
-	RequestTimeoutSeconds    int      `json:"requestTimeoutSeconds"`
-	TotalScanDeadlineSeconds int      `json:"totalScanDeadlineSeconds"`
-	MaxNFProfiles            int      `json:"maxNfProfiles"`
+	SchemaVersion              int      `json:"schemaVersion"`
+	AdapterTypes               []string `json:"adapterTypes"`
+	TransportModes             []string `json:"transportModes"`
+	RunStatuses                []string `json:"runStatuses"`
+	ObservedStates             []string `json:"observationStates"`
+	MinScanIntervalSeconds     int      `json:"minScanIntervalSeconds"`
+	DefaultScanIntervalSeconds int      `json:"defaultScanIntervalSeconds"`
+	MaxScanIntervalSeconds     int      `json:"maxScanIntervalSeconds"`
+	RequestTimeoutSeconds      int      `json:"requestTimeoutSeconds"`
+	TotalScanDeadlineSeconds   int      `json:"totalScanDeadlineSeconds"`
+	MaxNFProfiles              int      `json:"maxNfProfiles"`
 }
 
 // ListSourcesResponse is the payload for GET /api/discovery/sources.

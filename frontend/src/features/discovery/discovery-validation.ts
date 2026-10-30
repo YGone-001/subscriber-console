@@ -16,6 +16,12 @@ import type {
 export const CANONICAL_ADAPTER_TYPES: DiscoveryAdapterType[] = ['nrf'];
 export const CANONICAL_TRANSPORT_MODES: DiscoveryTransportMode[] = ['h2c', 'h2_tls'];
 
+/* Mirrors backend/internal/discovery/model.go for early form feedback only.
+ * The backend remains the validation authority. */
+export const MIN_SCAN_INTERVAL_SECONDS = 60;
+export const MAX_SCAN_INTERVAL_SECONDS = 86400;
+export const DEFAULT_SCAN_INTERVAL_SECONDS = 300;
+
 const NAME_MAX = 128;
 
 export function validateSourceName(value: string): string | null {
@@ -55,6 +61,21 @@ export function validateTransportMode(value: string): string | null {
     : 'discovery_validation_transport';
 }
 
+/**
+ * Validates a scheduled scan cadence. 0 is the explicit manual-only value;
+ * positive values must stay inside the backend bounds.
+ */
+export function validateScanInterval(value: number): string | null {
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    return 'discovery_validation_interval';
+  }
+  if (value === 0) return null;
+  if (value < MIN_SCAN_INTERVAL_SECONDS || value > MAX_SCAN_INTERVAL_SECONDS) {
+    return 'discovery_validation_interval';
+  }
+  return null;
+}
+
 export function validateResourceId(value: string): string | null {
   const id = value.trim();
   if (!id) return 'discovery_validation_resource_required';
@@ -69,6 +90,7 @@ export function buildCreateSourceRequest(input: {
   baseUrl: string;
   transportMode: string;
   enabled?: boolean;
+  scanIntervalSeconds?: number;
 }): CreateDiscoverySourceRequest {
   const nameError = validateSourceName(input.name);
   if (nameError) throw new Error(nameError);
@@ -78,6 +100,10 @@ export function buildCreateSourceRequest(input: {
   if (urlError) throw new Error(urlError);
   const transportError = validateTransportMode(input.transportMode);
   if (transportError) throw new Error(transportError);
+  if (input.scanIntervalSeconds !== undefined) {
+    const intervalError = validateScanInterval(input.scanIntervalSeconds);
+    if (intervalError) throw new Error(intervalError);
+  }
 
   const request: CreateDiscoverySourceRequest = {
     name: input.name.trim(),
@@ -86,6 +112,9 @@ export function buildCreateSourceRequest(input: {
     transportMode: input.transportMode as DiscoveryTransportMode,
   };
   if (typeof input.enabled === 'boolean') request.enabled = input.enabled;
+  if (input.scanIntervalSeconds !== undefined) {
+    request.scanIntervalSeconds = input.scanIntervalSeconds;
+  }
   return request;
 }
 
@@ -102,6 +131,8 @@ export function buildUpdateSourceRequest(
   if (urlError) throw new Error(urlError);
   const transportError = validateTransportMode(form.transportMode);
   if (transportError) throw new Error(transportError);
+  const intervalError = validateScanInterval(form.scanIntervalSeconds);
+  if (intervalError) throw new Error(intervalError);
 
   return {
     expectedRevision,
@@ -110,6 +141,7 @@ export function buildUpdateSourceRequest(
       baseUrl: form.baseUrl.trim(),
       transportMode: form.transportMode,
       enabled: form.enabled,
+      scanIntervalSeconds: form.scanIntervalSeconds,
     },
   };
 }

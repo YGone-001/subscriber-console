@@ -38,7 +38,11 @@ import {
   buildUnlinkCandidateRequest,
   formatObservedEndpoint,
 } from './discovery-builders';
-import { buildUpdateSourceRequest, validateResourceId } from './discovery-validation';
+import {
+  buildUpdateSourceRequest,
+  MAX_SCAN_INTERVAL_SECONDS,
+  validateResourceId,
+} from './discovery-validation';
 import type {
   DiscoveryRun,
   DiscoverySource,
@@ -73,6 +77,7 @@ export function DiscoverySourceDetailPage() {
     baseUrl: '',
     transportMode: 'h2c',
     enabled: true,
+    scanIntervalSeconds: 0,
   });
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -100,6 +105,7 @@ export function DiscoverySourceDetailPage() {
         baseUrl: sourceRes.baseUrl,
         transportMode: sourceRes.transportMode,
         enabled: sourceRes.enabled,
+        scanIntervalSeconds: sourceRes.scanIntervalSeconds,
       });
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : t('discovery_err_load'));
@@ -304,6 +310,18 @@ export function DiscoverySourceDetailPage() {
                 </dd>
               </div>
               <div>
+                <dt>{t('discovery_col_interval')}</dt>
+                <dd>
+                  {source.scanIntervalSeconds > 0
+                    ? t('discovery_interval_seconds', { seconds: source.scanIntervalSeconds })
+                    : t('discovery_interval_manual')}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('discovery_col_next_scan')}</dt>
+                <dd>{source.nextScanAt ? formatTimestamp(source.nextScanAt) : '-'}</dd>
+              </div>
+              <div>
                 <dt>{t('discovery_revision')}</dt>
                 <dd>r{source.revision}</dd>
               </div>
@@ -341,6 +359,7 @@ export function DiscoverySourceDetailPage() {
                     <tr>
                       <th scope="col">{t('discovery_col_started')}</th>
                       <th scope="col">{t('discovery_col_run_status')}</th>
+                      <th scope="col">{t('discovery_col_trigger')}</th>
                       <th scope="col">{t('discovery_col_discovered')}</th>
                       <th scope="col">{t('discovery_col_created')}</th>
                       <th scope="col">{t('discovery_col_updated')}</th>
@@ -356,6 +375,13 @@ export function DiscoverySourceDetailPage() {
                           <span className={run.status === 'success' ? styles.badgeOk : run.status === 'failed' ? styles.badgeDanger : styles.badgeWarn}>
                             {runStatusLabel(run.status)}
                           </span>
+                        </td>
+                        <td>
+                          {run.trigger === 'scheduled'
+                            ? t('discovery_trigger_scheduled')
+                            : run.trigger === 'manual'
+                              ? t('discovery_trigger_manual')
+                              : '-'}
                         </td>
                         <td>{run.discoveredCount}</td>
                         <td>{run.createdCount}</td>
@@ -519,6 +545,23 @@ export function DiscoverySourceDetailPage() {
               type="checkbox"
               checked={form.enabled}
               onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
+              disabled={busy}
+            />
+          </Field>
+          <Field
+            htmlFor="discovery-edit-interval"
+            label={t('discovery_field_interval')}
+            description={t('discovery_field_interval_hint')}
+          >
+            <input
+              id="discovery-edit-interval"
+              className="form-input"
+              type="number"
+              min={0}
+              max={MAX_SCAN_INTERVAL_SECONDS}
+              step={1}
+              value={form.scanIntervalSeconds}
+              onChange={(event) => setForm({ ...form, scanIntervalSeconds: Number(event.target.value) })}
               disabled={busy}
             />
           </Field>

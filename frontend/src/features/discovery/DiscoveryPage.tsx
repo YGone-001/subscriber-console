@@ -48,6 +48,8 @@ import {
   buildCreateSourceRequest,
   CANONICAL_ADAPTER_TYPES,
   CANONICAL_TRANSPORT_MODES,
+  DEFAULT_SCAN_INTERVAL_SECONDS,
+  MAX_SCAN_INTERVAL_SECONDS,
 } from './discovery-validation';
 import { describeMutationError } from './discovery-view-model';
 import type {
@@ -239,6 +241,7 @@ export function DiscoveryPage() {
   const [formBaseUrl, setFormBaseUrl] = useState('');
   const [formTransport, setFormTransport] = useState<DiscoveryTransportMode>('h2c');
   const [formEnabled, setFormEnabled] = useState(true);
+  const [formScanInterval, setFormScanInterval] = useState(DEFAULT_SCAN_INTERVAL_SECONDS);
 
   const openCreateDialog = () => {
     setFormError(null);
@@ -255,12 +258,14 @@ export function DiscoveryPage() {
         baseUrl: formBaseUrl,
         transportMode: formTransport,
         enabled: formEnabled,
+        scanIntervalSeconds: formScanInterval,
       });
       await createDiscoverySource(payload);
       setCreateOpen(false);
       setFormName('');
       setFormBaseUrl('');
       setFormEnabled(true);
+      setFormScanInterval(DEFAULT_SCAN_INTERVAL_SECONDS);
       setFeedback({ tone: 'success', message: t('discovery_feedback_created') });
       bumpReload();
     } catch (err) {
@@ -481,6 +486,23 @@ export function DiscoveryPage() {
               type="checkbox"
               checked={formEnabled}
               onChange={(event) => setFormEnabled(event.target.checked)}
+              disabled={submitting}
+            />
+          </Field>
+          <Field
+            htmlFor="discovery-interval"
+            label={t('discovery_field_interval')}
+            description={t('discovery_field_interval_hint')}
+          >
+            <input
+              id="discovery-interval"
+              className="form-input"
+              type="number"
+              min={0}
+              max={MAX_SCAN_INTERVAL_SECONDS}
+              step={1}
+              value={formScanInterval}
+              onChange={(event) => setFormScanInterval(Number(event.target.value))}
               disabled={submitting}
             />
           </Field>

@@ -49,6 +49,10 @@ name
 adapterType   (canonical value: nrf)
 baseUrl       (must be allowlisted)
 transportMode (h2c | h2_tls)
+
+optional:
+scanIntervalSeconds  0 = manual only; 60..86400 = scheduled cadence
+                     omitted on create = 300 seconds
 ```
 
 Rejections:
@@ -58,6 +62,7 @@ Rejections:
 | `DISCOVERY_TARGET_NOT_ALLOWED` | 403 | Destination not in the allowlist |
 | `DISCOVERY_REVISION_CONFLICT` | 409 | CAS revision mismatch on update |
 | `DISCOVERY_SCAN_RATE_LIMITED` | 429 | Per-source minimum interval not elapsed |
+| `INVALID_SCAN_INTERVAL` | 400 | Interval is neither 0 nor inside 60..86400 |
 
 ## 4. Run a scan
 
@@ -66,10 +71,15 @@ UI: Discovery -> Scan
 API: POST /api/discovery/sources/{sourceId}/scan
 ```
 
-- One active scan per source and globally.
+- One active scan per source and globally, shared with scheduled scans.
 - Minimum interval per source is 60 seconds.
 - A complete successful scan may mark previously seen candidates `missing`.
 - A failed or truncated scan never marks candidates missing.
+- A source with a positive `scanIntervalSeconds` is scanned automatically once
+  the interval has elapsed since its last attempt (or creation). `0` means
+  manual-only, and pre-existing sources stay manual until an operator sets an
+  interval. Scheduled runs record `trigger=scheduled`; manual runs record
+  `trigger=manual`.
 
 Interpret `run.status`:
 

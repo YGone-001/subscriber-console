@@ -229,7 +229,14 @@ func main() {
 		mc.Ops.Collection("app_discovery_runs"),
 		mc.Ops.Collection("app_nf_observations"),
 	)
-	discoveryHandler := discovery.NewHandler(discoveryRepo, limiter, auditWriter, discoveryAdapters, discoveryAllowlist, discoveryInventoryResolver)
+	discoveryScanner := discovery.NewScanner(discoveryRepo, discoveryAdapters, auditWriter)
+	discoveryHandler := discovery.NewHandler(discoveryRepo, discoveryScanner, limiter, auditWriter, discoveryAllowlist, discoveryInventoryResolver)
+	// Scheduled scans reuse the manual scan path's bounds: the same Scanner
+	// enforces per-source and global single-flight, so the scheduler can never
+	// overlap an operator-triggered scan or exceed the live-scan budget.
+	discoveryScheduler := discovery.NewScheduler(discoveryRepo, discoveryScanner)
+	discoveryScheduler.Start(context.Background())
+	defer discoveryScheduler.Stop()
 
 	// NF Health (read-only telemetry; Inventory remains the sole canonical
 	// resource authority and Discovery remains read-only observation)

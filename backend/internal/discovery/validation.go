@@ -88,6 +88,26 @@ func ValidateBaseURL(raw string) error {
 	return nil
 }
 
+// ValidateScanIntervalSeconds checks a scheduled scan cadence. 0 is the
+// explicit manual-only value; positive values must stay inside the supported
+// scheduling bounds.
+func ValidateScanIntervalSeconds(seconds int) error {
+	if seconds == 0 {
+		return nil
+	}
+	if seconds < MinScanIntervalSeconds || seconds > MaxScanIntervalSeconds {
+		return validationError(
+			"INVALID_SCAN_INTERVAL",
+			fmt.Sprintf(
+				"scanIntervalSeconds must be 0 (manual only) or between %d and %d",
+				MinScanIntervalSeconds,
+				MaxScanIntervalSeconds,
+			),
+		)
+	}
+	return nil
+}
+
 // ValidateCreateSourceRequest validates POST /api/discovery/sources.
 func ValidateCreateSourceRequest(req *CreateSourceRequest, allowlist *DestinationAllowlist) error {
 	if err := ValidateSourceName(req.Name); err != nil {
@@ -98,6 +118,11 @@ func ValidateCreateSourceRequest(req *CreateSourceRequest, allowlist *Destinatio
 	}
 	if err := ValidateTransportMode(req.TransportMode); err != nil {
 		return err
+	}
+	if req.ScanIntervalSeconds != nil {
+		if err := ValidateScanIntervalSeconds(*req.ScanIntervalSeconds); err != nil {
+			return err
+		}
 	}
 	if err := ValidateBaseURL(req.BaseURL); err != nil {
 		return err
@@ -117,6 +142,9 @@ func ValidateUpdateSourceRequest(req *UpdateSourceRequest, allowlist *Destinatio
 		return err
 	}
 	if err := ValidateTransportMode(req.Source.TransportMode); err != nil {
+		return err
+	}
+	if err := ValidateScanIntervalSeconds(req.Source.ScanIntervalSeconds); err != nil {
 		return err
 	}
 	if err := ValidateBaseURL(req.Source.BaseURL); err != nil {
@@ -158,6 +186,15 @@ var ErrScanInProgress = errors.New("discovery scan in progress")
 
 // ErrScanRateLimited is returned when scans are requested too frequently.
 var ErrScanRateLimited = errors.New("discovery scan rate limited")
+
+// ScanFailure carries the classified outcome of an executed scan that failed.
+// The run itself has already been completed and persisted when this is returned.
+type ScanFailure struct {
+	Code    string
+	Summary string
+}
+
+func (e *ScanFailure) Error() string { return e.Summary }
 
 // ErrLinkConflict is returned when an inventory link is not permitted.
 var ErrLinkConflict = errors.New("discovery inventory link conflict")

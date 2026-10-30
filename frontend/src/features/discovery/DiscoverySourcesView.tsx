@@ -172,7 +172,7 @@ export function DiscoverySourcesView({
           />
         </div>
       ) : loading && sources.length === 0 ? (
-        <LoadingRows columns={6} rows={4} />
+        <LoadingRows columns={7} rows={4} />
       ) : sources.length === 0 ? (
         <div className={styles.stateWrap}>
           <EmptyState
@@ -198,6 +198,7 @@ export function DiscoverySourcesView({
                 <th scope="col">{t('discovery_col_adapter')}</th>
                 <th scope="col">{t('discovery_col_base_url')}</th>
                 <th scope="col">{t('discovery_col_enabled')}</th>
+                <th scope="col">{t('discovery_col_interval')}</th>
                 <th scope="col">{t('discovery_col_last_scan')}</th>
                 <th scope="col">{t('discovery_col_actions')}</th>
               </tr>
@@ -216,6 +217,11 @@ export function DiscoverySourcesView({
                     <span className={source.enabled ? styles.badgeOk : styles.badgeMuted}>
                       {source.enabled ? t('discovery_enabled') : t('discovery_disabled')}
                     </span>
+                  </td>
+                  <td>
+                    {source.scanIntervalSeconds > 0
+                      ? t('discovery_interval_seconds', { seconds: source.scanIntervalSeconds })
+                      : t('discovery_interval_manual')}
                   </td>
                   <td>{formatTimestamp(source.lastScanAt)}</td>
                   <td>

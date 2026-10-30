@@ -33,6 +33,17 @@ type Props = {
   reloadToken: number;
 };
 
+function triggerLabel(trigger: string | undefined, t: (key: string) => string): string {
+  switch (trigger) {
+    case 'scheduled':
+      return t('discovery_trigger_scheduled');
+    case 'manual':
+      return t('discovery_trigger_manual');
+    default:
+      return '-';
+  }
+}
+
 function runStatusLabel(status: string, t: (key: string) => string): string {
   switch (status) {
     case 'success':
@@ -201,7 +212,7 @@ export function DiscoveryRunsView({
           />
         </div>
       ) : loading && runs.length === 0 ? (
-        <LoadingRows columns={7} rows={4} />
+        <LoadingRows columns={9} rows={4} />
       ) : runs.length === 0 ? (
         <div className={styles.stateWrap}>
           <EmptyState
@@ -219,6 +230,7 @@ export function DiscoveryRunsView({
                 <th scope="col">{t('discovery_col_source')}</th>
                 <th scope="col">{t('discovery_col_started')}</th>
                 <th scope="col">{t('discovery_col_run_status')}</th>
+                <th scope="col">{t('discovery_col_trigger')}</th>
                 <th scope="col">{t('discovery_col_discovered')}</th>
                 <th scope="col">{t('discovery_col_created')}</th>
                 <th scope="col">{t('discovery_col_updated')}</th>
@@ -248,6 +260,7 @@ export function DiscoveryRunsView({
                       {runStatusLabel(run.status, t)}
                     </span>
                   </td>
+                  <td>{triggerLabel(run.trigger, t)}</td>
                   <td>{run.discoveredCount}</td>
                   <td>{run.createdCount}</td>
                   <td>{run.updatedCount}</td>
