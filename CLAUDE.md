@@ -911,6 +911,7 @@ BUSINESS_STATEFUL_READ
 - 用户可见文案同步中英文 locale。
 - 前端不持有 API 认证运行时（见 §2.5）。
 - 列表→详情导航保留上下文：列表链接携带当前列表 URL（含筛选/排序/页码）的 `returnTo`，详情/新建页只接受本实体列表前缀，拒绝外部、协议相对与跨实体目标；返回按钮恢复原列表上下文。统一解析位于 `frontend/src/lib/return-to.ts`。
+- UI 所有权：新页面必须组合 `components/ui/*` 共享 primitives（PageHeader/MetricStrip/分页/排序/Dialog/反馈），域组件只承载域语义；`styles/ocs.css` 是 analytics、订阅者、模板、保留期与 OCS 共用的业务样式层，禁止只把 OCS 局部迁到 CSS module 而制造第二套样式。权威文档：`docs/architecture/frontend-ui-ownership.md`。
 
 ### 9.2 设计与文案
 

@@ -135,3 +135,44 @@ test('PageHeader consumers resolve through the module in either export form', ()
     /export function PageHeader\(/,
   );
 });
+
+test('OCS business surfaces compose shared primitives instead of duplicating them', () => {
+  const shell = read('components/ocs/OcsPageShell.tsx');
+  assert.match(shell, /import PageHeader from '..\/ui\/PageHeader'/);
+  assert.match(shell, /import RefreshButton from '..\/ui\/RefreshButton'/);
+
+  const surfaces = [
+    { path: 'components/ocs/contracts/OcsContractsPanel.tsx', paginated: true },
+    { path: 'components/ocs/balances/OcsBalancePlaceholder.tsx', paginated: true },
+    { path: 'components/ocs/tariffs/OcsTariffGovernancePanel.tsx', paginated: false },
+  ];
+  for (const surface of surfaces) {
+    const source = read(surface.path);
+    assert.match(source, /MetricStrip/);
+    if (surface.paginated) assert.match(source, /DataTablePagination/);
+    assert.match(source, /SortableTableHeader/);
+    assert.match(source, /DataTableStateRow/);
+    assert.doesNotMatch(source, /function (DataTablePagination|SortableTableHeader|MetricStrip)/, `${surface.path} must not fork a shared primitive`);
+  }
+
+  for (const dialog of [
+    'components/ocs/contracts/CreateContractDialog.tsx',
+    'components/ocs/contracts/OcsContractDetail.tsx',
+    'components/ocs/common/ConfirmDialog.tsx',
+  ]) {
+    assert.match(read(dialog), /\.\.\/\.\.\/ui\/Dialog|\.\.\/\.\.\/\.\.\/ui\/Dialog/, `${dialog} must mount through the shared Dialog`);
+  }
+});
+
+test('ocs.css remains one shared business stylesheet with consumers outside the OCS pages', () => {
+  assert.match(read('styles/app.css'), /@import '\.\/ocs\.css'/);
+  for (const consumer of [
+    'components/TrafficAdjustmentModal.tsx',
+    'components/analytics/OcsHealthPanel.tsx',
+    'features/profiles/components/ProfileViewMode.tsx',
+    'features/subscribers/components/subscriber/SubscriberViewMode.tsx',
+    'features/retention/RetentionPage.tsx',
+  ]) {
+    assert.match(read(consumer), /ocs-/, `${consumer} is an ocs.css consumer; a piecemeal module split would break it`);
+  }
+});
