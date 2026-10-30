@@ -24,7 +24,8 @@
     "ui:scan-untranslated": "node scripts/scan-untranslated.mjs",
     "ui:a11y": "node scripts/test-ui-accessibility.mjs",
     "docs:sync-agents": "node scripts/sync-agent-docs.mjs",
-    "check:scale": "node scripts/check-scale-triggers.mjs"
+    "check:scale": "node scripts/check-scale-triggers.mjs",
+    "mongo:indexes": "node scripts/migrate-mongo-indexes.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

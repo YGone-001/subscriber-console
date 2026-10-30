@@ -2,6 +2,7 @@ import { Long, MongoClient } from 'mongodb';
 import bcrypt from 'bcryptjs';
 import { loadEnv } from './lib/load-env.mjs';
 import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
+import { BUSINESS_INDEX_SPECS } from './lib/mongo-business-indexes.mjs';
 
 loadEnv(process.cwd());
 
@@ -413,11 +414,14 @@ async function ensureIndexes() {
   const xcloudDb = client.db(xcloudDbName);
   const appDb = client.db(appDbName);
 
-  // ── xcloud.subscribers ──
-  createdIndexes.push(...(await xcloudDb.collection('subscribers').createIndexes([
-    { key: { imsi: 1 }, unique: true, name: 'uniq_imsi' },
-    { key: { msisdn: 1 }, name: 'subscriber_msisdn' },
-  ])).map((name) => ({ database: xcloudDbName, collection: 'subscribers', name })));
+  // ── business collections (shared spec with the index-only migration) ──
+  for (const spec of BUSINESS_INDEX_SPECS) {
+    const db = spec.database === 'xcloud' ? xcloudDb : appDb;
+    const collection = db.collection(spec.collection);
+    await dropConflictingIndexes(collection, spec.indexes);
+    createdIndexes.push(...(await collection.createIndexes(spec.indexes))
+      .map((name) => ({ database: db.databaseName, collection: spec.collection, name })));
+  }
 
   // ── xcloud.ocs_tariff_plans ──
   const tariffDesired = [
@@ -427,25 +431,6 @@ async function ensureIndexes() {
   await dropConflictingIndexes(xcloudDb.collection('ocs_tariff_plans'), tariffDesired);
   createdIndexes.push(...(await xcloudDb.collection('ocs_tariff_plans').createIndexes(tariffDesired))
     .map((name) => ({ database: xcloudDbName, collection: 'ocs_tariff_plans', name })));
-
-  // ── xcloud.ocs_subscribers ──
-  const ocsSubDesired = [
-    { key: { imsi: 1 }, unique: true, name: 'uniq_ocs_subscriber_imsi' },
-    { key: { plan_id: 1 }, name: 'ocs_subscriber_plan_id' },
-    { key: { msisdn: 1 }, name: 'ocs_subscriber_msisdn' },
-  ];
-  await dropConflictingIndexes(xcloudDb.collection('ocs_subscribers'), ocsSubDesired);
-  createdIndexes.push(...(await xcloudDb.collection('ocs_subscribers').createIndexes(ocsSubDesired))
-    .map((name) => ({ database: xcloudDbName, collection: 'ocs_subscribers', name })));
-
-  // ── xcloud.ocs_balances ──
-  const balanceDesired = [
-    { key: { imsi: 1 }, unique: true, name: 'uniq_ocs_balance_imsi' },
-    { key: { updated_at: -1 }, name: 'ocs_balance_updated_at_desc' },
-  ];
-  await dropConflictingIndexes(xcloudDb.collection('ocs_balances'), balanceDesired);
-  createdIndexes.push(...(await xcloudDb.collection('ocs_balances').createIndexes(balanceDesired))
-    .map((name) => ({ database: xcloudDbName, collection: 'ocs_balances', name })));
 
   // ── xcloud.ocs_sessions ──
   createdIndexes.push(...(await xcloudDb.collection('ocs_sessions').createIndexes([
@@ -458,10 +443,6 @@ async function ensureIndexes() {
   ])).map((name) => ({ database: xcloudDbName, collection: 'ocs_usage_records', name })));
 
   // ── xcloud_ops collections ──
-  createdIndexes.push(...(await appDb.collection('app_profiles').createIndexes([
-    { key: { name: 1 }, unique: true, name: 'uniq_profile_name' },
-  ])).map((name) => ({ database: appDbName, collection: 'app_profiles', name })));
-
   createdIndexes.push(...(await appDb.collection('app_profile_versions').createIndexes([
     { key: { profileName: 1, savedAt: -1 }, name: 'profile_versions_by_profile' },
     { key: { versionId: 1 }, unique: true, name: 'uniq_profile_version_id' },

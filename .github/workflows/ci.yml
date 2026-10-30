@@ -94,6 +94,9 @@ jobs:
       - name: Frontend runtime dependency integrity
         run: node scripts/test-frontend-runtime-dependencies.mjs
 
+      - name: Mongo index migration contract
+        run: node scripts/test-mongo-index-migration.mjs
+
   ui-restoration:
     name: Frontend UI restoration contract
     runs-on: ubuntu-latest

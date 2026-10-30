@@ -77,13 +77,35 @@ Run the read-only diagnosis before a scale test:
 node scripts/check-mongo-query-performance.mjs
 ```
 
-Observed on the 2026-10-30 lab database: the `subscribers` checks reported
-`COLLSCAN` / `indexes=none`, which means the lab database had not been
-initialized with the declared indexes. That is an operational finding, not a
-reason to add indexes opportunistically in a read path. Apply the index
-initialization during a maintenance window (it also performs OCS backfill) after
-confirming its writes, or create the missing indexes through the approved
-migration path. Do not create indexes from request handlers.
+The index-only migration is separate from the full initializer because
+`init-mongo-indexes.mjs` also provisions OCS rows and backfills balances:
+
+```bash
+npm run mongo:indexes                 # dry-run: create / exists / equivalent / conflict
+npm run mongo:indexes -- --json       # machine-readable plan
+npm run mongo:indexes -- --apply      # maintenance window: create missing indexes only
+```
+
+It never performs a business write, refuses unique indexes when duplicate values
+exist, and treats a same-key/different-name index as equivalent unless
+`--replace-conflicting` is explicitly requested. The shared index definition is
+`scripts/lib/mongo-business-indexes.mjs`; `init-mongo-indexes.mjs` consumes the
+same spec.
+
+Audit on 2026-10-30 (lab):
+
+- `xcloud.subscribers`, `xcloud.ocs_subscribers`, `xcloud.ocs_balances` had only
+  the `_id_` index.
+- `xcloud_ops.app_profiles` had `uniq_profile_name` and
+  `profile_updated_at_desc`.
+- No duplicate values existed for `subscribers.imsi`, `ocs_subscribers.imsi`,
+  `ocs_balances.imsi` or `app_profiles.name`.
+- The index-only dry-run reported seven creates and no conflicts.
+
+`mongo:perf` on the same database reported `COLLSCAN` for subscriber page,
+MSISDN lookup and profile filter queries. This is an operational finding, not a
+reason to add indexes opportunistically in a read path. Do not create indexes
+from request handlers.
 
 ## Non-goals before a trigger
 
