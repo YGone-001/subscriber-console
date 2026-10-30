@@ -1,0 +1,2201 @@
+[
+  {
+    "name": "all",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000005",
+          "msisdn": "18800000005",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_missing",
+          "policyName": "plan_missing",
+          "provisioning": {
+            "contract": true,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000006",
+          "msisdn": "18800000006",
+          "status": "Active",
+          "contractStatus": "terminated",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 200,
+            "used": 0,
+            "balance": 200
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 6,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 6,
+        "active": 4,
+        "restricted": 2,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 2
+      }
+    }
+  },
+  {
+    "name": "status_active",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000005",
+          "msisdn": "18800000005",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_missing",
+          "policyName": "plan_missing",
+          "provisioning": {
+            "contract": true,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000006",
+          "msisdn": "18800000006",
+          "status": "Active",
+          "contractStatus": "terminated",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 200,
+            "used": 0,
+            "balance": 200
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 4,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 4,
+        "active": 4,
+        "restricted": 2,
+        "lowTraffic": 0,
+        "lowBalance": 0,
+        "unprovisioned": 2
+      }
+    }
+  },
+  {
+    "name": "status_restricted",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 2,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 2,
+        "active": 4,
+        "restricted": 2,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "status_low_traffic",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 4,
+        "restricted": 2,
+        "lowTraffic": 1,
+        "lowBalance": 0,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "contract_active",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000005",
+          "msisdn": "18800000005",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_missing",
+          "policyName": "plan_missing",
+          "provisioning": {
+            "contract": true,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 3,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 3,
+        "active": 2,
+        "restricted": 1,
+        "lowTraffic": 1,
+        "lowBalance": 0,
+        "unprovisioned": 1
+      }
+    }
+  },
+  {
+    "name": "contract_suspended",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 0,
+        "restricted": 1,
+        "lowTraffic": 0,
+        "lowBalance": 1,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "contract_terminated",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000006",
+          "msisdn": "18800000006",
+          "status": "Active",
+          "contractStatus": "terminated",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 200,
+            "used": 0,
+            "balance": 200
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 1,
+        "restricted": 0,
+        "lowTraffic": 0,
+        "lowBalance": 0,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "contract_none",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 1,
+        "restricted": 0,
+        "lowTraffic": 0,
+        "lowBalance": 0,
+        "unprovisioned": 1
+      }
+    }
+  },
+  {
+    "name": "provisioning_complete",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000006",
+          "msisdn": "18800000006",
+          "status": "Active",
+          "contractStatus": "terminated",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 200,
+            "used": 0,
+            "balance": 200
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 4,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 4,
+        "active": 2,
+        "restricted": 2,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 2
+      }
+    }
+  },
+  {
+    "name": "provisioning_incomplete",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000005",
+          "msisdn": "18800000005",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_missing",
+          "policyName": "plan_missing",
+          "provisioning": {
+            "contract": true,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 2,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 2,
+        "active": 2,
+        "restricted": 0,
+        "lowTraffic": 0,
+        "lowBalance": 0,
+        "unprovisioned": 2
+      }
+    }
+  },
+  {
+    "name": "provisioning_missing_contract",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 1,
+        "restricted": 0,
+        "lowTraffic": 0,
+        "lowBalance": 0,
+        "unprovisioned": 2
+      }
+    }
+  },
+  {
+    "name": "provisioning_missing_balance",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000005",
+          "msisdn": "18800000005",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_missing",
+          "policyName": "plan_missing",
+          "provisioning": {
+            "contract": true,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 2,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 2,
+        "active": 2,
+        "restricted": 0,
+        "lowTraffic": 0,
+        "lowBalance": 0,
+        "unprovisioned": 2
+      }
+    }
+  },
+  {
+    "name": "provisioning_missing_plan",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000005",
+          "msisdn": "18800000005",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_missing",
+          "policyName": "plan_missing",
+          "provisioning": {
+            "contract": true,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 2,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 2,
+        "active": 2,
+        "restricted": 0,
+        "lowTraffic": 0,
+        "lowBalance": 0,
+        "unprovisioned": 2
+      }
+    }
+  },
+  {
+    "name": "plan_a",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000006",
+          "msisdn": "18800000006",
+          "status": "Active",
+          "contractStatus": "terminated",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 200,
+            "used": 0,
+            "balance": 200
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 3,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 3,
+        "active": 2,
+        "restricted": 1,
+        "lowTraffic": 0,
+        "lowBalance": 1,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "plan_b",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 0,
+        "restricted": 1,
+        "lowTraffic": 1,
+        "lowBalance": 0,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "balance_exhausted",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 0,
+        "restricted": 1,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "balance_low",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 0,
+        "restricted": 1,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "balance_normal",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000006",
+          "msisdn": "18800000006",
+          "status": "Active",
+          "contractStatus": "terminated",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 200,
+            "used": 0,
+            "balance": 200
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 2,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 2,
+        "active": 2,
+        "restricted": 0,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "balance_available_alias",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000006",
+          "msisdn": "18800000006",
+          "status": "Active",
+          "contractStatus": "terminated",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 200,
+            "used": 0,
+            "balance": 200
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 3,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 3,
+        "active": 2,
+        "restricted": 1,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "balance_missing",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000005",
+          "msisdn": "18800000005",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_missing",
+          "policyName": "plan_missing",
+          "provisioning": {
+            "contract": true,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 2,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 2,
+        "active": 2,
+        "restricted": 0,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 2
+      }
+    }
+  },
+  {
+    "name": "profile_tpl_a",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 1,
+        "restricted": 0,
+        "lowTraffic": 0,
+        "lowBalance": 0,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "profile_tpl_b",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 0,
+        "restricted": 1,
+        "lowTraffic": 0,
+        "lowBalance": 1,
+        "unprovisioned": 0
+      }
+    }
+  },
+  {
+    "name": "search_imsi_prefix",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000005",
+          "msisdn": "18800000005",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_missing",
+          "policyName": "plan_missing",
+          "provisioning": {
+            "contract": true,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000006",
+          "msisdn": "18800000006",
+          "status": "Active",
+          "contractStatus": "terminated",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 200,
+            "used": 0,
+            "balance": 200
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 6,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 6,
+        "active": 4,
+        "restricted": 2,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 2
+      },
+      "matchedBy": "imsi"
+    }
+  },
+  {
+    "name": "search_msisdn_fallback",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 1,
+        "active": 0,
+        "restricted": 1,
+        "lowTraffic": 0,
+        "lowBalance": 1,
+        "unprovisioned": 0
+      },
+      "matchedBy": "msisdn",
+      "matchSource": "xcloud"
+    }
+  },
+  {
+    "name": "page_two",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 6,
+      "page": 2,
+      "limit": 2,
+      "summary": {
+        "total": 6,
+        "active": 4,
+        "restricted": 2,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 2
+      }
+    }
+  },
+  {
+    "name": "sort_usage_desc",
+    "result": {
+      "subscribers": [
+        {
+          "imsi": "460020000000004",
+          "msisdn": "18800000004",
+          "status": "Suspended",
+          "contractStatus": "active",
+          "balanceState": "exhausted",
+          "ard": 255,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_b",
+          "policyName": "Plan B",
+          "policyStatus": "disabled",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 100,
+            "balance": 0
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000001",
+          "msisdn": "18800000001",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "tpl_a",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 1000,
+            "used": 100,
+            "balance": 900
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000002",
+          "msisdn": "18800000002",
+          "status": "Partial Restricted",
+          "contractStatus": "suspended",
+          "balanceState": "low",
+          "balanceThreshold": 100,
+          "ard": 63,
+          "plmn": "46002",
+          "profile": "tpl_b",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 100,
+            "used": 50,
+            "balance": 50
+          },
+          "sms": {
+            "total": 10,
+            "used": 10,
+            "balance": 0
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000006",
+          "msisdn": "18800000006",
+          "status": "Active",
+          "contractStatus": "terminated",
+          "balanceState": "normal",
+          "balanceThreshold": 100,
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_a",
+          "policyName": "Plan A",
+          "policyStatus": "active",
+          "provisioning": {
+            "contract": true,
+            "balance": true,
+            "tariffPlan": true
+          },
+          "traffic": {
+            "total": 200,
+            "used": 0,
+            "balance": 200
+          },
+          "sms": {
+            "total": 10,
+            "used": 0,
+            "balance": 10
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000005",
+          "msisdn": "18800000005",
+          "status": "Active",
+          "contractStatus": "active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "plan_missing",
+          "policyName": "plan_missing",
+          "provisioning": {
+            "contract": true,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        },
+        {
+          "imsi": "460020000000003",
+          "msisdn": "18800000003",
+          "status": "Active",
+          "balanceState": "missing",
+          "ard": 32,
+          "plmn": "46002",
+          "profile": "",
+          "policy": "",
+          "provisioning": {
+            "contract": false,
+            "balance": false,
+            "tariffPlan": false
+          },
+          "traffic": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "sms": {
+            "total": null,
+            "used": null,
+            "balance": null
+          },
+          "lastActive": ""
+        }
+      ],
+      "total": 6,
+      "page": 1,
+      "limit": 50,
+      "summary": {
+        "total": 6,
+        "active": 4,
+        "restricted": 2,
+        "lowTraffic": 1,
+        "lowBalance": 1,
+        "unprovisioned": 2
+      }
+    }
+  }
+]
