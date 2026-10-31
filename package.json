@@ -19,6 +19,7 @@
     "local:doctor": "node scripts/check-local-stack.mjs",
     "local:stop": "node scripts/local-stop.mjs",
     "check:agent-docs-parity": "node scripts/test-agent-docs-parity.mjs",
+    "check:full": "node scripts/check-full.mjs",
     "check:fonts": "node scripts/check-font-coverage.mjs",
     "check:ui-anti-ai-drift": "node scripts/check-ui-anti-ai-drift.mjs",
     "ui:scan-untranslated": "node scripts/scan-untranslated.mjs",
