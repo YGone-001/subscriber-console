@@ -250,7 +250,10 @@ test('unavailable entries stay keyboard reachable and explain themselves', () =>
   assert.ok(source.includes('aria-disabled="true"'), 'the entry must announce that it is disabled');
   assert.ok(source.includes('aria-describedby={describedBy}'), 'the reason must be reachable from the control');
   assert.ok(!/disabled\s+title=/.test(source), 'a native disabled control hides its explanation from the keyboard');
-  assert.ok(source.includes('arch-entry-logs-reason'), 'the log note must exist in the DOM');
+  assert.ok(
+    source.includes('describedBy="arch-entry-resource-reason"'),
+    'an unbound role must point every disabled entry at the shared resource reason',
+  );
 });
 
 test('the alerts entry is labelled as the global console', () => {
@@ -258,13 +261,22 @@ test('the alerts entry is labelled as the global console', () => {
   assert.equal(zh.arch_entry_alerts, '告警中心');
   assert.match(en.arch_entry_alerts_note, /global alert queue/);
   assert.match(zh.arch_entry_alerts_note, /全局告警队列/);
+  assert.doesNotMatch(en.arch_entry_alerts_note, /UX-5/, 'a shipped stage must not stay a promise in the copy');
+  assert.doesNotMatch(zh.arch_entry_alerts_note, /UX-5/);
 });
 
-test('the log entry states that it is not implemented', () => {
-  assert.equal(en.arch_entry_logs, 'Logs (not implemented)');
-  assert.equal(zh.arch_entry_logs, '日志（尚未实施）');
-  assert.match(en.arch_entry_logs_unavailable, /controlled log source/);
-  assert.match(zh.arch_entry_logs_unavailable, /受控日志源/);
+test('the log entry opens the resource-scoped log workspace', () => {
+  const source = read('../src/features/topology/components/ArchitectureDetailDrawer.tsx');
+  assert.ok(
+    source.includes('/logs?resourceId='),
+    'a bound resource must open the log workspace with its resource context',
+  );
+  assert.ok(
+    !source.includes('arch-entry-logs-reason'),
+    'the log entry must not keep a dedicated not-implemented note',
+  );
+  assert.equal(en.arch_entry_logs, 'Logs');
+  assert.equal(zh.arch_entry_logs, '日志');
 });
 
 test('the unbound copy separates "no explicit binding" from "no resource"', () => {

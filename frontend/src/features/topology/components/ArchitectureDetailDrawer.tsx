@@ -8,7 +8,7 @@
  *   resource    -> the bound Inventory resource
  *   monitoring  -> the bound NF Health target
  *   alerts      -> the alert console
- *   logs        -> reserved for the log center (not implemented yet)
+ *   logs        -> the log workspace, scoped to the bound resource's sources
  *
  * There is deliberately no restart, no command and no log path: this console
  * observes, it does not operate the network function.
@@ -209,7 +209,13 @@ export function ArchitectureRoleDetail({ node }: { node: ArchitectureNodeView })
           />
         )}
         <Link className="btn btn-secondary" to="/nf-alerts">{t('arch_entry_alerts')}</Link>
-        <UnavailableEntry label={t('arch_entry_logs')} describedBy="arch-entry-logs-reason" />
+        {node.resourceId ? (
+          <Link className="btn btn-secondary" to={`/logs?resourceId=${encodeURIComponent(node.resourceId)}`}>
+            {t('arch_entry_logs')}
+          </Link>
+        ) : (
+          <UnavailableEntry label={t('arch_entry_logs')} describedBy="arch-entry-resource-reason" />
+        )}
       </div>
       {!node.resourceId ? (
         <p id="arch-entry-resource-reason" className={styles.viewNote}>{t('arch_entry_unavailable')}</p>
@@ -218,7 +224,6 @@ export function ArchitectureRoleDetail({ node }: { node: ArchitectureNodeView })
         <p id="arch-entry-monitoring-reason" className={styles.viewNote}>{t('arch_detail_no_monitoring')}</p>
       ) : null}
       <p className={styles.viewNote}>{t('arch_entry_alerts_note')}</p>
-      <p id="arch-entry-logs-reason" className={styles.viewNote}>{t('arch_entry_logs_unavailable')}</p>
     </section>
 
     {node.observed ? (
