@@ -123,7 +123,7 @@ test('the architecture reference is its own mode, not a third evidence layer', (
 test('each graph evidence layer states its evidence and offers expandable data notes', () => {
   const cases = [
     ['declared', 'Inventory nodes + persisted Topology edges'],
-    ['runtime', 'Runtime observation + explicit configuration'],
+    ['runtime', 'Host observation + explicit configuration'],
   ];
   for (const [source, evidence] of cases) {
     const markup = renderTopology(`/topology?view=graph&source=${source}`);

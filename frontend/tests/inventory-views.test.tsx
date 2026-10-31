@@ -92,7 +92,7 @@ test('runtime observation is its own route', () => {
     '/inventory/runtime',
     createElement(InventoryRuntimePage),
   );
-  assert.ok(markup.includes('Runtime'), 'the runtime surface must render');
+  assert.ok(markup.includes('Host observation'), 'the runtime surface must render');
   assert.equal(markup.split('data-operations-nav="workbench"').length - 1, 1, 'runtime keeps one tab strip');
 });
 
