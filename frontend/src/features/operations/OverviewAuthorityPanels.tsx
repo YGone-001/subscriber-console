@@ -185,7 +185,7 @@ export function RuntimeSummaryPanel({
             label={(key) => t(`runtime_summary_${key}`)}
           />
 
-          <Link to="/inventory?view=runtime" className={styles.authorityLink}>
+          <Link to="/inventory/runtime" className={styles.authorityLink}>
             {t('ops_runtime_panel_link')}
           </Link>
         </>

@@ -10,7 +10,10 @@
  *   - no route performs network access during render.
  */
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -83,7 +86,7 @@ test('the asset ledger is its own route', () => {
   assert.equal(markup.split('data-operations-refresh="page"').length - 1, 1, 'the ledger keeps one refresh entry');
 });
 
-test('runtime discovery is its own route', () => {
+test('runtime observation is its own route', () => {
   const markup = renderRoute(
     '/inventory/runtime',
     '/inventory/runtime',
@@ -91,6 +94,29 @@ test('runtime discovery is its own route', () => {
   );
   assert.ok(markup.includes('Runtime'), 'the runtime surface must render');
   assert.equal(markup.split('data-operations-nav="workbench"').length - 1, 1, 'runtime keeps one tab strip');
+});
+
+function walkSourceFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walkSourceFiles(full));
+    else if (/\.(ts|tsx)$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+test('the UI never emits pre-split inventory view links', () => {
+  const srcDir = fileURLToPath(new URL('../src', import.meta.url));
+  const redirectModule = resolve(srcDir, 'features/inventory/inventory-view.ts');
+  const offenders = walkSourceFiles(srcDir).filter((file) => (
+    file !== redirectModule && /\/inventory\?view=/.test(readFileSync(file, 'utf8'))
+  ));
+  assert.deepEqual(
+    offenders,
+    [],
+    'only the redirect resolver may mention a pre-split inventory view link',
+  );
 });
 
 test('pre-split task links resolve to the canonical routes', () => {

@@ -41,7 +41,7 @@ import styles from '../../styles/modules/operations.module.css';
 const SUMMARY_SECTIONS = 'health,alerts';
 const SUMMARY_REFRESH_MS = 30000;
 const UE_SUMMARY_PATH = '/api/ue-info?summary=1';
-const RUNTIME_DETAIL_PATH = '/inventory?view=runtime';
+const RUNTIME_DETAIL_PATH = '/inventory/runtime';
 
 /* The overview aggregates the six operational modules; each entry is a link to
  * the module's owning surface, never an embedded second copy of its tables. */

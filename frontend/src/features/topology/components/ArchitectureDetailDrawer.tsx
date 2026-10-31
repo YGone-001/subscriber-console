@@ -228,7 +228,7 @@ export function ArchitectureRoleDetail({ node }: { node: ArchitectureNodeView })
           <code>{node.observed.processName}</code>
         </p>
         <p>{t('arch_detail_observed_body')}</p>
-        <Link className={styles.detailAction} to="/inventory?view=runtime">
+        <Link className={styles.detailAction} to="/inventory/runtime">
           {t('arch_detail_manage')}
         </Link>
       </div>

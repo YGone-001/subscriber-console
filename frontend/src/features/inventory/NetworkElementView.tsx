@@ -615,7 +615,7 @@ export default function NetworkElementView({ presentation = 'table' }: { present
                         <td title={t('ops_unmanaged_note')}>-</td>
                         <td>{component.memoryRssBytes != null ? formatBytes(component.memoryRssBytes) : '-'}</td>
                         <td className={styles.cellLinks}>
-                          <Link className={styles.rowLink} to="/inventory?view=runtime">{t('ops_unmanaged_open')}</Link>
+                          <Link className={styles.rowLink} to="/inventory/runtime">{t('ops_unmanaged_open')}</Link>
                         </td>
                       </tr>
                     ))
