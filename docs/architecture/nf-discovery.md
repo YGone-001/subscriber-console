@@ -50,7 +50,7 @@ Observation state is not operational health.
 |---|---|
 | `seen` | Present in the latest complete successful scan |
 | `missing` | Absent from a complete successful scan that previously saw it |
-| `stale` | Retained evidence that is no longer fresh under the observation policy |
+| `stale` | Seen evidence whose last real observation is older than 3× the source scan interval (scheduled sources only) |
 
 Registry status (`REGISTERED`, `SUSPENDED`, and so on) is a separate axis and is
 never collapsed into observation state, Inventory lifecycle, Topology lifecycle,
@@ -181,6 +181,13 @@ run records `trigger=manual` and the operator identity. Scheduled runs do not
 write the per-request user audit stream; the run document is their execution
 evidence. Failed and truncated scheduled scans follow the same rules as manual
 scans and never infer absence.
+
+Scheduled sources also age their own evidence. After every scan attempt, a
+`seen` candidate whose `lastSeenAt` is older than three scan intervals becomes
+`stale`. The sweep never touches `missing` (absence from a complete scan is not
+overwritten), preserves `lastSeenAt` and Inventory associations, and a later
+successful observation restores the same candidate to `seen`. Manual-only
+sources promise no cadence and therefore never age evidence.
 
 ### 5.2 Observation and scan timestamps
 

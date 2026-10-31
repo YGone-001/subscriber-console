@@ -45,6 +45,21 @@ func SourceNextScanAt(src *DiscoverySource) string {
 	return last.Add(time.Duration(interval) * time.Second).UTC().Format(time.RFC3339)
 }
 
+// StaleCutoff returns the observation cutoff for a source at now. A scheduled
+// source ages evidence after StaleIntervalMultiplier scan intervals; a
+// manual-only source returns false because it promises no cadence.
+func StaleCutoff(src *DiscoverySource, now time.Time) (string, bool) {
+	if src == nil || !src.Enabled {
+		return "", false
+	}
+	interval := EffectiveScanInterval(src.ScanIntervalSeconds)
+	if interval == 0 {
+		return "", false
+	}
+	cutoff := now.Add(-time.Duration(interval*StaleIntervalMultiplier) * time.Second)
+	return cutoff.UTC().Format(time.RFC3339), true
+}
+
 // IsSourceDue reports whether a scheduled source should be scanned at now.
 //
 // Persisted lastScanAt is the cadence basis; a never-scanned source uses its

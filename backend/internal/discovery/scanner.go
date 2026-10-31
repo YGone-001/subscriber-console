@@ -27,6 +27,7 @@ type ScanRepository interface {
 	CompleteRun(ctx context.Context, run *DiscoveryRun) error
 	UpsertObservation(ctx context.Context, sourceID, adapterType string, profile *NormalizedProfile, now string) (bool, bool, bool, error)
 	MarkMissing(ctx context.Context, sourceID string, seenIDs map[string]struct{}, now string) (int, error)
+	MarkStale(ctx context.Context, sourceID, cutoff string) (int, error)
 	UpdateSourceScanMeta(ctx context.Context, sourceID, completedAt, lastError string) error
 }
 
@@ -195,6 +196,7 @@ func (s *Scanner) Scan(ctx context.Context, src *DiscoverySource, trigger, actor
 func (s *Scanner) finish(src *DiscoverySource, run *DiscoveryRun, completedAt, lastError, trigger, actor, role string) {
 	_ = s.repo.UpdateSourceScanMeta(context.Background(), src.SourceID, completedAt, lastError)
 	_ = s.repo.CompleteRun(context.Background(), run)
+	s.markStale(src)
 	if trigger == ScanTriggerManual {
 		// The audit result mirrors the recorded run outcome: a failed or
 		// truncated scan must never be audited as a success.
@@ -205,6 +207,17 @@ func (s *Scanner) finish(src *DiscoverySource, run *DiscoveryRun, completedAt, l
 			"discovered": run.DiscoveredCount,
 		})
 	}
+}
+
+// markStale ages previously seen evidence for a scheduled source. It runs after
+// the run and source metadata are recorded, never before: staleness is a
+// freshness projection over historical evidence, not a scan outcome.
+func (s *Scanner) markStale(src *DiscoverySource) {
+	cutoff, ok := StaleCutoff(src, s.now())
+	if !ok {
+		return
+	}
+	_, _ = s.repo.MarkStale(context.Background(), src.SourceID, cutoff)
 }
 
 func (s *Scanner) audit(action, sourceID, actor, role, result string, after map[string]any) {

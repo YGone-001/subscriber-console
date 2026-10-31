@@ -401,6 +401,26 @@ func (r *Repository) MarkMissing(ctx context.Context, sourceID string, seenIDs m
 	return int(res.ModifiedCount), nil
 }
 
+// MarkStale ages seen candidates whose last real observation is older than the
+// source freshness cutoff. It only transitions `seen` to `stale`; `missing`
+// already records absence from a complete scan and is never overwritten.
+// lastSeenAt, candidate identity and Inventory associations are preserved, and
+// the timestamp is not rewritten: staleness is inferred, not observed.
+func (r *Repository) MarkStale(ctx context.Context, sourceID, cutoff string) (int, error) {
+	filter := bson.M{
+		"sourceId":         sourceID,
+		"observationState": ObservationSeen,
+		"lastSeenAt":       bson.M{"$lt": cutoff},
+	}
+	res, err := r.observations.UpdateMany(ctx, filter, bson.M{"$set": bson.M{
+		"observationState": ObservationStale,
+	}})
+	if err != nil {
+		return 0, fmt.Errorf("failed to mark stale nf observations: %w", err)
+	}
+	return int(res.ModifiedCount), nil
+}
+
 // GetCandidate retrieves one NF observation by candidate id.
 func (r *Repository) GetCandidate(ctx context.Context, candidateID string) (*NFObservation, error) {
 	var item NFObservation

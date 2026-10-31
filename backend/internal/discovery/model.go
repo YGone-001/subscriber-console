@@ -85,16 +85,20 @@ const (
 	// SchedulerTickSeconds bounds how long after its due instant a source can
 	// be picked up. The scheduler starts at most one scan per tick because the
 	// global live-scan bound is one.
-	SchedulerTickSeconds  = 30
-	MaxScheduledSources   = 200
-	MaxGlobalLiveScans    = 1
-	MaxPerSourceLiveScans = 1
-	RequestTimeoutSeconds = 5
-	TotalScanDeadlineSec  = 20
-	MaxNFProfiles         = 256
-	MaxNFServicesPerInst  = 64
-	MaxLinkTraversal      = 256
-	MaxResponseBytes      = 2 << 20 // 2 MiB bounded response body
+	SchedulerTickSeconds = 30
+	MaxScheduledSources  = 200
+	// StaleIntervalMultiplier defines freshness for scheduled sources: evidence
+	// whose last real observation is older than this many scan intervals is
+	// stale. Manual-only sources have no promised cadence and never age.
+	StaleIntervalMultiplier = 3
+	MaxGlobalLiveScans      = 1
+	MaxPerSourceLiveScans   = 1
+	RequestTimeoutSeconds   = 5
+	TotalScanDeadlineSec    = 20
+	MaxNFProfiles           = 256
+	MaxNFServicesPerInst    = 64
+	MaxLinkTraversal        = 256
+	MaxResponseBytes        = 2 << 20 // 2 MiB bounded response body
 )
 
 // Pagination defaults shared with Inventory/Topology list contracts.

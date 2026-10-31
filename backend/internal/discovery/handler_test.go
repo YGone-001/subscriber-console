@@ -29,6 +29,7 @@ type mockRepo struct {
 	linkCalls     int
 	inventoryMut  int
 	scanMetaCalls []scanMetaCall
+	staleCalls    []string
 }
 
 func newMockRepo() *mockRepo {
@@ -118,6 +119,7 @@ func (m *mockRepo) UpsertObservation(ctx context.Context, sourceID, adapterType 
 	for _, existing := range m.candidates {
 		if existing.SourceID == sourceID && existing.ExternalNfInstanceID == p.ExternalNfInstanceID {
 			existing.LastSeenAt = now
+			existing.ObservationState = ObservationSeen
 			return false, false, true, nil
 		}
 	}
@@ -145,6 +147,21 @@ func (m *mockRepo) MarkMissing(ctx context.Context, sourceID string, seen map[st
 		}
 	}
 	return missing, nil
+}
+
+func (m *mockRepo) MarkStale(ctx context.Context, sourceID, cutoff string) (int, error) {
+	m.staleCalls = append(m.staleCalls, cutoff)
+	count := 0
+	for _, c := range m.candidates {
+		if c.SourceID != sourceID || c.ObservationState != ObservationSeen {
+			continue
+		}
+		if c.LastSeenAt < cutoff {
+			c.ObservationState = ObservationStale
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (m *mockRepo) GetCandidate(ctx context.Context, id string) (*NFObservation, error) {

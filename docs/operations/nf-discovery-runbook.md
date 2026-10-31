@@ -75,6 +75,9 @@ API: POST /api/discovery/sources/{sourceId}/scan
 - Minimum interval per source is 60 seconds.
 - A complete successful scan may mark previously seen candidates `missing`.
 - A failed or truncated scan never marks candidates missing.
+- After every scan attempt, a scheduled source ages `seen` evidence older than
+  three scan intervals to `stale`; `missing` is never overwritten, and the next
+  successful observation restores `seen`. Manual-only sources never age.
 - A source with a positive `scanIntervalSeconds` is scanned automatically once
   the interval has elapsed since its last attempt (or creation). `0` means
   manual-only, and pre-existing sources stay manual until an operator sets an

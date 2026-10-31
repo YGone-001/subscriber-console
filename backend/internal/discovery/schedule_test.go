@@ -36,6 +36,28 @@ func TestSourceNextScanAtRequiresScheduledEnabledSource(t *testing.T) {
 	}
 }
 
+func TestStaleCutoffOnlyAppliesToScheduledSources(t *testing.T) {
+	now := time.Date(2026, 10, 31, 8, 0, 0, 0, time.UTC)
+	src := &DiscoverySource{Enabled: true, ScanIntervalSeconds: 300}
+
+	cutoff, ok := StaleCutoff(src, now)
+	if !ok || cutoff != "2026-10-31T07:45:00Z" {
+		t.Fatalf("cutoff = %q ok=%v, want now - 3 intervals", cutoff, ok)
+	}
+
+	manual := *src
+	manual.ScanIntervalSeconds = 0
+	if _, ok := StaleCutoff(&manual, now); ok {
+		t.Fatal("manual-only sources must not promise a freshness window")
+	}
+
+	disabled := *src
+	disabled.Enabled = false
+	if _, ok := StaleCutoff(&disabled, now); ok {
+		t.Fatal("disabled sources must not age evidence")
+	}
+}
+
 func TestIsSourceDueUsesLatestAttemptBasis(t *testing.T) {
 	now := time.Date(2026, 10, 31, 8, 0, 0, 0, time.UTC)
 	src := &DiscoverySource{
