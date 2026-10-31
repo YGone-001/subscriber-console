@@ -70,6 +70,8 @@ export type UEPagination = {
   limit: number;
   offset: number;
   total: number;
+  nextCursor: string | null;
+  hasMore: boolean;
 };
 
 export type UEInfoResponse = {
@@ -88,5 +90,5 @@ export type UEQuery = {
   domain?: '' | 'EPS' | '5GS';
   state?: '' | 'registered' | 'idle' | 'connected' | 'unknown';
   limit?: number;
-  offset?: number;
+  cursor?: string;
 };

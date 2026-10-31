@@ -1,5 +1,21 @@
 import type { UEInfo, UEInfoResponse, UEQuery } from './types';
 
+export type UEDomainFilter = '' | 'EPS' | '5GS';
+export type UEStateFilter = '' | 'registered' | 'idle' | 'connected' | 'unknown';
+
+const UE_DOMAINS: UEDomainFilter[] = ['EPS', '5GS'];
+const UE_STATES: UEStateFilter[] = ['registered', 'idle', 'connected', 'unknown'];
+
+/** Reads a URL domain token; unknown values degrade to "all". */
+export function readUEDomainFilter(value: string | undefined): UEDomainFilter {
+  return UE_DOMAINS.includes(value as UEDomainFilter) ? (value as UEDomainFilter) : '';
+}
+
+/** Reads a URL state token; unknown values degrade to "all". */
+export function readUEStateFilter(value: string | undefined): UEStateFilter {
+  return UE_STATES.includes(value as UEStateFilter) ? (value as UEStateFilter) : '';
+}
+
 export function buildUEInfoPath(query: UEQuery = {}): string {
   const params = new URLSearchParams();
   if (query.summary) params.set('summary', '1');
@@ -7,7 +23,7 @@ export function buildUEInfoPath(query: UEQuery = {}): string {
   if (query.domain) params.set('domain', query.domain);
   if (query.state) params.set('state', query.state);
   if (typeof query.limit === 'number') params.set('limit', String(query.limit));
-  if (typeof query.offset === 'number') params.set('offset', String(query.offset));
+  if (query.cursor) params.set('cursor', query.cursor);
   const suffix = params.toString();
   return suffix ? `/api/ue-info?${suffix}` : '/api/ue-info';
 }

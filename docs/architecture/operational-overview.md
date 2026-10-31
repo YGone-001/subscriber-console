@@ -363,9 +363,9 @@ that the projection model does not already define.
   score, and the page H1 remains the Operations Overview title. No API path,
   route or collection is added.
 - **Operations workbench navigation** (`OperationsNav`): one tab strip rendered
-  by the four operational routes (`/inventory`, `/topology`, `/discovery`,
-  `/nf-health`). It adds no route and no destination; nested detail routes keep
-  the owning tab active.
+  by the six operational routes (`/inventory`, `/topology`, `/discovery`,
+  `/nf-health`, `/nf-alerts`, `/ue-info`). It adds no route and no destination;
+  nested detail routes keep the owning tab active.
 - **Network-element card wall** (`NetworkElementCards`): the scannable view of
   the same projection the table renders, grouped by canonical Inventory domain,
   with the monitoring state, the three layer-coverage marks and resident memory.
@@ -380,6 +380,7 @@ presentation of the same projection. The resource ledger lives at
 `/inventory/assets` and local runtime observation at `/inventory/runtime`, so each
 task owns a route instead of a peer `view` token. Pre-split
 `/inventory?view=network|cards|assets|list|runtime` links redirect once to the
-canonical route or density and are never emitted again. Every unavailable value
-on these surfaces remains an explicit unavailable state, never a zero and never a
-positive health claim.
+canonical route or density and are never emitted again. `/ue-info` uses the same
+page frame, tab strip and single refresh control; its filters and cursor live in
+the URL. Every unavailable value on these surfaces remains an explicit
+unavailable state, never a zero and never a positive health claim.

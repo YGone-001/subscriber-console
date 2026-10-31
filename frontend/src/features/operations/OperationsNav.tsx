@@ -1,8 +1,8 @@
 /*
  * Operational workspace navigation.
  *
- * One tab strip shared by the five network-operation surfaces, so the operator
- * reads them as one workbench instead of five unrelated tables. It adds no route
+ * One tab strip shared by the six network-operation surfaces, so the operator
+ * reads them as one workbench instead of six unrelated tables. It adds no route
  * and changes no destination: every tab points at the existing canonical route,
  * and nested detail routes keep their owning tab active.
  *
@@ -11,7 +11,7 @@
  * only implied by colour.
  */
 import { NavLink } from 'react-router-dom';
-import { BellRing, Boxes, ChevronDown, HeartPulse, Network, Radar } from 'lucide-react';
+import { BellRing, Boxes, ChevronDown, HeartPulse, Network, Radar, Users } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import styles from '../../styles/modules/operations-nav.module.css';
 
@@ -21,6 +21,7 @@ const TABS = [
   { to: '/discovery', labelKey: 'nav_discovery', icon: Radar },
   { to: '/nf-health', labelKey: 'nav_nf_health', icon: HeartPulse },
   { to: '/nf-alerts', labelKey: 'nav_nf_alerts', icon: BellRing },
+  { to: '/ue-info', labelKey: 'nav_ue_info', icon: Users },
 ];
 
 export function OperationsNav() {

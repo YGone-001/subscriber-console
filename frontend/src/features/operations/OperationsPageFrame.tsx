@@ -1,7 +1,7 @@
 /*
  * Shared operations page frame.
  *
- * Five routes present one workbench, so they share one chrome:
+ * The network-operation routes present one workbench, so they share one chrome:
  *
  *   compact title + primary action
  *   shared OperationsNav

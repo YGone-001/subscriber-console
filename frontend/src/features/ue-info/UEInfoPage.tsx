@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   ChevronDown,
@@ -6,25 +6,29 @@ import {
   Globe,
   Mail,
   Phone,
-  RefreshCw,
   Search,
   Server,
   Smartphone,
   Users,
   Wifi,
 } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
 import MetricStrip, { type MetricStripItem, type MetricTone } from '../../components/ui/MetricStrip';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
+import { OperationsPageFrame } from '../operations/OperationsPageFrame';
+import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import {
   buildUEInfoPath,
   formatBandwidth,
   formatUETimestamp,
   hasUnavailableSource,
+  readUEDomainFilter,
+  readUEStateFilter,
   sourceLabelKey,
   ueStateToken,
+  type UEDomainFilter,
+  type UEStateFilter,
 } from './ue-info-model';
 import type { UEInfo, UEInfoResponse, UESource, UESourceState } from './types';
 import styles from '../../styles/modules/ue-info.module.css';
@@ -32,8 +36,7 @@ import styles from '../../styles/modules/ue-info.module.css';
 const PAGE_LIMIT = 50;
 const REFRESH_INTERVAL_MS = 10000;
 
-type DomainFilter = '' | 'EPS' | '5GS';
-type StateFilter = '' | 'registered' | 'idle' | 'connected' | 'unknown';
+const UE_URL_KEYS = ['q', 'domain', 'state'] as const;
 
 function sourceTone(state: UESourceState): string {
   switch (state) {
@@ -149,17 +152,41 @@ function DetailBody({ ue }: { ue: UEInfo }) {
 
 export function UEInfoPage() {
   const { t, formatDateTime } = useI18n();
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [domain, setDomain] = useState<DomainFilter>('');
-  const [state, setState] = useState<StateFilter>('');
-  const [offset, setOffset] = useState(0);
+  const url = useOperationsUrlState({ keys: UE_URL_KEYS });
+  const query = url.filters.q ?? '';
+  const domain = readUEDomainFilter(url.filters.domain);
+  const state = readUEStateFilter(url.filters.state);
+  const [searchInput, setSearchInput] = useState(query);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  const queryKeyRef = useRef('');
+
+  useEffect(() => {
+    setSearchInput(query);
+  }, [query]);
+
+  useEffect(() => {
+    const key = `${query}|${domain}|${state}`;
+    if (queryKeyRef.current !== key) {
+      queryKeyRef.current = key;
+      setCursorHistory([]);
+    }
+  }, [query, domain, state]);
+
+  useEffect(() => {
+    if (!url.cursor) setCursorHistory([]);
+  }, [url.cursor]);
 
   const path = useMemo(
-    () => buildUEInfoPath({ q: search, domain, state, limit: PAGE_LIMIT, offset }),
-    [search, domain, state, offset],
+    () => buildUEInfoPath({
+      q: query || undefined,
+      domain,
+      state,
+      limit: PAGE_LIMIT,
+      cursor: url.cursor,
+    }),
+    [query, domain, state, url.cursor],
   );
   const { data, error, isLoading, isValidating, mutate } = useRead<UEInfoResponse>(path);
 
@@ -211,27 +238,51 @@ export function UEInfoPage() {
 
   const applySearch = (event: React.FormEvent) => {
     event.preventDefault();
-    setOffset(0);
+    const next = searchInput.trim();
+    if (next === query) {
+      void mutate();
+      return;
+    }
     setExpanded(null);
-    setSearch(searchInput.trim());
+    url.setFilter('q', next);
   };
 
-  const resetToFirstPage = () => {
-    setOffset(0);
+  const changeDomain = (value: UEDomainFilter) => {
     setExpanded(null);
+    url.setFilter('domain', value);
+  };
+
+  const changeState = (value: UEStateFilter) => {
+    setExpanded(null);
+    url.setFilter('state', value);
   };
 
   const refresh = () => {
     void mutate();
   };
 
-  const previous = () => {
+  const page = data?.pagination;
+
+  const firstPage = () => {
     setExpanded(null);
-    setOffset(Math.max(0, offset - PAGE_LIMIT));
+    setCursorHistory([]);
+    url.setCursor(undefined);
   };
-  const next = () => {
+
+  const previous = () => {
+    if (cursorHistory.length === 0) return;
     setExpanded(null);
-    setOffset(offset + PAGE_LIMIT);
+    const history = cursorHistory.slice(0, -1);
+    setCursorHistory(history);
+    url.setCursor(history.length > 0 ? history[history.length - 1] : undefined);
+  };
+
+  const next = () => {
+    const cursor = page?.nextCursor;
+    if (!cursor || !page?.hasMore) return;
+    setExpanded(null);
+    setCursorHistory((history) => [...history, cursor]);
+    url.setCursor(cursor);
   };
 
   const showSourceStrip = data && data.sources.length > 0;
@@ -239,26 +290,27 @@ export function UEInfoPage() {
   const noSources = data && !data.configured;
 
   return (
-    <div className="container animate-fade-in">
-      <PageHeader
-        eyebrow={t('ue_page_eyebrow')}
-        icon={<Smartphone size={24} />}
-        title={t('ue_page_title')}
-        description={t('ue_page_description')}
-        status={data?.generatedAt ? <span className={styles.snapshot}>{t('ue_snapshot_at', { time: formatDateTime(data.generatedAt) })}</span> : undefined}
-        actions={(
-          <div className={styles.headerActions}>
-            <label className={styles.autoRefresh}>
-              <input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.target.checked)} />
-              {t('ue_auto_refresh', { seconds: REFRESH_INTERVAL_MS / 1000 })}
-            </label>
-            <button type="button" className={styles.refreshButton} onClick={refresh} disabled={isValidating}>
-              <RefreshCw size={15} className={isValidating ? styles.spinning : undefined} /> {t('refresh')}
-            </button>
-          </div>
-        )}
-      />
-
+    <OperationsPageFrame
+      title={t('ue_page_title')}
+      description={t('ue_page_description')}
+      icon={<Smartphone size={23} />}
+      status={data?.generatedAt ? (
+        <span className={styles.snapshot}>
+          {t('ue_snapshot_at', { time: formatDateTime(data.generatedAt) })}
+        </span>
+      ) : undefined}
+      onRefresh={refresh}
+      actions={(
+        <label className={styles.autoRefresh}>
+          <input
+            type="checkbox"
+            checked={autoRefresh}
+            onChange={(event) => setAutoRefresh(event.target.checked)}
+          />
+          {t('ue_auto_refresh', { seconds: REFRESH_INTERVAL_MS / 1000 })}
+        </label>
+      )}
+    >
       <MetricStrip variant="cards" columns={4} className={styles.kpiStrip} ariaLabel={t('ue_page_title')} items={kpiItems} />
 
       {showSourceStrip ? (
@@ -299,7 +351,7 @@ export function UEInfoPage() {
           </form>
           <label className={styles.filter}>
             <span>{t('ue_filter_domain')}</span>
-            <select value={domain} onChange={(event) => { setDomain(event.target.value as DomainFilter); resetToFirstPage(); }}>
+            <select value={domain} onChange={(event) => changeDomain(event.target.value as UEDomainFilter)}>
               <option value="">{t('ue_filter_all')}</option>
               <option value="EPS">{t('ue_domain_eps')}</option>
               <option value="5GS">{t('ue_domain_5gs')}</option>
@@ -307,7 +359,7 @@ export function UEInfoPage() {
           </label>
           <label className={styles.filter}>
             <span>{t('ue_filter_state')}</span>
-            <select value={state} onChange={(event) => { setState(event.target.value as StateFilter); resetToFirstPage(); }}>
+            <select value={state} onChange={(event) => changeState(event.target.value as UEStateFilter)}>
               <option value="">{t('ue_filter_all')}</option>
               <option value="registered">{t('ue_state_registered')}</option>
               <option value="idle">{t('ue_state_idle')}</option>
@@ -362,20 +414,35 @@ export function UEInfoPage() {
             <div className={styles.pager}>
               <span className={styles.pagerInfo}>
                 {t('ue_page_range', {
-                  start: data.pagination.total === 0 ? 0 : offset + 1,
-                  end: Math.min(offset + PAGE_LIMIT, data.pagination.total),
+                  start: data.pagination.total === 0 ? 0 : data.pagination.offset + 1,
+                  end: Math.min(data.pagination.offset + data.items.length, data.pagination.total),
                   total: data.pagination.total,
                 })}
               </span>
               <div className={styles.pagerActions}>
-                <button type="button" onClick={previous} disabled={offset === 0}>{t('previous')}</button>
-                <button type="button" onClick={next} disabled={offset + PAGE_LIMIT >= data.pagination.total}>{t('next')}</button>
+                <button
+                  type="button"
+                  onClick={firstPage}
+                  disabled={cursorHistory.length === 0 && data.pagination.offset === 0}
+                >
+                  {t('ops_pager_first')}
+                </button>
+                <button type="button" onClick={previous} disabled={cursorHistory.length === 0}>
+                  {t('ops_pager_prev')}
+                </button>
+                <button
+                  type="button"
+                  onClick={next}
+                  disabled={isValidating || !data.pagination.hasMore || !data.pagination.nextCursor}
+                >
+                  {t('ops_pager_next')}
+                </button>
               </div>
             </div>
           </>
         ) : null}
       </section>
-    </div>
+    </OperationsPageFrame>
   );
 }
 

@@ -96,10 +96,18 @@ GET /api/ue-info
   domain=EPS|5GS
   state=registered|idle|connected|unknown
   limit=1..200       default 50
-  offset=0..100000   default 0
+  cursor=<opaque>    canonical page token returned by nextCursor
+  offset=0..100000   legacy compatibility only; mutually exclusive with cursor
 ```
 
+`pagination` returns `limit`, `offset`, `total`, `nextCursor` and `hasMore`.
+`offset` remains so older clients keep working, but the SPA always pages with
+`cursor`. A cursor only names a result position; it carries no filter state, so
+filter changes must start from the first page.
+
 Unknown parameters and invalid values return HTTP 400 with a stable error code.
+A malformed cursor, or a request that sends both `cursor` and `offset`, returns
+HTTP 400 `INVALID_CURSOR`.
 The endpoint requires `core.read`, is rate-limited to 120 requests per 60
 seconds per user, and sets `Cache-Control: no-store`.
 
@@ -107,11 +115,15 @@ seconds per user, and sets `Cache-Control: no-store`.
 
 `/ue-info` renders:
 
+- the shared operations page frame and workbench tab strip, with exactly one
+  refresh control;
 - four KPI cards (total, registered, idle, connected);
 - per-source availability chips;
-- server-side search and domain/state filters;
-- a paginated UE table with expandable identity, radio, location, AMBR and PDN
-  details;
+- server-side search and domain/state filters carried in the URL, with the page
+  cursor also in the URL so reload, back/forward and a shared link restore the
+  same page;
+- a cursor-paginated UE table with expandable identity, radio, location, AMBR
+  and PDN details;
 - explicit loading, empty, error and partial states.
 
 The operations overview replaces its former monitoring KPI slots with

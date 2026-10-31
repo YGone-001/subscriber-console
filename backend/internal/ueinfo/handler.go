@@ -1,6 +1,7 @@
 package ueinfo
 
 import (
+	"encoding/base64"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,7 +40,30 @@ func allowedParams() map[string]bool {
 		"state":   true,
 		"limit":   true,
 		"offset":  true,
+		"cursor":  true,
 	}
+}
+
+// encodeCursor turns a result offset into the opaque page token. The token is
+// only an offset; it carries no filter state, so a cursor from one filter set
+// can never silently resume another.
+func encodeCursor(offset int) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(offset)))
+}
+
+func decodeCursor(raw string) (int, bool) {
+	if len(raw) > 64 {
+		return 0, false
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return 0, false
+	}
+	offset, err := strconv.Atoi(string(decoded))
+	if err != nil || offset < 0 || offset > MaxOffset {
+		return 0, false
+	}
+	return offset, true
 }
 
 // Get serves GET /api/ue-info.
@@ -111,8 +135,21 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		query.Limit = value
 	}
 
-	if raw := strings.TrimSpace(q.Get("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
+	cursorRaw := strings.TrimSpace(q.Get("cursor"))
+	offsetRaw := strings.TrimSpace(q.Get("offset"))
+	if cursorRaw != "" && offsetRaw != "" {
+		response.BadRequest(w, "cursor and offset are mutually exclusive", "INVALID_CURSOR")
+		return
+	}
+	if cursorRaw != "" {
+		value, ok := decodeCursor(cursorRaw)
+		if !ok {
+			response.BadRequest(w, "cursor is not a valid page token", "INVALID_CURSOR")
+			return
+		}
+		query.Offset = value
+	} else if offsetRaw != "" {
+		value, err := strconv.Atoi(offsetRaw)
 		if err != nil || value < 0 || value > MaxOffset {
 			response.BadRequest(w, "offset must be an integer between 0 and 100000", "INVALID_OFFSET")
 			return
@@ -128,12 +165,18 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		Summary:     snapshot.Summary,
 		Sources:     snapshot.Sources,
 		Items:       []UE{},
-		Pagination:  Pagination{Limit: query.Limit, Offset: query.Offset, Total: snapshot.Summary.Total},
+		Pagination:  Pagination{Limit: query.Limit, Total: snapshot.Summary.Total},
 	}
 	if !query.SummaryOnly {
 		items, total := FilterAndPage(snapshot.Items, query)
 		res.Items = items
 		res.Pagination = Pagination{Limit: query.Limit, Offset: query.Offset, Total: total}
+		nextOffset := query.Offset + len(items)
+		if nextOffset < total && nextOffset <= MaxOffset {
+			cursor := encodeCursor(nextOffset)
+			res.Pagination.NextCursor = &cursor
+			res.Pagination.HasMore = true
+		}
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	response.JSON(w, http.StatusOK, res)

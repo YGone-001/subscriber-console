@@ -72,6 +72,31 @@ func TestGetListFiltersAndPaginates(t *testing.T) {
 	}
 }
 
+func TestGetCursorPagination(t *testing.T) {
+	first := httptest.NewRecorder()
+	testHandler().Get(first, principalRequest(http.MethodGet, "/api/ue-info?limit=1", "viewer"))
+	var page Response
+	if err := json.Unmarshal(first.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(page.Items) != 1 || !page.Pagination.HasMore || page.Pagination.NextCursor == nil {
+		t.Fatalf("first page must expose exactly one item and a next cursor: %+v", page.Pagination)
+	}
+
+	second := httptest.NewRecorder()
+	testHandler().Get(second, principalRequest(http.MethodGet, "/api/ue-info?limit=1&cursor="+*page.Pagination.NextCursor, "viewer"))
+	var next Response
+	if err := json.Unmarshal(second.Body.Bytes(), &next); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(next.Items) != 1 || next.Items[0].SUPI == page.Items[0].SUPI {
+		t.Fatalf("cursor must advance to the next item: %+v", next.Items)
+	}
+	if next.Pagination.HasMore || next.Pagination.NextCursor != nil {
+		t.Fatalf("last page must not expose another cursor: %+v", next.Pagination)
+	}
+}
+
 func TestGetRejectsInvalidQueries(t *testing.T) {
 	cases := []string{
 		"/api/ue-info?unknown=1",
@@ -82,6 +107,8 @@ func TestGetRejectsInvalidQueries(t *testing.T) {
 		"/api/ue-info?limit=0",
 		"/api/ue-info?limit=201",
 		"/api/ue-info?offset=-1",
+		"/api/ue-info?cursor=@@@",
+		"/api/ue-info?cursor=MQ&offset=0",
 	}
 	for _, target := range cases {
 		rec := httptest.NewRecorder()

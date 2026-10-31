@@ -212,6 +212,7 @@ const OPERATIONS_PAGES = [
   'src/features/discovery/DiscoveryPage.tsx',
   'src/features/nf-health/NfHealthPage.tsx',
   'src/features/nf-alerts/NfAlertsPage.tsx',
+  'src/features/ue-info/UEInfoPage.tsx',
 ];
 
 test('every operations page renders inside the shared frame', () => {

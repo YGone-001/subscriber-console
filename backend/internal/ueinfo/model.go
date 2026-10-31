@@ -92,11 +92,14 @@ type SourceStatus struct {
 	ItemCount int    `json:"itemCount"`
 }
 
-// Pagination describes the filtered result window.
+// Pagination describes the filtered result window. `offset` remains for
+// compatibility; `nextCursor`/`hasMore` are the canonical page controls.
 type Pagination struct {
-	Limit  int `json:"limit"`
-	Offset int `json:"offset"`
-	Total  int `json:"total"`
+	Limit      int     `json:"limit"`
+	Offset     int     `json:"offset"`
+	Total      int     `json:"total"`
+	NextCursor *string `json:"nextCursor"`
+	HasMore    bool    `json:"hasMore"`
 }
 
 // Response is the GET /api/ue-info payload.

@@ -10,6 +10,8 @@ import {
   formatBandwidth,
   formatUETimestamp,
   hasUnavailableSource,
+  readUEDomainFilter,
+  readUEStateFilter,
   sourceLabelKey,
   ueStateToken,
 } from '../src/features/ue-info/ue-info-model';
@@ -31,9 +33,20 @@ test('the UE API path carries only the requested query values', () => {
   assert.equal(buildUEInfoPath(), '/api/ue-info');
   assert.equal(buildUEInfoPath({ summary: true }), '/api/ue-info?summary=1');
   assert.equal(
-    buildUEInfoPath({ q: '46002', domain: '5GS', state: 'connected', limit: 50, offset: 100 }),
-    '/api/ue-info?q=46002&domain=5GS&state=connected&limit=50&offset=100',
+    buildUEInfoPath({ q: '46002', domain: '5GS', state: 'connected', limit: 50, cursor: 'MTAw' }),
+    '/api/ue-info?q=46002&domain=5GS&state=connected&limit=50&cursor=MTAw',
   );
+});
+
+test('UE URL filters only accept the canonical vocabulary', () => {
+  assert.equal(readUEDomainFilter('EPS'), 'EPS');
+  assert.equal(readUEDomainFilter('5GS'), '5GS');
+  assert.equal(readUEDomainFilter('2G'), '');
+  assert.equal(readUEDomainFilter(undefined), '');
+  assert.equal(readUEStateFilter('connected'), 'connected');
+  assert.equal(readUEStateFilter('unknown'), 'unknown');
+  assert.equal(readUEStateFilter('active'), '');
+  assert.equal(readUEStateFilter(undefined), '');
 });
 
 test('bandwidth formatting never fabricates a missing measurement', () => {
@@ -81,4 +94,6 @@ test('the UE page renders its localized shell without network access', () => {
   assert.ok(html.includes('UE Info'));
   assert.ok(html.includes('Total UEs'));
   assert.ok(html.includes('UE list'));
+  assert.equal(html.split('data-operations-nav="workbench"').length - 1, 1, 'the workbench tab strip must render once');
+  assert.equal(html.split('data-operations-refresh="page"').length - 1, 1, 'the frame owns the only refresh entry');
 });

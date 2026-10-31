@@ -609,13 +609,13 @@ test('the canvas renders role labels, states and keyboard-reachable nodes', () =
   assert.ok(markup.includes(en.arch_state_unregistered), 'a role without an explicit binding must say so');
 });
 
-test('the operational navigation renders the four canonical destinations', () => {
+test('the operational navigation renders the six canonical destinations', () => {
   const markup = render(createElement(
     MemoryRouter,
     { initialEntries: ['/topology'] },
     createElement(OperationsNav),
   ));
-  for (const href of ['/inventory', '/topology', '/discovery', '/nf-health']) {
+  for (const href of ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info']) {
     assert.ok(markup.includes(`href="${href}"`), `${href} must be reachable from the workbench`);
   }
   assert.ok(markup.includes('Operational sections'), 'the navigation must carry an accessible name');
