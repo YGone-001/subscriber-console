@@ -4,7 +4,7 @@
  *
  * Proves:
  * - Route count = 28
- * - Inventory frontend routes = 3
+ * - Inventory frontend routes = 5
  * - Inventory API registrations = 6
  * - Inventory reads = 3
  * - Inventory mutations = 3
@@ -44,8 +44,14 @@ const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'),
 const routeCount = assertSpaRouteContract(routes);
 
 const inventoryRoutes = routes.filter((r) => r.route.startsWith('/inventory'));
-assert.equal(inventoryRoutes.length, 3, `Inventory frontend route count must be 3, got ${inventoryRoutes.length}`);
-const expectedInventoryRoutes = ['/inventory', '/inventory/:resourceId', '/inventory/create'];
+assert.equal(inventoryRoutes.length, 5, `Inventory frontend route count must be 5, got ${inventoryRoutes.length}`);
+const expectedInventoryRoutes = [
+  '/inventory',
+  '/inventory/assets',
+  '/inventory/runtime',
+  '/inventory/:resourceId',
+  '/inventory/create',
+];
 for (const r of expectedInventoryRoutes) {
   assert.ok(inventoryRoutes.some((ir) => ir.route === r), `Missing inventory route: ${r}`);
 }
@@ -373,7 +379,7 @@ assert.equal(autoRetryCount, 0, `inventory automatic mutation retries must be 0,
 assert.equal(genericExecutorCount, 0, `inventory generic executor calls must be 0, got ${genericExecutorCount}`);
 
 console.log(`route_count=${routeCount}`);
-console.log('inventory_frontend_routes=3');
+console.log('inventory_frontend_routes=5');
 console.log('inventory_api_registrations=6');
 console.log('inventory_reads=3');
 console.log('inventory_mutations=3');
