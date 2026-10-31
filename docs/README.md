@@ -45,7 +45,7 @@ Canonical frontend SPA source     -> frontend/src/
 - [NF discovery foundation](architecture/nf-discovery.md)
 - [Operational overview and network element management](architecture/operational-overview.md) - current operational surfaces: authorities, projection, denominators and boundaries.
 - [UE information and EPC/5GC online users](architecture/ue-info.md) - read-only UE source allowlist, merge semantics, partial-source behavior and the current IMS scope boundary.
-- [Runtime discovery](architecture/runtime-discovery.md) - CNMS-compatible local process recognition, runtime status semantics and the governed monitoring bootstrap.
+- [Host observation](architecture/runtime-discovery.md) - CNMS-compatible local process recognition, runtime status semantics and the governed monitoring bootstrap.
 - [Knowledge base](architecture/knowledge-base.md) - fault phenomena, root causes and resolutions with secure local attachment storage.
 - [Architecture evolution roadmap](architecture/architecture-evolution-roadmap.md) - planned architecture evolution authority; it distinguishes future targets from current production behavior.
 - [Scale capacity triggers](architecture/scale-capacity-triggers.md) - measured list benchmark, quantified warning/hard triggers, index verification and the actions required when a trigger is reached.

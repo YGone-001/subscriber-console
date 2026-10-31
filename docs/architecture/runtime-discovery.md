@@ -1,9 +1,13 @@
-# Runtime Discovery (CNMS-Compatible Local Process Recognition)
+# Host Observation (CNMS-Compatible Local Process Recognition)
 
 Status: implemented. This document describes the current behaviour of the
 read-only local process scanner, the CNMS compatibility registry, the runtime
 status model and the governed monitoring bootstrap. It is a description of the
 running system, not a roadmap.
+
+The operator-facing surface is **Host observation** (`/inventory/runtime`);
+the Go package and this file keep the historical `runtime discovery`
+identifier.
 
 ## 1. Purpose
 
@@ -17,7 +21,7 @@ but the xCloud architecture is preserved:
 - **Topology** remains edge-only, with Inventory as the node authority.
 - **Discovery** (NRF) remains an independent, read-only evidence source.
 
-Runtime discovery only *observes* and only *proposes*. It never starts, stops,
+Host observation only *observes* and only *proposes*. It never starts, stops,
 signals, reconfigures or probes a network function.
 
 ## 2. Recognition registry (single authority)
