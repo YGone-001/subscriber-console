@@ -538,10 +538,14 @@ Honesty rules:
   `reason: ledger_unavailable` and leaves the projection itself intact; zero
   counts are never presented as a completed reconciliation.
 
-The projection remains available to API consumers, but the live topology view
-does not render a reconciliation panel. The graph canvas and its inspector are
-the only relationship surface; reconciliation never registers, updates or
-retires an edge by itself.
+The live topology view renders this diff as a collapsible footer panel beside the
+unresolved-peer list: it counts confirmed, configured-but-undeclared,
+declared-without-evidence and not-confirmed-by-interface pairs, lists every row
+with its per-interface status, and offers a locate control that selects the pair
+on the canvas. The panel always states whether the ledger read was complete, so an
+empty list is scoped to what was read and never claims the topology is clean.
+Reconciliation never registers, updates or retires an edge by itself; the graph
+canvas and its inspector remain the only write surfaces.
 
 ## 7. Metadata Validation and Security
 

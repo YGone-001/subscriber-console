@@ -21,6 +21,7 @@ import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
 import { TopologyGraphShell } from './components/TopologyGraphShell';
 import { TopologyCanvasControls, TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import { TopologyAnnouncer } from './components/TopologyAnnouncer';
+import { TopologyReconciliationPanel } from './components/TopologyReconciliationPanel';
 import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology } from './actual-topology-model';
 import { LABEL_DETAIL_MIN_ZOOM, resolveLabelVisibility } from './actual-topology-labels';
 import { interfaceCoverage } from './interface-catalog';
@@ -36,6 +37,8 @@ import {
   liveDirectory,
   liveEdges,
   presentRuntimeStates,
+  reconciliationGroups,
+  reconciliationSummary,
 } from './live-topology-model';
 import type {
   LiveEdge,
@@ -105,6 +108,8 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
 
   const directory = useMemo(() => liveDirectory(data), [data]);
   const liveLinks = useMemo(() => liveEdges(data), [data]);
+  const reconciliation = useMemo(() => reconciliationSummary(data), [data]);
+  const reconciliationDiff = useMemo(() => reconciliationGroups(data), [data]);
   const runtimeResources = useMemo(() => Object.values(directory), [directory]);
   const layout = useMemo(
     () => buildActualTopology(liveLinks, directory, { domainMode, resources: runtimeResources }),
@@ -559,7 +564,8 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
             </span>
           </span>
         )}
-        footer={unresolved.length > 0 ? (
+        footer={(unresolved.length > 0 || Boolean(reconciliation && reconciliationDiff)) ? (
+          <>
           <details className={styles.liveUnresolved}>
             <summary>{t('topology_live_unresolved_title')}</summary>
             <ul>
@@ -576,6 +582,14 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
               ))}
             </ul>
           </details>
+          {reconciliation && reconciliationDiff ? (
+            <TopologyReconciliationPanel
+              summary={reconciliation}
+              groups={reconciliationDiff}
+              onLocate={selectNode}
+            />
+          ) : null}
+          </>
         ) : undefined}
       >
         {layout.nodes.length === 0 ? (

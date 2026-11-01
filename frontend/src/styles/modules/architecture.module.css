@@ -1898,6 +1898,97 @@
   overflow-wrap: anywhere;
 }
 
+/* Advisory reconciliation: a difference is a question to verify, not an error. */
+.reconGroup {
+  margin-top: var(--space-8);
+}
+
+.reconGroupTitle {
+  margin: 0 0 var(--space-4);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.reconList {
+  display: grid;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reconRow {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+}
+
+.reconPath {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.reconMeta {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.reconBadge {
+  padding: 1px var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+}
+
+.reconBadge[data-recon-verdict='partial'],
+.reconBadge[data-recon-retired='true'] {
+  border-color: var(--sys-color-status-warning, currentColor);
+  color: var(--sys-color-status-warning, currentColor);
+}
+
+.reconBadge[data-recon-verdict='differs'] {
+  border-color: var(--status-danger);
+  color: var(--status-danger);
+}
+
+.reconInterfaces {
+  display: flex;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.7rem;
+}
+
+.reconInterfaces li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-muted);
+}
+
+.reconInterfaces li[data-interface-status='matched'] {
+  color: var(--sys-color-status-success, currentColor);
+}
+
+.reconInterfaceName {
+  color: var(--text-primary, inherit);
+  font-family: var(--font-data);
+}
+
+.reconRow button {
+  justify-self: start;
+}
+
 .liveDomainFilter select {
   min-height: calc(var(--control-height) - 4px);
   padding: 0 var(--space-8);

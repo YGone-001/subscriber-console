@@ -54,6 +54,11 @@ export type ReconciliationSummary = {
   unevidenced: number;
   retired: number;
   differing: number;
+  /* Matched pairs whose precise verdict is partial: one side carries an
+   * interface the other does not describe. */
+  partial: number;
+  /* Name of the comparison rules behind the per-interface verdict. */
+  rulesVersion: string;
 };
 
 /**
@@ -74,6 +79,78 @@ export function reconciliationSummary(
     unevidenced: block.unevidencedDeclarations.length,
     retired: block.undeclaredEvidence.filter((item) => item.retired).length,
     differing: block.matched.filter((item) => item.interfaceMatch === 'differs').length,
+    partial: block.matched.filter((item) => item.interfaceVerdict === 'partial').length,
+    rulesVersion: block.rulesVersion ?? '',
+  };
+}
+
+export type ReconciliationInterface = {
+  name: string;
+  /* matched | evidence_only | declaration_only */
+  status: string;
+};
+
+export type ReconciliationRow = {
+  key: string;
+  fromComponentId: string;
+  toComponentId: string;
+  relationshipType: string;
+  verdict: string;
+  /* The legacy pair-level grade, kept beside the precise verdict. */
+  interfaceMatch: string;
+  interfaces: ReconciliationInterface[];
+  claims: number;
+  retired: boolean;
+};
+
+export type ReconciliationGroups = {
+  /* Configured links with no active declaration. */
+  undeclared: ReconciliationRow[];
+  /* Active declarations with no configured evidence. */
+  unevidenced: ReconciliationRow[];
+  /* Matched pairs whose per-interface verdict is not a full agreement. */
+  disagreed: ReconciliationRow[];
+  /* Matched pairs whose per-interface verdict is a full agreement. */
+  agreed: number;
+};
+
+function reconciliationRow(
+  item: NonNullable<LiveTopologyResponse['reconciliation']>['matched'][number],
+  keyPrefix: string,
+  index: number,
+): ReconciliationRow {
+  return {
+    key: `${keyPrefix}-${item.configuredEdgeId ?? item.edgeId ?? index}-${item.fromResourceId}-${item.toResourceId}`,
+    fromComponentId: item.fromComponentId ?? '',
+    toComponentId: item.toComponentId ?? '',
+    relationshipType: item.relationshipType ?? '',
+    verdict: item.interfaceVerdict ?? '',
+    interfaceMatch: item.interfaceMatch ?? '',
+    interfaces: (item.interfaceCoverage ?? []).map((entry) => ({
+      name: entry.interface,
+      status: entry.status,
+    })),
+    claims: (item.declaredClaims ?? []).length,
+    retired: Boolean(item.retired),
+  };
+}
+
+/**
+ * Groups the advisory diff for the operator. A pair whose interface verdict is
+ * `partial` or `differs` belongs in `disagreed`: it matched by resource pair but
+ * is not confirmed by interface, and must never be counted as agreement.
+ */
+export function reconciliationGroups(
+  data: LiveTopologyResponse | undefined,
+): ReconciliationGroups | null {
+  const block = data?.reconciliation;
+  if (!block || !block.available) return null;
+  const matched = block.matched.map((item, index) => reconciliationRow(item, 'matched', index));
+  return {
+    undeclared: block.undeclaredEvidence.map((item, index) => reconciliationRow(item, 'undeclared', index)),
+    unevidenced: block.unevidencedDeclarations.map((item, index) => reconciliationRow(item, 'unevidenced', index)),
+    disagreed: matched.filter((row) => row.verdict !== 'agrees'),
+    agreed: matched.filter((row) => row.verdict === 'agrees').length,
   };
 }
 
