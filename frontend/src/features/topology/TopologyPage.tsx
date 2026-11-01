@@ -18,6 +18,7 @@ import { GitBranch, Plus, Search, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { MutationApiError } from '../../lib/api/mutation-client';
+import { createLatestRequestGuard } from '../../lib/api/latest-request';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { Dialog } from '../../components/ui/Dialog';
@@ -129,6 +130,12 @@ export function TopologyPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const queryKeyRef = useRef('');
+  /* The ledger is read imperatively on every filter change, so a slow earlier
+   * response would otherwise overwrite the list the operator is now looking at.
+   * The newest read wins; superseded reads are aborted and their result dropped
+   * without being reported as an error. */
+  const readGuard = useRef(createLatestRequestGuard());
+  const readAbort = useRef<AbortController | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<TopologyEdge | null>(null);
@@ -150,6 +157,10 @@ export function TopologyPage() {
 
   const loadEdges = useCallback(
     async (activeCursor?: string) => {
+      const token = readGuard.current.begin();
+      readAbort.current?.abort();
+      const controller = new AbortController();
+      readAbort.current = controller;
       setLoading(true);
       setError(null);
       try {
@@ -160,19 +171,25 @@ export function TopologyPage() {
           lifecycleState: lifecycleState || undefined,
           cursor: activeCursor,
           limit: PAGE_LIMIT,
-        });
+        }, controller.signal);
+        if (!readGuard.current.isCurrent(token)) return;
         setEdges(res.edges || []);
         setNextCursor(res.page?.nextCursor ?? null);
         setHasMore(Boolean(res.page?.hasMore));
       } catch (err) {
+        if (!readGuard.current.isCurrent(token)) return;
         setError(err instanceof Error && err.message ? err.message : t('topology_err_load'));
         setEdges([]);
       } finally {
-        setLoading(false);
+        if (readGuard.current.isCurrent(token)) setLoading(false);
       }
     },
     [fromResourceId, toResourceId, relationshipType, lifecycleState, t],
   );
+
+  /* A superseded read is already dropped by the guard; aborting the socket on
+   * unmount keeps a detached page from resolving in the background. */
+  useEffect(() => () => readAbort.current?.abort(), []);
 
   /* The relationship ledger is only read on its own view: the graph sources
    * must not pay for a query they do not show. */

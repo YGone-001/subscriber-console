@@ -10,7 +10,7 @@
  * `active` is a DECLARED relationship; it is never presented as a verified
  * healthy network interface.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, GitBranch, RefreshCw } from 'lucide-react';
 import { ErrorState, LoadingState } from '../../components/ui/StatePanel';
@@ -18,6 +18,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import { EmptyState } from '../../components/ui/OperationFeedback';
 import { useI18n } from '../../providers/I18nProvider';
 import { resolveReturnTo } from '../../lib/return-to';
+import { createLatestRequestGuard } from '../../lib/api/latest-request';
 import { fetchTopologyNeighbors, fetchTopologyMeta } from './topology-api';
 import type {
   DirectionFilter,
@@ -58,6 +59,12 @@ export function ResourceTopologyPage() {
   const [hasMore, setHasMore] = useState(false);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>(undefined);
 
+  /* Neighbour reads are imperative and re-issued on every filter or cursor
+   * change. A slow earlier page must never replace the page the operator is now
+   * on, so only the newest read may write state. */
+  const readGuard = useRef(createLatestRequestGuard());
+  const readAbort = useRef<AbortController | null>(null);
+
   useEffect(() => {
     fetchTopologyMeta()
       .then(setMeta)
@@ -69,6 +76,10 @@ export function ResourceTopologyPage() {
   const load = useCallback(
     async (activeCursor?: string) => {
       if (!resourceId) return;
+      const token = readGuard.current.begin();
+      readAbort.current?.abort();
+      const controller = new AbortController();
+      readAbort.current = controller;
       setLoading(true);
       setError(null);
       setNotFound(false);
@@ -79,12 +90,14 @@ export function ResourceTopologyPage() {
           lifecycleState: lifecycleState || undefined,
           cursor: activeCursor,
           limit: PAGE_LIMIT,
-        });
+        }, controller.signal);
+        if (!readGuard.current.isCurrent(token)) return;
         setData(res);
         setNextCursor(res.page?.nextCursor ?? null);
         setHasMore(Boolean(res.page?.hasMore));
         primeResourceProjections([res.rootResource, ...res.neighbors.map((n) => n.neighborResource)]);
       } catch (err) {
+        if (!readGuard.current.isCurrent(token)) return;
         const status = (err as { status?: number }).status;
         if (status === 404) {
           setNotFound(true);
@@ -93,11 +106,14 @@ export function ResourceTopologyPage() {
         }
         setData(null);
       } finally {
-        setLoading(false);
+        if (readGuard.current.isCurrent(token)) setLoading(false);
       }
     },
     [resourceId, direction, relationshipType, lifecycleState, t],
   );
+
+  /* Abort on unmount only; superseded reads are already dropped by the guard. */
+  useEffect(() => () => readAbort.current?.abort(), []);
 
   useEffect(() => {
     setCursor(undefined);

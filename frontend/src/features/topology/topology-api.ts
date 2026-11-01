@@ -5,7 +5,7 @@
  * absolute backend URL, no JWT handling and no automatic mutation retry exists
  * in this feature.
  */
-import { getJson } from '../../lib/api/read-client';
+import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
 import { postJson, putJson } from '../../lib/api/mutation-client';
 import type {
   CreateEdgeRequest,
@@ -25,6 +25,7 @@ export async function fetchTopologyMeta(): Promise<TopologyMetaResponse> {
 
 export async function fetchTopologyEdges(
   params: EdgeListQueryParams = {},
+  signal?: AbortSignal,
 ): Promise<ListEdgesResponse> {
   const searchParams = new URLSearchParams();
   if (params.fromResourceId) searchParams.set('fromResourceId', params.fromResourceId);
@@ -36,7 +37,9 @@ export async function fetchTopologyEdges(
 
   const query = searchParams.toString();
   const url = query ? `/api/topology/edges?${query}` : '/api/topology/edges';
-  return getJson<ListEdgesResponse>(url);
+  return signal
+    ? getJsonWithSignal<ListEdgesResponse>(url, signal)
+    : getJson<ListEdgesResponse>(url);
 }
 
 export async function fetchTopologyEdge(edgeId: string): Promise<TopologyEdge> {
@@ -46,6 +49,7 @@ export async function fetchTopologyEdge(edgeId: string): Promise<TopologyEdge> {
 export async function fetchTopologyNeighbors(
   resourceId: string,
   params: NeighborQueryParams = {},
+  signal?: AbortSignal,
 ): Promise<NeighborsResponse> {
   const searchParams = new URLSearchParams();
   if (params.direction) searchParams.set('direction', params.direction);
@@ -56,7 +60,10 @@ export async function fetchTopologyNeighbors(
 
   const query = searchParams.toString();
   const base = `/api/topology/resources/${encodeURIComponent(resourceId)}/neighbors`;
-  return getJson<NeighborsResponse>(query ? `${base}?${query}` : base);
+  const url = query ? `${base}?${query}` : base;
+  return signal
+    ? getJsonWithSignal<NeighborsResponse>(url, signal)
+    : getJson<NeighborsResponse>(url);
 }
 
 export async function createTopologyEdge(payload: CreateEdgeRequest): Promise<TopologyEdge> {
