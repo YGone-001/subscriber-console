@@ -347,4 +347,11 @@ test('the runtime canvas provides an equivalent node and relationship list', () 
     live.includes('<th scope="row">'),
     'a list row must expose its own header cell so the table stays navigable',
   );
+  /* A collapsed disclosure can leave visible text unrendered; the audit reads the
+   * accessible name, so both row actions must state it explicitly. */
+  assert.ok(live.includes('aria-label={nodeLabel}'), 'a node row action needs an explicit name');
+  assert.ok(
+    live.includes('aria-label={`${sourceLabel} → ${targetLabel}`}'),
+    'a relationship row action needs an explicit name',
+  );
 });

@@ -431,23 +431,30 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
           </tr>
         </thead>
         <tbody>
-          {data.nodes.map((node) => (
+          {data.nodes.map((node) => {
+            const nodeLabel = node.displayName || node.componentId;
+            return (
             <tr key={node.componentId}>
               <th scope="row">
                 <button
                   type="button"
                   className={styles.linkBtn}
                   data-list-node={node.componentId}
+                  /* A collapsed disclosure can leave the visible text unrendered,
+                   * so the accessible name is stated explicitly instead. */
+                  aria-label={nodeLabel}
+                  title={nodeLabel}
                   onClick={() => selectNode(node.componentId)}
                 >
-                  {node.displayName || node.componentId}
+                  {nodeLabel}
                 </button>
               </th>
               <td>{node.role || node.nfType || '-'}</td>
               <td>{node.domain || '-'}</td>
               <td>{t(`runtime_status_${node.runtimeStatus}`)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       <table className={styles.liveEquivalentTable}>
@@ -460,16 +467,21 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
           </tr>
         </thead>
         <tbody>
-          {liveLinks.map((edge) => (
+          {liveLinks.map((edge) => {
+            const sourceLabel = directory[edge.fromResourceId]?.displayName || edge.fromResourceId;
+            const targetLabel = directory[edge.toResourceId]?.displayName || edge.toResourceId;
+            return (
             <tr key={edge.edgeId}>
               <td>
                 <button
                   type="button"
                   className={styles.linkBtn}
                   data-list-edge={edge.edgeId}
+                  aria-label={`${sourceLabel} → ${targetLabel}`}
+                  title={`${sourceLabel} → ${targetLabel}`}
                   onClick={() => selectEdge(edge.edgeId)}
                 >
-                  {directory[edge.fromResourceId]?.displayName || edge.fromResourceId}
+                  {sourceLabel}
                 </button>
               </td>
               <td>
@@ -477,9 +489,10 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
                   ? (edge.interfaceNames ?? []).join(' / ')
                   : t('topology_interface_unannotated')}
               </td>
-              <td>{directory[edge.toResourceId]?.displayName || edge.toResourceId}</td>
+              <td>{targetLabel}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </details>
