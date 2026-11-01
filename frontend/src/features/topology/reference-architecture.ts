@@ -46,7 +46,7 @@ export type ArchitectureLink = {
   interfaceLabel: string;
 };
 
-export type ArchitectureViewMode = 'all' | 'epc' | '5gc-sa' | '5gc-nsa';
+export type ArchitectureViewMode = 'all' | 'epc' | '5gc-sa' | '5gc-nsa' | 'ims' | 'charging';
 
 export type ArchitectureLane = {
   key: string;
@@ -57,7 +57,7 @@ export type ArchitectureLane = {
   height: number;
 };
 
-export const ARCHITECTURE_VIEW_MODES: ArchitectureViewMode[] = ['all', 'epc', '5gc-sa', '5gc-nsa'];
+export const ARCHITECTURE_VIEW_MODES: ArchitectureViewMode[] = ['all', 'epc', '5gc-sa', '5gc-nsa', 'ims', 'charging'];
 
 export const NODE_WIDTH = 140;
 export const NODE_HEIGHT = 56;
@@ -90,6 +90,15 @@ export const ARCHITECTURE_NODES: ArchitectureNode[] = [
   { role: 'upf', label: 'UPF', domain: 'up', icon: 'router', x: 220, y: 580, roleTokens: ['upf'], nameTokens: ['upf', 'upfd'], inventoryDomain: '5gc' },
   { role: 'sgwu', label: 'SGW-U', domain: 'up', icon: 'router', x: 400, y: 580, roleTokens: ['sgwu', 'sgw-u'], nameTokens: ['sgwu', 'sgwud'], inventoryDomain: 'epc' },
   { role: 'pgwu', label: 'PGW-U', domain: 'up', icon: 'router', x: 580, y: 580, roleTokens: ['pgwu', 'pgw-u'], nameTokens: ['pgwu', 'pgwud'], inventoryDomain: 'epc' },
+
+  /* IMS. The IMS HSS shares the Inventory role hss with the EPC HSS, so this
+   * node declares the IMS domain and is only placed on the IMS template: the
+   * binding prefers the domain recorded here over the EPC one. */
+  { role: 'pcscf', label: 'P-CSCF', domain: 'cp', icon: 'server', x: 40, y: 390, roleTokens: ['pcscf', 'p-cscf'], nameTokens: ['pcscf'], inventoryDomain: 'ims' },
+  { role: 'icscf', label: 'I-CSCF', domain: 'cp', icon: 'server', x: 40, y: 500, roleTokens: ['icscf', 'i-cscf'], nameTokens: ['icscf'], inventoryDomain: 'ims' },
+  { role: 'scscf', label: 'S-CSCF', domain: 'cp', icon: 'server', x: 220, y: 390, roleTokens: ['scscf', 's-cscf'], nameTokens: ['scscf'], inventoryDomain: 'ims' },
+  { role: 'smsc', label: 'SMSC', domain: 'sp', icon: 'server', x: 220, y: 500, roleTokens: ['smsc'], nameTokens: ['smsc'], inventoryDomain: 'ims' },
+  { role: 'imsHss', label: 'HSS (IMS)', domain: 'dm', icon: 'database', x: 400, y: 500, roleTokens: ['hss'], nameTokens: ['hss'], inventoryDomain: 'ims' },
 ];
 
 export const ARCHITECTURE_LINKS: ArchitectureLink[] = [
@@ -131,6 +140,15 @@ export const ARCHITECTURE_LINKS: ArchitectureLink[] = [
 
   // Interworking
   { source: 'amf', target: 'mme', interfaceLabel: 'N26' },
+
+  // IMS: CSCF chain, HSS over Cx, SIP control and online charging
+  { source: 'pcscf', target: 'icscf', interfaceLabel: 'Mw' },
+  { source: 'icscf', target: 'scscf', interfaceLabel: 'Mw' },
+  { source: 'icscf', target: 'imsHss', interfaceLabel: 'Cx' },
+  { source: 'scscf', target: 'imsHss', interfaceLabel: 'Cx' },
+  { source: 'smsc', target: 'scscf', interfaceLabel: 'ISC' },
+  { source: 'pcscf', target: 'pcrf', interfaceLabel: 'Rx' },
+  { source: 'scscf', target: 'ocs', interfaceLabel: 'Ro' },
 ];
 
 const EPC_ROLES = new Set(['mme', 'sgwc', 'sgwu', 'pgwc', 'pgwu', 'hss', 'pcrf', 'dra', 'ocs']);
@@ -140,6 +158,10 @@ const SA_ROLES = new Set([
 ]);
 
 const NSA_ROLES = new Set(['amf', 'mme', 'smf', 'pgwc', 'pgwu', 'upf', 'hss', 'udm']);
+
+const IMS_ROLES = new Set(['pcscf', 'icscf', 'scscf', 'smsc', 'imsHss', 'pcrf', 'ocs']);
+
+const CHARGING_ROLES = new Set(['pgwc', 'pcrf', 'ocs', 'dra', 'smf', 'pcf']);
 
 /** Roles visible in a view. A role absent from the view is not a fault. */
 /**
@@ -157,6 +179,8 @@ export function rolesForView(view: ArchitectureViewMode): Set<string> | null {
   if (view === 'epc') return EPC_ROLES;
   if (view === '5gc-sa') return SA_ROLES;
   if (view === '5gc-nsa') return NSA_ROLES;
+  if (view === 'ims') return IMS_ROLES;
+  if (view === 'charging') return CHARGING_ROLES;
   return null;
 }
 
@@ -199,10 +223,39 @@ const EPC_LANES: ArchitectureLane[] = [
   { key: 'epc-external', labelKey: 'arch_lane_external', x: 764, y: 60, width: 172, height: 260 },
 ];
 
+const IMS_LAYOUT: Record<string, NodePosition> = {
+  pcscf: { x: 44, y: 120 },
+  icscf: { x: 244, y: 120 },
+  scscf: { x: 444, y: 120 },
+  imsHss: { x: 644, y: 120 },
+  pcrf: { x: 644, y: 320 },
+  ocs: { x: 444, y: 320 },
+  smsc: { x: 44, y: 320 },
+};
+
+const CHARGING_LAYOUT: Record<string, NodePosition> = {
+  pgwc: { x: 44, y: 120 },
+  pcrf: { x: 244, y: 120 },
+  ocs: { x: 444, y: 120 },
+  dra: { x: 644, y: 120 },
+  smf: { x: 84, y: 320 },
+  pcf: { x: 284, y: 320 },
+};
+
+const IMS_LANES: ArchitectureLane[] = [
+  { key: 'ims-control', labelKey: 'arch_lane_ims_control', x: 24, y: 60, width: 780, height: 180 },
+  { key: 'ims-charging', labelKey: 'arch_lane_ims_charging', x: 24, y: 260, width: 780, height: 200 },
+];
+
+const CHARGING_LANES: ArchitectureLane[] = [
+  { key: 'charging-epc', labelKey: 'arch_lane_charging_epc', x: 24, y: 60, width: 780, height: 160 },
+  { key: 'charging-5gc', labelKey: 'arch_lane_charging_5gc', x: 24, y: 240, width: 780, height: 160 },
+];
+
 const NSA_LANES: ArchitectureLane[] = [
   { key: 'nsa-interworking', labelKey: 'arch_lane_interworking', x: 24, y: 24, width: 912, height: 30 },
-  { key: 'nsa-lte', labelKey: 'arch_lane_lte_anchor', x: 24, y: 64, width: 440, height: 556 },
-  { key: 'nsa-nr', labelKey: 'arch_lane_nr_access', x: 480, y: 64, width: 456, height: 556 },
+  { key: 'nsa-lte', labelKey: 'arch_lane_epc_core', x: 24, y: 64, width: 440, height: 556 },
+  { key: 'nsa-nr', labelKey: 'arch_lane_5gs_core', x: 480, y: 64, width: 456, height: 556 },
 ];
 
 /**
@@ -212,7 +265,12 @@ const NSA_LANES: ArchitectureLane[] = [
  * single-domain templates.
  */
 export function architectureNodesForView(view: Exclude<ArchitectureViewMode, 'all'>): ArchitectureNode[] {
-  const layout = view === 'epc' ? EPC_LAYOUT : view === '5gc-nsa' ? NSA_LAYOUT : SA_LAYOUT;
+  const layout =
+    view === 'epc' ? EPC_LAYOUT
+      : view === '5gc-nsa' ? NSA_LAYOUT
+        : view === 'ims' ? IMS_LAYOUT
+          : view === 'charging' ? CHARGING_LAYOUT
+            : SA_LAYOUT;
   return ARCHITECTURE_NODES.map((node) => {
     const position = layout[node.role];
     return position ? { ...node, ...position } : node;
@@ -222,6 +280,8 @@ export function architectureNodesForView(view: Exclude<ArchitectureViewMode, 'al
 export function architectureLanesForView(view: Exclude<ArchitectureViewMode, 'all'>): ArchitectureLane[] {
   if (view === 'epc') return EPC_LANES;
   if (view === '5gc-nsa') return NSA_LANES;
+  if (view === 'ims') return IMS_LANES;
+  if (view === 'charging') return CHARGING_LANES;
   return [];
 }
 

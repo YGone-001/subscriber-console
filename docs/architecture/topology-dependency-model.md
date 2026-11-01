@@ -738,11 +738,19 @@ fact; the canvas legend and footnote state this explicitly.
 ### 9.5 Reference architecture canvas
 
 The `/topology` route additionally renders a deterministic 3GPP reference canvas
-(`ArchitectureView`). It is a three-layer projection, and the layers never merge:
+(`ArchitectureView`) with five templates. The `5gc-nsa` template is named
+**EPS-5GS interworking (N26)**: it describes the 4G/5G core interworking scenario,
+not an NSA deployment option, and its lanes are the EPC core, the 5GS core and the
+interworking reference point. IMS (CSCF chain, SMSC, IMS-domain HSS) and charging
+(PCRF/OCS/DRA for EPC, PCF/SMF for 5GC) complete the operator-facing set. The old
+`5gc-nsa` URL value is kept so existing links keep working. It is a three-layer
+projection, and the layers never merge:
 
 ```text
 layer 1  reference skeleton    static, versioned frontend reference data
-                               (20 roles, 33 reference points, view filters)
+                               (25 roles, 40 reference points, five templates:
+                               EPC, 5G SA, EPS-5GS interworking (N26), IMS,
+                               charging)
 layer 2  authoritative binding Inventory resources matched to roles; an
                                authoritative runtime association outranks name
                                matching; an equal-ranked duplicate is reported
@@ -759,9 +767,13 @@ Rules enforced by the projection model:
 - an unresolved association lookup is `unresolved`, never `unmonitored`;
 - a verified running process on an unregistered role is `observed`, which is
   process evidence only and never a health claim;
-- a reference point is rendered as `declared` only when a connectivity
-  relationship for the two bound resources exists in the Topology authority;
-  otherwise it is `reference` and makes no claim about the deployment;
+- a reference point is rendered as `declared` only when a relationship binds the
+  two resources, annotates that reference point and runs in the reference
+  direction (6.6); otherwise the canvas names the reason (`no_relationship`,
+  `interface_not_declared`, `wrong_direction`) and makes no claim;
+- a role whose node declares an Inventory domain never binds a resource recorded
+  in another domain: the EPC and the IMS HSS share the role token, so the domain
+  is part of the identity. A resource with no recorded domain never conflicts;
 - the reference skeleton is never persisted to the topology collection and is
   never presented as topology data;
 - label anchors are chosen deterministically so the canvas can be verified by

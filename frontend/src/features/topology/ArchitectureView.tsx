@@ -78,14 +78,18 @@ const VIEW_LABEL_KEY: Record<ArchitectureViewMode, string> = {
   epc: 'arch_view_epc',
   '5gc-sa': 'arch_view_5gc_sa',
   '5gc-nsa': 'arch_view_5gc_nsa',
+  ims: 'arch_view_ims',
+  charging: 'arch_view_charging',
 };
 
-const OVERVIEW_VIEWS = ['epc', '5gc-sa', '5gc-nsa'] as const;
+const OVERVIEW_VIEWS = ['epc', '5gc-sa', '5gc-nsa', 'ims', 'charging'] as const;
 
 const OVERVIEW_DESC_KEY: Record<typeof OVERVIEW_VIEWS[number], string> = {
   epc: 'arch_overview_epc_desc',
   '5gc-sa': 'arch_overview_5gc_sa_desc',
   '5gc-nsa': 'arch_overview_5gc_nsa_desc',
+  ims: 'arch_overview_ims_desc',
+  charging: 'arch_overview_charging_desc',
 };
 
 const ATTENTION_TONES = new Set<NodeTone>(['degraded', 'unhealthy', 'stale', 'unknown', 'unresolved']);

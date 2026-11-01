@@ -256,6 +256,13 @@ function rankCandidates(node: ArchitectureNode, resources: OperationalResource[]
     const nameToken = normalizeToken(resource.name);
     let tier = 0;
     if (roleToken && tokens.has(roleToken)) {
+      /* A role match on a resource recorded in a different network domain is not
+       * the same identity: the IMS and the EPC HSS share the role token, and the
+       * node states which domain it expects. An unknown domain never conflicts. */
+      const domainConflict = Boolean(node.inventoryDomain)
+        && Boolean(resource.domain)
+        && resource.domain !== node.inventoryDomain;
+      if (domainConflict) continue;
       tier = 4;
     } else if (nameToken && tokens.has(nameToken)) {
       tier = 3;

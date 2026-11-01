@@ -132,16 +132,26 @@ test('every template has deterministic, non-overlapping coordinates and lanes', 
   );
   assert.deepEqual(
     architectureLanesForView('5gc-nsa').map((lane) => lane.labelKey),
-    ['arch_lane_interworking', 'arch_lane_lte_anchor', 'arch_lane_nr_access'],
-    'NSA makes the LTE anchor, NR access and N26 interworking explicit',
+    ['arch_lane_interworking', 'arch_lane_epc_core', 'arch_lane_5gs_core'],
+    'the interworking template makes the EPC core, the 5GS core and N26 explicit',
   );
   assert.deepEqual(architectureLanesForView('5gc-sa'), [], 'SA relies on the SBI bus instead of lanes');
+  assert.deepEqual(
+    architectureLanesForView('ims').map((lane) => lane.labelKey),
+    ['arch_lane_ims_control', 'arch_lane_ims_charging'],
+    'the IMS template separates the CSCF chain from charging and policy',
+  );
+  assert.deepEqual(
+    architectureLanesForView('charging').map((lane) => lane.labelKey),
+    ['arch_lane_charging_epc', 'arch_lane_charging_5gc'],
+    'the charging template separates the EPC and 5GC planes',
+  );
 });
 
 test('the reference skeleton is internally consistent', () => {
-  assert.equal(ARCHITECTURE_NODES.length, 20, 'the reference architecture defines twenty roles');
+  assert.equal(ARCHITECTURE_NODES.length, 25, 'the reference architecture defines twenty-five roles');
   const roles = new Set(ARCHITECTURE_NODES.map((node) => node.role));
-  assert.equal(roles.size, 20, 'role keys must be unique');
+  assert.equal(roles.size, 25, 'role keys must be unique');
 
   for (const link of ARCHITECTURE_LINKS) {
     assert.ok(roles.has(link.source), `link source ${link.source} must be a known role`);
@@ -540,7 +550,7 @@ test('architecture views filter roles and drop dangling links', () => {
   const projection = resolveArchitecture({ resources: items([]) });
   const epc = filterArchitecture(projection, 'epc');
   assert.equal(epc.nodes.length, 9);
-  assert.equal(epc.hiddenCount, 11);
+  assert.equal(epc.hiddenCount, 16);
   for (const link of epc.links) {
     assert.ok(epc.nodes.some((node) => node.role === link.source));
     assert.ok(epc.nodes.some((node) => node.role === link.target));
@@ -551,7 +561,7 @@ test('architecture views filter roles and drop dangling links', () => {
   assert.ok(!sa.nodes.some((node) => node.role === 'mme'));
 
   const all = filterArchitecture(projection, 'all');
-  assert.equal(all.nodes.length, 20);
+  assert.equal(all.nodes.length, 25);
   assert.equal(all.hiddenCount, 0);
 });
 
@@ -559,9 +569,9 @@ test('the summary counts bound, unbound and observed roles separately', () => {
   const projection = resolveArchitecture({
     resources: items([resource()], [target({ overallState: 'degraded' })]),
   });
-  assert.equal(projection.summary.total, 20);
+  assert.equal(projection.summary.total, 25);
   assert.equal(projection.summary.bound, 1);
-  assert.equal(projection.summary.unbound, 19);
+  assert.equal(projection.summary.unbound, 24);
   assert.equal(projection.summary.monitored, 1);
   assert.equal(projection.summary.degraded, 1);
 });
@@ -743,4 +753,58 @@ test('architecture locale keys exist in both languages and are distinct', () => 
     assert.notEqual(en[key], zh[key], `${key} must be localized in both languages`);
   }
   assert.ok(/[\u4e00-\u9fff]/.test(zh.arch_title), 'the Chinese title must contain Chinese characters');
+});
+
+/* ----------------------------------------------------- interworking / IMS -- */
+
+test('the interworking template is named for EPS-5GS interworking, not NSA', () => {
+  assert.equal(en.arch_view_5gc_nsa, 'EPS-5GS interworking (N26)');
+  assert.ok(zh.arch_view_5gc_nsa.includes('N26'), 'the Chinese label states the interworking reference point too');
+  assert.ok(!/NSA/i.test(en.arch_view_5gc_nsa), 'the template no longer claims to define an NSA deployment option');
+  assert.deepEqual(
+    architectureLanesForView('5gc-nsa').map((lane) => lane.labelKey),
+    ['arch_lane_interworking', 'arch_lane_epc_core', 'arch_lane_5gs_core'],
+  );
+});
+
+test('the IMS template binds the HSS by its Inventory domain', () => {
+  const projection = resolveArchitecture({
+    resources: items([
+      resource({ _id: HSS_EPC, name: 'hss-epc', role: 'hss', domain: 'epc' }),
+      resource({ _id: HSS_IMS, name: 'hss-ims', role: 'hss', domain: 'ims' }),
+    ]),
+    nodes: architectureNodesForView('ims'),
+  });
+
+  const imsHss = projection.nodes.find((node) => node.role === 'imsHss');
+  assert.equal(imsHss?.resourceId, HSS_IMS, 'the IMS HSS is the resource recorded in the IMS domain');
+  assert.equal(imsHss?.binding, 'bound');
+
+  const epc = resolveArchitecture({
+    resources: items([
+      resource({ _id: HSS_EPC, name: 'hss-epc', role: 'hss', domain: 'epc' }),
+      resource({ _id: HSS_IMS, name: 'hss-ims', role: 'hss', domain: 'ims' }),
+    ]),
+    nodes: architectureNodesForView('epc'),
+  });
+  const epcHss = epc.nodes.find((node) => node.role === 'hss');
+  assert.equal(epcHss?.resourceId, HSS_EPC, 'the EPC template keeps the EPC HSS');
+});
+
+test('IMS and charging are selectable templates with their own role sets', () => {
+  const imsRoles = rolesForView('ims');
+  assert.ok(imsRoles?.has('pcscf') && imsRoles?.has('icscf') && imsRoles?.has('scscf'));
+  assert.ok(!imsRoles?.has('amf'), 'IMS does not include the 5GC access and mobility role');
+
+  const chargingRoles = rolesForView('charging');
+  assert.ok(chargingRoles?.has('pcrf') && chargingRoles?.has('ocs') && chargingRoles?.has('pcf'));
+
+  for (const view of ['ims', 'charging'] as const) {
+    const nodes = architectureNodesForView(view);
+    assert.ok(nodes.length > 0, `${view} must place nodes`);
+    for (const node of nodes) {
+      assert.ok(node.x >= 0 && node.x + NODE_WIDTH <= CANVAS_WIDTH, `${view}:${node.role} fits horizontally`);
+      assert.ok(node.y >= 0 && node.y + NODE_HEIGHT <= CANVAS_HEIGHT, `${view}:${node.role} fits vertically`);
+    }
+  }
 });
