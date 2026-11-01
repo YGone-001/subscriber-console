@@ -501,6 +501,26 @@ pair. Each matched item carries an `interfaceMatch` grade of `agrees`, `differs`
 or `unannotated`; a differing grade is metadata on a matched pair and never moves
 it into a diff bucket.
 
+That pair-level grade is deliberately coarse and keeps its original meaning. Each
+matched item also carries a precise comparison so a pair with one confirmed
+reference point is never summarised as a full agreement:
+
+```text
+interfaceVerdict    agrees | partial | differs | unannotated
+interfaceCoverage   one entry per interface, with evidence / declared flags and
+                    status matched | evidence_only | declaration_only
+declaredClaims      every active declaration on the pair, with its own edgeId,
+                    relationship type and forward/reverse direction
+rulesVersion        name of the comparison rules (currently interface-v1)
+```
+
+`agrees` requires every configured interface to be declared and every declared
+interface to be configured; a surplus on either side is `partial`, not an error;
+`differs` requires both sides to be annotated with no shared name. A claim in the
+reverse direction is retained with `direction: reverse` and is never dropped in
+favour of the first declaration read. `rulesVersion` exists so a cached verdict
+can tell a rule change from a data change.
+
 Honesty rules:
 
 - Neither bucket claims a relationship is wrong. A declaration without configured
