@@ -205,11 +205,22 @@ Frontend SPA assets are built from `frontend/` and embedded directly into the Go
 ### 4.2 Keyset Cursor Pagination & Query Parameter Allowlist
 `GET /api/inventory/resources` supports deterministic keyset pagination and strictly validated queries:
 - Default sort order: `{ updatedAt: -1, _id: 1 }`.
-- Allowed query parameters: `kind`, `domain`, `lifecycleState`, `q`, `limit`, `cursor`.
+- Allowed query parameters: `kind`, `domain`, `lifecycleState`, `q`, `limit`, `cursor`, `resourceIds`.
 - Any unsupported query parameter returns HTTP 400 (`UNSUPPORTED_QUERY_PARAMETER`).
 - `limit`: Integer bounded between 1 and 200 (default 50). Out of bounds returns HTTP 400 (`INVALID_LIMIT`).
 - `cursor`: Opaque base64 cursor token containing `{ u: updatedAt, i: id }`. Malformed tokens return HTTP 400 (`INVALID_CURSOR`).
 - `q`: Search by exact UUID or case-insensitive prefix on `nameNormalized`.
+- `resourceIds`: bounded identifier resolution for callers that already know which
+  resources they reference (the topology canvases naming their endpoints). It
+  accepts 1–50 canonical UUID v4 values, deduplicates them while keeping the
+  request order, and answers them in one read. An explicitly empty value,
+  a malformed value or an oversized list returns HTTP 400 (`INVALID_RESOURCE_ID`
+  / `RESOURCE_ID_FILTER_TOO_LARGE`) instead of being truncated. It cannot be
+  combined with `kind`, `domain`, `lifecycleState`, `q`, `cursor` or `limit`
+  (`UNSUPPORTED_QUERY_COMBINATION`): a narrowing parameter could hide a resource
+  and turn "not registered" into an apparent absence. The answer carries
+  `page.limit = len(resourceIds)`, `nextCursor: null`, `hasMore: false`, and
+  identifiers that are not registered are simply absent — never fabricated.
 - Response format:
   ```json
   {

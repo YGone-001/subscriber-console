@@ -122,6 +122,44 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Resource, error) 
 	return &res, nil
 }
 
+// FindByIDs resolves a bounded set of resource identifiers in a single query.
+//
+// Only registered resources are returned, in the requested order: an identifier
+// that is not registered is absent from the result rather than fabricated, so a
+// caller can tell "not found" from "not asked". The read is bounded by the
+// handler's filter limit and never paginates.
+func (r *Repository) FindByIDs(ctx context.Context, ids []string) ([]Resource, error) {
+	if len(ids) == 0 {
+		return []Resource{}, nil
+	}
+
+	cursor, err := r.collection.Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list resources: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	byID := make(map[string]Resource, len(ids))
+	for cursor.Next(ctx) {
+		var res Resource
+		if err := cursor.Decode(&res); err != nil {
+			return nil, fmt.Errorf("failed to decode resource: %w", err)
+		}
+		byID[res.ResourceID] = res
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("failed to list resources: %w", err)
+	}
+
+	ordered := make([]Resource, 0, len(ids))
+	for _, id := range ids {
+		if res, ok := byID[id]; ok {
+			ordered = append(ordered, res)
+		}
+	}
+	return ordered, nil
+}
+
 // List queries resources with filters and keyset cursor pagination.
 func (r *Repository) List(ctx context.Context, filter ListFilter) ([]Resource, *string, bool, error) {
 	limit := filter.Limit

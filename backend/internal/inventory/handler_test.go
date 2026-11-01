@@ -60,6 +60,16 @@ func (m *mockRepo) List(ctx context.Context, filter ListFilter) ([]Resource, *st
 	return list, nil, false, nil
 }
 
+func (m *mockRepo) FindByIDs(ctx context.Context, ids []string) ([]Resource, error) {
+	ordered := make([]Resource, 0, len(ids))
+	for _, id := range ids {
+		if item, ok := m.items[id]; ok {
+			ordered = append(ordered, *item)
+		}
+	}
+	return ordered, nil
+}
+
 func (m *mockRepo) Update(ctx context.Context, id string, req *UpdateResourceRequest, actor string) (*Resource, *Resource, error) {
 	res, ok := m.items[id]
 	if !ok {

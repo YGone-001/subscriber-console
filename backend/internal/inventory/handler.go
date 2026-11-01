@@ -29,6 +29,7 @@ type AuditWriter interface {
 type ResourceRepository interface {
 	Create(ctx context.Context, req *CreateResourceRequest, actor string) (*Resource, error)
 	GetByID(ctx context.Context, id string) (*Resource, error)
+	FindByIDs(ctx context.Context, ids []string) ([]Resource, error)
 	List(ctx context.Context, filter ListFilter) ([]Resource, *string, bool, error)
 	Update(ctx context.Context, id string, req *UpdateResourceRequest, actor string) (*Resource, *Resource, error)
 	Retire(ctx context.Context, id string, req *RetireResourceRequest, actor string) (*Resource, *Resource, error)
@@ -104,12 +105,47 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		"q":              true,
 		"limit":          true,
 		"cursor":         true,
+		"resourceIds":    true,
 	}
 	for param := range q {
 		if !allowedParams[param] {
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
 		}
+	}
+
+	/* Bounded identifier resolution: a caller that already knows which resources
+	 * it references must not walk the whole Inventory to name them. The answer is
+	 * exactly the requested set, so narrowing parameters are refused instead of
+	 * being silently combined. */
+	_, resourceFilterPresent := q["resourceIds"]
+	resourceIDs, filtered, invalid := parseInventoryResourceIDs(q.Get("resourceIds"), resourceFilterPresent)
+	if invalid != nil {
+		response.BadRequest(w, invalid.message, invalid.code)
+		return
+	}
+	if filtered {
+		if q.Get("kind") != "" || q.Get("domain") != "" || q.Get("lifecycleState") != "" ||
+			strings.TrimSpace(q.Get("q")) != "" || q.Get("cursor") != "" || q.Get("limit") != "" {
+			response.BadRequest(w,
+				"resourceIds cannot be combined with kind, domain, lifecycleState, q, cursor or limit",
+				"UNSUPPORTED_QUERY_COMBINATION")
+			return
+		}
+		items, err := h.repo.FindByIDs(r.Context(), resourceIDs)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, "Failed to read resources", "INVENTORY_READ_FAILED")
+			return
+		}
+		response.JSON(w, http.StatusOK, ListResourcesResponse{
+			Resources: items,
+			Page: PageInfo{
+				Limit:      len(resourceIDs),
+				NextCursor: nil,
+				HasMore:    false,
+			},
+		})
+		return
 	}
 
 	kind := q.Get("kind")
@@ -480,4 +516,75 @@ func (h *Handler) recordDenial(p *auth.Principal, method, path string) {
 			"path":   path,
 		},
 	})
+}
+
+// maxInventoryResourceIDFilter bounds the identifier resolution. The console only
+// ever names the resources a page already references, so an oversized list is a
+// client error rather than something to truncate silently.
+const maxInventoryResourceIDFilter = 50
+
+// inventoryPackageValidation carries a deterministic error code and message so a
+// rejected filter never reaches the repository.
+type inventoryPackageValidation struct {
+	code    string
+	message string
+}
+
+// parseInventoryResourceIDs validates the bounded resourceIds resolution.
+//
+// Contract:
+//   - comma separated canonical Inventory resource UUID v4 values;
+//   - at least one and at most maxInventoryResourceIDFilter identifiers;
+//   - empty entries, malformed values and oversized lists are rejected, never
+//     silently truncated;
+//   - repeated identifiers are deduplicated while the request order is kept.
+func parseInventoryResourceIDs(raw string, present bool) ([]string, bool, *inventoryPackageValidation) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		if present {
+			return nil, true, &inventoryPackageValidation{
+				code:    "INVALID_RESOURCE_ID",
+				message: "resourceIds must contain at least one identifier",
+			}
+		}
+		return nil, false, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	if len(parts) > maxInventoryResourceIDFilter {
+		return nil, true, &inventoryPackageValidation{
+			code:    "RESOURCE_ID_FILTER_TOO_LARGE",
+			message: fmt.Sprintf("resourceIds accepts at most %d identifiers", maxInventoryResourceIDFilter),
+		}
+	}
+
+	seen := make(map[string]struct{}, len(parts))
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		id := strings.TrimSpace(part)
+		if id == "" {
+			return nil, true, &inventoryPackageValidation{
+				code:    "INVALID_RESOURCE_ID",
+				message: "resourceIds must not contain empty identifiers",
+			}
+		}
+		if !uuidRegex.MatchString(id) {
+			return nil, true, &inventoryPackageValidation{
+				code:    "INVALID_RESOURCE_ID",
+				message: "resourceIds must contain canonical Inventory resource UUID v4 values",
+			}
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, true, &inventoryPackageValidation{
+			code:    "INVALID_RESOURCE_ID",
+			message: "resourceIds must contain at least one identifier",
+		}
+	}
+	return ids, true, nil
 }
