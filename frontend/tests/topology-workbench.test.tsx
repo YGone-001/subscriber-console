@@ -285,3 +285,41 @@ test('the runtime view pans, reveals labels deliberately and reports the view st
   assert.match(source, /data-hidden-label-count=\{labelVisibility.hiddenCount\}/, 'the status bar must report hidden labels');
   assert.match(source, /data-live-zoom=/, 'the status bar must report the current zoom');
 });
+
+test('the workspace decides the inspector layout from its own width', () => {
+  const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
+  const css = read('../src/styles/modules/topology.module.css');
+
+  assert.ok(
+    css.includes('container-type: inline-size'),
+    'the shell must be a container so the layout follows the content area, not the window',
+  );
+  assert.ok(css.includes('@container (max-width: 1040px)'), 'a narrow workspace must switch layout');
+  assert.ok(
+    css.includes("@media (min-width: 1101px)") && css.includes('@container (max-width: 1040px)'),
+    'the container rule must stay scoped so the existing narrow-viewport drawer is unchanged',
+  );
+  assert.ok(
+    css.includes(".shellBody[data-inspector-open='true'] .inspector"),
+    'the stacked layout must place the inspector under the canvas instead of compressing it',
+  );
+});
+
+test('the runtime canvas offers a domain overview that filters, not a hidden list', () => {
+  const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
+  const live = read('../src/features/topology/LiveTopologyView.tsx');
+
+  assert.ok(live.includes('data-domain-overview="true"'), 'the overview strip must be identifiable');
+  assert.ok(
+    live.includes('data-domain-count={count}'),
+    'each domain must state how many components it holds in this snapshot',
+  );
+  assert.ok(
+    live.includes('aria-pressed={active}'),
+    'the domain overview must expose the active filter as pressed state',
+  );
+  assert.ok(
+    live.includes("setDomainMode(active && option.value !== 'all' ? 'all' : option.value)"),
+    'selecting the active domain must return to the unfiltered canvas',
+  );
+});

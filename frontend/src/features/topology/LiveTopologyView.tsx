@@ -109,6 +109,16 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
 
   const directory = useMemo(() => liveDirectory(data), [data]);
   const liveLinks = useMemo(() => liveEdges(data), [data]);
+  /* Domain population of the current snapshot, used as the overview strip. It
+   * counts what the payload contains and never re-derives it from the layout. */
+  const domainOverview = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const node of data?.nodes ?? []) {
+      const key = node.domain || 'unclassified';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [data]);
   const reconciliation = useMemo(() => reconciliationSummary(data), [data]);
   const reconciliationDiff = useMemo(() => reconciliationGroups(data), [data]);
   const runtimeResources = useMemo(() => Object.values(directory), [directory]);
@@ -396,6 +406,38 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
   const completeness = liveConfigCompleteness(config);
   const unavailableSources = config.unavailable ?? [];
 
+  const domainOverviewChips = domainOverview.size > 0 ? (
+    <span
+      className={styles.liveDomainOverview}
+      role="group"
+      aria-label={t('topology_domain_filter')}
+      data-domain-overview="true"
+    >
+      {ACTUAL_DOMAIN_MODE_OPTIONS
+        .filter((option) => option.value === 'all' || domainOverview.has(option.value))
+        .map((option) => {
+          const active = domainMode === option.value;
+          const count = option.value === 'all'
+            ? Array.from(domainOverview.values()).reduce((total, value) => total + value, 0)
+            : domainOverview.get(option.value) ?? 0;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={`${styles.liveDomainChip} ${active ? styles.liveDomainChipActive : ''}`}
+              aria-pressed={active}
+              data-domain-option={option.value}
+              data-domain-count={count}
+              onClick={() => setDomainMode(active && option.value !== 'all' ? 'all' : option.value)}
+            >
+              {t(option.labelKey)}
+              <span aria-hidden="true">{count}</span>
+            </button>
+          );
+        })}
+    </span>
+  ) : undefined;
+
   return (
     <div className={styles.liveSection} data-live-topology="true">
       <TopologyAnnouncer message={announcement} />
@@ -421,6 +463,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
               </span>
             ) : null}
             {/* The canvas is read on demand: state when the evidence was produced. */}
+            {domainOverviewChips}
             <TopologyFreshnessChip sourceTime={data.generatedAt} />
           </div>
         ) : undefined}

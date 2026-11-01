@@ -1127,6 +1127,13 @@
   margin-left: auto;
 }
 
+/* Container queries describe the space the workspace actually has, which is not
+ * the viewport width: an embedded canvas can be narrow inside a wide window.
+ * The shell is the container so the inspector decision follows the content area. */
+.shell {
+  container-type: inline-size;
+}
+
 .shellBody {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1585,4 +1592,24 @@
   margin: 0;
   font-size: 0.72rem;
   color: var(--sys-color-status-warning);
+}
+
+/*
+ * A wide window does not guarantee a wide workspace. When the content area is
+ * narrower than a comfortable split, the inspector stacks under the canvas
+ * instead of taking a rail that compresses every node label. Narrow viewports
+ * (<= 1100px) keep the existing overlay drawer, so that behaviour is unchanged.
+ */
+@media (min-width: 1101px) {
+  @container (max-width: 1040px) {
+    .shellBody[data-inspector-open='true'] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .shellBody[data-inspector-open='true'] .inspector {
+      position: static;
+      width: auto;
+      max-height: none;
+    }
+  }
 }

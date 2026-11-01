@@ -928,10 +928,22 @@ Inventory link. Configured links use a dashed edge and an explicit `configured`
 evidence marker so they cannot be mistaken for declared edges. Interface names
 are the preferred edge label, followed by protocol.
 
-The view does not duplicate the graph with a node table, a configured-edge table
-or a reconciliation panel. Node and configured-edge inspection stays on the
-canvas itself, and the contextual inspector carries the detail; registering
-stays an explicit operator action in the link inspector.
+The view does not duplicate the graph with a node table or a configured-edge
+table. The advisory reconciliation panel lives in the footer (6.7) and never
+replaces the canvas. Node and configured-edge inspection stays on the canvas
+itself, and the contextual inspector carries the detail; registering stays an
+explicit operator action in the link inspector.
+
+The header also carries a domain overview: one chip per domain present in this
+snapshot with its component count, plus `all`. Selecting a chip applies the same
+domain filter the canvas already supported, and selecting the active chip returns
+to `all`. The counts describe the payload that was read, never a topology total.
+
+The workspace chooses its inspector layout from the width of the content area (a
+CSS container query on the shell), not from the window: below 1040px of content
+the inspector stacks under the canvas instead of taking a rail that compresses
+every node label in a wide window. Narrow viewports (<= 1100px) keep the existing
+overlay drawer behaviour.
 
 Unknown or unreadable config sources are listed under `Sources`; the view never
 falls back to a reference config copy. An API failure renders an explicit
