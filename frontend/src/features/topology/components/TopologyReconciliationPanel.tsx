@@ -24,6 +24,8 @@ export type TopologyReconciliationPanelProps = {
   groups: ReconciliationGroups;
   /* Selects a component on the canvas so a difference can be inspected in place. */
   onLocate?: (componentId: string) => void;
+  /* The declared canvas selects Inventory resources, not runtime components. */
+  onLocateResource?: (resourceId: string) => void;
 };
 
 function verdictKey(verdict: string): string {
@@ -37,12 +39,19 @@ function interfaceKey(status: string): string {
 function ReconciliationRowItem({
   row,
   onLocate,
+  onLocateResource,
 }: {
   row: ReconciliationRow;
   onLocate?: (componentId: string) => void;
+  onLocateResource?: (resourceId: string) => void;
 }) {
   const { t } = useI18n();
   const label = `${row.fromComponentId || '-'} → ${row.toComponentId || '-'}`;
+  const locate = onLocateResource && row.fromResourceId
+    ? () => onLocateResource(row.fromResourceId)
+    : onLocate && row.fromComponentId
+      ? () => onLocate(row.fromComponentId)
+      : undefined;
   return (
     <li className={styles.reconRow} data-recon-row={row.key}>
       <div className={styles.reconPath}>
@@ -81,11 +90,11 @@ function ReconciliationRowItem({
           {t('topology_recon_claims', { count: row.claims })}
         </p>
       ) : null}
-      {onLocate && row.fromComponentId ? (
+      {locate ? (
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={() => onLocate(row.fromComponentId)}
+          onClick={locate}
           aria-label={`${t('topology_recon_locate')}: ${label}`}
         >
           {t('topology_recon_locate')}
@@ -99,6 +108,7 @@ export function TopologyReconciliationPanel({
   summary,
   groups,
   onLocate,
+  onLocateResource,
 }: TopologyReconciliationPanelProps) {
   const { t } = useI18n();
   const sections: ReadonlyArray<readonly [string, string, ReconciliationRow[]]> = [
@@ -152,7 +162,12 @@ export function TopologyReconciliationPanel({
             <h3 className={styles.reconGroupTitle}>{t(titleKey)}</h3>
             <ul className={styles.reconList}>
               {rows.map((row) => (
-                <ReconciliationRowItem key={row.key} row={row} onLocate={onLocate} />
+                <ReconciliationRowItem
+                  key={row.key}
+                  row={row}
+                  onLocate={onLocate}
+                  onLocateResource={onLocateResource}
+                />
               ))}
             </ul>
           </section>

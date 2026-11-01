@@ -92,6 +92,10 @@ export type ReconciliationInterface = {
 
 export type ReconciliationRow = {
   key: string;
+  /* The Inventory identity is what a declared canvas selects; the component id
+   * only names the runtime process behind it. */
+  fromResourceId: string;
+  toResourceId: string;
   fromComponentId: string;
   toComponentId: string;
   relationshipType: string;
@@ -121,6 +125,8 @@ function reconciliationRow(
 ): ReconciliationRow {
   return {
     key: `${keyPrefix}-${item.configuredEdgeId ?? item.edgeId ?? index}-${item.fromResourceId}-${item.toResourceId}`,
+    fromResourceId: item.fromResourceId,
+    toResourceId: item.toResourceId,
     fromComponentId: item.fromComponentId ?? '',
     toComponentId: item.toComponentId ?? '',
     relationshipType: item.relationshipType ?? '',

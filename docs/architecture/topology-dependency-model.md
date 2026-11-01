@@ -807,6 +807,12 @@ reference architecture remains one click away in its own view. Reference
 suggestions, runtime identities and configured links are never persisted as
 topology edges.
 
+The declared canvas also renders the advisory diff from 6.7 in its footer: it
+lists configured-but-undeclared, declared-without-evidence and
+not-confirmed-by-interface pairs, and locating a row selects that Inventory
+resource on this canvas. The diff is read from the live projection for display
+only; drawing it never registers, retires or rewrites a relationship.
+
 Every `network_element` and every other Inventory kind is a support resource:
 
 ```text

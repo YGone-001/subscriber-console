@@ -39,6 +39,8 @@ import {
 import { nodeHealthLabelKey, summarizeNodeHealth, type NodeHealth, type NodeHealthState } from './actual-topology-health';
 import { useResourceDirectory } from './use-resource-directory';
 import { useTopologyHealth } from './use-topology-health';
+import { useTopologyReconciliation } from './use-topology-reconciliation';
+import { TopologyReconciliationPanel } from './components/TopologyReconciliationPanel';
 import { ActualTopologyCanvas } from './components/ActualTopologyCanvas';
 import { TopologyEdgeDetail } from './components/TopologyEdgeDetail';
 import { TopologyInspector } from './components/TopologyInspector';
@@ -109,6 +111,9 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     [layout.nodes],
   );
   const health = useTopologyHealth(nodeIds);
+  /* The diff against configured evidence is produced by the live projection; the
+   * declared canvas only displays it and never writes the ledger. */
+  const reconciliation = useTopologyReconciliation();
   const healthCounts = useMemo(() => summarizeNodeHealth(health.byResource), [health.byResource]);
   const selected = layout.nodes.find((node) => node.resourceId === selectedResourceId);
   const selectedEdge = layout.links.find((link) => link.edgeId === selectedEdgeId);
@@ -232,6 +237,8 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
   ]);
 
   useRegisterOperationsRefresh('topology:actual', refreshAll);
+  /* A page refresh also re-reads the configured evidence behind the diff. */
+  useRegisterOperationsRefresh('topology:actual:reconciliation', reconciliation.refresh);
 
   const fitView = useCallback((mode: TopologyFitMode = fitModeRef.current) => {
     const viewport = canvasRef.current;
@@ -778,6 +785,16 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
           ) : null}
         </div>
       )}
+
+      {reconciliation.summary && reconciliation.groups ? (
+        <TopologyReconciliationPanel
+          summary={reconciliation.summary}
+          groups={reconciliation.groups}
+          onLocateResource={(resourceId) => {
+            if (layout.nodes.some((node) => node.resourceId === resourceId)) selectNode(resourceId);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
