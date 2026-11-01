@@ -14,6 +14,31 @@ type listenerRef struct {
 	Endpoint    Endpoint
 }
 
+// Reasons a configured peer stays unresolved. They are part of the read
+// projection: an operator must be able to tell "nothing matched" from "several
+// things matched" and from "the address matched but the port did not".
+const (
+	reasonPeerUnresolved        = "peer does not resolve to a configured component endpoint"
+	reasonPeerIdentityAmbiguous = "peer identity matches more than one configured component"
+	reasonPeerEndpointAmbiguous = "peer endpoint matches more than one configured component"
+	reasonPeerPortMismatch      = "peer port does not match any configured endpoint"
+)
+
+// appendListenerRef keeps one entry per component and endpoint. Two different
+// components advertising the same endpoint stay two entries: that is exactly the
+// ambiguity the resolver must refuse to guess through.
+func appendListenerRef(refs []listenerRef, ref listenerRef) []listenerRef {
+	for _, existing := range refs {
+		if existing.ComponentID == ref.ComponentID &&
+			existing.Endpoint.Protocol == ref.Endpoint.Protocol &&
+			existing.Endpoint.Port == ref.Endpoint.Port &&
+			normalizeAddress(existing.Endpoint.Address) == normalizeAddress(ref.Endpoint.Address) {
+			return refs
+		}
+	}
+	return append(refs, ref)
+}
+
 type edgeBuilder struct {
 	edge Edge
 }
@@ -171,8 +196,8 @@ func Build(snapshot *runtimeinv.Snapshot, parsed map[string]*parsedComponent, co
 	response.Runtime = runtimeSummary(snapshot)
 
 	componentByID := map[string]runtimeinv.Observation{}
-	identities := map[string]string{}
-	byAddressPort := map[string]listenerRef{}
+	identities := map[string]map[string]struct{}{}
+	byAddressPort := map[string][]listenerRef{}
 	byAddress := map[string][]listenerRef{}
 	for _, component := range snapshot.Components {
 		componentByID[component.ComponentID] = component
@@ -193,9 +218,15 @@ func Build(snapshot *runtimeinv.Snapshot, parsed map[string]*parsedComponent, co
 			node.Listeners = dedupeEndpoints(componentParsed.Listeners)
 			for _, identity := range componentParsed.Identities {
 				key := normalizeAddress(identity)
-				if key != "" {
-					identities[key] = component.ComponentID
+				if key == "" {
+					continue
 				}
+				owners, ok := identities[key]
+				if !ok {
+					owners = map[string]struct{}{}
+					identities[key] = owners
+				}
+				owners[component.ComponentID] = struct{}{}
 			}
 		}
 		response.Nodes = append(response.Nodes, node)
@@ -210,9 +241,10 @@ func Build(snapshot *runtimeinv.Snapshot, parsed map[string]*parsedComponent, co
 			}
 			ref := listenerRef{ComponentID: componentID, Endpoint: listener}
 			address := normalizeAddress(listener.Address)
-			byAddressPort[fmt.Sprintf("%s|%s|%d", listener.Protocol, address, listener.Port)] = ref
+			portKey := fmt.Sprintf("%s|%s|%d", listener.Protocol, address, listener.Port)
+			byAddressPort[portKey] = appendListenerRef(byAddressPort[portKey], ref)
 			addressKey := fmt.Sprintf("%s|%s", listener.Protocol, address)
-			byAddress[addressKey] = append(byAddress[addressKey], ref)
+			byAddress[addressKey] = appendListenerRef(byAddress[addressKey], ref)
 		}
 	}
 
@@ -262,32 +294,56 @@ func Build(snapshot *runtimeinv.Snapshot, parsed map[string]*parsedComponent, co
 			}
 			targetID := ""
 			var targetEndpoint Endpoint
+			unresolvedReason := ""
 			if item.FQDN != "" {
-				if id, ok := identities[normalizeAddress(item.FQDN)]; ok {
-					targetID = id
-					if idParsed, ok := parsed[id]; ok {
-						for _, listener := range idParsed.Listeners {
-							if listener.Protocol == protocol {
-								targetEndpoint = listener
-								break
+				switch owners := identities[normalizeAddress(item.FQDN)]; len(owners) {
+				case 1:
+					for id := range owners {
+						targetID = id
+						if idParsed, ok := parsed[id]; ok {
+							for _, listener := range idParsed.Listeners {
+								if listener.Protocol == protocol {
+									targetEndpoint = listener
+									break
+								}
 							}
 						}
 					}
+				case 0:
+					// A peer may name both an identity and an address; the address
+					// form is tried below before the peer is declared unmatched.
+				default:
+					unresolvedReason = reasonPeerIdentityAmbiguous
 				}
 			}
-			if targetID == "" && item.Address != "" {
+			if targetID == "" && unresolvedReason == "" && item.Address != "" {
 				address := normalizeAddress(item.Address)
-				key := fmt.Sprintf("%s|%s|%d", protocol, address, port)
-				if ref, ok := byAddressPort[key]; ok {
-					targetID = ref.ComponentID
-					targetEndpoint = ref.Endpoint
-				} else if refs := byAddress[fmt.Sprintf("%s|%s", protocol, address)]; len(refs) == 1 {
+				portKey := fmt.Sprintf("%s|%s|%d", protocol, address, port)
+				switch refs := byAddressPort[portKey]; len(refs) {
+				case 1:
 					targetID = refs[0].ComponentID
 					targetEndpoint = refs[0].Endpoint
+				case 0:
+					/* Strict identity: a listener on a different port is a different
+					 * endpoint, so it never becomes a certain edge. Report which of
+					 * the two misses actually happened. */
+					switch sameAddress := byAddress[fmt.Sprintf("%s|%s", protocol, address)]; len(sameAddress) {
+					case 1:
+						unresolvedReason = reasonPeerPortMismatch
+					case 0:
+						// Nothing matched at all; the generic reason below applies.
+					default:
+						unresolvedReason = reasonPeerEndpointAmbiguous
+					}
+				default:
+					unresolvedReason = reasonPeerEndpointAmbiguous
 				}
 			}
 			if targetID == "" {
-				addUnresolved(componentID, item, "peer does not resolve to a configured component endpoint")
+				if unresolvedReason == "" {
+					unresolvedReason = reasonPeerUnresolved
+				}
+				addUnresolved(componentID, item, unresolvedReason)
 				continue
 			}
 			if targetID == componentID {

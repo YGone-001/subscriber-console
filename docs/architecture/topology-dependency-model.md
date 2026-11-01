@@ -463,7 +463,12 @@ other secret material.
 
 A live edge exists only when one component's config explicitly names another
 recognized component's identity or listener address and port. Unmatched peers are
-returned as `unresolvedPeers` and are never guessed into an edge. DRA config
+returned as `unresolvedPeers` and are never guessed into an edge. Resolution is
+strict: the match must be a protocol, address and port that belongs to exactly
+one component, or a declared identity owned by exactly one component. When two
+components advertise the same identity or the same endpoint, or when the address
+matches a listener on a different port, the peer is reported with a reason that
+names the ambiguity and never becomes a certain edge. DRA config
 does not synthesize direct links through the proxy. The edge `state` is derived
 from the two endpoints' runtime status (`active`, `partial`, `inactive`,
 `unknown`); it is not a health, traffic or connectivity claim. `inactive` is
