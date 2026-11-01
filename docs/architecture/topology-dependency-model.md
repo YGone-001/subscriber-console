@@ -489,7 +489,9 @@ of the evidence only; it is not a health or availability claim about the
 resources. A source time that cannot be parsed is reported as `unknown` and is
 never rendered as fresh. Views are read on demand, so a canvas that has not been
 refreshed keeps showing the older picture explicitly rather than silently
-appearing current.
+appearing current. Surfaces that read the ledger or the reference projection have
+no server timestamp of their own and state a read time instead (`mode="read"`);
+a source time and a read time are never presented as the same fact.
 
 ### 6.7 Declared versus configured reconciliation
 

@@ -42,6 +42,7 @@ import type {
 } from './topology-types';
 import { RELATIONSHIP_PRESENTATION } from './topology-types';
 import { useResourceDirectory } from './use-resource-directory';
+import { TopologyFreshnessChip } from './components/TopologyFreshnessChip';
 import { TopologyEdgeTable } from './components/TopologyEdgeTable';
 import { TopologyEdgeForm } from './components/TopologyEdgeForm';
 import { TopologyResourcePicker } from './components/TopologyResourcePicker';
@@ -129,6 +130,9 @@ export function TopologyPage() {
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  /* Read time of the ledger, not a server side timestamp: the list response
+     carries page state only, so the surface states when it last read it. */
+  const [ledgerReadAt, setLedgerReadAt] = useState('');
   const queryKeyRef = useRef('');
   /* The ledger is read imperatively on every filter change, so a slow earlier
    * response would otherwise overwrite the list the operator is now looking at.
@@ -176,6 +180,7 @@ export function TopologyPage() {
         setEdges(res.edges || []);
         setNextCursor(res.page?.nextCursor ?? null);
         setHasMore(Boolean(res.page?.hasMore));
+        setLedgerReadAt(new Date().toISOString());
       } catch (err) {
         if (!readGuard.current.isCurrent(token)) return;
         setError(err instanceof Error && err.message ? err.message : t('topology_err_load'));
@@ -371,18 +376,24 @@ export function TopologyPage() {
       )}
       onRefresh={primary === 'ledger' ? () => loadEdges(url.cursor) : undefined}
       actions={
-        canConfigure && primary === 'ledger' ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              setFormError(null);
-              setCreateOpen(true);
-            }}
-          >
-            <Plus size={16} />
-            {t('topology_create_relationship')}
-          </button>
+        primary === 'ledger' ? (
+          <>
+            {/* The ledger is read on demand; state when it was last read. */}
+            <TopologyFreshnessChip mode="read" sourceTime={ledgerReadAt || undefined} />
+            {canConfigure ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setFormError(null);
+                  setCreateOpen(true);
+                }}
+              >
+                <Plus size={16} />
+                {t('topology_create_relationship')}
+              </button>
+            ) : null}
+          </>
         ) : undefined
       }
     >

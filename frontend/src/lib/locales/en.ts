@@ -1991,6 +1991,7 @@ export const en: Record<string, string> = {
     topology_fresh_fresh: "synced {age}s ago",
     topology_fresh_stale: "Data is stale ({age}s old) - refresh before deciding",
     topology_fresh_unknown: "no source time",
+    topology_fresh_read_time: "Read time {time}",
     topology_live_config_complete: "Configuration sources read completely",
     topology_live_config_incomplete: "Config sources incomplete ({available}/{total})",
     topology_live_register: "Register as declared relationship",

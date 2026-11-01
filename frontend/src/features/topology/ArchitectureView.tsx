@@ -62,6 +62,7 @@ import { ArchitectureRoleDetail } from './components/ArchitectureDetailDrawer';
 import { TopologyCanvasControls, TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import { TopologyInspector } from './components/TopologyInspector';
 import { TopologyAnnouncer } from './components/TopologyAnnouncer';
+import { TopologyFreshnessChip } from './components/TopologyFreshnessChip';
 import type { RuntimeObservations } from '../runtime/runtime-types';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import styles from '../../styles/modules/architecture.module.css';
@@ -227,6 +228,13 @@ export function ArchitectureView({
     embedded ? 'topology:actual:suggested' : 'topology:architecture',
     refresh,
   );
+
+  /* The projection has no server side timestamp of its own, so the surface
+   * records when it last received data instead of implying a source time. */
+  const [readAt, setReadAt] = useState('');
+  useEffect(() => {
+    if (resourcesRead.data) setReadAt(new Date().toISOString());
+  }, [resourcesRead.data]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -542,6 +550,9 @@ export function ArchitectureView({
             >
               {t(`ops_completeness_${completeness.overall}`)}
             </span>
+            {/* The reference projection is read on demand and re-read on a timer:
+                state when this surface last read it. */}
+            <TopologyFreshnessChip mode="read" sourceTime={readAt || undefined} />
           </div>
 
           <div

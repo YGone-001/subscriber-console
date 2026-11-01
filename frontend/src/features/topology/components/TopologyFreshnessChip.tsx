@@ -22,29 +22,40 @@ export type TopologyFreshnessChipProps = {
   /* Injected clock so the chip stays deterministic in tests. */
   now?: number;
   policySeconds?: number;
+  /* `source` states when the evidence was produced; `read` states when this
+   * surface last read it. A ledger read has no server timestamp of its own, and
+   * the two must not be presented as the same fact. */
+  mode?: 'source' | 'read';
 };
 
 export function TopologyFreshnessChip({
   sourceTime,
   now,
   policySeconds = TOPOLOGY_FRESHNESS_POLICY_SECONDS,
+  mode = 'source',
 }: TopologyFreshnessChipProps) {
   const { t } = useI18n();
   const label = sourceTimeLabel(sourceTime);
   const age = sourceAgeSeconds(sourceTime, now);
   const state = freshnessState(age, policySeconds);
+  const timeKey = mode === 'read' ? 'topology_fresh_read_time' : 'topology_fresh_source_time';
 
   if (state === 'unknown') {
     return (
-      <span className={styles.liveChip} data-freshness="unknown">
+      <span className={styles.liveChip} data-freshness="unknown" data-freshness-mode={mode}>
         {t('topology_fresh_unknown')}
       </span>
     );
   }
 
   return (
-    <span className={styles.liveChip} data-freshness={state} data-source-time={label}>
-      <span>{t('topology_fresh_source_time', { time: label })}</span>
+    <span
+      className={styles.liveChip}
+      data-freshness={state}
+      data-freshness-mode={mode}
+      data-source-time={label}
+    >
+      <span>{t(timeKey, { time: label })}</span>
       <span aria-hidden="true">{' · '}</span>
       <span>{t(freshnessLabelKey(state), { age: age as number })}</span>
     </span>

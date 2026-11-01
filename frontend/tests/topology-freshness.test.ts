@@ -7,6 +7,7 @@
  * An unknown source time is never rendered as fresh.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -67,4 +68,31 @@ test('an absent source time is reported as unknown, never as fresh', () => {
   assert.ok(markup.includes('data-freshness="unknown"'));
   assert.ok(!markup.includes('data-freshness="fresh"'));
   assert.ok(!markup.includes('data-source-time'), 'nothing may be invented when the server sent no time');
+});
+test('a read has no source time of its own and is labelled as a read', () => {
+  const markup = render(createElement(TopologyFreshnessChip, {
+    mode: 'read',
+    sourceTime: '2026-11-01T11:59:00Z',
+    now: NOW,
+  }));
+  assert.ok(markup.includes('data-freshness-mode="read"'));
+  assert.ok(markup.includes('Read time'), 'a ledger read must not be presented as a source time');
+  assert.ok(!markup.includes('Source time'));
+});
+
+test('every topology surface states the time it is showing', () => {
+  const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
+  const live = read('../src/features/topology/LiveTopologyView.tsx');
+  assert.ok(
+    live.includes('<TopologyFreshnessChip sourceTime={data.generatedAt} />'),
+    'the live canvas must state the server generatedAt as its source time',
+  );
+
+  const ledger = read('../src/features/topology/TopologyPage.tsx');
+  assert.ok(ledger.includes('mode="read"'), 'the ledger reads on demand, so it states a read time');
+  assert.ok(ledger.includes('setLedgerReadAt('), 'the ledger must record when the read succeeded');
+
+  const architecture = read('../src/features/topology/ArchitectureView.tsx');
+  assert.ok(architecture.includes('mode="read"'), 'the reference projection states a read time');
+  assert.ok(architecture.includes('setReadAt('), 'the architecture view must record its last successful read');
 });
