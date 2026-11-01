@@ -7,6 +7,7 @@
  * degrade to a usable default instead of an empty workspace.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   canonicalizeTopologyViewSearch,
@@ -148,5 +149,26 @@ test('the state patch writes the mode and the evidence layer', () => {
   assert.deepEqual(
     topologyViewStatePatch(state('ledger', 'runtime', 'config')),
     { view: 'ledger', source: null, scope: null },
+  );
+});
+
+/* --------------------------------------------------- one-hop URL contract -- */
+
+test('the one-hop view keeps its filters, cursor and selection in the URL', () => {
+  const source = readFileSync(new URL('../src/features/topology/ResourceTopologyPage.tsx', import.meta.url), 'utf8');
+
+  assert.ok(
+    source.includes("keys: ['direction', 'relationship', 'state', 'domain', 'selected']"),
+    'every one-hop filter and the selected relationship must be part of the URL contract',
+  );
+  assert.ok(source.includes('url.setFilter('), 'filter changes must go through the shared contract');
+  assert.ok(source.includes('url.setCursor('), 'paging must go through the URL cursor');
+  assert.ok(
+    source.includes('void load(cursor)'),
+    'the read must be driven by the URL cursor so a shared link restores the same page',
+  );
+  assert.ok(
+    !source.includes('useState<DirectionFilter>'),
+    'no duplicate copy of the filter state may remain in component memory',
   );
 });

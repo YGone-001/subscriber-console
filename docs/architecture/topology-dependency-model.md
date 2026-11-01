@@ -378,6 +378,13 @@ Read projections hydrate `resourceId`, `kind`, `name`, `displayName`, `domain`,
 Traversal is strictly **one hop**. There is no recursive BFS/DFS, no multi-hop
 impact analysis, no shortest path and no automated blast-radius analysis.
 
+The one-hop page keeps `direction`, `relationship`, `state` (lifecycle), `domain`,
+the cursor and the selected relationship in the query string, using the shared
+operations URL contract. Reload, Back/Forward and a shared link therefore restore
+the same neighbourhood and page; changing a filter drops the cursor rather than
+silently keeping a cursor produced by another filter set. The domain filter stays
+presentation-only over the loaded page and never alters the server query.
+
 ### 6.4 Mutations
 
 Create accepts `relationshipType`, `fromResourceId`, `toResourceId` and the

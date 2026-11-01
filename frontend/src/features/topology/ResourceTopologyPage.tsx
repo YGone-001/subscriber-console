@@ -19,6 +19,7 @@ import { EmptyState } from '../../components/ui/OperationFeedback';
 import { useI18n } from '../../providers/I18nProvider';
 import { resolveReturnTo } from '../../lib/return-to';
 import { createLatestRequestGuard } from '../../lib/api/latest-request';
+import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { fetchTopologyNeighbors, fetchTopologyMeta } from './topology-api';
 import type {
   DirectionFilter,
@@ -48,16 +49,30 @@ export function ResourceTopologyPage() {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
-  const [direction, setDirection] = useState<DirectionFilter>('both');
-  const [relationshipType, setRelationshipType] = useState('');
-  const [lifecycleState, setLifecycleState] = useState('active');
-  const [domainBucket, setDomainBucket] = useState('');
+  /* The one-hop view keeps its filters, page cursor and selected relationship in
+   the query string, so reload, Back/Forward and a shared link restore the same
+   neighbourhood instead of resetting to the default filter set. */
+  const url = useOperationsUrlState({
+    keys: ['direction', 'relationship', 'state', 'domain', 'selected'],
+    clearKeys: ['direction', 'relationship', 'state', 'domain', 'selected'],
+  });
+  const direction = (url.filters.direction || 'both') as DirectionFilter;
+  const relationshipType = url.filters.relationship || '';
+  const lifecycleState = url.filters.state || 'active';
+  const domainBucket = url.filters.domain || '';
+  const selectedEdgeId = url.filters.selected || undefined;
+  const cursor = url.cursor;
 
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const setDirection = (value: DirectionFilter) => url.setFilter('direction', value === 'both' ? '' : value);
+  const setRelationshipType = (value: string) => url.setFilter('relationship', value);
+  const setLifecycleState = (value: string) => url.setFilter('state', value === 'active' ? '' : value);
+  const setDomainBucket = (value: string) => url.setFilter('domain', value);
+  const setSelectedEdgeId = (value?: string) => url.setFilter('selected', value ?? '');
+  const setCursor = (value?: string) => url.setCursor(value);
+
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>(undefined);
 
   /* Neighbour reads are imperative and re-issued on every filter or cursor
    * change. A slow earlier page must never replace the page the operator is now
@@ -115,12 +130,21 @@ export function ResourceTopologyPage() {
   /* Abort on unmount only; superseded reads are already dropped by the guard. */
   useEffect(() => () => readAbort.current?.abort(), []);
 
+  /* The URL owns the cursor: a filter change drops it in the shared hook, so the
+   read is driven by the cursor rather than by component state. */
   useEffect(() => {
-    setCursor(undefined);
+    void load(cursor);
+  }, [load, cursor]);
+
+  /* The pager keeps its own back-list for the visible previous control; a shared
+     link restores the cursor itself, and browser Back restores the filters. */
+  const filterSignature = `${direction}|${relationshipType}|${lifecycleState}|${domainBucket}`;
+  const filterSignatureRef = useRef(filterSignature);
+  useEffect(() => {
+    if (filterSignatureRef.current === filterSignature) return;
+    filterSignatureRef.current = filterSignature;
     setCursorHistory([]);
-    setSelectedEdgeId(undefined);
-    void load(undefined);
-  }, [load]);
+  }, [filterSignature]);
 
   const relationshipLabel = useCallback(
     (value: string) => {
@@ -164,7 +188,6 @@ export function ResourceTopologyPage() {
     if (!nextCursor) return;
     setCursorHistory((prev) => [...prev, cursor ?? '']);
     setCursor(nextCursor);
-    void load(nextCursor);
   };
 
   const handlePrevPage = () => {
@@ -173,7 +196,6 @@ export function ResourceTopologyPage() {
     const previous = history.pop() ?? '';
     setCursorHistory(history);
     setCursor(previous || undefined);
-    void load(previous || undefined);
   };
 
   return (
