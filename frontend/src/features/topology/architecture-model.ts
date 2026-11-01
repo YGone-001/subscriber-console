@@ -15,9 +15,10 @@
  *   - an unresolved association lookup is `unresolved`, never `unmonitored`;
  *   - an observed process is evidence of a running process only, never of an
  *     interface or a service;
- *   - a reference point is `declared` only when a connectivity relationship for
- *     the two bound resources exists in the Topology authority; otherwise it is
- *     `reference` and makes no claim about the deployment;
+ *   - a reference point is `declared` only when an active connectivity
+ *     relationship binds the two resources, annotates this reference point and
+ *     runs in the reference direction; a pair bound without that annotation is
+ *     `bound`, and every refusal names its reason instead of being silent;
  *   - no value is fabricated: absent evidence becomes an explicit state.
  */
 import type { MetricView, OperationalResource } from '../operations/operational-model';
@@ -125,13 +126,28 @@ export type ArchitectureLinkEvidence =
   | 'unresolved'
   | 'reference';
 
+export type ArchitectureDeclarationReason =
+  | 'matched'
+  | 'unbound'
+  | 'no_relationship'
+  | 'wrong_direction'
+  | 'interface_not_declared';
+
 export type ArchitectureLinkView = {
   key: string;
   source: string;
   target: string;
   interfaceLabel: string;
-  /** A connectivity relationship is declared between the two bound resources. */
+  /** This reference point is bound, annotated and directed as declared. */
   declared: boolean;
+  /** A relationship exists between the two resources in either direction. */
+  pairDeclared: boolean;
+  /** The reference label is annotated on one of those relationships. */
+  interfaceDeclared: boolean;
+  /** Why this reference point is, or is not, declared by the ledger. */
+  declarationReason: ArchitectureDeclarationReason;
+  /** Every relationship covering the pair, so no record is hidden behind one. */
+  declaredEdgeIds: string[];
   /** Both endpoints resolve to an Inventory resource. */
   endpointsBound: boolean;
   /** Strongest evidence available for this reference point. */
@@ -174,6 +190,15 @@ const asList = (value: unknown): Record<string, unknown>[] =>
   Array.isArray(value) ? value.map(asRecord) : [];
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : value == null ? '' : String(value));
+
+/* `asList` normalises entries into records, so a list of plain strings (an
+ * edge's interface names) needs its own reader instead of being flattened to
+ * empty objects. */
+const stringList = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? value.map((entry) => (typeof entry === 'string' ? entry.trim() : '')).filter(Boolean)
+    : []
+);
 
 /** Case-insensitive alphanumeric token, so `SGW-C` and `sgw_c` compare equal. */
 export function normalizeToken(value: unknown): string {
@@ -394,31 +419,87 @@ function viewForNode(
   };
 }
 
-function declaredPairs(edges: unknown): Set<string> {
-  const pairs = new Set<string>();
+/* Only these relationship types describe a connection between two network
+ * functions. Composition and placement (contains, runs_on) never validate a
+ * protocol reference point, so they stay out of the declaration check. */
+const SYMMETRIC_RELATIONSHIPS = new Set(['connects_to']);
+
+type DeclaredRelation = {
+  edgeId: string;
+  from: string;
+  to: string;
+  relationshipType: string;
+  interfaces: string[];
+};
+
+function declaredRelations(edges: unknown): DeclaredRelation[] {
+  const relations: DeclaredRelation[] = [];
   for (const edge of asList(edges)) {
     if (str(edge.lifecycleState) === 'retired') continue;
-    if (!CONNECTIVITY_RELATIONSHIPS.has(str(edge.relationshipType))) continue;
+    const relationshipType = str(edge.relationshipType);
+    if (!CONNECTIVITY_RELATIONSHIPS.has(relationshipType)) continue;
     const from = str(edge.fromResourceId);
     const to = str(edge.toResourceId);
     if (!from || !to || from === to) continue;
-    pairs.add(`${from}|${to}`);
-    pairs.add(`${to}|${from}`);
+    relations.push({
+      edgeId: str(edge.edgeId),
+      from,
+      to,
+      relationshipType,
+      interfaces: stringList(edge.interfaceNames),
+    });
   }
-  return pairs;
+  return relations;
+}
+
+/* A bound resource pair is not a declared reference point. The label must be
+ * annotated on a relationship that also runs in the reference direction; the
+ * reason for any refusal is returned so the page can explain it. */
+function declarationFor(
+  sourceId: string,
+  targetId: string,
+  interfaceLabel: string,
+  relations: DeclaredRelation[],
+): { reason: ArchitectureDeclarationReason; pairDeclared: boolean; interfaceDeclared: boolean; edgeIds: string[] } {
+  if (!sourceId || !targetId) {
+    return { reason: 'unbound', pairDeclared: false, interfaceDeclared: false, edgeIds: [] };
+  }
+  const pair = relations.filter((relation) => (
+    (relation.from === sourceId && relation.to === targetId)
+    || (relation.from === targetId && relation.to === sourceId)
+  ));
+  const edgeIds = pair.map((relation) => relation.edgeId).filter(Boolean);
+  if (pair.length === 0) {
+    return { reason: 'no_relationship', pairDeclared: false, interfaceDeclared: false, edgeIds };
+  }
+  const label = interfaceLabel.trim().toLowerCase();
+  const annotated = label
+    ? pair.filter((relation) => relation.interfaces.some((name) => name.toLowerCase() === label))
+    : pair;
+  if (annotated.length === 0) {
+    return { reason: 'interface_not_declared', pairDeclared: true, interfaceDeclared: false, edgeIds };
+  }
+  const inDirection = annotated.filter((relation) => (
+    SYMMETRIC_RELATIONSHIPS.has(relation.relationshipType) || relation.from === sourceId
+  ));
+  if (inDirection.length === 0) {
+    return { reason: 'wrong_direction', pairDeclared: true, interfaceDeclared: true, edgeIds };
+  }
+  return { reason: 'matched', pairDeclared: true, interfaceDeclared: true, edgeIds };
 }
 
 function viewForLink(
   link: ArchitectureLink,
   byRole: Map<string, ArchitectureNodeView>,
-  pairs: Set<string>,
+  relations: DeclaredRelation[],
 ): ArchitectureLinkView {
   const source = byRole.get(link.source);
   const target = byRole.get(link.target);
   const sourceId = source?.resourceId ?? '';
   const targetId = target?.resourceId ?? '';
   const endpointsBound = Boolean(sourceId && targetId);
-  const declared = endpointsBound && pairs.has(`${sourceId}|${targetId}`);
+  const declaration = declarationFor(sourceId, targetId, link.interfaceLabel, relations);
+  const declared = endpointsBound && declaration.reason === 'matched';
   return {
     key: `${link.source}->${link.target}`,
     source: link.source,
@@ -426,6 +507,10 @@ function viewForLink(
     interfaceLabel: link.interfaceLabel,
     endpointsBound,
     declared,
+    pairDeclared: declaration.pairDeclared,
+    interfaceDeclared: declaration.interfaceDeclared,
+    declarationReason: endpointsBound ? declaration.reason : 'unbound',
+    declaredEdgeIds: declaration.edgeIds,
     evidence: linkEvidence(source, target, endpointsBound, declared),
   };
 }
@@ -459,8 +544,8 @@ export function resolveArchitecture(input: {
   const components = asList(input.runtimeComponents);
   const nodeViews = nodes.map((node) => viewForNode(node, input.resources, components));
   const byRole = new Map(nodeViews.map((view) => [view.role, view]));
-  const pairs = declaredPairs(input.edges);
-  const linkViews = links.map((link) => viewForLink(link, byRole, pairs));
+  const relations = declaredRelations(input.edges);
+  const linkViews = links.map((link) => viewForLink(link, byRole, relations));
   return { nodes: nodeViews, links: linkViews, summary: summarizeArchitecture(nodeViews) };
 }
 

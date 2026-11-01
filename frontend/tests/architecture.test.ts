@@ -391,15 +391,55 @@ test('coverage and metrics are projected from the monitoring target', () => {
 test('a reference point is declared only when a connectivity relationship exists', () => {
   const projection = resolveArchitecture({
     resources: items([resource(), resource({ _id: SMF, name: 'smf-01', role: 'smf' })]),
-    edges: [{ relationshipType: 'connects_to', fromResourceId: AMF, toResourceId: SMF, lifecycleState: 'active' }],
+    edges: [{
+      relationshipType: 'connects_to',
+      fromResourceId: AMF,
+      toResourceId: SMF,
+      lifecycleState: 'active',
+      interfaceNames: ['N11'],
+    }],
   });
   const n11 = projection.links.find((link) => link.source === 'amf' && link.target === 'smf');
   assert.equal(n11?.declared, true);
+  assert.equal(n11?.declarationReason, 'matched');
   assert.equal(n11?.endpointsBound, true);
   assert.equal(n11?.interfaceLabel, 'N11');
 
   const n4 = projection.links.find((link) => link.source === 'smf' && link.target === 'upf');
   assert.equal(n4?.declared, false, 'an unbound endpoint can never be a declared relationship');
+  assert.equal(n4?.declarationReason, 'unbound');
+});
+
+test('a bound pair without the annotation reports why it is not declared', () => {
+  const resources = items([resource(), resource({ _id: SMF, name: 'smf-01', role: 'smf' })]);
+  const withoutAnnotation = resolveArchitecture({
+    resources,
+    edges: [{ relationshipType: 'connects_to', fromResourceId: AMF, toResourceId: SMF, lifecycleState: 'active' }],
+  });
+  const unannotated = withoutAnnotation.links.find((link) => link.source === 'amf' && link.target === 'smf');
+  assert.equal(unannotated?.pairDeclared, true, 'the resource pair is declared');
+  assert.equal(unannotated?.interfaceDeclared, false);
+  assert.equal(unannotated?.declared, false, 'a pair without annotation never declares the reference point');
+  assert.equal(unannotated?.declarationReason, 'interface_not_declared');
+
+  const otherInterface = resolveArchitecture({
+    resources,
+    edges: [{
+      relationshipType: 'connects_to',
+      fromResourceId: AMF,
+      toResourceId: SMF,
+      lifecycleState: 'active',
+      interfaceNames: ['N8'],
+    }],
+  });
+  const mismatched = otherInterface.links.find((link) => link.source === 'amf' && link.target === 'smf');
+  assert.equal(mismatched?.declared, false, 'a different reference point does not declare N11');
+  assert.equal(mismatched?.declarationReason, 'interface_not_declared');
+
+  const noRelationship = resolveArchitecture({ resources });
+  const missing = noRelationship.links.find((link) => link.source === 'amf' && link.target === 'smf');
+  assert.equal(missing?.pairDeclared, false);
+  assert.equal(missing?.declarationReason, 'no_relationship');
 });
 
 test('containment, hosting and retired edges never declare connectivity', () => {
@@ -415,13 +455,66 @@ test('containment, hosting and retired edges never declare connectivity', () => 
   assert.equal(n11?.declared, false);
 });
 
-test('a declared relationship is symmetric for the reference point', () => {
+test('a symmetric connection declares the reference point in either direction', () => {
+  const resources = items([resource(), resource({ _id: SMF, name: 'smf-01', role: 'smf' })]);
   const projection = resolveArchitecture({
-    resources: items([resource(), resource({ _id: SMF, name: 'smf-01', role: 'smf' })]),
-    edges: [{ relationshipType: 'depends_on', fromResourceId: SMF, toResourceId: AMF, lifecycleState: 'active' }],
+    resources,
+    edges: [{
+      relationshipType: 'connects_to',
+      fromResourceId: SMF,
+      toResourceId: AMF,
+      lifecycleState: 'active',
+      interfaceNames: ['N11'],
+    }],
   });
   const n11 = projection.links.find((link) => link.source === 'amf' && link.target === 'smf');
-  assert.equal(n11?.declared, true, 'the reference point does not depend on edge direction');
+  assert.equal(n11?.declared, true, 'connects_to is symmetric, so its direction carries no meaning');
+  assert.equal(n11?.declarationReason, 'matched');
+});
+
+test('a directional relationship against the reference direction is not declared', () => {
+  const resources = items([resource(), resource({ _id: SMF, name: 'smf-01', role: 'smf' })]);
+  const reversed = resolveArchitecture({
+    resources,
+    edges: [{
+      relationshipType: 'depends_on',
+      fromResourceId: SMF,
+      toResourceId: AMF,
+      lifecycleState: 'active',
+      interfaceNames: ['N11'],
+    }],
+  });
+  const reversedN11 = reversed.links.find((link) => link.source === 'amf' && link.target === 'smf');
+  assert.equal(reversedN11?.pairDeclared, true, 'the resources are related, just not in this direction');
+  assert.equal(reversedN11?.interfaceDeclared, true);
+  assert.equal(reversedN11?.declared, false);
+  assert.equal(reversedN11?.declarationReason, 'wrong_direction');
+
+  const forward = resolveArchitecture({
+    resources,
+    edges: [{
+      relationshipType: 'depends_on',
+      fromResourceId: AMF,
+      toResourceId: SMF,
+      lifecycleState: 'active',
+      interfaceNames: ['N11'],
+    }],
+  });
+  const forwardN11 = forward.links.find((link) => link.source === 'amf' && link.target === 'smf');
+  assert.equal(forwardN11?.declared, true, 'the reference direction is the declared direction');
+  assert.equal(forwardN11?.declarationReason, 'matched');
+});
+
+test('every relationship covering the pair stays addressable', () => {
+  const projection = resolveArchitecture({
+    resources: items([resource(), resource({ _id: SMF, name: 'smf-01', role: 'smf' })]),
+    edges: [
+      { edgeId: 'edge-1', relationshipType: 'connects_to', fromResourceId: AMF, toResourceId: SMF, lifecycleState: 'active' },
+      { edgeId: 'edge-2', relationshipType: 'uses', fromResourceId: SMF, toResourceId: AMF, lifecycleState: 'active' },
+    ],
+  });
+  const n11 = projection.links.find((link) => link.source === 'amf' && link.target === 'smf');
+  assert.deepEqual(n11?.declaredEdgeIds, ['edge-1', 'edge-2'], 'no covering record may be hidden');
 });
 
 test('every reference point label finds an anchor that avoids the node boxes', () => {
@@ -523,7 +616,13 @@ test('reference links carry an explicit evidence class', () => {
 
   const declared = resolveArchitecture({
     resources: both,
-    edges: [{ fromResourceId: AMF, toResourceId: SMF, relationshipType: 'connects_to', lifecycleState: 'active' }],
+    edges: [{
+      fromResourceId: AMF,
+      toResourceId: SMF,
+      relationshipType: 'connects_to',
+      lifecycleState: 'active',
+      interfaceNames: ['Nnrf'],
+    }],
   });
   assert.equal(
     declared.links.find((link) => link.key === 'amf->nrf')?.evidence,

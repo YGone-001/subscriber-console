@@ -78,6 +78,20 @@ export type LiveUnresolvedPeer = {
  * a declaration may cover a link this manifest does not describe, and a
  * configured link may be deliberately undeclared or retired.
  */
+export type LiveInterfaceCoverage = {
+  interface: string;
+  evidence: boolean;
+  declared: boolean;
+  status: 'matched' | 'evidence_only' | 'declaration_only' | string;
+};
+
+export type LiveDeclaredClaim = {
+  edgeId: string;
+  relationshipType: string;
+  direction?: 'forward' | 'reverse' | string;
+  interfaceNames?: string[];
+};
+
 export type LiveReconciliationItem = {
   fromResourceId: string;
   toResourceId: string;
@@ -89,6 +103,11 @@ export type LiveReconciliationItem = {
   interfaceNames?: string[];
   declaredInterfaceNames?: string[];
   interfaceMatch?: 'agrees' | 'differs' | 'unannotated' | string;
+  /* Per-interface result of the precise comparison. `interfaceMatch` keeps its
+   * original pair-level meaning; these fields never replace it. */
+  interfaceVerdict?: 'agrees' | 'differs' | 'partial' | 'unannotated' | string;
+  interfaceCoverage?: LiveInterfaceCoverage[];
+  declaredClaims?: LiveDeclaredClaim[];
   protocol?: string;
   sourceFiles?: string[];
   retired?: boolean;
@@ -98,6 +117,8 @@ export type LiveReconciliation = {
   available: boolean;
   reason?: string;
   complete: boolean;
+  /* Name of the comparison rules behind interfaceVerdict / interfaceCoverage. */
+  rulesVersion?: string;
   configuredLinks: number;
   declaredEdges: number;
   matchedCount: number;
