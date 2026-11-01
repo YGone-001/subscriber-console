@@ -8,6 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { readLiveViewState, withLiveViewParam } from '../src/features/topology/live-topology-url';
 import test from 'node:test';
 import {
   canonicalizeTopologyViewSearch,
@@ -170,5 +171,39 @@ test('the one-hop view keeps its filters, cursor and selection in the URL', () =
   assert.ok(
     !source.includes('useState<DirectionFilter>'),
     'no duplicate copy of the filter state may remain in component memory',
+  );
+});
+/* ------------------------------------------------- live canvas URL state -- */
+
+test('the live canvas reads its own keys without touching the page filters', () => {
+  const params = new URLSearchParams('view=graph&source=runtime&state=retired&q=smf&domain=epc&focus=upf&edge=edge-1');
+  assert.deepEqual(readLiveViewState(params), {
+    search: 'smf',
+    domain: 'epc',
+    focus: 'upf',
+    edge: 'edge-1',
+  });
+});
+
+test('an unknown domain degrades to all and a default key leaves the address bar', () => {
+  assert.equal(readLiveViewState(new URLSearchParams('domain=cross-domain')).domain, 'cross-domain');
+  assert.equal(readLiveViewState(new URLSearchParams('domain=not-a-domain')).domain, 'all');
+
+  const cleared = withLiveViewParam(new URLSearchParams('view=graph&state=retired&domain=epc'), 'domain', 'all');
+  assert.equal(cleared.get('domain'), null, 'the default must not occupy the URL');
+  assert.equal(cleared.get('view'), 'graph', 'the page contract stays untouched');
+  assert.equal(cleared.get('state'), 'retired', 'the page contract stays untouched');
+
+  assert.equal(withLiveViewParam(new URLSearchParams(), 'focus', 'upf').get('focus'), 'upf');
+  assert.equal(withLiveViewParam(new URLSearchParams('focus=upf'), 'focus', '').get('focus'), null);
+});
+
+test('the live canvas keeps no local copy of its view state', () => {
+  const source = readFileSync(new URL('../src/features/topology/LiveTopologyView.tsx', import.meta.url), 'utf8');
+  assert.ok(source.includes('useLiveTopologyViewState()'), 'the canvas must read its view state from the URL');
+  assert.ok(!source.includes("useState('')"), 'the search must not keep a second copy');
+  assert.ok(
+    !source.includes("useState<TopologyDomainMode>('all')"),
+    'the domain must not keep a second copy',
   );
 });

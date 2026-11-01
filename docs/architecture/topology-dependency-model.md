@@ -956,6 +956,12 @@ snapshot with its component count, plus `all`. Selecting a chip applies the same
 domain filter the canvas already supported, and selecting the active chip returns
 to `all`. The counts describe the payload that was read, never a topology total.
 
+Search, domain and selection are kept in the query string (`q`, `domain`, `focus`,
+`edge`) through a merge-only writer: entering this source never rebuilds the query
+from its own allow list, so the ledger filters survive a mode switch, and a shared
+link restores the same canvas. Default values are removed from the address bar
+instead of written, and writes replace history so typing does not fill Back.
+
 The workspace chooses its inspector layout from the width of the content area (a
 CSS container query on the shell), not from the window: below 1040px of content
 the inspector stacks under the canvas instead of taking a rail that compresses

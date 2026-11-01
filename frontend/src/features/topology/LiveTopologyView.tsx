@@ -23,6 +23,7 @@ import { TopologyCanvasControls, TopologyGraphToolbar } from './components/Topol
 import { TopologyAnnouncer } from './components/TopologyAnnouncer';
 import { TopologyReconciliationPanel } from './components/TopologyReconciliationPanel';
 import { TopologyFreshnessChip } from './components/TopologyFreshnessChip';
+import { useLiveTopologyViewState } from './live-topology-url';
 import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology } from './actual-topology-model';
 import { LABEL_DETAIL_MIN_ZOOM, resolveLabelVisibility } from './actual-topology-labels';
 import { interfaceCoverage } from './interface-catalog';
@@ -78,14 +79,21 @@ export type LiveTopologyViewProps = {
 export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewProps) {
   const { t } = useI18n();
   const live = useRead<LiveTopologyResponse>('/api/topology/live');
-  const [selectedComponentId, setSelectedComponentId] = useState<string | undefined>();
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
+  /* Search, domain and selection live in the URL (see live-topology-url.ts), so a
+   * reload or a shared link restores the same canvas instead of the default view. */
+  const liveView = useLiveTopologyViewState();
+  const selectedComponentId = liveView.focus;
+  const selectedEdgeId = liveView.edge;
+  const setSelectedComponentId = liveView.setFocus;
+  const setSelectedEdgeId = liveView.setEdge;
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | undefined>();
   const [focusedEdgeId, setFocusedEdgeId] = useState<string | undefined>();
   const [hoveredResourceId, setHoveredResourceId] = useState<string | undefined>();
   const [focusedResourceId, setFocusedResourceId] = useState<string | undefined>();
-  const [search, setSearch] = useState('');
-  const [domainMode, setDomainMode] = useState<TopologyDomainMode>('all');
+  const search = liveView.search;
+  const domainMode = liveView.domain;
+  const setSearch = liveView.setSearch;
+  const setDomainMode = liveView.setDomain;
   const [showAllInterfaceNames, setShowAllInterfaceNames] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
