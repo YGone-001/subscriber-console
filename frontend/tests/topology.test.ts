@@ -18,6 +18,8 @@ import { TopologyGraph } from '../src/features/topology/components/TopologyGraph
 import { ActualTopologyCanvas } from '../src/features/topology/components/ActualTopologyCanvas';
 import { TopologyEdgeTable } from '../src/features/topology/components/TopologyEdgeTable';
 import { TopologyEdgeForm } from '../src/features/topology/components/TopologyEdgeForm';
+import { recommendInterfaces } from '../src/features/topology/interface-catalog';
+import { TopologyInterfaceSelector } from '../src/features/topology/components/TopologyInterfaceSelector';
 import { TopologyEdgeDetail } from '../src/features/topology/components/TopologyEdgeDetail';
 import { TopologyPage } from '../src/features/topology/TopologyPage';
 import { ResourceTopologyPage } from '../src/features/topology/ResourceTopologyPage';
@@ -1797,4 +1799,79 @@ test('the ledger keeps the endpoint pickers behind a disclosure', () => {
     source.includes('if (fromResourceId || toResourceId) setAdvancedOpen(true);'),
     'an applied endpoint filter must reveal the picker that owns it',
   );
+});
+
+/* -------------------------------------------------- interface suggestion -- */
+
+const suggestionCatalog = [
+  { name: 'N4', category: 'reference_point', domains: ['5gc'], plane: 'user', scope: 'intra', endpoints: [['SMF', 'UPF']], spec: '3GPP', description: '' },
+  { name: 'N11', category: 'reference_point', domains: ['5gc'], plane: 'control', scope: 'intra', endpoints: [['AMF', 'SMF']], spec: '3GPP', description: '' },
+  { name: 'S6a', category: 'reference_point', domains: ['epc'], plane: 'control', scope: 'inter', endpoints: [['MME', 'HSS']], spec: '3GPP', description: '' },
+  { name: 'Nnrf', category: 'sbi', domains: ['5gc'], plane: 'control', scope: 'intra', producerRole: 'NRF', spec: '3GPP', description: '' },
+] as InterfaceEntry[];
+
+test('interfaces are suggested only when both endpoints and the role pair match', () => {
+  assert.deepEqual(
+    recommendInterfaces(suggestionCatalog, { domain: '5gc', role: 'smf' }, { domain: '5gc', role: 'upf' }),
+    ['N4'],
+    'a matching role pair is suggested in either direction',
+  );
+  assert.deepEqual(
+    recommendInterfaces(suggestionCatalog, { domain: '5gc', role: 'upf' }, { domain: '5gc', role: 'smf' }),
+    ['N4'],
+    'the suggestion does not depend on endpoint order',
+  );
+  assert.deepEqual(
+    recommendInterfaces(suggestionCatalog, { domain: '5gc', role: 'smf' }, { domain: '5gc', role: 'hss' }),
+    [],
+    'a pair with no catalog entry is not guessed',
+  );
+  assert.deepEqual(
+    recommendInterfaces(suggestionCatalog, { domain: '5gc', role: 'smf' }, null),
+    [],
+    'a missing endpoint yields no suggestion at all',
+  );
+  assert.deepEqual(
+    recommendInterfaces(suggestionCatalog, { domain: 'epc', role: 'mme' }, { domain: '5gc', role: 'upf' }),
+    [],
+    'an interface that does not cover both domains is never suggested',
+  );
+});
+
+test('the create form starts without a relationship type and keeps extension fields advanced', () => {
+  const markup = render(createElement(TopologyEdgeForm, {
+    mode: 'create',
+    relationshipTypes: ['contains', 'connects_to'],
+    interfaceCatalog: INTERFACE_CATALOG,
+    submitting: false,
+    serverError: null,
+    onCancel: () => {},
+  }));
+
+  assert.ok(
+    markup.includes('data-relationship-preview="none"'),
+    'no relationship is preselected, so the preview must say so',
+  );
+  assert.ok(
+    markup.includes('Select a relationship type'),
+    'the placeholder must name the missing decision',
+  );
+  assert.ok(
+    markup.includes('data-edge-advanced-settings="true"'),
+    'labels and extension attributes belong to the advanced section',
+  );
+});
+
+test('the interface selector shows suggestions first and keeps the rest reachable', () => {
+  const markup = render(createElement(TopologyInterfaceSelector, {
+    catalog: suggestionCatalog,
+    selected: [],
+    onChange: () => {},
+    recommended: ['N4'],
+  }));
+
+  assert.ok(markup.includes('data-interface-scope="recommended"'), 'the scoped view must be identifiable');
+  assert.ok(markup.includes('data-interface-name="N4"'), 'the suggested interface must be shown');
+  assert.ok(!markup.includes('data-interface-name="S6a"'), 'an unrelated interface stays out of the default view');
+  assert.ok(markup.includes('Show all interfaces'), 'the rest of the catalog must stay one click away');
 });

@@ -8,7 +8,7 @@
  * Both submit paths go through the production request builders so the payload
  * shape cannot drift from the validated contract.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Field } from '../../../components/ui/Field';
 import type { Resource } from '../../inventory/inventory-types';
@@ -21,6 +21,7 @@ import type {
   UpdateEdgeRequest,
 } from '../topology-types';
 import { RELATIONSHIP_PRESENTATION } from '../topology-types';
+import { recommendInterfaces } from '../interface-catalog';
 import { edgeInterfaceNames } from '../interface-catalog';
 import { primeResourceDirectory } from '../use-resource-directory';
 import { TopologyResourcePicker } from './TopologyResourcePicker';
@@ -73,8 +74,12 @@ export function TopologyEdgeForm({
 
   const [fromResource, setFromResource] = useState<Resource | null>(null);
   const [toResource, setToResource] = useState<Resource | null>(null);
-  const [relationshipType, setRelationshipType] = useState(
-    initialEdge?.relationshipType ?? relationshipTypes[0] ?? '',
+  /* Creating a relationship is a decision, not a default: the form starts with no
+   * type selected, and the catalog order never becomes the operator's intent. */
+  const [relationshipType, setRelationshipType] = useState(initialEdge?.relationshipType ?? '');
+  const recommendedInterfaces = useMemo(
+    () => recommendInterfaces(interfaceCatalog, fromResource, toResource),
+    [interfaceCatalog, fromResource, toResource],
   );
   const [interfaceNames, setInterfaceNames] = useState<string[]>(
     initialEdge ? edgeInterfaceNames(initialEdge) : [],
@@ -107,6 +112,9 @@ export function TopologyEdgeForm({
     event.preventDefault();
     setValidationError(null);
     try {
+      if (mode === 'create' && !relationshipType) {
+        throw new Error(t('topology_relationship_required'));
+      }
       const labels = rowsToLabels(labelRows);
       const attributes = parseAttributes();
 
@@ -164,6 +172,11 @@ export function TopologyEdgeForm({
               onChange={(event) => setRelationshipType(event.target.value)}
               disabled={submitting}
             >
+              {relationshipType === '' ? (
+                <option value="" disabled>
+                  {t('topology_relationship_placeholder')}
+                </option>
+              ) : null}
               {relationshipTypes.map((value) => (
                 <option key={value} value={value}>
                   {relationshipLabel(value)}
@@ -182,7 +195,13 @@ export function TopologyEdgeForm({
           <p className={styles.directionPreview} aria-live="polite">
             {fromResource ? fromResource.displayName || fromResource.name : t('topology_select_from')}
             <span aria-hidden="true"> → </span>
-            <span className="sr-only">{relationshipLabel(relationshipType)}</span>
+            <span
+              className={styles.directionRelation}
+              data-relationship-preview={relationshipType || 'none'}
+            >
+              {relationshipType ? relationshipLabel(relationshipType) : t('topology_relationship_placeholder')}
+            </span>
+            <span aria-hidden="true"> → </span>
             {toResource ? toResource.displayName || toResource.name : t('topology_select_to')}
           </p>
         </>
@@ -212,6 +231,7 @@ export function TopologyEdgeForm({
         selected={interfaceNames}
         onChange={setInterfaceNames}
         disabled={submitting}
+        recommended={recommendedInterfaces}
       />
 
       <Field htmlFor="topology-description" label={t('topology_edge_description')}>
@@ -226,6 +246,8 @@ export function TopologyEdgeForm({
         />
       </Field>
 
+      <details className={styles.advancedSettings} data-edge-advanced-settings="true">
+        <summary>{t('topology_advanced_settings')}</summary>
       <fieldset className={styles.labelSet}>
         <legend>{t('topology_labels')}</legend>
         {labelRows.map((row, index) => (
@@ -288,6 +310,7 @@ export function TopologyEdgeForm({
           disabled={submitting}
         />
       </Field>
+      </details>
 
       {validationError ? (
         <p className={styles.formError} role="alert">{validationError}</p>

@@ -883,6 +883,19 @@ endpoint roles or SBI producer. There is no free-text interface input, and the
 form enforces the maximum of eight selections. Unannotated relationships remain
 valid.
 
+The create form starts with **no relationship type selected**: the catalog order
+never becomes the operator's intent, and saving without a type is refused with an
+explicit message. Once both endpoints are chosen, the preview spells the intent
+out as `from → relationship → to`.
+
+With both endpoints known, the selector opens scoped to the interfaces whose
+declared endpoint roles match the pair and whose domains cover both endpoints.
+The scope is a starting point, not a restriction: `Show all interfaces` reveals
+the rest of the catalog, already-selected names stay visible in both scopes, and
+a pair with no matching catalog entry simply shows the full list. Labels and
+extension attributes live under `Advanced settings`; the action bar stays sticky
+so cancel/save remain reachable while the form scrolls.
+
 The ledger and the relationship detail render every annotated interface name.
 An edge stored without names is shown explicitly as `Unannotated`; no name is
 inferred from its endpoints or relationship type.

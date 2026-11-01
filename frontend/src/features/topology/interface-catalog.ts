@@ -99,3 +99,42 @@ export function interfaceSearchText(entry: InterfaceEntry): string {
     ...(entry.endpoints ?? []).flat(),
   ].join(' ').toLowerCase();
 }
+
+/**
+ * Interfaces that plausibly connect two resources.
+ *
+ * The recommendation only narrows what is shown first; it never blocks any
+ * catalog entry and never invents a reference point. A pair whose endpoints are
+ * unknown yields no recommendation at all, so the form falls back to the full
+ * catalog instead of guessing.
+ */
+export function recommendInterfaces(
+  catalog: InterfaceEntry[],
+  from?: { domain?: string; role?: string } | null,
+  to?: { domain?: string; role?: string } | null,
+): string[] {
+  if (!from || !to) return [];
+  const fromDomain = (from.domain ?? '').trim().toLowerCase();
+  const toDomain = (to.domain ?? '').trim().toLowerCase();
+  if (!fromDomain || !toDomain) return [];
+  const domains = [fromDomain, toDomain];
+  const roles = [(from.role ?? '').trim().toLowerCase(), (to.role ?? '').trim().toLowerCase()];
+  const recommended: string[] = [];
+
+  for (const entry of catalog) {
+    const covers = domains.every((domain) => entry.domains.some((candidate) => candidate.toLowerCase() === domain));
+    if (!covers) continue;
+    /* A producer-style service entry names one role, not the pair this form is
+     * creating. Only entries that declare both endpoint roles can be suggested;
+     * everything else stays selectable through the full catalog. */
+    const pairs = entry.endpoints ?? [];
+    const roleMatch = pairs.some((pair) => {
+      const [left, right] = pair.map((role) => (role ?? '').trim().toLowerCase());
+      return (left === roles[0] && right === roles[1]) || (left === roles[1] && right === roles[0]);
+    });
+    if (!roleMatch) continue;
+    recommended.push(entry.name);
+  }
+
+  return recommended;
+}

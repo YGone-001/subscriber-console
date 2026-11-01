@@ -25,6 +25,10 @@ export interface TopologyInterfaceSelectorProps {
   onChange: (names: string[]) => void;
   disabled?: boolean;
   idPrefix?: string;
+  /* Interfaces that plausibly connect the chosen endpoints. They are shown first
+   * so the common task is short; every other catalog entry stays one toggle away
+   * and is never disabled by the recommendation. */
+  recommended?: string[];
 }
 
 const CATEGORY_ORDER = ['reference_point', 'sbi'];
@@ -40,14 +44,22 @@ export function TopologyInterfaceSelector({
   onChange,
   disabled = false,
   idPrefix = 'topology-interface',
+  recommended = [],
 }: TopologyInterfaceSelectorProps) {
   const { t } = useI18n();
   const [search, setSearch] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const recommendedSet = useMemo(() => new Set(recommended), [recommended]);
+  const scoped = recommendedSet.size > 0 && !showAll;
   const atLimit = selected.length >= MAX_INTERFACE_NAMES;
   const groups = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const filtered = catalog.filter((entry) => !query || interfaceSearchText(entry).includes(query));
+    const filtered = catalog.filter((entry) => {
+      if (query) return interfaceSearchText(entry).includes(query);
+      if (scoped && !recommendedSet.has(entry.name) && !selectedSet.has(entry.name)) return false;
+      return true;
+    });
     const buckets = new Map<string, { category: string; domain: string; entries: InterfaceEntry[] }>();
     for (const entry of filtered) {
       const category = entry.category;
@@ -66,7 +78,7 @@ export function TopologyInterfaceSelector({
         CATEGORY_ORDER.indexOf(left.category) - CATEGORY_ORDER.indexOf(right.category)
         || DOMAIN_ORDER.indexOf(left.domain) - DOMAIN_ORDER.indexOf(right.domain)
       ));
-  }, [catalog, search]);
+  }, [catalog, search, scoped, recommendedSet, selectedSet]);
 
   const toggle = (name: string) => {
     if (selectedSet.has(name)) {
@@ -101,7 +113,24 @@ export function TopologyInterfaceSelector({
             max: MAX_INTERFACE_NAMES,
           })}
         </span>
+        {recommendedSet.size > 0 ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setShowAll((value) => !value)}
+            data-interface-scope={scoped ? 'recommended' : 'all'}
+            disabled={disabled}
+          >
+            {scoped ? t('topology_interface_expand_catalog') : t('topology_interface_recommended_only')}
+          </button>
+        ) : null}
       </div>
+
+      {scoped ? (
+        <p className={styles.interfaceHint} data-interface-recommended-hint="true">
+          {t('topology_interface_recommended_hint', { count: recommendedSet.size })}
+        </p>
+      ) : null}
 
       {selected.length > 0 ? (
         <div className={styles.interfaceSelected}>
