@@ -963,11 +963,14 @@ Inventory link. Configured links use a dashed edge and an explicit `configured`
 evidence marker so they cannot be mistaken for declared edges. Interface names
 are the preferred edge label, followed by protocol.
 
-The view does not duplicate the graph with a node table or a configured-edge
-table. The advisory reconciliation panel lives in the footer (6.7) and never
-replaces the canvas. Node and configured-edge inspection stays on the canvas
-itself, and the contextual inspector carries the detail; registering stays an
-explicit operator action in the link inspector.
+The canvas is paired with a collapsed **equivalent list** (one row per runtime
+component and one per configured link, both selectable and captioned) because a
+visualization without a structured alternative is not accessible. The disclosure
+keeps the graph the primary surface, so the list is an equivalent, not a second
+always-open copy. The advisory reconciliation panel lives in the footer (6.7) and
+never replaces the canvas. Node and configured-edge inspection stays on the
+canvas itself, and the contextual inspector carries the detail; registering stays
+an explicit operator action in the link inspector.
 
 The header also carries a domain overview: one chip per domain present in this
 snapshot with its component count, plus `all`. Selecting a chip applies the same

@@ -414,6 +414,77 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
   const completeness = liveConfigCompleteness(config);
   const unavailableSources = config.unavailable ?? [];
 
+  /* Equivalent, keyboard-navigable representation of the canvas. A visualization
+   * without a structured alternative is not an accessible surface: these tables
+   * carry the same identities and selection actions as the graph. */
+  const equivalentLists = (
+    <details className={styles.liveUnresolved} data-live-equivalent-lists="true">
+      <summary>{t('topology_equivalent_lists')}</summary>
+      <table className={styles.liveEquivalentTable}>
+        <caption className="sr-only">{t('topology_list_nodes')}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{t('topology_list_name')}</th>
+            <th scope="col">{t('topology_inspector_type')}</th>
+            <th scope="col">{t('topology_domain_filter')}</th>
+            <th scope="col">{t('topology_list_state')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.nodes.map((node) => (
+            <tr key={node.componentId}>
+              <th scope="row">
+                <button
+                  type="button"
+                  className={styles.linkBtn}
+                  data-list-node={node.componentId}
+                  onClick={() => selectNode(node.componentId)}
+                >
+                  {node.displayName || node.componentId}
+                </button>
+              </th>
+              <td>{node.role || node.nfType || '-'}</td>
+              <td>{node.domain || '-'}</td>
+              <td>{t(`runtime_status_${node.runtimeStatus}`)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <table className={styles.liveEquivalentTable}>
+        <caption className="sr-only">{t('topology_list_relationships')}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{t('topology_list_source')}</th>
+            <th scope="col">{t('topology_list_interface')}</th>
+            <th scope="col">{t('topology_list_target')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {liveLinks.map((edge) => (
+            <tr key={edge.edgeId}>
+              <td>
+                <button
+                  type="button"
+                  className={styles.linkBtn}
+                  data-list-edge={edge.edgeId}
+                  onClick={() => selectEdge(edge.edgeId)}
+                >
+                  {directory[edge.fromResourceId]?.displayName || edge.fromResourceId}
+                </button>
+              </td>
+              <td>
+                {(edge.interfaceNames?.length ?? 0) > 0
+                  ? (edge.interfaceNames ?? []).join(' / ')
+                  : t('topology_interface_unannotated')}
+              </td>
+              <td>{directory[edge.toResourceId]?.displayName || edge.toResourceId}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+
   const domainOverviewChips = domainOverview.size > 0 ? (
     <span
       className={styles.liveDomainOverview}
@@ -618,8 +689,10 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
             </span>
           </span>
         )}
-        footer={(unresolved.length > 0 || Boolean(reconciliation && reconciliationDiff)) ? (
+        footer={(
           <>
+            {equivalentLists}
+          {unresolved.length > 0 ? (
           <details className={styles.liveUnresolved}>
             <summary>{t('topology_live_unresolved_title')}</summary>
             <ul>
@@ -636,6 +709,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
               ))}
             </ul>
           </details>
+          ) : null}
           {reconciliation && reconciliationDiff ? (
             <TopologyReconciliationPanel
               summary={reconciliation}
@@ -644,7 +718,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
             />
           ) : null}
           </>
-        ) : undefined}
+        )}
       >
         {layout.nodes.length === 0 ? (
           <div className={styles.statePanel} data-state-panel="empty" data-state-source="topology-live">

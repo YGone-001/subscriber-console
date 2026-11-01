@@ -182,7 +182,7 @@ test('the announcer exposes a polite live status', () => {
   assert.ok(markup.includes('Loaded 5 nodes'));
 });
 
-test('every canvas keeps an accessible channel without duplicating the runtime graph below it', () => {
+test('every canvas keeps an accessible channel and an equivalent structured list', () => {
   const actual = read('../src/features/topology/ActualTopologyView.tsx');
   const live = read('../src/features/topology/LiveTopologyView.tsx');
   const architecture = read('../src/features/topology/ArchitectureView.tsx');
@@ -201,9 +201,17 @@ test('every canvas keeps an accessible channel without duplicating the runtime g
     assert.ok(actual.includes(key), `declared relationship list needs ${key}`);
   }
 
-  assert.ok(!live.includes('data-list-node='), 'runtime nodes must not be duplicated below the graph');
-  assert.ok(!live.includes('data-list-edge='), 'configured relationships must not be duplicated below the graph');
-  assert.match(live, /<ActualTopologyCanvas/, 'the runtime canvas is the single node and relationship surface');
+  /* Acceptance 3.8: a visualization without an equivalent structured list is not
+   * accessible. The runtime canvas therefore carries one, inside a disclosure so
+   * the graph stays the primary surface instead of a second always-open copy. */
+  assert.ok(live.includes('data-list-node='), 'runtime nodes must be listed as the accessible equivalent');
+  assert.ok(live.includes('data-list-edge='), 'configured relationships must be listed as the accessible equivalent');
+  assert.match(
+    live,
+    /<details[^>]*data-live-equivalent-lists="true"/,
+    'the equivalent lists belong to a collapsed disclosure, not to an inline duplicate',
+  );
+  assert.match(live, /<ActualTopologyCanvas/, 'the runtime canvas remains the primary node and relationship surface');
 
   assert.match(architecture, /data-architecture-relationship-list/, 'reference relationships need a list');
 });
@@ -321,5 +329,22 @@ test('the runtime canvas offers a domain overview that filters, not a hidden lis
   assert.ok(
     live.includes("setDomainMode(active && option.value !== 'all' ? 'all' : option.value)"),
     'selecting the active domain must return to the unfiltered canvas',
+  );
+});
+
+test('the runtime canvas provides an equivalent node and relationship list', () => {
+  const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
+  const live = read('../src/features/topology/LiveTopologyView.tsx');
+
+  assert.ok(live.includes('data-live-equivalent-lists="true"'), 'the alternative view must be identifiable');
+  assert.ok(live.includes('data-list-node={node.componentId}'), 'every runtime component needs a list entry');
+  assert.ok(live.includes('data-list-edge={edge.edgeId}'), 'every configured link needs a list entry');
+  assert.ok(
+    live.includes('<caption className="sr-only">{t(\'topology_list_nodes\')}</caption>'),
+    'the node list must carry a caption for screen readers',
+  );
+  assert.ok(
+    live.includes('<th scope="row">'),
+    'a list row must expose its own header cell so the table stays navigable',
   );
 });

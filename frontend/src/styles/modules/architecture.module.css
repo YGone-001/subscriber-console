@@ -2211,6 +2211,21 @@
   }
 }
 
+.liveEquivalentTable {
+  width: 100%;
+  margin-top: var(--space-8);
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+.liveEquivalentTable th,
+.liveEquivalentTable td {
+  padding: var(--space-4) var(--space-8);
+  border-bottom: 1px solid var(--surface-border);
+  text-align: left;
+  vertical-align: top;
+}
+
 .liveDomainOverview {
   display: inline-flex;
   align-items: center;
