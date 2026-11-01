@@ -133,6 +133,8 @@ export function TopologyPage() {
   /* Read time of the ledger, not a server side timestamp: the list response
      carries page state only, so the surface states when it last read it. */
   const [ledgerReadAt, setLedgerReadAt] = useState('');
+  /* The endpoint pickers start collapsed unless the link already carries one. */
+  const [advancedOpen, setAdvancedOpen] = useState(Boolean(fromResourceId || toResourceId));
   const queryKeyRef = useRef('');
   /* The ledger is read imperatively on every filter change, so a slow earlier
    * response would otherwise overwrite the list the operator is now looking at.
@@ -207,6 +209,11 @@ export function TopologyPage() {
     }
     void loadEdges(url.cursor);
   }, [primary, loadEdges, url.cursor, lifecycleState, relationshipType, fromResourceId, toResourceId]);
+
+  /* Applying an endpoint filter from anywhere must reveal the picker that owns it. */
+  useEffect(() => {
+    if (fromResourceId || toResourceId) setAdvancedOpen(true);
+  }, [fromResourceId, toResourceId]);
 
   const endpointIds = useMemo(
     () => [
@@ -516,22 +523,33 @@ export function TopologyPage() {
           </div>
         </div>
 
-        <div className={styles.resourceFilters}>
-          <TopologyResourcePicker
-            id="topology-filter-from"
-            label={t('topology_filter_from')}
-            value={fromResourceId}
-            onChange={(resource) => url.setFilter('from', resource?.resourceId ?? '')}
-            excludeResourceId={toResourceId || undefined}
-          />
-          <TopologyResourcePicker
-            id="topology-filter-to"
-            label={t('topology_filter_to')}
-            value={toResourceId}
-            onChange={(resource) => url.setFilter('to', resource?.resourceId ?? '')}
-            excludeResourceId={fromResourceId || undefined}
-          />
-        </div>
+        {/* Source and target pickers are the heaviest controls on this page, so they
+            live behind a disclosure. The row above keeps the common filters, and an
+            applied endpoint filter re-opens this section so the value stays visible. */}
+        <details
+          className={styles.advancedFilters}
+          data-ledger-advanced-filters="true"
+          open={advancedOpen}
+          onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+        >
+          <summary>{t('topology_advanced_filters')}</summary>
+          <div className={styles.resourceFilters}>
+            <TopologyResourcePicker
+              id="topology-filter-from"
+              label={t('topology_filter_from')}
+              value={fromResourceId}
+              onChange={(resource) => url.setFilter('from', resource?.resourceId ?? '')}
+              excludeResourceId={toResourceId || undefined}
+            />
+            <TopologyResourcePicker
+              id="topology-filter-to"
+              label={t('topology_filter_to')}
+              value={toResourceId}
+              onChange={(resource) => url.setFilter('to', resource?.resourceId ?? '')}
+              excludeResourceId={fromResourceId || undefined}
+            />
+          </div>
+        </details>
 
         {activeFilters.length > 0 ? (
           <div className={styles.filterTags}>

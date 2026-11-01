@@ -641,17 +641,21 @@ authority.
 ```text
 PageHeader (title, description, refresh, create for authorized users)
 Operations workbench navigation (shared tab strip)
-Reference architecture canvas (see 9.5)
-Filter toolbar (from resource, to resource, relationship type, lifecycle state, clear)
-Relationship table (from, relationship, direction, to, lifecycle, revision, updated, actions)
+Filter toolbar (relationship type, lifecycle state, clear)
+Advanced filters disclosure (from resource, to resource)
+Relationship table (from, relationship, interfaces, direction, to, lifecycle, updated, actions)
 Cursor pagination
 ```
 
-The table renders readable resource names plus the complete endpoint UUID with a
-copy affordance, preserves filter state across pages, links to an endpoint's
-topology detail, and can display retired records when explicitly requested. It
-never reports fabricated totals or KPI values and never loads the whole graph:
-pagination is server-side.
+The endpoint pickers are the heaviest controls on this page, so they live behind a
+disclosure that starts closed and opens automatically when the link already
+carries a `from` or `to` filter. Revision is no longer a scanned column: it belongs
+to the record detail. The table renders readable names and keeps the identifier
+available through the hover title and the copy control instead of repeating the
+UUID on every row. Filters persist across pages, rows link to the endpoint's
+topology detail, and retired records appear only when explicitly requested. The
+page never reports fabricated totals or KPI values and never loads the whole
+graph: pagination is server-side.
 
 ### 9.2 Resource topology (`/topology/:resourceId`)
 

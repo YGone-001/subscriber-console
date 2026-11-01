@@ -1772,3 +1772,29 @@ test('zoom resolution is safe on empty geometry', () => {
   const box = { availableWidth: 1000, availableHeight: 400 };
   assert.equal(resolveFitZoom(box, { width: 0, height: 0 }, 'readable', READABLE_MIN_ZOOM), 1);
 });
+
+test('the relationship table keeps engineering identifiers out of the scanned columns', () => {
+  const markup = render(createElement(TopologyEdgeTable, {
+    edges: [edge({ revision: 7 })],
+    directory,
+    caption: 'Topology relationships',
+    canConfigure: false,
+  }));
+
+  assert.ok(!markup.includes('>Revision<'), 'revision belongs to the detail, not to a scanned column');
+  assert.ok(!markup.includes('<code'), 'the identifier is no longer a visible line in every row');
+  assert.ok(
+    markup.includes('title="r-smf"') || markup.includes('title="r-pcf"') || markup.includes('Copy'),
+    'the identifier must stay discoverable through the hover title and the copy control',
+  );
+});
+
+test('the ledger keeps the endpoint pickers behind a disclosure', () => {
+  const source = readFileSync(new URL('../src/features/topology/TopologyPage.tsx', import.meta.url), 'utf8');
+  assert.ok(source.includes('data-ledger-advanced-filters="true"'), 'the pickers need their own disclosure');
+  assert.ok(source.includes('topology_advanced_filters'), 'the disclosure must be labelled');
+  assert.ok(
+    source.includes('if (fromResourceId || toResourceId) setAdvancedOpen(true);'),
+    'an applied endpoint filter must reveal the picker that owns it',
+  );
+});

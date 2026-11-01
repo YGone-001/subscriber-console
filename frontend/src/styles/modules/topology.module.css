@@ -37,6 +37,26 @@
   border-radius: var(--ref-radius-control);
 }
 
+/* The endpoint pickers sit behind a disclosure: they are the heaviest controls
+ * on the ledger and pushed the relationship list below the first screen. */
+.advancedFilters {
+  margin: 0 0 var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+}
+
+.advancedFilters > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.advancedFilters .resourceFilters {
+  padding: var(--space-8) 0 0;
+}
+
 .resourceFilters {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

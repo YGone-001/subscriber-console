@@ -84,7 +84,7 @@ function EndpointCell({
   const name = projection?.displayName || projection?.name;
   return (
     <div className={styles.endpoint}>
-      <div className={styles.endpointName}>
+      <div className={styles.endpointName} title={resourceId}>
         {name ? (
           onView ? (
             <button type="button" className={styles.linkBtn} onClick={() => onView(resourceId)}>
@@ -98,9 +98,8 @@ function EndpointCell({
         )}
         <CopyIdButton value={resourceId} />
       </div>
-      <code className={styles.uuid} title={resourceId}>
-        {resourceId}
-      </code>
+      {/* The identifier stays copyable and appears on hover; it no longer takes a
+          table row's width, because names are what an operator scans. */}
       {projection ? (
         <span className={styles.endpointMeta}>
           {projection.kind} · {projection.domain}
@@ -160,7 +159,6 @@ export function TopologyEdgeTable({
             <th scope="col">{t('topology_direction')}</th>
             <th scope="col">{t('topology_to_resource')}</th>
             <th scope="col">{t('topology_lifecycle')}</th>
-            <th scope="col">{t('topology_revision')}</th>
             <th scope="col">{t('topology_updated_at')}</th>
             <th scope="col" className={styles.actionsCell}>
               {t('actions')}
@@ -214,9 +212,7 @@ export function TopologyEdgeTable({
                   </span>
                   <span className={styles.declaredNote}>{t('topology_declared_note')}</span>
                 </td>
-                <td>
-                  <span className={styles.revision}>r{edge.revision}</span>
-                </td>
+
                 <td>
                   <span className={styles.dateCell}>{formatTimestamp(edge.updatedAt)}</span>
                 </td>
