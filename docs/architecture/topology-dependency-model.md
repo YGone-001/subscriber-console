@@ -468,7 +468,12 @@ strict: the match must be a protocol, address and port that belongs to exactly
 one component, or a declared identity owned by exactly one component. When two
 components advertise the same identity or the same endpoint, or when the address
 matches a listener on a different port, the peer is reported with a reason that
-names the ambiguity and never becomes a certain edge. DRA config
+names the ambiguity and never becomes a certain edge. A peer that names one
+identity while its address and port belong to a component that declares a
+different identity is reported as a contradiction (`peer identity contradicts
+the component that owns that endpoint`): both sides are known and neither is
+silently preferred. Components that declare no identity at all, such as the
+open5gs SBI endpoints, keep the address based resolution. DRA config
 does not synthesize direct links through the proxy. The edge `state` is derived
 from the two endpoints' runtime status (`active`, `partial`, `inactive`,
 `unknown`); it is not a health, traffic or connectivity claim. `inactive` is

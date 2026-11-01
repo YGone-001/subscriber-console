@@ -158,3 +158,88 @@ func TestExactEndpointResolutionStillCreatesEdge(t *testing.T) {
 		t.Fatalf("a resolved peer must not be reported as unresolved: %+v", response.Unresolved)
 	}
 }
+
+/* A peer that names one identity while its endpoint belongs to a component that
+ * declares a different identity is a contradiction: neither side may be
+ * silently preferred, so no certain edge is produced. */
+func TestIdentityConflictWithEndpointOwnerNeverCreatesCertainEdge(t *testing.T) {
+	parsed := map[string]*parsedComponent{
+		"pcrf": {
+			ComponentID: "pcrf",
+			Listeners:   []Endpoint{testListener("diameter", "192.168.64.128", 3891)},
+			Peers: []peer{{
+				Protocol: "diameter",
+				FQDN:     "uniransim-af.epc.example",
+				Address:  "192.168.64.128",
+				Port:     3893,
+			}},
+		},
+		"pcf": {
+			ComponentID: "pcf",
+			Listeners:   []Endpoint{testListener("diameter", "192.168.64.128", 3893)},
+			Identities:  []string{"pcf.epc.example"},
+		},
+	}
+	response := Build(ambiguitySnapshot("pcrf", "pcf"), parsed, ConfigStatus{})
+
+	if edgeBetween(response, "pcrf", "pcf") {
+		t.Fatalf("a contradicting identity must not become a certain edge: %+v", response.Edges)
+	}
+	reason := unresolvedReasonFor(response, "pcrf", "diameter", "uniransim-af.epc.example")
+	if reason != reasonPeerIdentityConflict {
+		t.Fatalf("expected the identity-conflict reason, got %q (unresolved=%+v)", reason, response.Unresolved)
+	}
+}
+
+/* The same shape without a declared identity on the target stays an address
+ * match: components such as the open5gs SBI endpoints never declare a Diameter
+ * identity, and their configured peers must keep resolving. */
+func TestEndpointMatchStillResolvesWhenTheTargetDeclaresNoIdentity(t *testing.T) {
+	parsed := map[string]*parsedComponent{
+		"pcrf": {
+			ComponentID: "pcrf",
+			Listeners:   []Endpoint{testListener("diameter", "192.168.64.128", 3891)},
+			Peers: []peer{{
+				Protocol: "diameter",
+				FQDN:     "uniransim-af.epc.example",
+				Address:  "192.168.64.128",
+				Port:     3893,
+			}},
+		},
+		"pcf": {
+			ComponentID: "pcf",
+			Listeners:   []Endpoint{testListener("diameter", "192.168.64.128", 3893)},
+		},
+	}
+	response := Build(ambiguitySnapshot("pcrf", "pcf"), parsed, ConfigStatus{})
+
+	if !edgeBetween(response, "pcrf", "pcf") {
+		t.Fatalf("an endpoint match without a declared identity must still resolve: %+v", response.Unresolved)
+	}
+}
+
+/* A peer whose identity matches the endpoint owner resolves as before. */
+func TestIdentityAgreeingWithTheEndpointOwnerStillResolves(t *testing.T) {
+	parsed := map[string]*parsedComponent{
+		"pcrf": {
+			ComponentID: "pcrf",
+			Listeners:   []Endpoint{testListener("diameter", "192.168.64.128", 3891)},
+			Peers: []peer{{
+				Protocol: "diameter",
+				FQDN:     "pcf.epc.example",
+				Address:  "192.168.64.128",
+				Port:     3893,
+			}},
+		},
+		"pcf": {
+			ComponentID: "pcf",
+			Listeners:   []Endpoint{testListener("diameter", "192.168.64.128", 3893)},
+			Identities:  []string{"pcf.epc.example"},
+		},
+	}
+	response := Build(ambiguitySnapshot("pcrf", "pcf"), parsed, ConfigStatus{})
+
+	if !edgeBetween(response, "pcrf", "pcf") {
+		t.Fatalf("an agreeing identity must still resolve: %+v", response.Unresolved)
+	}
+}

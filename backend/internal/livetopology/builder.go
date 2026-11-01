@@ -22,6 +22,10 @@ const (
 	reasonPeerIdentityAmbiguous = "peer identity matches more than one configured component"
 	reasonPeerEndpointAmbiguous = "peer endpoint matches more than one configured component"
 	reasonPeerPortMismatch      = "peer port does not match any configured endpoint"
+	// A peer that names an identity while pointing at an endpoint owned by a
+	// component which declares a different identity is a contradiction, not a
+	// link. Both sides are known, so neither may be silently preferred.
+	reasonPeerIdentityConflict = "peer identity contradicts the component that owns that endpoint"
 )
 
 // appendListenerRef keeps one entry per component and endpoint. Two different
@@ -37,6 +41,20 @@ func appendListenerRef(refs []listenerRef, ref listenerRef) []listenerRef {
 		}
 	}
 	return append(refs, ref)
+}
+
+// declaresIdentity reports whether the component itself declares this identity.
+func declaresIdentity(component *parsedComponent, identity string) bool {
+	target := normalizeAddress(identity)
+	if target == "" {
+		return false
+	}
+	for _, declared := range component.Identities {
+		if normalizeAddress(declared) == target {
+			return true
+		}
+	}
+	return false
 }
 
 type edgeBuilder struct {
@@ -348,6 +366,18 @@ func Build(snapshot *runtimeinv.Snapshot, parsed map[string]*parsedComponent, co
 			}
 			if targetID == componentID {
 				continue
+			}
+			/* The peer named an identity but reached a component through its
+			 * address and port. When both sides are known and they disagree, the
+			 * link is a contradiction: report it instead of silently choosing one
+			 * side. Components that declare no identity (for example the open5gs
+			 * SBI endpoints) keep the address based resolution. */
+			if item.FQDN != "" {
+				if targetParsed, ok := parsed[targetID]; ok && len(targetParsed.Identities) > 0 &&
+					!declaresIdentity(targetParsed, item.FQDN) {
+					addUnresolved(componentID, item, reasonPeerIdentityConflict)
+					continue
+				}
 			}
 			targetComponent, exists := componentByID[targetID]
 			if !exists {
