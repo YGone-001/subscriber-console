@@ -24,6 +24,9 @@ export async function fetchInventoryResources(
   if (params.q) searchParams.set('q', params.q);
   if (params.cursor) searchParams.set('cursor', params.cursor);
   if (params.limit) searchParams.set('limit', String(params.limit));
+  if (params.resourceIds && params.resourceIds.length > 0) {
+    searchParams.set('resourceIds', params.resourceIds.join(','));
+  }
 
   const query = searchParams.toString();
   const url = query ? `/api/inventory/resources?${query}` : '/api/inventory/resources';

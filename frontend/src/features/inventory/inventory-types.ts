@@ -176,4 +176,7 @@ export interface ResourceListQueryParams {
   q?: string;
   cursor?: string;
   limit?: number;
+  /* Bounded identifier resolution: at most 50 canonical UUIDs, answered as one
+   * set and therefore never combined with the narrowing parameters above. */
+  resourceIds?: string[];
 }
