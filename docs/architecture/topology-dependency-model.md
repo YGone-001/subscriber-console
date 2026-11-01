@@ -482,6 +482,15 @@ to `120/60s` per user, and returns `HTTP 503 TOPOLOGY_LIVE_UNAVAILABLE` when the
 runtime snapshot is unavailable. It never writes Inventory, Topology, NF Health
 or Discovery state.
 
+The response carries `generatedAt` and the canvas states it as the source time of
+the evidence it is showing, with the measured age and a `fresh`/`stale`/`unknown`
+state (`topology_freshness_policy_seconds = 300`). The policy describes staleness
+of the evidence only; it is not a health or availability claim about the
+resources. A source time that cannot be parsed is reported as `unknown` and is
+never rendered as fresh. Views are read on demand, so a canvas that has not been
+refreshed keeps showing the older picture explicitly rather than silently
+appearing current.
+
 ### 6.7 Declared versus configured reconciliation
 
 The same projection additionally reports `reconciliation`: an advisory diff

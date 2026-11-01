@@ -22,6 +22,7 @@ import { TopologyGraphShell } from './components/TopologyGraphShell';
 import { TopologyCanvasControls, TopologyGraphToolbar } from './components/TopologyGraphToolbar';
 import { TopologyAnnouncer } from './components/TopologyAnnouncer';
 import { TopologyReconciliationPanel } from './components/TopologyReconciliationPanel';
+import { TopologyFreshnessChip } from './components/TopologyFreshnessChip';
 import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology } from './actual-topology-model';
 import { LABEL_DETAIL_MIN_ZOOM, resolveLabelVisibility } from './actual-topology-labels';
 import { interfaceCoverage } from './interface-catalog';
@@ -419,6 +420,8 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
                 {t('topology_live_unresolved_peers', { count: unresolved.length })}
               </span>
             ) : null}
+            {/* The canvas is read on demand: state when the evidence was produced. */}
+            <TopologyFreshnessChip sourceTime={data.generatedAt} />
           </div>
         ) : undefined}
         notice={(!config.manifestConfigured || !config.complete || unavailableSources.length > 0) ? (
