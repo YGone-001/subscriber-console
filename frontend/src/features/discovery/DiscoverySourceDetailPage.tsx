@@ -6,7 +6,7 @@
  * create or mutate Inventory resources or Topology edges.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Link2,
@@ -23,6 +23,7 @@ import { Field } from '../../components/ui/Field';
 import PageHeader from '../../components/ui/PageHeader';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
+import { resolveReturnTo } from '../../lib/return-to';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import {
   fetchDiscoveryCandidates,
@@ -60,6 +61,8 @@ export function DiscoverySourceDetailPage() {
   const { t } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = resolveReturnTo(location.search, '/discovery', ['/discovery']);
 
   const canConfigure = hasPermission(user, 'core.configure');
 
@@ -231,7 +234,7 @@ export function DiscoverySourceDetailPage() {
         description={t('discovery_source_detail_description')}
         actions={(
           <>
-            <button type="button" className="btn btn-secondary" onClick={() => navigate('/discovery')}>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate(returnTo)}>
               <ArrowLeft size={16} />
               {t('discovery_back')}
             </button>

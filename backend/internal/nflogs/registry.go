@@ -179,6 +179,18 @@ func (r *Registry) List() []Source {
 	return sources
 }
 
+// Summary reports the number of configured sources and how many are currently
+// readable. It is a read-only probe used by platform health.
+func (r *Registry) Summary() (total, readable int) {
+	sources := r.List()
+	for _, source := range sources {
+		if source.Readable {
+			readable++
+		}
+	}
+	return len(sources), readable
+}
+
 // Resolve maps a client-supplied id onto the fixed table. The returned path is
 // never serialized.
 func (r *Registry) Resolve(sourceID string) (entry, bool) {

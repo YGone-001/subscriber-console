@@ -217,15 +217,20 @@ type CreateUserRequest struct {
 }
 
 // UpdateUserRequest is the PATCH /api/users/{username} request body.
-// Only non-nil fields are updated.
+// Only non-nil fields are updated. Password is rejected here: password changes
+// must use POST /api/users/{username}/password-reset so the audit event and the
+// session invalidation stay on one path.
 type UpdateUserRequest struct {
 	DisplayName *string `json:"displayName,omitempty"`
 	Email       *string `json:"email,omitempty"`
 	Role        *string `json:"role,omitempty"`
 	Status      *string `json:"status,omitempty"`
+	Password    *string `json:"password,omitempty"`
+	Reason      *string `json:"reason,omitempty"`
 }
 
 // ResetPasswordRequest is the POST /api/users/{username}/password-reset request body.
 type ResetPasswordRequest struct {
 	Password string `json:"password"`
+	Reason   string `json:"reason,omitempty"`
 }

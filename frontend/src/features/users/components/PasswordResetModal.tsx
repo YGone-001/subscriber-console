@@ -23,6 +23,7 @@ export function PasswordResetModal({ username, open, onClose, onSuccess, onReset
   const { t } = useI18n();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [reason, setReason] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,6 +34,7 @@ export function PasswordResetModal({ username, open, onClose, onSuccess, onReset
   const reset = () => {
     setPassword("");
     setConfirmPassword("");
+    setReason("");
     setPasswordVisible(false);
     setConfirmVisible(false);
     setError("");
@@ -50,6 +52,7 @@ export function PasswordResetModal({ username, open, onClose, onSuccess, onReset
         username,
         password,
         confirmPassword,
+        reason: reason.trim() || undefined,
         onReset,
         onSuccess,
         setError,
@@ -86,6 +89,10 @@ export function PasswordResetModal({ username, open, onClose, onSuccess, onReset
           autoComplete="new-password"
         />
         <PasswordStrengthBar password={password} />
+        <label>
+          <span>{t("users_confirm_reason")}</span>
+          <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={2} />
+        </label>
         <PasswordField
           id="reset-password-confirm"
           label={t("users_password_confirm")}

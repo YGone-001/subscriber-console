@@ -286,7 +286,7 @@ func (r *Repository) DeleteRule(ctx context.Context, ruleID string, actor string
 }
 
 func (r *Repository) resolveRuleAlerts(ctx context.Context, ruleID, now, actor string) ([]Alert, error) {
-	query := bson.M{"ruleId": ruleID, "state": bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged}}}
+	query := bson.M{"ruleId": ruleID, "state": bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering}}}
 	cursor, err := r.alerts.Find(ctx, query)
 	if err != nil {
 		return nil, err
@@ -356,17 +356,17 @@ func (r *Repository) ListAlerts(ctx context.Context, filter AlertListFilter) ([]
 	switch filter.Scope {
 	case "":
 		switch filter.State {
-		case "", AlertStateActive, AlertStateAcknowledged, AlertStateResolved:
+		case "", AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering, AlertStateResolved:
 			if filter.State != "" {
 				query["state"] = filter.State
 			}
 		default:
-			return nil, nil, false, validationError("NF_ALERT_INVALID_STATE_FILTER", "state must be active, acknowledged or resolved")
+			return nil, nil, false, validationError("NF_ALERT_INVALID_STATE_FILTER", "state must be active, acknowledged, assigned, recovering or resolved")
 		}
 	case AlertScopeOpen:
 		// The duty queue is everything still demanding attention. The two
 		// states stay distinct in the payload; this filter only selects them.
-		query["state"] = bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged}}
+		query["state"] = bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering}}
 	case AlertScopeHistory:
 		query["state"] = AlertStateResolved
 	default:
@@ -447,8 +447,12 @@ func alertStateRank(state string) int {
 		return 0
 	case AlertStateAcknowledged:
 		return 1
-	case AlertStateResolved:
+	case AlertStateAssigned:
 		return 2
+	case AlertStateRecovering:
+		return 3
+	case AlertStateResolved:
+		return 4
 	default:
 		return 9
 	}
@@ -480,7 +484,9 @@ func (r *Repository) listAlertsByRisk(ctx context.Context, query bson.M, rawCurs
 				"branches": bson.A{
 					bson.M{"case": bson.M{"$eq": bson.A{"$state", AlertStateActive}}, "then": 0},
 					bson.M{"case": bson.M{"$eq": bson.A{"$state", AlertStateAcknowledged}}, "then": 1},
-					bson.M{"case": bson.M{"$eq": bson.A{"$state", AlertStateResolved}}, "then": 2},
+					bson.M{"case": bson.M{"$eq": bson.A{"$state", AlertStateAssigned}}, "then": 2},
+					bson.M{"case": bson.M{"$eq": bson.A{"$state", AlertStateRecovering}}, "then": 3},
+					bson.M{"case": bson.M{"$eq": bson.A{"$state", AlertStateResolved}}, "then": 4},
 				},
 				"default": 9,
 			}}, 10}},
@@ -572,11 +578,63 @@ func (r *Repository) AcknowledgeAlert(ctx context.Context, alertID, actor string
 	return &doc, nil
 }
 
-// ResolveAlert manually resolves an active or acknowledged alert.
+// AssignAlert moves an open alert to the assigned state and records the owner.
+func (r *Repository) AssignAlert(ctx context.Context, alertID, assignedTo string) (*Alert, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res := r.alerts.FindOneAndUpdate(ctx,
+		bson.M{"_id": alertID, "state": bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged, AlertStateAssigned}}},
+		bson.M{"$set": bson.M{
+			"state":      AlertStateAssigned,
+			"assignedTo": assignedTo,
+			"assignedAt": now,
+			"updatedAt":  now,
+		}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+	var doc Alert
+	if err := res.Decode(&doc); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			if _, err := r.GetAlert(ctx, alertID); err != nil {
+				return nil, err
+			}
+			return nil, ErrAlertTransition
+		}
+		return nil, err
+	}
+	return &doc, nil
+}
+
+// RecoverAlert marks an assigned alert as recovering. The operator-facing
+// recovery step is distinct from the evaluator's automatic recovery resolve.
+func (r *Repository) RecoverAlert(ctx context.Context, alertID string) (*Alert, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res := r.alerts.FindOneAndUpdate(ctx,
+		bson.M{"_id": alertID, "state": AlertStateAssigned},
+		bson.M{"$set": bson.M{
+			"state":        AlertStateRecovering,
+			"recoveringAt": now,
+			"updatedAt":    now,
+		}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+	var doc Alert
+	if err := res.Decode(&doc); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			if _, err := r.GetAlert(ctx, alertID); err != nil {
+				return nil, err
+			}
+			return nil, ErrAlertTransition
+		}
+		return nil, err
+	}
+	return &doc, nil
+}
+
+// ResolveAlert manually resolves any open alert state.
 func (r *Repository) ResolveAlert(ctx context.Context, alertID, actor string) (*Alert, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	res := r.alerts.FindOneAndUpdate(ctx,
-		bson.M{"_id": alertID, "state": bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged}}},
+		bson.M{"_id": alertID, "state": bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering}}},
 		bson.M{"$set": bson.M{
 			"state":          AlertStateResolved,
 			"resolvedAt":     now,

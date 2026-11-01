@@ -108,6 +108,31 @@ func (s *stubRepo) AcknowledgeAlert(ctx context.Context, alertID, actor string) 
 	return a, nil
 }
 
+func (s *stubRepo) AssignAlert(ctx context.Context, alertID, assignedTo string) (*Alert, error) {
+	a, ok := s.alerts[alertID]
+	if !ok {
+		return nil, ErrAlertNotFound
+	}
+	if a.State == AlertStateResolved {
+		return nil, ErrAlertTransition
+	}
+	a.State = AlertStateAssigned
+	a.AssignedTo = assignedTo
+	return a, nil
+}
+
+func (s *stubRepo) RecoverAlert(ctx context.Context, alertID string) (*Alert, error) {
+	a, ok := s.alerts[alertID]
+	if !ok {
+		return nil, ErrAlertNotFound
+	}
+	if a.State != AlertStateAssigned {
+		return nil, ErrAlertTransition
+	}
+	a.State = AlertStateRecovering
+	return a, nil
+}
+
 func (s *stubRepo) ResolveAlert(ctx context.Context, alertID, actor string) (*Alert, error) {
 	a, ok := s.alerts[alertID]
 	if !ok {
@@ -173,6 +198,8 @@ func doRouted(h *Handler, method, target, role string, body any) *httptest.Respo
 	mux.HandleFunc("PUT /api/nf-alerts/rules/{ruleId}", withPrincipal(role, h.UpdateRule))
 	mux.HandleFunc("DELETE /api/nf-alerts/rules/{ruleId}", withPrincipal(role, h.DeleteRule))
 	mux.HandleFunc("POST /api/nf-alerts/{alertId}/acknowledge", withPrincipal(role, h.AcknowledgeAlert))
+	mux.HandleFunc("POST /api/nf-alerts/{alertId}/assign", withPrincipal(role, h.AssignAlert))
+	mux.HandleFunc("POST /api/nf-alerts/{alertId}/recover", withPrincipal(role, h.RecoverAlert))
 	mux.HandleFunc("POST /api/nf-alerts/{alertId}/resolve", withPrincipal(role, h.ResolveAlert))
 
 	var reader *bytes.Reader
@@ -427,6 +454,61 @@ func TestAcknowledgeAndResolveSemantics(t *testing.T) {
 	rec = doRouted(h, "POST", "/api/nf-alerts/0192f0c0-a000-7000-8000-00000000dead/resolve", "operator", nil)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown alert must be 404, got %d", rec.Code)
+	}
+}
+
+func TestAssignAndRecoverLifecycle(t *testing.T) {
+	repo := newStubRepo()
+	const alertID = "0192f0c0-a000-7000-8000-0000000000cc"
+	repo.alerts[alertID] = &Alert{
+		AlertID: alertID, RuleID: "r1", TargetID: "t1", State: AlertStateActive, Severity: SeverityCritical,
+	}
+	h := newTestServer(repo)
+
+	// An empty assignee is a client error, never a silent unassignment.
+	rec := doRouted(h, "POST", "/api/nf-alerts/"+alertID+"/assign", "operator", map[string]any{"assignedTo": "  "})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty assignee must be 400, got %d", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "NF_ALERT_INVALID_ASSIGNEE" {
+		t.Fatalf("expected NF_ALERT_INVALID_ASSIGNEE, got %q", code)
+	}
+
+	rec = doRouted(h, "POST", "/api/nf-alerts/"+alertID+"/assign", "operator", map[string]any{"assignedTo": "noc-shift-a"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("assign expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	m := decodeBody(t, rec)
+	if m["state"] != string(AlertStateAssigned) || m["assignedTo"] != "noc-shift-a" {
+		t.Fatalf("assign must set state and assignee, got %v/%v", m["state"], m["assignedTo"])
+	}
+
+	// Recovering is only reachable from assigned.
+	rec = doRouted(h, "POST", "/api/nf-alerts/"+alertID+"/recover", "operator", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("recover expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if state := decodeBody(t, rec)["state"]; state != string(AlertStateRecovering) {
+		t.Fatalf("recover must move to recovering, got %v", state)
+	}
+
+	// An alert that was never assigned cannot claim to be recovering.
+	unassignedID := "0192f0c0-a000-7000-8000-0000000000dd"
+	repo.alerts[unassignedID] = &Alert{
+		AlertID: unassignedID, RuleID: "r1", TargetID: "t2", State: AlertStateActive,
+	}
+	rec = doRouted(h, "POST", "/api/nf-alerts/"+unassignedID+"/recover", "operator", nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("recovering an active alert must be 409, got %d", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "NF_ALERT_INVALID_TRANSITION" {
+		t.Fatalf("expected NF_ALERT_INVALID_TRANSITION, got %q", code)
+	}
+
+	// Viewer cannot assign.
+	rec = doRouted(h, "POST", "/api/nf-alerts/"+alertID+"/assign", "viewer", map[string]any{"assignedTo": "noc-shift-a"})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer assign must be 403, got %d", rec.Code)
 	}
 }
 

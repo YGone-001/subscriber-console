@@ -17,8 +17,12 @@ func TestAlertRiskRankOrdersTheDutyQueue(t *testing.T) {
 		{"info active", AlertStateActive, SeverityInfo, 2},
 		{"critical acknowledged", AlertStateAcknowledged, SeverityCritical, 10},
 		{"warning acknowledged", AlertStateAcknowledged, SeverityWarning, 11},
-		{"critical resolved", AlertStateResolved, SeverityCritical, 20},
-		{"info resolved trails", AlertStateResolved, SeverityInfo, 22},
+		{"critical assigned", AlertStateAssigned, SeverityCritical, 20},
+		{"warning assigned", AlertStateAssigned, SeverityWarning, 21},
+		{"critical recovering", AlertStateRecovering, SeverityCritical, 30},
+		{"warning recovering", AlertStateRecovering, SeverityWarning, 31},
+		{"critical resolved", AlertStateResolved, SeverityCritical, 40},
+		{"info resolved trails", AlertStateResolved, SeverityInfo, 42},
 	}
 	previous := -1
 	for _, tc := range cases {

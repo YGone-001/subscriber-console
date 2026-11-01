@@ -1,280 +1,186 @@
 /*
- * Forward-ported from the historical xCloud UI (reference commit 2c40903):
- * frontend/src/app/(dashboard)/system-health/page.tsx
- * Adaptations: `@/` aliases and CSS imports repointed; `useSWR(fetcher)` replaced by the current read client; raw `fetch` mutations replaced by the current mutation client; `@/types/platformHealth` ported alongside.
+ * System health workspace.
+ *
+ * Two sections, two authorities:
+ *
+ *   - Platform health: runtime probes owned by the Go process (API, schedulers,
+ *     notification worker, knowledge storage, log sources) plus MongoDB. A
+ *     missing probe is unavailable, never healthy.
+ *   - Data consistency: read-only OCS/HSS/anomaly evaluation. The former
+ *     auto-heal write path is retired from the console; findings link to the
+ *     owning business surface instead.
+ *
+ * The page never fabricates a healthy default: a failed read renders an explicit
+ * unavailable state, and a composite score is not presented as an operational
+ * fact.
  */
-import { useState, useRef, useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Activity,
-  ShieldAlert,
-  HeartPulse,
-  HardDrive,
-  Database,
-  DatabaseZap,
-  Check,
-  RefreshCw,
-  Zap,
-  Layers,
-  ShieldCheck,
-  Download,
-  Wrench,
   AlertTriangle,
+  Check,
+  Database,
+  Download,
+  HeartPulse,
   Info,
+  Layers,
+  RefreshCw,
+  Server,
+  ShieldAlert,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import useSWR from "swr";
-import { fetcher } from '../../lib/fetcher';
-import { useI18n } from '../../providers/I18nProvider';
-import { useAuth } from '../../providers/AuthProvider';
-import { hasPermission } from '../../lib/permissions';
-import {
-  batchHealErrors,
-  classifyBatchHealOutcome,
-  requestAnalyticsSync,
-  requestAuditScanStep,
-  requestBatchHeal,
-  requestSingleHeal,
-} from './system-health-api';
-import { EmptyState, LoadingRows, OperationNotice } from '../../components/ui/OperationFeedback';
-import type { ComprehensiveSystemHealth, SubsystemStatus } from '../../types/platformHealth';
-import type { SystemAnomaly, AnomalyCategory, AnomalySeverity } from '../../types/platformHealth';
-import PageHeader, { type PageHeaderTone } from '../../components/ui/PageHeader';
-import SectionHeader from '../../components/ui/SectionHeader';
-import { Dialog } from '../../components/ui/Dialog';
-import SubsystemCard from '../../components/health/SubsystemCard';
-import MetricStrip from '../../components/ui/MetricStrip';
+import { fetcher } from "../../lib/fetcher";
+import { useI18n } from "../../providers/I18nProvider";
+import { useAuth } from "../../providers/AuthProvider";
+import { hasPermission } from "../../lib/permissions";
+import { requestAuditScanStep } from "./system-health-api";
+import { EmptyState, LoadingRows, OperationNotice } from "../../components/ui/OperationFeedback";
+import { ErrorState } from "../../components/ui/StatePanel";
+import type {
+  ComprehensiveSystemHealth,
+  PlatformProbe,
+  SubsystemStatus,
+  SystemAnomaly,
+  AnomalyCategory,
+  AnomalySeverity,
+} from "../../types/platformHealth";
+import PageHeader, { type PageHeaderTone } from "../../components/ui/PageHeader";
+import SectionHeader from "../../components/ui/SectionHeader";
+import SubsystemCard from "../../components/health/SubsystemCard";
+import MetricStrip from "../../components/ui/MetricStrip";
 
 type HealthNotice = {
   type: "success" | "error" | "warning";
   text: string;
 };
 
-type ScanPhase = 'IDLE' | 'INIT' | 'SCAN_SUB' | 'SCAN_OCS' | 'SCAN_TARIFF' | 'SCAN_RESERVATIONS' | 'COMPLETE' | 'ABORTED';
+type ScanPhase = "IDLE" | "INIT" | "SCAN_SUB" | "SCAN_OCS" | "SCAN_TARIFF" | "SCAN_RESERVATIONS" | "COMPLETE" | "ABORTED";
+
+const KNOWN_PROBES = [
+  "api",
+  "discovery_scheduler",
+  "nf_health_scheduler",
+  "notification_worker",
+  "knowledge_storage",
+  "log_sources",
+] as const;
+
+function worstStatus(statuses: Array<SubsystemStatus | undefined>): SubsystemStatus {
+  if (statuses.some((status) => status === "critical" || status === "unavailable")) return "unavailable";
+  if (statuses.some((status) => status === "degraded")) return "degraded";
+  if (statuses.length > 0 && statuses.every((status) => status === "healthy")) return "healthy";
+  return "unavailable";
+}
+
+function probeTone(status: SubsystemStatus | undefined): "success" | "warning" | "danger" | undefined {
+  if (status === "healthy") return "success";
+  if (status === "degraded") return "warning";
+  if (status === "critical" || status === "unavailable") return "danger";
+  return undefined;
+}
 
 export function SystemHealthPage() {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
-  /* Remediation is offered only to accounts that hold `system_heal`. The server
-   * re-checks the capability on every call and remains the final authority. */
-  const canHeal = hasPermission(user, 'system_heal');
-  const { data: profileData } = useSWR<{ profiles?: Array<{ name: string; title?: string }> }>("/api/profiles", fetcher);
-  const profileList = profileData?.profiles || [];
+  const canScan = hasPermission(user, "core.configure");
 
-  const { data: statusData, mutate: mutateStatus } = useSWR<{ lastSaveTime?: number }>("/api/system/audit/status", fetcher, { refreshInterval: 60000 });
-  const lastSaveTime = statusData?.lastSaveTime || null;
-
-  // Comprehensive Multi-Subsystem Health
   const {
     data: systemHealth,
     mutate: refreshSystemHealth,
     isLoading: isHealthLoading,
-  } = useSWR<ComprehensiveSystemHealth>("/api/system/health", fetcher, { refreshInterval: 30000 });
+    error: healthError,
+  } = useSWR<ComprehensiveSystemHealth>("/api/system/health", fetcher, {
+    refreshInterval: 30000,
+    revalidateOnFocus: false,
+  });
 
-  // Scan states
   const [isAuditing, setIsAuditing] = useState(false);
   const [scannedTotal, setScannedTotal] = useState(0);
   const [anomalies, setAnomalies] = useState<SystemAnomaly[]>([]);
-  const [auditPhase, setAuditPhase] = useState<ScanPhase>('IDLE');
+  const [auditPhase, setAuditPhase] = useState<ScanPhase>("IDLE");
   const [notice, setNotice] = useState<HealthNotice | null>(null);
+  const [activeCategoryTab, setActiveCategoryTab] = useState<AnomalyCategory | "all">("all");
+  const [selectedSeverity, setSelectedSeverity] = useState<AnomalySeverity | "all">("all");
 
-  // Filtering states
-  const [activeCategoryTab, setActiveCategoryTab] = useState<AnomalyCategory | 'all'>('all');
-  const [selectedSeverity, setSelectedSeverity] = useState<AnomalySeverity | 'all'>('all');
-
-  // Telemetry sync state
-  const [syncState, setSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
-
-  const handleSync = async () => {
-    if (syncState === "syncing") return;
-    setSyncState("syncing");
-    try {
-      await requestAnalyticsSync();
-      setSyncState("success");
-      setNotice({ type: "success", text: `${t("sync_telemetry")} ${t("sync_ok")}` });
-      setTimeout(() => setSyncState("idle"), 2000);
-    } catch (error) {
-      setSyncState("error");
-      setNotice({ type: "error", text: error instanceof Error ? error.message : t("sync_error") });
-      setTimeout(() => setSyncState("idle"), 2000);
-    }
-  };
-
-  // Single Heal Modal states
-  const [healModalOpen, setHealModalOpen] = useState(false);
-  const [targetAnomaly, setTargetAnomaly] = useState<SystemAnomaly | null>(null);
-  const [healProfile, setHealProfile] = useState("");
-  const [isHealConfirmed, setIsHealConfirmed] = useState(false);
-  const [isHealing, setIsHealing] = useState(false);
-
-  // Batch Heal Modal states
-  const [batchModalOpen, setBatchModalOpen] = useState(false);
-  const [batchHealProfile, setBatchHealProfile] = useState("");
-  const [isBatchConfirmed, setIsBatchConfirmed] = useState(false);
-  const [isBatchHealing, setIsBatchHealing] = useState(false);
-
-  // Use refs for aggressive recursion logic without stale states
   const scanMetrics = useRef({ total: 0, anomaliesList: [] as SystemAnomaly[] });
 
+  const probes = systemHealth?.platform?.probes ?? [];
+  const probeByKey = useMemo(() => {
+    const map = new Map<string, PlatformProbe>();
+    for (const probe of probes) map.set(probe.key, probe);
+    return map;
+  }, [probes]);
+  const platformStatus = systemHealth?.platform?.status ?? "unavailable";
+  const dataStatus = systemHealth?.dataConsistency?.status ?? systemHealth?.status ?? "unavailable";
+  const overallStatus: SubsystemStatus = !systemHealth
+    ? "unavailable"
+    : worstStatus([platformStatus, dataStatus]);
+
   const runFullAudit = async () => {
+    if (!canScan) return;
     setIsAuditing(true);
     setNotice(null);
     setAnomalies([]);
     setScannedTotal(0);
-    setAuditPhase('INIT');
+    setAuditPhase("INIT");
     scanMetrics.current = { total: 0, anomaliesList: [] };
-
-    // Start 4-phase recursion pipeline
-    await recursiveScan('0', 'sub');
+    await recursiveScan("0", "sub");
   };
 
-  const recursiveScan = async (cursor: string, phase: 'sub' | 'ocs' | 'tariff' | 'reservation') => {
+  const recursiveScan = async (cursor: string, phase: "sub" | "ocs" | "tariff" | "reservation") => {
     try {
-      if (cursor === '0') {
-        if (phase === 'sub') setAuditPhase('SCAN_SUB');
-        else if (phase === 'ocs') setAuditPhase('SCAN_OCS');
-        else if (phase === 'tariff') setAuditPhase('SCAN_TARIFF');
-        else if (phase === 'reservation') setAuditPhase('SCAN_RESERVATIONS');
+      if (cursor === "0") {
+        if (phase === "sub") setAuditPhase("SCAN_SUB");
+        else if (phase === "ocs") setAuditPhase("SCAN_OCS");
+        else if (phase === "tariff") setAuditPhase("SCAN_TARIFF");
+        else setAuditPhase("SCAN_RESERVATIONS");
       }
 
       const data = await requestAuditScanStep(cursor, phase);
-
       scanMetrics.current.total += data.scannedCount;
       if (data.anomalies && data.anomalies.length > 0) {
         scanMetrics.current.anomaliesList = [...scanMetrics.current.anomaliesList, ...data.anomalies];
       }
-
       setScannedTotal(scanMetrics.current.total);
       setAnomalies([...scanMetrics.current.anomaliesList]);
 
       const newNext = String(data.nextCursor);
-
-      if (newNext !== '0') {
-        // Recursive continuation in same phase
+      if (newNext !== "0") {
         await recursiveScan(newNext, phase);
+      } else if (phase === "sub") {
+        await recursiveScan("0", "ocs");
+      } else if (phase === "ocs") {
+        await recursiveScan("0", "tariff");
+      } else if (phase === "tariff") {
+        await recursiveScan("0", "reservation");
       } else {
-        // Switch phase or complete
-        if (phase === 'sub') {
-          await recursiveScan('0', 'ocs');
-        } else if (phase === 'ocs') {
-          await recursiveScan('0', 'tariff');
-        } else if (phase === 'tariff') {
-          await recursiveScan('0', 'reservation');
-        } else {
-          setAuditPhase('COMPLETE');
-          setIsAuditing(false);
-          await refreshSystemHealth();
-        }
+        setAuditPhase("COMPLETE");
+        setIsAuditing(false);
+        await refreshSystemHealth();
       }
     } catch {
       setIsAuditing(false);
-      setAuditPhase('ABORTED');
+      setAuditPhase("ABORTED");
       setNotice({ type: "error", text: t("health_scan_abort") });
     }
   };
 
-  // Filtered anomalies list
-  const filteredAnomalies = useMemo(() => {
-    return anomalies.filter((a) => {
-      if (activeCategoryTab !== 'all' && a.category !== activeCategoryTab) return false;
-      if (selectedSeverity !== 'all' && a.severity !== selectedSeverity) return false;
-      return true;
-    });
-  }, [anomalies, activeCategoryTab, selectedSeverity]);
+  const filteredAnomalies = useMemo(() => anomalies.filter((anomaly) => {
+    if (activeCategoryTab !== "all" && anomaly.category !== activeCategoryTab) return false;
+    if (selectedSeverity !== "all" && anomaly.severity !== selectedSeverity) return false;
+    return true;
+  }), [anomalies, activeCategoryTab, selectedSeverity]);
 
-  // Single Item Heal handlers
-  const handleOpenHealModal = (anomaly: SystemAnomaly) => {
-    setTargetAnomaly(anomaly);
-    setIsHealConfirmed(false);
-    setHealProfile("");
-    setNotice(null);
-    setHealModalOpen(true);
-  };
-
-  const executeHeal = async () => {
-    if (!targetAnomaly || !isHealConfirmed) return;
-    setIsHealing(true);
-
-    try {
-      /* Direct execution: the server validated the capability, the rate limit and the
-       * request, and the repair has already been applied when this resolves. */
-      await requestSingleHeal(targetAnomaly, healProfile || undefined);
-
-      const updatedList = anomalies.filter(
-        (a) => a.imsi !== targetAnomaly.imsi || a.type !== targetAnomaly.type
-      );
-      setAnomalies(updatedList);
-      await mutateStatus();
-      await refreshSystemHealth();
-      scanMetrics.current.anomaliesList = updatedList;
-      setNotice({ type: "success", text: t("health_msg_heal_success", { imsi: targetAnomaly.imsi }) });
-      setHealModalOpen(false);
-    } catch (failure) {
-      /* 401/403/429 and transport failures all arrive here through the mutation
-       * client; nothing is retried automatically. */
-      setNotice({ type: "error", text: failure instanceof Error && failure.message ? failure.message : t("health_err_heal_net") });
-    } finally {
-      setIsHealing(false);
-    }
-  };
-
-  // Batch Heal handlers
-  const handleOpenBatchModal = () => {
-    setIsBatchConfirmed(false);
-    setBatchHealProfile("");
-    setNotice(null);
-    setBatchModalOpen(true);
-  };
-
-  const executeBatchHeal = async () => {
-    if (filteredAnomalies.length === 0 || !isBatchConfirmed) return;
-    setIsBatchHealing(true);
-
-    try {
-      const response = await requestBatchHeal(filteredAnomalies, batchHealProfile || undefined);
-      const outcome = classifyBatchHealOutcome(response);
-      const errors = batchHealErrors(response);
-      const succeeded = Number(response?.successCount ?? 0);
-      const failed = Number(response?.failedCount ?? 0);
-
-      /* Only the targets the server actually repaired are dropped from the list; a
-       * partially failed run must keep the rest visible. */
-      const repaired = outcome === 'failed' ? [] : filteredAnomalies.slice(0, succeeded);
-      const remainingAnomalies = outcome === 'succeeded'
-        ? anomalies.filter((a) => !filteredAnomalies.some((fa) => fa.imsi === a.imsi && fa.type === a.type))
-        : anomalies.filter((a) => !repaired.some((fa) => fa.imsi === a.imsi && fa.type === a.type));
-      setAnomalies(remainingAnomalies);
-      await mutateStatus();
-      await refreshSystemHealth();
-      scanMetrics.current.anomaliesList = remainingAnomalies;
-
-      if (outcome === 'succeeded') {
-        setNotice({ type: 'success', text: t('health_msg_batch_heal_success', { count: succeeded }) });
-      } else if (outcome === 'partial') {
-        setNotice({
-          type: 'warning',
-          text: t('health_msg_batch_heal_partial', { success: succeeded, failed })
-            + (errors.length ? ` — ${errors.slice(0, 3).join('; ')}` : ''),
-        });
-      } else {
-        setNotice({
-          type: 'error',
-          text: t('health_err_batch_heal_failed', { failed })
-            + (errors.length ? ` — ${errors.slice(0, 3).join('; ')}` : ''),
-        });
-      }
-      if (outcome === 'succeeded') setBatchModalOpen(false);
-    } catch (failure) {
-      setNotice({ type: 'error', text: failure instanceof Error && failure.message ? failure.message : t('health_err_heal_net') });
-    } finally {
-      setIsBatchHealing(false);
-    }
-  };
-
-  // Export diagnostic report snapshot
   const exportDiagnosticReport = () => {
     const reportData = {
       timestamp: new Date().toISOString(),
-      score: systemHealth?.score ?? 100,
-      status: systemHealth?.status ?? 'healthy',
+      status: systemHealth?.status ?? "unavailable",
+      checkedAt: systemHealth?.checkedAt,
+      platform: systemHealth?.platform,
+      dataConsistency: systemHealth?.dataConsistency,
       subsystems: systemHealth?.subsystems,
       recommendations: systemHealth?.summary?.recommendations || [],
       auditStats: {
@@ -283,34 +189,19 @@ export function SystemHealthPage() {
         anomalies,
       },
     };
-
     const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `system-health-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `system-health-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
     URL.revokeObjectURL(url);
   };
 
-  // Health Score Calculation
-  const displayScore = useMemo(() => {
-    if (systemHealth?.score !== undefined) {
-      if (auditPhase === 'COMPLETE' && scannedTotal > 0) {
-        const auditImpact = Math.max(0, (1 - anomalies.length / scannedTotal) * 100);
-        return Math.min(systemHealth.score, parseFloat(auditImpact.toFixed(1)));
-      }
-      return systemHealth.score;
-    }
-    if (scannedTotal === 0) return 100;
-    const h = (1 - (anomalies.length / scannedTotal)) * 100;
-    return Math.max(0, parseFloat(h.toFixed(1)));
-  }, [systemHealth, auditPhase, scannedTotal, anomalies.length]);
-
   const renderDetails = (details: string, type: string) => {
-    if (type === 'orphan_reservation') return t("health_err_orphan_reservation");
-    if (type === 'invalid_tariff') return t("health_err_invalid_tariff");
-    if (type === 'dangling_profile') return t("health_err_dangling_profile");
+    if (type === "orphan_reservation") return t("health_err_orphan_reservation");
+    if (type === "invalid_tariff") return t("health_err_invalid_tariff");
+    if (type === "dangling_profile") return t("health_err_dangling_profile");
     if (details.startsWith("Missing ")) {
       const ratio = details.split(" ")[1];
       return t("health_err_missing_ocs").replace("{ratio}", ratio);
@@ -322,12 +213,7 @@ export function SystemHealthPage() {
     return details;
   };
 
-  /*
-   * Recommendation copy is produced by the Go health evaluator as canonical English
-   * sentences. Each known template is mapped onto a locale key so the banner renders in
-   * the active language without altering the API contract, mirroring `renderDetails`.
-   */
-  const renderRecommendation = (rec: string) => {
+  const renderRecommendation = (recommendation: string) => {
     const patterns: Array<[RegExp, string]> = [
       [/^Run MongoDB index initialization .* to restore (\d+) missing indexes$/, "health_rec_mongo_indexes"],
       [/^Resolve (\d+) OCS balance invariant inconsistencies$/, "health_rec_ocs_invariants"],
@@ -337,17 +223,57 @@ export function SystemHealthPage() {
       [/^Acknowledge and triage (\d+) critical operational alerts in NOC$/, "health_rec_critical_alerts"],
     ];
     for (const [pattern, key] of patterns) {
-      const matched = rec.match(pattern);
+      const matched = recommendation.match(pattern);
       if (matched) return t(key, { count: matched[1] });
     }
-    return rec;
+    return recommendation;
   };
 
-  const getStatusBadge = (status: SubsystemStatus = 'healthy') => {
-    if (status === 'healthy') return <span className="subsystem-badge healthy"><Check size={12} /> {t("health_status_healthy")}</span>;
-    if (status === 'degraded') return <span className="subsystem-badge degraded"><AlertTriangle size={12} /> {t("health_status_degraded")}</span>;
+  const getStatusBadge = (status: SubsystemStatus) => {
+    if (status === "healthy") return <span className="subsystem-badge healthy"><Check size={12} /> {t("health_status_healthy")}</span>;
+    if (status === "degraded") return <span className="subsystem-badge degraded"><AlertTriangle size={12} /> {t("health_status_degraded")}</span>;
+    if (status === "unavailable") return <span className="subsystem-badge unavailable"><Server size={12} /> {t("health_status_unavailable")}</span>;
     return <span className="subsystem-badge critical"><ShieldAlert size={12} /> {t("health_status_critical")}</span>;
   };
+
+  const probeLabel = (key: string) => {
+    if ((KNOWN_PROBES as readonly string[]).includes(key)) return t(`platform_probe_${key}`);
+    return key;
+  };
+
+  const probeMetric = (key: string) => {
+    const probe = probeByKey.get(key);
+    return {
+      label: probeLabel(key),
+      value: probe ? t(`health_status_${probe.status}`) : t("health_status_unavailable"),
+      tone: probeTone(probe?.status),
+    };
+  };
+
+  const platformHealthyCount = probes.filter((probe) => probe.status === "healthy").length;
+
+  if (healthError && !systemHealth) {
+    return (
+      <div className="container animate-fade-in health-container">
+        <PageHeader
+          eyebrow={t("eyebrow_noc_diagnostics")}
+          icon={<HeartPulse size={23} />}
+          title={t("nav_system_health")}
+          description={t("health_error_body")}
+          tone="danger"
+          status={getStatusBadge("unavailable")}
+        />
+        <div className="dash-card">
+          <ErrorState
+            title={t("health_error_title")}
+            message={healthError instanceof Error ? healthError.message : t("health_error_body")}
+            retryLabel={t("retry")}
+            onRetry={() => { void refreshSystemHealth(); }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -367,190 +293,222 @@ export function SystemHealthPage() {
           icon={<HeartPulse size={23} />}
           title={t("nav_system_health")}
           description={t("health_subsystems_title")}
-          tone={(systemHealth?.status === "critical" ? "danger" : systemHealth?.status === "degraded" ? "warning" : "healthy") as PageHeaderTone}
-          status={getStatusBadge(systemHealth?.status)}
-          actions={<div className="health-header-actions">
-            <button
-              onClick={handleSync}
-              disabled={syncState === "syncing"}
-              className={`btn btn-outline analytics-sync-btn ${syncState === "syncing" ? "radar-animating" : ""}`}
-              title={t("sync_tooltip")}
-            >
-              {syncState === "syncing" ? (
-                <span>{t("sync_scanning")}</span>
-              ) : syncState === "success" ? (
-                <span className="text-success">{t("sync_ok")}</span>
-              ) : syncState === "error" ? (
-                <span className="text-danger">{t("sync_error")}</span>
-              ) : (
-                <>
-                  <DatabaseZap size={15} /> {t("sync_telemetry")}
-                </>
-              )}
-            </button>
-            <button
-              className="btn btn-outline health-mongo-refresh"
-              onClick={() => refreshSystemHealth()}
-              disabled={isHealthLoading}
-            >
-              <RefreshCw size={14} className={isHealthLoading ? "spin" : ""} />
-              {t("refresh")}
-            </button>
-          </div>}
+          tone={(overallStatus === "healthy" ? "healthy" : overallStatus === "degraded" ? "warning" : "danger") as PageHeaderTone}
+          status={getStatusBadge(overallStatus)}
+          actions={<button
+            className="btn btn-outline health-mongo-refresh"
+            onClick={() => void refreshSystemHealth()}
+            disabled={isHealthLoading}
+          >
+            <RefreshCw size={14} className={isHealthLoading ? "spin" : ""} />
+            {t("refresh")}
+          </button>}
         />
 
-        {/* Subsystems Matrix Section */}
-        <section className="health-subsystems-section">
-          <SectionHeader title={t("health_subsystems_title")} />
+        {healthError && systemHealth ? (
+          <p className="warning-text" role="status">{t("health_refresh_stale")}</p>
+        ) : null}
 
+        <section className="health-subsystems-section" aria-labelledby="health-platform-title">
+          <SectionHeader title={t("health_platform_title")} />
           <div className="health-subsystems-grid">
-            {/* 1. Database Subsystem */}
             <SubsystemCard
-              status={systemHealth?.subsystems?.database?.status || 'healthy'}
+              status={worstStatus([
+                probeByKey.get("api")?.status,
+                platformStatus,
+              ])}
+              icon={<Server size={20} color="var(--primary)" />}
+              name={t("health_platform_api")}
+              description={systemHealth ? t("health_platform_probes", { healthy: platformHealthyCount, total: probes.length }) : t("health_status_unavailable")}
+              statusBadge={getStatusBadge(worstStatus([probeByKey.get("api")?.status, platformStatus]))}
+              metrics={[
+                probeMetric("api"),
+                {
+                  label: t("health_last_check"),
+                  value: systemHealth?.checkedAt ? formatDateTime(systemHealth.checkedAt) : "—",
+                },
+              ]}
+            />
+
+            <SubsystemCard
+              status={systemHealth ? systemHealth.subsystems.database.status : "unavailable"}
               icon={<Database size={20} color="var(--primary)" />}
               name={t("health_subsystem_db")}
-              description={`${systemHealth?.subsystems?.database?.xcloudDb || 'xcloud'} / ${systemHealth?.subsystems?.database?.appDb || 'app'}`}
-              statusBadge={getStatusBadge(systemHealth?.subsystems?.database?.status)}
+              description={`${systemHealth?.subsystems?.database?.xcloudDb || "xcloud"} / ${systemHealth?.subsystems?.database?.appDb || "app"}`}
+              statusBadge={getStatusBadge(systemHealth?.subsystems?.database?.status ?? "unavailable")}
               metrics={[
-                { label: t("health_db_latency"), value: systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--' },
-                { label: t("health_db_collections"), value: systemHealth?.subsystems?.database ? `${systemHealth.subsystems.database.existingCollections} / ${systemHealth.subsystems.database.totalCollections}` : '--' },
-                { label: t("health_db_indexes"), value: systemHealth?.subsystems?.database?.missingIndexesCount ?? '--', tone: (systemHealth?.subsystems?.database?.missingIndexesCount || 0) > 0 ? 'danger' : 'success' },
-                { label: t("status"), value: systemHealth?.subsystems?.database?.ready ? t("health_status_ready") : t("health_status_attention"), tone: systemHealth?.subsystems?.database?.ready ? 'success' : 'danger' },
+                { label: t("health_db_latency"), value: systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : "—" },
+                { label: t("health_db_collections"), value: systemHealth?.subsystems?.database ? `${systemHealth.subsystems.database.existingCollections} / ${systemHealth.subsystems.database.totalCollections}` : "—" },
+                { label: t("health_db_indexes"), value: systemHealth?.subsystems?.database?.missingIndexesCount ?? "—", tone: (systemHealth?.subsystems?.database?.missingIndexesCount || 0) > 0 ? "danger" : "success" },
+                { label: t("status"), value: systemHealth?.subsystems?.database?.ready ? t("health_status_ready") : t("health_status_attention"), tone: systemHealth?.subsystems?.database?.ready ? "success" : "danger" },
               ]}
             />
 
-            {/* 2. OCS Engine Subsystem */}
             <SubsystemCard
-              status={systemHealth?.subsystems?.ocsEngine?.status || 'healthy'}
-              icon={<Zap size={20} color="var(--primary)" />}
-              name={t("health_subsystem_ocs")}
-              description={t("health_desc_ocs")}
-              statusBadge={getStatusBadge(systemHealth?.subsystems?.ocsEngine?.status)}
+              status={worstStatus([
+                probeByKey.get("discovery_scheduler")?.status,
+                probeByKey.get("nf_health_scheduler")?.status,
+                probeByKey.get("notification_worker")?.status,
+              ])}
+              icon={<Activity size={20} color="var(--primary)" />}
+              name={t("health_platform_jobs")}
+              description={t("health_platform_jobs_hint")}
+              statusBadge={getStatusBadge(worstStatus([
+                probeByKey.get("discovery_scheduler")?.status,
+                probeByKey.get("nf_health_scheduler")?.status,
+                probeByKey.get("notification_worker")?.status,
+              ]))}
               metrics={[
-                { label: t("health_ocs_invariants"), value: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? t("health_status_ok") : t("health_status_broken", { count: systemHealth?.subsystems?.ocsEngine?.brokenInvariantsCount || 0 }), tone: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? 'success' : 'danger' },
-                { label: t("health_ocs_sessions"), value: systemHealth?.subsystems?.ocsEngine?.activeSessions ?? '--' },
-                { label: t("health_ocs_reservations"), value: systemHealth?.subsystems?.ocsEngine?.activeReservations ?? '--' },
-                { label: t("health_ocs_tariff_plans"), value: systemHealth?.subsystems?.ocsEngine?.activeTariffPlans ?? '--' },
+                probeMetric("discovery_scheduler"),
+                probeMetric("nf_health_scheduler"),
+                probeMetric("notification_worker"),
               ]}
             />
 
-            {/* 3. HSS Core Subsystem */}
             <SubsystemCard
-              status={systemHealth?.subsystems?.hssCore?.status || 'healthy'}
+              status={worstStatus([
+                probeByKey.get("knowledge_storage")?.status,
+                probeByKey.get("log_sources")?.status,
+              ])}
               icon={<Layers size={20} color="var(--primary)" />}
-              name={t("health_subsystem_hss")}
-              description={t("health_desc_hss")}
-              statusBadge={getStatusBadge(systemHealth?.subsystems?.hssCore?.status)}
+              name={t("health_platform_storage")}
+              description={t("health_platform_storage_hint")}
+              statusBadge={getStatusBadge(worstStatus([
+                probeByKey.get("knowledge_storage")?.status,
+                probeByKey.get("log_sources")?.status,
+              ]))}
               metrics={[
-                { label: t("health_hss_auth_credentials"), value: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? t("health_status_invalid", { count: systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0 }) : t("health_status_ok"), tone: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? 'danger' : 'success' },
-                { label: t("health_hss_slice_routing"), value: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? t("health_status_missing", { count: systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0 }) : t("health_status_optimal"), tone: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? 'danger' : 'success' },
-                { label: t("health_hss_dangling_profiles"), value: systemHealth?.subsystems?.hssCore?.danglingProfilesCount ?? '--', tone: (systemHealth?.subsystems?.hssCore?.danglingProfilesCount || 0) > 0 ? 'warning' : 'success' },
-                { label: t("profiles_title"), value: systemHealth?.subsystems?.hssCore?.activeProfilesCount ?? '--' },
-              ]}
-            />
-
-            {/* 4. Security Subsystem */}
-            <SubsystemCard
-              status={systemHealth?.subsystems?.security?.status || 'healthy'}
-              icon={<ShieldCheck size={20} color="var(--primary)" />}
-              name={t("health_subsystem_security")}
-              description={t("health_desc_sec")}
-              statusBadge={getStatusBadge(systemHealth?.subsystems?.security?.status)}
-              metrics={[
-                { label: t("health_sec_root"), value: systemHealth?.subsystems?.security?.rootUserConfigured ? t("health_status_active") : t("health_status_missing", { count: 1 }), tone: systemHealth?.subsystems?.security?.rootUserConfigured ? 'success' : 'danger' },
-                { label: t("health_sec_alerts"), value: systemHealth?.subsystems?.security?.unacknowledgedAlertsCount ?? '--', tone: (systemHealth?.subsystems?.security?.criticalAlertsCount || 0) > 0 ? 'danger' : 'success' },
-                { label: t("users_title"), value: systemHealth?.subsystems?.security?.activeUsersCount ?? '--' },
+                probeMetric("knowledge_storage"),
+                probeMetric("log_sources"),
               ]}
             />
           </div>
         </section>
 
-        {/* Actionable Recommendations Banner */}
+        <section className="health-subsystems-section" aria-labelledby="health-data-title">
+          <SectionHeader title={t("health_data_consistency_title")} />
+          <div className="health-subsystems-grid">
+            <SubsystemCard
+              status={systemHealth?.subsystems.ocsEngine.status ?? "unavailable"}
+              icon={<Zap size={20} color="var(--primary)" />}
+              name={t("health_subsystem_ocs")}
+              description={t("health_desc_ocs")}
+              statusBadge={getStatusBadge(systemHealth?.subsystems.ocsEngine.status ?? "unavailable")}
+              metrics={[
+                { label: t("health_ocs_invariants"), value: systemHealth?.subsystems.ocsEngine.invariantsOk ? t("health_status_ok") : t("health_status_broken", { count: systemHealth?.subsystems.ocsEngine.brokenInvariantsCount || 0 }), tone: systemHealth?.subsystems.ocsEngine.invariantsOk ? "success" : "danger" },
+                { label: t("health_ocs_sessions"), value: systemHealth?.subsystems.ocsEngine.activeSessions ?? "—" },
+                { label: t("health_ocs_reservations"), value: systemHealth?.subsystems.ocsEngine.activeReservations ?? "—" },
+                { label: t("health_ocs_tariff_plans"), value: systemHealth?.subsystems.ocsEngine.activeTariffPlans ?? "—" },
+              ]}
+            />
+
+            <SubsystemCard
+              status={systemHealth?.subsystems.hssCore.status ?? "unavailable"}
+              icon={<Layers size={20} color="var(--primary)" />}
+              name={t("health_subsystem_hss")}
+              description={t("health_desc_hss")}
+              statusBadge={getStatusBadge(systemHealth?.subsystems.hssCore.status ?? "unavailable")}
+              metrics={[
+                { label: t("health_hss_auth_credentials"), value: (systemHealth?.subsystems.hssCore.missingCredentialsCount || 0) > 0 ? t("health_status_invalid", { count: systemHealth?.subsystems.hssCore.missingCredentialsCount || 0 }) : t("health_status_ok"), tone: (systemHealth?.subsystems.hssCore.missingCredentialsCount || 0) > 0 ? "danger" : "success" },
+                { label: t("health_hss_slice_routing"), value: (systemHealth?.subsystems.hssCore.missingSlicesCount || 0) > 0 ? t("health_status_missing", { count: systemHealth?.subsystems.hssCore.missingSlicesCount || 0 }) : t("health_status_optimal"), tone: (systemHealth?.subsystems.hssCore.missingSlicesCount || 0) > 0 ? "danger" : "success" },
+                { label: t("health_hss_dangling_profiles"), value: systemHealth?.subsystems.hssCore.danglingProfilesCount ?? "—", tone: (systemHealth?.subsystems.hssCore.danglingProfilesCount || 0) > 0 ? "warning" : "success" },
+                { label: t("profiles_title"), value: systemHealth?.subsystems.hssCore.activeProfilesCount ?? "—" },
+              ]}
+            />
+
+            <SubsystemCard
+              status={systemHealth?.subsystems.security.status ?? "unavailable"}
+              icon={<ShieldCheck size={20} color="var(--primary)" />}
+              name={t("health_subsystem_security")}
+              description={t("health_desc_sec")}
+              statusBadge={getStatusBadge(systemHealth?.subsystems.security.status ?? "unavailable")}
+              metrics={[
+                { label: t("health_sec_root"), value: systemHealth?.subsystems.security.rootUserConfigured ? t("health_status_active") : t("health_status_missing", { count: 1 }), tone: systemHealth?.subsystems.security.rootUserConfigured ? "success" : "danger" },
+                { label: t("health_sec_alerts"), value: systemHealth?.subsystems.security.unacknowledgedAlertsCount ?? "—", tone: (systemHealth?.subsystems.security.criticalAlertsCount || 0) > 0 ? "danger" : "success" },
+                { label: t("users_title"), value: systemHealth?.subsystems.security.activeUsersCount ?? "—" },
+              ]}
+            />
+          </div>
+        </section>
+
         {systemHealth?.summary?.recommendations && systemHealth.summary.recommendations.length > 0 && (
           <div className="health-recommendations-banner">
             <AlertTriangle className="health-rec-icon" size={22} />
             <div className="health-rec-content">
               <div className="health-rec-title">{t("health_recommendations_title")}</div>
               <ul className="health-rec-list">
-                {systemHealth.summary.recommendations.map((rec, i) => (
-                  <li key={i}>{renderRecommendation(rec)}</li>
+                {systemHealth.summary.recommendations.map((recommendation, index) => (
+                  <li key={index}>{renderRecommendation(recommendation)}</li>
                 ))}
               </ul>
             </div>
           </div>
         )}
 
-        {/* Composite KPI Board */}
         <MetricStrip
           variant="strip"
           ariaLabel={t("nav_system_health")}
           items={[
             {
-              key: "score",
-              label: t("health_overall_score"),
-              value: auditPhase === 'INIT' ? '--' : `${displayScore}%`,
-              tone: displayScore < 90 ? "danger" : "success",
-              icon: <HeartPulse size={20} />,
+              key: "probes",
+              label: t("health_platform_probes"),
+              value: systemHealth ? `${platformHealthyCount}/${probes.length}` : "—",
+              tone: platformStatus === "healthy" ? "success" : platformStatus === "degraded" ? "warning" : "danger",
+              icon: <Server size={20} />,
             },
             {
               key: "anomalies",
               label: t("health_active_anomalies"),
-              value: anomalies.length,
+              value: systemHealth?.summary.totalAnomaliesDetected ?? "—",
               icon: <ShieldAlert size={20} />,
             },
             {
-              key: "bgsave",
-              label: t("health_last_bgsave"),
-              value: lastSaveTime ? new Date(lastSaveTime * 1000).toLocaleString() : t("health_loading"),
-              tone: "warning",
-              compactValue: true,
-              icon: <HardDrive size={20} />,
-            },
-            {
-              key: "latency",
-              label: t("health_db_latency"),
-              value: systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--',
+              key: "checked",
+              label: t("health_last_check"),
+              value: systemHealth?.checkedAt ? formatDateTime(systemHealth.checkedAt) : "—",
+              tone: "muted",
               compactValue: true,
               icon: <Activity size={20} />,
+            },
+            {
+              key: "heal",
+              label: t("health_heal_state"),
+              value: t("health_heal_disabled_value"),
+              tone: "muted",
+              icon: <ShieldCheck size={20} />,
             },
           ]}
         />
 
-        {/* Multi-Phase Control Strip */}
         <div className="health-control-strip">
           <div className="health-control-status">
             <div className="health-control-text">
               <Activity size={20} color="var(--primary)" />
-              <span className={`health-control-msg ${isAuditing ? 'health-control-msg-active' : 'health-control-msg-idle'}`}>
-                {auditPhase === 'IDLE' && t("health_idle_msg")}
-                {auditPhase === 'INIT' && t("health_scan_init")}
-                {auditPhase === 'SCAN_SUB' && t("health_scan_progress", { phase: 'HSS', total: String(scannedTotal), anomalies: String(anomalies.length) })}
-                {auditPhase === 'SCAN_OCS' && t("health_scan_progress", { phase: 'OCS', total: String(scannedTotal), anomalies: String(anomalies.length) })}
-                {auditPhase === 'SCAN_TARIFF' && t("health_scan_progress", { phase: 'TARIFF', total: String(scannedTotal), anomalies: String(anomalies.length) })}
-                {auditPhase === 'SCAN_RESERVATIONS' && t("health_scan_progress", { phase: 'RESERVATION', total: String(scannedTotal), anomalies: String(anomalies.length) })}
-                {auditPhase === 'COMPLETE' && t("health_scan_complete", { total: String(scannedTotal), anomalies: String(anomalies.length) })}
-                {auditPhase === 'ABORTED' && t("health_scan_abort")}
+              <span className={`health-control-msg ${isAuditing ? "health-control-msg-active" : "health-control-msg-idle"}`}>
+                {auditPhase === "IDLE" && t("health_idle_msg")}
+                {auditPhase === "INIT" && t("health_scan_init")}
+                {auditPhase === "SCAN_SUB" && t("health_scan_progress", { phase: "HSS", total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === "SCAN_OCS" && t("health_scan_progress", { phase: "OCS", total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === "SCAN_TARIFF" && t("health_scan_progress", { phase: "TARIFF", total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === "SCAN_RESERVATIONS" && t("health_scan_progress", { phase: "RESERVATION", total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === "COMPLETE" && t("health_scan_complete", { total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === "ABORTED" && t("health_scan_abort")}
               </span>
             </div>
-            {isAuditing && (
-              <div className="progress-bar-container health-progress-bar">
-                <div className="progress-bar-value" />
-              </div>
-            )}
+            {isAuditing && <div className="progress-bar-container health-progress-bar"><div className="progress-bar-value" /></div>}
           </div>
           <div className="health-control-actions">
-            <button
-              className="btn btn-primary health-btn-run"
-              onClick={runFullAudit}
-              disabled={isAuditing}
-            >
-              {isAuditing ? <span className="spinner health-spinner" /> : <Database size={16}/>}
-              {isAuditing ? t("health_btn_scanning") : t("health_btn_run")}
-            </button>
+            {canScan ? (
+              <button className="btn btn-primary health-btn-run" onClick={() => void runFullAudit()} disabled={isAuditing}>
+                {isAuditing ? <span className="spinner health-spinner" /> : <Database size={16} />}
+                {isAuditing ? t("health_btn_scanning") : t("health_btn_run")}
+              </button>
+            ) : (
+              <span className="health-control-msg health-control-msg-idle">{t("health_scan_readonly")}</span>
+            )}
           </div>
         </div>
 
-        {/* Anomalies Table & Diagnostic Toolbar */}
         <div className="dash-card">
           <div className="health-anomalies-header">
             <div className="health-anomalies-title-group">
@@ -558,77 +516,38 @@ export function SystemHealthPage() {
               <span className="health-anomalies-badge-count">{filteredAnomalies.length} / {anomalies.length}</span>
             </div>
 
-            {/* Category Filter Tabs */}
             <div className="health-filter-tabs">
-              <button
-                type="button"
-                className={`health-tab-btn ${activeCategoryTab === 'all' ? 'active' : ''}`}
-                onClick={() => setActiveCategoryTab('all')}
-              >
-                {t("health_tab_all")}
-              </button>
-              <button
-                type="button"
-                className={`health-tab-btn ${activeCategoryTab === 'hss' ? 'active' : ''}`}
-                onClick={() => setActiveCategoryTab('hss')}
-              >
-                {t("health_tab_hss")}
-              </button>
-              <button
-                type="button"
-                className={`health-tab-btn ${activeCategoryTab === 'ocs' ? 'active' : ''}`}
-                onClick={() => setActiveCategoryTab('ocs')}
-              >
-                {t("health_tab_ocs")}
-              </button>
-              <button
-                type="button"
-                className={`health-tab-btn ${activeCategoryTab === 'reservation' ? 'active' : ''}`}
-                onClick={() => setActiveCategoryTab('reservation')}
-              >
-                {t("health_tab_reservation")}
-              </button>
-              <button
-                type="button"
-                className={`health-tab-btn ${activeCategoryTab === 'tariff' ? 'active' : ''}`}
-                onClick={() => setActiveCategoryTab('tariff')}
-              >
-                {t("health_tab_tariff")}
-              </button>
-              <button
-                type="button"
-                className={`health-tab-btn ${activeCategoryTab === 'profile' ? 'active' : ''}`}
-                onClick={() => setActiveCategoryTab('profile')}
-              >
-                {t("health_tab_profile")}
-              </button>
+              {([
+                ["all", "health_tab_all"],
+                ["hss", "health_tab_hss"],
+                ["ocs", "health_tab_ocs"],
+                ["reservation", "health_tab_reservation"],
+                ["tariff", "health_tab_tariff"],
+                ["profile", "health_tab_profile"],
+              ] as const).map(([value, key]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`health-tab-btn ${activeCategoryTab === value ? "active" : ""}`}
+                  onClick={() => setActiveCategoryTab(value)}
+                >
+                  {t(key)}
+                </button>
+              ))}
             </div>
 
-            {/* Severity and Actions Toolbar */}
             <div className="health-anomalies-toolbar">
               <select
                 className="health-severity-select"
                 aria-label={t("health_anomalies_detected")}
                 value={selectedSeverity}
-                onChange={(e) => setSelectedSeverity(e.target.value as any)}
+                onChange={(event) => setSelectedSeverity(event.target.value as AnomalySeverity | "all")}
               >
                 <option value="all">{t("health_filter_all_severities")}</option>
                 <option value="critical">{t("health_severity_critical")}</option>
                 <option value="warning">{t("health_severity_warning")}</option>
                 <option value="info">{t("health_severity_info")}</option>
               </select>
-
-              {filteredAnomalies.length > 0 && canHeal && (
-                <button
-                  type="button"
-                  className="btn btn-primary health-btn-batch"
-                  onClick={handleOpenBatchModal}
-                  disabled={isAuditing}
-                >
-                  <Wrench size={14} />
-                  {t("health_btn_batch_heal")}
-                </button>
-              )}
 
               <button
                 type="button"
@@ -649,13 +568,11 @@ export function SystemHealthPage() {
               icon={<ShieldAlert size={48} />}
               title={t("health_no_anomalies")}
               description={auditPhase === "IDLE" ? t("health_empty_idle_desc") : t("health_empty_complete_desc")}
-              action={
-                auditPhase === "IDLE" ? (
-                  <button type="button" className="btn btn-primary" onClick={runFullAudit}>
-                    <Database size={16} /> {t("health_btn_run")}
-                  </button>
-                ) : undefined
-              }
+              action={auditPhase === "IDLE" && canScan ? (
+                <button type="button" className="btn btn-primary" onClick={() => void runFullAudit()}>
+                  <Database size={16} /> {t("health_btn_run")}
+                </button>
+              ) : undefined}
             />
           ) : (
             <div className="health-table-wrap">
@@ -671,29 +588,21 @@ export function SystemHealthPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAnomalies.map((a, idx) => (
-                    <tr key={`${a.imsi}-${a.type}-${idx}`} className="health-table-tr">
-                      <td className="health-table-td-imsi" data-label={t("health_col_imsi")} data-column-priority="essential">{a.imsi}</td>
+                  {filteredAnomalies.map((anomaly, index) => (
+                    <tr key={`${anomaly.imsi}-${anomaly.type}-${index}`} className="health-table-tr">
+                      <td className="health-table-td-imsi" data-label={t("health_col_imsi")} data-column-priority="essential">{anomaly.imsi}</td>
                       <td className="health-table-td" data-label={t("health_filter_severity")} data-column-priority="essential">
-                        <span className={`health-severity-tag ${a.severity || 'warning'}`}>
-                          {a.severity === 'critical' ? <ShieldAlert size={12} /> : a.severity === 'info' ? <Info size={12} /> : <AlertTriangle size={12} />}
-                          {t(`health_severity_${a.severity || 'warning'}`)}
+                        <span className={`health-severity-tag ${anomaly.severity || "warning"}`}>
+                          {anomaly.severity === "critical" ? <ShieldAlert size={12} /> : anomaly.severity === "info" ? <Info size={12} /> : <AlertTriangle size={12} />}
+                          {t(`health_severity_${anomaly.severity || "warning"}`)}
                         </span>
                       </td>
                       <td className="health-table-td" data-label={t("health_col_type")} data-column-priority="supplementary">
-                        <span className="health-category-pill">
-                          {a.type}
-                        </span>
+                        <span className="health-category-pill">{anomaly.type}</span>
                       </td>
-                      <td className="health-table-td-details" data-label={t("health_col_details")} data-column-priority="essential">{renderDetails(a.details, a.type)}</td>
+                      <td className="health-table-td-details" data-label={t("health_col_details")} data-column-priority="essential">{renderDetails(anomaly.details, anomaly.type)}</td>
                       <td className="health-table-td-actions" data-label={t("health_col_action")} data-column-priority="essential">
-                        <button
-                          hidden={!canHeal}
-                          className="btn btn-outline health-btn-heal"
-                          onClick={() => handleOpenHealModal(a)}
-                        >
-                          {t("health_btn_heal")}
-                        </button>
+                        <AnomalyLink anomaly={anomaly} t={t} />
                       </td>
                     </tr>
                   ))}
@@ -701,125 +610,24 @@ export function SystemHealthPage() {
               </table>
             </div>
           )}
+          <p className="footnote">{t("health_readonly_notice")}</p>
         </div>
       </div>
-
-      {/* Single Item Heal Modal */}
-      {targetAnomaly && (
-        <Dialog open={healModalOpen} onClose={() => setHealModalOpen(false)} overlayClassName="modal-overlay health-modal-overlay" className="modal-content animate-fade-in health-modal-content" labelledBy="health-heal-modal-title" describedBy="health-heal-modal-description">
-            <div className="health-modal-header">
-              <h2 id="health-heal-modal-title" className="health-modal-title">{t("health_modal_title")}</h2>
-            </div>
-
-            <div className="health-modal-body">
-              <div className="health-modal-group">
-                <div className="health-modal-label">{t("health_modal_target")}</div>
-                <div className="health-modal-target">{targetAnomaly.imsi} ({targetAnomaly.type})</div>
-              </div>
-
-              <div className="health-modal-group-lg">
-                <label className="form-label health-modal-form-label" htmlFor="health-heal-profile">{t("health_modal_restore")}</label>
-                <select id="health-heal-profile" className="form-input" value={healProfile} onChange={e => setHealProfile(e.target.value)}>
-                  <option value="">{t("health_modal_default")}</option>
-                  {profileList.map((p: any) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
-                </select>
-                <div id="health-heal-modal-description" className="health-modal-desc">
-                  {t("health_modal_desc")}
-                </div>
-              </div>
-
-              <div className="health-modal-confirm-box">
-                <label className="health-modal-checkbox-label">
-                  <input
-                    type="checkbox"
-                    className="checkbox-custom health-modal-checkbox"
-                    checked={isHealConfirmed}
-                    onChange={e => setIsHealConfirmed(e.target.checked)}
-                  />
-                  <span className="health-modal-confirm-text">
-                    {t("health_modal_confirm", { time: lastSaveTime ? new Date(lastSaveTime * 1000).toLocaleString() : t("health_unknown") })}
-                  </span>
-                </label>
-              </div>
-
-              <div className="health-modal-actions">
-                <button
-                  className="btn btn-outline"
-                  onClick={() => setHealModalOpen(false)}
-                  disabled={isHealing}
-                >
-                  {t("cancel")}
-                </button>
-                <button
-                  className="btn btn-primary health-modal-btn"
-                  onClick={executeHeal}
-                  disabled={!isHealConfirmed || isHealing}
-                >
-                  {isHealing ? <span className="spinner health-spinner" /> : <Check size={16} />}
-                  {t("health_btn_execute")}
-                </button>
-              </div>
-            </div>
-        </Dialog>
-      )}
-
-      {/* Batch Auto-Heal Modal */}
-      <Dialog open={batchModalOpen} onClose={() => setBatchModalOpen(false)} overlayClassName="modal-overlay health-modal-overlay" className="modal-content animate-fade-in health-modal-content" labelledBy="health-batch-modal-title" describedBy="health-batch-modal-description">
-            <div className="health-modal-header">
-              <h2 id="health-batch-modal-title" className="health-modal-title">{t("health_batch_modal_title")}</h2>
-            </div>
-
-            <div className="health-modal-body">
-              <div className="health-modal-group">
-                <div className="health-modal-label">{t("health_anomalies_detected")}</div>
-                <div className="health-modal-target">{t("health_items_to_remediate", { count: filteredAnomalies.length })}</div>
-              </div>
-
-              <p id="health-batch-modal-description" className="health-modal-desc">
-                {t("health_batch_modal_desc", { count: String(filteredAnomalies.length) })}
-              </p>
-
-              <div className="health-modal-group-lg">
-                <label className="form-label health-modal-form-label" htmlFor="health-batch-profile">{t("health_modal_restore")}</label>
-                <select id="health-batch-profile" className="form-input" value={batchHealProfile} onChange={e => setBatchHealProfile(e.target.value)}>
-                  <option value="">{t("health_modal_default")}</option>
-                  {profileList.map((p: any) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
-                </select>
-              </div>
-
-              <div className="health-modal-confirm-box">
-                <label className="health-modal-checkbox-label">
-                  <input
-                    type="checkbox"
-                    className="checkbox-custom health-modal-checkbox"
-                    checked={isBatchConfirmed}
-                    onChange={e => setIsBatchConfirmed(e.target.checked)}
-                  />
-                  <span className="health-modal-confirm-text">
-                    {t("health_batch_modal_confirm")}
-                  </span>
-                </label>
-              </div>
-
-              <div className="health-modal-actions">
-                <button
-                  className="btn btn-outline"
-                  onClick={() => setBatchModalOpen(false)}
-                  disabled={isBatchHealing}
-                >
-                  {t("cancel")}
-                </button>
-                <button
-                  className="btn btn-primary health-modal-btn"
-                  onClick={executeBatchHeal}
-                  disabled={!isBatchConfirmed || isBatchHealing}
-                >
-                  {isBatchHealing ? <span className="spinner health-spinner" /> : <Wrench size={16} />}
-                  {t("health_btn_batch_heal")}
-                </button>
-              </div>
-            </div>
-      </Dialog>
     </>
   );
 }
+
+function AnomalyLink({ anomaly, t }: { anomaly: SystemAnomaly; t: (key: string) => string }) {
+  if (!/^\d{15}$/.test(anomaly.imsi)) {
+    return <span className="chip-muted">{t("health_anomaly_no_link")}</span>;
+  }
+  if (anomaly.category === "hss" || anomaly.category === "profile") {
+    return <Link className="btn btn-outline health-btn-view" to={`/subscribers/${encodeURIComponent(anomaly.imsi)}`}>{t("health_anomaly_view_subscriber")}</Link>;
+  }
+  if (anomaly.category === "ocs" || anomaly.category === "tariff" || anomaly.category === "reservation") {
+    return <Link className="btn btn-outline health-btn-view" to={`/ocs/contracts/${encodeURIComponent(anomaly.imsi)}`}>{t("health_anomaly_view_contract")}</Link>;
+  }
+  return <span className="chip-muted">{t("health_anomaly_no_link")}</span>;
+}
+
+export default SystemHealthPage;

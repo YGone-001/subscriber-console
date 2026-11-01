@@ -7,7 +7,7 @@
  * collected points and never interpolate across collection gaps.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Activity,
   ArrowLeft,
@@ -33,6 +33,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { MutationApiError } from '../../lib/api/mutation-client';
+import { resolveReturnTo } from '../../lib/return-to';
 import { fetchDiscoveryCandidate } from '../discovery/discovery-api';
 import type { NfObservation } from '../discovery/discovery-types';
 import {
@@ -70,6 +71,8 @@ export function NfHealthDetailPage() {
   const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = resolveReturnTo(location.search, '/nf-health', ['/nf-health']);
 
   const canConfigure = hasPermission(user, 'core.configure');
 
@@ -180,7 +183,7 @@ export function NfHealthDetailPage() {
         description={t('nf_health_detail_description')}
         actions={(
           <>
-            <button type="button" className="btn btn-secondary" onClick={() => navigate('/nf-health')}>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate(returnTo)}>
               <ArrowLeft size={16} />
               {t('nf_health_back')}
             </button>

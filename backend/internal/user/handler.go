@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
@@ -255,7 +256,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logUserOperation(r, p, "user.create", user.Username, nil, user)
+	h.logUserOperation(r, p, "user.create", user.Username, nil, user, "")
 	writeJSON(w, http.StatusCreated, user)
 }
 
@@ -295,7 +296,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logUserOperation(r, p, "user.update", username, before, user)
+	h.logUserOperation(r, p, "user.update", username, before, user, stringValue(req.Reason))
 	writeJSON(w, http.StatusOK, user)
 }
 
@@ -321,6 +322,13 @@ func (h *Handler) DisableUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
 	before, _ := h.repo.FindByUsername(r.Context(), username)
 
 	user, err := h.svc.DisableUser(r.Context(), username, p)
@@ -329,7 +337,7 @@ func (h *Handler) DisableUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logUserOperation(r, p, "user.disable", username, before, user)
+	h.logUserOperation(r, p, "user.disable", username, before, user, body.Reason)
 	writeJSON(w, http.StatusOK, user)
 }
 
@@ -366,7 +374,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logUserOperation(r, p, "user.password.reset", username, nil, nil)
+	h.logUserOperation(r, p, "user.password.reset", username, nil, nil, req.Reason)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "password reset successful"})
 }
 
@@ -381,6 +389,13 @@ func extractUsernameFromAction(path, action string) string {
 }
 
 // writeServiceError maps service errors to HTTP responses.
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
 func writeServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrUserNotFound):
@@ -400,11 +415,17 @@ func writeServiceError(w http.ResponseWriter, err error) {
 }
 
 // logUserOperation writes an audit record for a user management operation.
-func (h *Handler) logUserOperation(r *http.Request, p *auth.Principal, action, targetUsername string, before, after interface{}) {
+func (h *Handler) logUserOperation(r *http.Request, p *auth.Principal, action, targetUsername string, before, after interface{}, explicitReason string) {
 	if h.writer == nil {
 		return
 	}
 	source, request, reason := audit.AuditRequestContext(r)
+	if strings.TrimSpace(explicitReason) != "" {
+		reason = strings.TrimSpace(explicitReason)
+		if len(reason) > 1000 {
+			reason = reason[:1000]
+		}
+	}
 	input := audit.WriteAuditInput{
 		Action: action,
 		Module: "user",

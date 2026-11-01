@@ -66,6 +66,7 @@ func TestFormatJSString(t *testing.T) {
 
 func TestHealValidation(t *testing.T) {
 	h := NewHandler(nil, nil, nil)
+	h.SetWritesEnabled(true)
 
 	tests := []struct {
 		name           string
@@ -153,6 +154,7 @@ func TestHealValidation(t *testing.T) {
 
 func TestBatchHealValidation(t *testing.T) {
 	h := NewHandler(nil, nil, nil)
+	h.SetWritesEnabled(true)
 
 	tests := []struct {
 		name           string
@@ -220,8 +222,34 @@ func TestBatchHealValidation(t *testing.T) {
 	}
 }
 
+func TestRemediationWritesAreRetiredByDefault(t *testing.T) {
+	h := NewHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/system/audit/heal", bytes.NewBufferString(`{"imsi":"123456789012345","type":"missing_config"}`))
+	ctx := auth.ContextWithPrincipal(req.Context(), &auth.Principal{
+		Username:       "admin",
+		Role:           "admin",
+		NormalizedRole: "admin",
+	})
+	req = req.WithContext(ctx)
+
+	rec := httptest.NewRecorder()
+	h.Heal(rec, req)
+
+	if rec.Code != http.StatusGone {
+		t.Fatalf("expected 410, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["code"] != "REMEDIATION_RETIRED" {
+		t.Fatalf("expected REMEDIATION_RETIRED, got %q", resp["code"])
+	}
+}
+
 func TestAuthorizationDenial(t *testing.T) {
 	h := NewHandler(nil, nil, nil)
+	h.SetWritesEnabled(true)
 
 	// Viewer role has system_heal capability denied
 	req := httptest.NewRequest(http.MethodPost, "/api/system/audit/heal", bytes.NewBufferString(`{"imsi":"123456789012345","type":"missing_config"}`))

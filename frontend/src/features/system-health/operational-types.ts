@@ -29,35 +29,3 @@ export interface AuditScanResponse {
   scannedCount: number;
   anomalies?: SystemAnomaly[];
 }
-
-export interface AnalyticsInitResponse {
-  message?: string;
-  metrics?: Record<string, unknown>;
-}
-
-export interface SingleHealRequest {
-  imsi: string;
-  type: string;
-  profileName?: string;
-}
-
-export interface SingleHealResponse {
-  message?: string;
-}
-
-export interface BatchHealAnomaly {
-  imsi: string;
-  type: string;
-}
-
-export interface BatchHealRequest {
-  anomalies: BatchHealAnomaly[];
-  profileName?: string;
-}
-
-export interface BatchHealResponse {
-  message?: string;
-  successCount: number;
-  failedCount: number;
-  errors?: string[];
-}

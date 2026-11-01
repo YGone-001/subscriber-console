@@ -146,6 +146,22 @@ func (fs *FileStore) writeFile(id string, data []byte) error {
 	return nil
 }
 
+// Status reports whether both storage roots are present and are directories.
+// It is a read-only probe used by platform health; writability is exercised by
+// the upload path itself rather than by a periodic write.
+func (fs *FileStore) Status() (bool, string) {
+	for _, dir := range []string{fs.dir, fs.trashDir} {
+		info, err := os.Stat(dir)
+		if err != nil {
+			return false, "storage directory is unavailable: " + filepath.Base(dir)
+		}
+		if !info.IsDir() {
+			return false, "storage root is not a directory: " + filepath.Base(dir)
+		}
+	}
+	return true, "upload and trash roots are present"
+}
+
 // Open returns a read handle for a stored attachment.
 func (fs *FileStore) Open(id string) (*os.File, error) {
 	if !IsValidID(id) {

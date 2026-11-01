@@ -16,18 +16,35 @@ var imsiRegex = regexp.MustCompile(`^\d{15}$|^UNKNOWN$`)
 
 // Handler handles HTTP requests for system self-healing endpoints.
 type Handler struct {
-	repo        *Repository
-	limiter     *ratelimit.Limiter
-	auditWriter *audit.Writer
+	repo          *Repository
+	limiter       *ratelimit.Limiter
+	auditWriter   *audit.Writer
+	writesEnabled bool
 }
 
-// NewHandler creates a new remediation Handler.
+// NewHandler creates a new remediation Handler. Writes are disabled by default:
+// the console no longer offers auto-heal, and the server must not keep a
+// fabricating write path reachable by a direct request.
 func NewHandler(repo *Repository, limiter *ratelimit.Limiter, auditWriter *audit.Writer) *Handler {
 	return &Handler{
-		repo:        repo,
-		limiter:     limiter,
-		auditWriter: auditWriter,
+		repo:          repo,
+		limiter:       limiter,
+		auditWriter:   auditWriter,
+		writesEnabled: false,
 	}
+}
+
+// SetWritesEnabled re-enables the legacy write path. Production wiring never
+// calls this; it exists so repository/handler tests can exercise the retired
+// implementation.
+func (h *Handler) SetWritesEnabled(enabled bool) {
+	h.writesEnabled = enabled
+}
+
+func (h *Handler) writeRetired(w http.ResponseWriter) {
+	response.Error(w, http.StatusGone,
+		"Automatic remediation is retired; repair through the owning business surface",
+		"REMEDIATION_RETIRED")
 }
 
 // RegisterRoutes registers controlled remediation routes onto the mux.
@@ -51,6 +68,10 @@ func (h *Handler) Heal(w http.ResponseWriter, r *http.Request) {
 
 	// Rate limit: 20 req / 60s per user (system:audit-heal:<user>)
 	if h.limiter != nil && !h.limiter.EnforceNodeParity(w, r, "system:audit-heal:"+p.Username, 20, 60) {
+		return
+	}
+	if !h.writesEnabled {
+		h.writeRetired(w)
 		return
 	}
 
@@ -140,6 +161,10 @@ func (h *Handler) BatchHeal(w http.ResponseWriter, r *http.Request) {
 
 	// Rate limit: 10 req / 60s per user (system:audit-batch-heal:<user>)
 	if h.limiter != nil && !h.limiter.EnforceNodeParity(w, r, "system:audit-batch-heal:"+p.Username, 10, 60) {
+		return
+	}
+	if !h.writesEnabled {
+		h.writeRetired(w)
 		return
 	}
 

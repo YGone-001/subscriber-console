@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (166 exact METHOD+PATH registrations)
+Read + write APIs (168 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 166
+Go registration set                  = 168
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -544,8 +544,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 166 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，166 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 168 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，168 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -575,7 +575,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (166 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (168 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -625,7 +625,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **166 条** METHOD+PATH 精确注册（GET 82 / POST 58 / PUT 13 / DELETE 10 / PATCH 3）：
+路由权威为源码派生的 Go 注册集合，共 **168 条** METHOD+PATH 精确注册（GET 82 / POST 60 / PUT 13 / DELETE 10 / PATCH 3）：
 
 ```text
 GET    /api/analytics/metrics
@@ -771,6 +771,8 @@ POST   /api/nf-alerts/rules
 PUT    /api/nf-alerts/rules/{ruleId}
 DELETE /api/nf-alerts/rules/{ruleId}
 POST   /api/nf-alerts/{alertId}/acknowledge
+POST   /api/nf-alerts/{alertId}/assign
+POST   /api/nf-alerts/{alertId}/recover
 POST   /api/nf-alerts/{alertId}/resolve
 GET    /api/operations/summary
 GET    /api/operations/resources
@@ -799,7 +801,7 @@ POST   /api/knowledge/files
 状态：
 
 ```text
-Go production API registrations = 166 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 168 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0
@@ -818,7 +820,7 @@ NF 健康遥测底座（只读）：权威存储 `xcloud_ops.app_nf_health_targe
 
 Topology 依赖模型底座（Stage 2）：权威存储 `xcloud_ops.app_topology_edges`（`xcloud` 中为 0，且不创建 `app_topology_nodes` / `app_topology_vertices` / `app_topology_resources` 任何节点集合）；8 条 Go 路由（5 读 + 3 写）；2 条前端 SPA 路由（`/topology`、`/topology/{resourceId}`）；9 种有向关系类型（`contains`、`runs_on`、`depends_on`、`connects_to`、`routes_to`、`registers_with`、`serves`、`uses`、`exposes`）与 2 种生命周期（`active`、`retired`），由 `GET /api/topology/meta` 权威下发；`GET /api/topology/live` 为只读运行时投影：节点来自当前 runtime 快照，链路仅来自运维人员提供的 `NF_ETC_MANIFEST` 中每网元绝对配置路径的显式对端配置（Open5GS YAML / freeDiameter / IMS Diameter XML / SIP cfg / DRA），绝不硬编码 IP、绝不推断未配置连接、绝不返回密钥、绝不写 Inventory/Topology/Health/Discovery；同一投影附带 `reconciliation` 咨询性差集（按无序 Inventory 资源对匹配台账与配置证据，接口标注分 `agrees`/`differs`/`unannotated`，已按决定退役单列而非当作漏登记，台账读取截断标 `partial`、读取失败标 `available=false`，绝不据此自动写台账）；Inventory 独占节点权威，Topology 仅持久化资源间关系边，端点必须引用已存在且未退役的 Inventory UUID；`contains`/`runs_on` 属显式声明的组成与落位关系，绝不由 runtime 派生，当前部署刻意保持 0 条（主机归属由 runtime 观测与按域虚拟分组承载，自动写入既会在对账中制造伪差异，也会在重装后静默过期）；活动边按 `(fromResourceId, toResourceId, relationshipType)` 部分唯一索引去重，重复创建返回 409，退役后可用新 `edgeId` 重建同一有向组合；`revision` CAS 乐观锁，`retired` 为不可逆终态；仅一跳邻域查询（`inbound` / `outbound` / `both`），不含多跳、自动发现或远端执行能力；读需 `core.read`，写需 `core.configure`。声明式拓扑关系不代表接口真实连通、注册成功或服务健康；配置证据同样不代表实测流量。权威文档：`docs/architecture/topology-dependency-model.md`；面向未来阶段的 Feature + UI/UX 完成门见 `docs/architecture/stage-feature-ui-acceptance.md`。
 
-NF 告警规则底座：权威存储 `xcloud_ops.app_nf_alert_rules` + `xcloud_ops.app_nf_alerts`（共 2 个集合，`xcloud` 中为 0）；9 条 Go 路由（4 读 + 5 写）；1 条前端 SPA 路由（`/nf-alerts`）；规则由运营人员编写，是网元健康测量证据的纯观察者——在每次记录采集后由 scheduler 钩子评估，绝不触发采集、绝不修改网络、绝不写 Inventory/Topology/Discovery/NF Health 字段；两种条件类型（`state` 观测 L1/L2/L3/overall 层状态词表 [unhealthy, degraded, unknown]，`run_failed` 响应采集运行失败）；词表由 `GET /api/nf-alerts/meta` 权威下发；`not_configured` 与 `stale` 不可选（前者属于目标配置，后者属于新鲜度投影）；作用域三选一（`targetId` 单目标 / `resourceId` 资源全部目标 / 留空全部目标），创建后不可变；去重窗口（cooldown，有界秒数）内重复触发仅累计 `triggerCount`，绝不新建实例；每 (rule, target) 至多一个未闭合实例（active/acknowledged），由部分唯一索引 `uniq_nf_alert_open_instance` 强制；恢复即清除（条件不再满足时自动 resolve，`resolveReason=recovery`）；规则删除时引擎自动 resolve 其全部未闭合告警（`resolveReason=rule_deleted`）；告警实例保留不可变触发证据快照（runStatus/sampleId/collectedAt/layers/overallState）；`revision` CAS 乐观锁；读需 `core.read`，写需 `core.configure`；无 TTL，历史保留。
+NF 告警规则底座：权威存储 `xcloud_ops.app_nf_alert_rules` + `xcloud_ops.app_nf_alerts`（共 2 个集合，`xcloud` 中为 0）；11 条 Go 路由（4 读 + 7 写）；1 条前端 SPA 路由（`/nf-alerts`）；规则由运营人员编写，是网元健康测量证据的纯观察者——在每次记录采集后由 scheduler 钩子评估，绝不触发采集、绝不修改网络、绝不写 Inventory/Topology/Discovery/NF Health 字段；两种条件类型（`state` 观测 L1/L2/L3/overall 层状态词表 [unhealthy, degraded, unknown]，`run_failed` 响应采集运行失败）；词表由 `GET /api/nf-alerts/meta` 权威下发；`not_configured` 与 `stale` 不可选（前者属于目标配置，后者属于新鲜度投影）；作用域三选一（`targetId` 单目标 / `resourceId` 资源全部目标 / 留空全部目标），创建后不可变；去重窗口（cooldown，有界秒数）内重复触发仅累计 `triggerCount`，绝不新建实例；每 (rule, target) 至多一个未闭合实例（active/acknowledged/assigned/recovering），由部分唯一索引 `uniq_nf_alert_open_instance` 强制；`POST /api/nf-alerts/{alertId}/assign` 写入分派人与时间（active/acknowledged/assigned -> assigned），`POST /api/nf-alerts/{alertId}/recover` 仅允许 assigned -> recovering，非法迁移返回 409 `NF_ALERT_INVALID_TRANSITION`；恢复即清除（条件不再满足时自动 resolve，`resolveReason=recovery`）；规则删除时引擎自动 resolve 其全部未闭合告警（`resolveReason=rule_deleted`）；告警实例保留不可变触发证据快照（runStatus/sampleId/collectedAt/layers/overallState）；`revision` CAS 乐观锁；读需 `core.read`，写需 `core.configure`；无 TTL，历史保留。
 
 用户模板读权限与凭据脱敏：5 个模板读端点（`GET /api/profiles`、`GET /api/profiles/meta`、`GET /api/profiles/{name}`、`GET /api/profiles/{name}/stats`、`GET /api/profiles/{name}/versions`）要求 `profiles.read` 权限，拒绝经 `RequirePermissionWithAudit` 落 403 `PERMISSION_DENIED` 审计证据；`POST /api/profiles/{name}/versions/{versionId}/restore` 在 `profile_rollback` 能力判定前先过同一读门（恢复需读取含凭据的快照）。模板写拒绝（POST/PUT/DELETE）保持原有 403 `Insufficient permissions` 响应体，并经 `audit.RecordPermissionDenied` 补记 `authorization.denied` 证据，与读拒绝证据对称；恢复的能力拒绝（`profile_rollback`）同样补记证据，并保持原有 403 `FORBIDDEN` 响应体。`GET /api/profiles/{name}`、versions 详情分支与 `GET /api/profiles/{name}/export` 对无 `subscribers.write` 权限的角色**删除** `auth.k`/`auth.op`/`auth.opc` 三个键，并在 `auth` 块内附 `credentialState`（`visibility` + 每键 `configured|not_configured`；AMF 与 SQN 不是密钥材料，不脱敏）。投影不再用占位字符串冒充值：占位值会被当成值显示、当成内容比较、被回写成“凭据”，并可能被 governed apply 复制进订阅者 `security.k`。凭据条件与“已配置”的判定（非空且非全零）由 `backend/internal/credential` 单一定义，模板与订阅者两个平面共用；键存在与否不再承担语义。可见性判定与 `/api/profiles/meta` 下发的 `credentialVisibility` 同源（同为 `subscribers.write`）。`/api/profiles/meta` 还下发 `canEditCredentials`（= `profiles.write` ∧ `subscribers.write`），显式表达“能写模板”与“能看凭据”缺一不可的耦合，前端不再自行从角色表推断：该位为 false 时凭据块只读且 PUT 不含 `auth` 字段，存储的凭据块原样保留。`[MASKED]` 永不作为合法写入值——PUT 在 `auth` 三键内遇到即返回 400 `INVALID_PROFILE_UPDATE`，防止读投影被回存为真实鉴权材料并经 governed apply 复制进订阅者 `security.k`。`auth` 内的投影键 `credentialState` 同样不得回存（同一 400 形状）：导出载荷把它放在 `auth` 里，复制粘贴不得把读投影写成存储事实。`POST /api/profiles` 的键名策略严于路径解析策略：拒绝空串、超过 64 字符、首尾空白或含制表/换行、以及保留键 `new`（大小写不敏感，会遮蔽 `/profile/new` SPA 路由）；读路径历史正则保持宽松，确保既有奇名模板仍可访问。`POST /api/profiles` 的请求体接受与 PUT 相同的字段白名单（`title`/`description`/`auth`/`ambr`/`access_restriction_data`/`sliceList`/`ocsDefaults`）：不带内容时仍生成与历史逐字一致的默认文档，带内容时一次写入成型且只产生一条 `CREATE` 快照，未知字段或 `[MASKED]` 返回 400 `INVALID_PROFILE_CREATE`。恢复同样受该不变量约束：含 `[MASKED]` 哨兵的快照在产生任何写入之前被拒绝（HTTP 400 `PROFILE_RESTORE_MASKED_MATERIAL`、`committed:false`、落 `MASKED_CREDENTIAL_MATERIAL` 拒绝证据）；恢复成功响应回显完整文档而不脱敏，因为 `profile_rollback` 仅授予 admin/operator，其受众恒在 `subscribers.write` 之内。
 

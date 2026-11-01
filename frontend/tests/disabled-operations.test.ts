@@ -125,46 +125,33 @@ test('the denylist check cannot be bypassed by a generic argument or a wrapper',
   assert.ok(!WRITE_CALL.test(contextOf(read, readMatch!.index!)), 'a GET read must not be treated as a write');
 });
 
-test('system health operational endpoints are owned by exactly one module', () => {
-  const owners = ['system-health-api.ts'];
-  const ownable = [
+test('retired remediation and analytics-init endpoints are absent from SPA source', () => {
+  const retired = [
     '/api/system/audit/heal',
     '/api/system/audit/batch-heal',
-    '/api/system/audit/scan',
     '/api/analytics/init',
   ];
-
-  for (const path of ownable) {
+  for (const path of retired) {
     const mentions = (allEndpoints.get(path) ?? []).filter((file) => !/\.test\./.test(file));
-    assert.ok(mentions.length > 0, `${path} must have an owner`);
-    for (const file of mentions) {
-      assert.ok(
-        owners.some((owner) => file.endsWith(owner)),
-        `${path} may only be referenced from ${owners.join(', ')}, found in ${file}`,
-      );
-    }
+    assert.deepEqual(mentions, [], `${path} must not be called by the console`);
   }
 });
 
-test('the system health page never calls the remediation endpoints with a raw fetch', () => {
+test('the system health page only owns the read-only audit scan', () => {
   const page = readFileSync(resolve(srcDir, 'features/system-health/SystemHealthPage.tsx'), 'utf8');
   assert.doesNotMatch(page, /\bfetch\s*\(/, 'the page must go through the API owner, not native fetch');
-  assert.match(page, /requestSingleHeal\(/, 'single remediation must use the owner helper');
-  assert.match(page, /requestBatchHeal\(/, 'batch remediation must use the owner helper');
+  assert.match(page, /requestAuditScanStep\(/, 'the diagnostic scan must use its owner helper');
+  assert.doesNotMatch(page, /requestSingleHeal|requestBatchHeal|health_btn_heal|health_modal_confirm/i, 'auto-heal must be retired from the page');
+  assert.match(page, /health_readonly_notice/, 'the page must state that diagnostics are read-only');
 });
 
-test('remediation requests are built by the existing request builders', () => {
-  const api = readFileSync(resolve(srcDir, 'features/system-health/system-health-api.ts'), 'utf8');
-  assert.match(api, /buildSingleHealRequest\(/, 'the single request must be validated by its builder');
-  assert.match(api, /buildBatchHealRequest\(/, 'the batch request must be validated by its builder');
-  /* And the owner must go through the mutation client, so 401/403/429 and network
-     failures keep the shared error contract and are never retried automatically. */
-  assert.match(api, /postJson<[^>]*>\(SINGLE_HEAL_PATH/, 'the owner must use the mutation client');
-  assert.match(api, /postJson<[^>]*>\(BATCH_HEAL_PATH/, 'the owner must use the mutation client');
+test('the scan entry is gated by core.configure, not by a capability that no longer exists', () => {
+  const page = readFileSync(resolve(srcDir, 'features/system-health/SystemHealthPage.tsx'), 'utf8');
+  assert.match(page, /hasPermission\(user, "core\.configure"\)/, 'the scan entry must check core.configure');
+  assert.match(page, /canScan \?/, 'the scan action must be conditional');
 });
 
-test('no approval compatibility logic remains on the remediation path', () => {
-  /* These operations execute directly; "submitted for approval" is a retired state. */
+test('no approval compatibility logic remains on the diagnostics path', () => {
   assert.doesNotMatch(allSource, /approval_msg_submitted/, 'the retired approval notice must be gone');
   assert.doesNotMatch(allSource, /\.approval\?\.id/, 'the retired approval response branch must be gone');
 
@@ -178,27 +165,4 @@ test('subscriber mutation surfaces use direct-execution language', () => {
     readFileSync(resolve(srcDir, 'components/SubscriberBatchUpdateModal.tsx'), 'utf8'),
   ].join('\n');
   assert.doesNotMatch(surfaces, /提交审批|submitted for approval/i, 'subscriber writes must not present a retired approval hand-off');
-});
-
-test('a partially failed batch is never reported as a full success', () => {
-  const api = readFileSync(resolve(srcDir, 'features/system-health/system-health-api.ts'), 'utf8');
-  const page = readFileSync(resolve(srcDir, 'features/system-health/SystemHealthPage.tsx'), 'utf8');
-
-  /* The classifier must distinguish all three outcomes. */
-  assert.match(api, /return 'succeeded'/, 'all-succeeded must be its own outcome');
-  assert.match(api, /return 'partial'/, 'partial must be its own outcome');
-  assert.match(api, /return 'failed'/, 'all-failed must be its own outcome');
-
-  /* And the page must branch on the outcome rather than assuming success. */
-  assert.match(page, /classifyBatchHealOutcome\(/, 'the page must classify the outcome');
-  assert.match(page, /health_msg_batch_heal_partial/, 'partial runs need their own notice');
-  assert.match(page, /health_err_batch_heal_failed/, 'a fully failed run needs a failure notice');
-  assert.match(page, /batchHealErrors\(/, 'the server error detail must be surfaced');
-});
-
-test('remediation actions are gated on the system_heal capability', () => {
-  const page = readFileSync(resolve(srcDir, 'features/system-health/SystemHealthPage.tsx'), 'utf8');
-  assert.match(page, /hasPermission\(user, 'system_heal'\)/, 'the page must check the capability');
-  assert.match(page, /hidden=\{!canHeal\}/, 'per-row remediation must be hidden without the capability');
-  assert.match(page, /filteredAnomalies\.length > 0 && canHeal/, 'batch remediation must be hidden without the capability');
 });

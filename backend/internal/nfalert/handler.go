@@ -34,6 +34,8 @@ type RepositoryAPI interface {
 	GetAlert(ctx context.Context, alertID string) (*Alert, error)
 	ListAlerts(ctx context.Context, filter AlertListFilter) ([]Alert, *string, bool, error)
 	AcknowledgeAlert(ctx context.Context, alertID, actor string) (*Alert, error)
+	AssignAlert(ctx context.Context, alertID, assignedTo string) (*Alert, error)
+	RecoverAlert(ctx context.Context, alertID string) (*Alert, error)
 	ResolveAlert(ctx context.Context, alertID, actor string) (*Alert, error)
 }
 
@@ -133,6 +135,10 @@ func writeValidation(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusConflict, "Alert instance is already resolved", "NF_ALERT_INSTANCE_RESOLVED")
 		return
 	}
+	if errors.Is(err, ErrAlertTransition) {
+		response.Error(w, http.StatusConflict, "Alert lifecycle transition is not allowed", "NF_ALERT_INVALID_TRANSITION")
+		return
+	}
 	code, message := MapValidationError(err)
 	status := http.StatusBadRequest
 	switch code {
@@ -159,6 +165,10 @@ func writeAlertNotFound(w http.ResponseWriter, err error) {
 	}
 	if errors.Is(err, ErrAlertResolved) {
 		response.Error(w, http.StatusConflict, "Alert instance is already resolved", "NF_ALERT_INSTANCE_RESOLVED")
+		return
+	}
+	if errors.Is(err, ErrAlertTransition) {
+		response.Error(w, http.StatusConflict, "Alert lifecycle transition is not allowed", "NF_ALERT_INVALID_TRANSITION")
 		return
 	}
 	response.Error(w, http.StatusInternalServerError, "Internal error", "NF_ALERT_INTERNAL")

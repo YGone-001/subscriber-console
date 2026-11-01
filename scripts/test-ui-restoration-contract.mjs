@@ -156,12 +156,13 @@ check('UI-13b', /XCLOUD_OPEN_TABS/.test(tabBarSource) && /nav-tab-close/.test(ta
 check('UI-14', breadcrumbSource.includes('nav-breadcrumbs-bar') && breadcrumbSource.includes('aria-current') && /getBreadcrumbs/.test(breadcrumbSource), 'breadcrumbs=restored+route_derived');
 check('UI-15', notificationSource.includes('notif-bell-button') && notificationSource.includes('notif-dropdown-panel') && /useNotifications/.test(notificationSource), 'notification_presentation=restored');
 /*
- * The invariant is that the sentinel is restored AND driven by an alert authority.
- * Pinning the specific hook was wrong: the historical sentinel reads `/api/alerts`
- * directly, which is the reference behaviour this port restores. Either authority is
- * acceptable; a hardcoded list is not.
+ * The invariant is that the sentinel is restored AND driven by the sole alert
+ * authority. NF alerts are that authority: the header renders the full-collection
+ * summary from GET /api/operations/summary and links to the NF alert workbench.
+ * The historical dropdown read legacy /api/alerts, which has no producer and is
+ * deliberately no longer restored.
  */
-check('UI-16', nocSource.includes('noc-header-button') && nocSource.includes('noc-panel') && /useNotifications|\/api\/alerts/.test(nocSource), 'noc_sentinel=restored+alert_authority');
+check('UI-16', nocSource.includes('noc-header-button') && nocSource.includes('/api/operations/summary') && nocSource.includes('/nf-alerts'), 'noc_sentinel=restored+alert_authority');
 
 // 6. Shell orchestration and interaction contract.
 check('UI-17', /NavigationTabBar/.test(shellSource) && /NavigationBreadcrumbs/.test(shellSource) && /AppHeader/.test(shellSource) && /AppSidebar/.test(shellSource) && /ToastRegion/.test(shellSource), 'shell_orchestration=complete');

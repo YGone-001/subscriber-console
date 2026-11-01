@@ -12,15 +12,17 @@
  * reload, back/forward and a shared link restore the same workspace.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Boxes, ChevronRight, Plus, Search, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { fetchInventoryMeta, fetchInventoryResources } from './inventory-api';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
+import { InventoryViewSwitch } from './InventoryViewSwitch';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { INVENTORY_URL_KEYS } from '../operations/inventory-url-keys';
 import type { MetaResponse, Resource } from './inventory-types';
@@ -31,6 +33,8 @@ const PAGE_LIMIT = 20;
 export function InventoryAssetsPage() {
   const { t } = useI18n();
   const { user } = useAuth();
+  const location = useLocation();
+  const listLocation = currentListLocation('/inventory/assets', location.search);
 
   const [meta, setMeta] = useState<MetaResponse | null>(null);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -185,6 +189,7 @@ export function InventoryAssetsPage() {
       title={t('inventory_assets_title')}
       description={t('inventory_assets_description')}
       icon={<Boxes size={23} />}
+      viewSwitch={<InventoryViewSwitch active="assets" />}
       onRefresh={() => loadResources(url.cursor)}
       actions={
         canConfigure ? (
@@ -369,7 +374,7 @@ export function InventoryAssetsPage() {
                     </td>
                     <td className={styles.actionsCell}>
                       <Link
-                        to={`/inventory/${encodeURIComponent(item.resourceId)}`}
+                        to={withReturnTo(`/inventory/${encodeURIComponent(item.resourceId)}`, listLocation)}
                         className={styles.rowAction}
                       >
                         {t('inventory_view_details')}

@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Activity,
   Boxes,
@@ -30,6 +30,7 @@ import {
   YAxis,
 } from 'recharts';
 import { hasPermission } from '../../lib/permissions';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { EmptyState } from '../../components/ui/OperationFeedback';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
@@ -101,6 +102,10 @@ export function NfHealthTargetDrawer({ target, onClose, onCollected }: Props) {
   const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
   const canConfigure = hasPermission(user, 'core.configure');
+  const location = useLocation();
+  // The drawer is opened from the target list, so its detail link must keep the
+  // list filters and page instead of dropping the operator on a bare list.
+  const listLocation = currentListLocation(location.pathname, location.search);
 
   const [detail, setDetail] = useState<GetTargetResponse | null>(null);
   const [samples, setSamples] = useState<HealthSample[]>([]);
@@ -396,7 +401,10 @@ export function NfHealthTargetDrawer({ target, onClose, onCollected }: Props) {
 
               <section className={styles.drawerSection} aria-label={t('nf_health_drawer_links')}>
                 <div className={styles.drawerLinks}>
-                  <Link className="btn btn-secondary" to={`/nf-health/${encodeURIComponent(target.targetId)}`}>
+                  <Link
+                    className="btn btn-secondary"
+                    to={withReturnTo(`/nf-health/${encodeURIComponent(target.targetId)}`, listLocation)}
+                  >
                     <Activity size={15} />
                     {t('nf_health_drawer_open_detail')}
                   </Link>

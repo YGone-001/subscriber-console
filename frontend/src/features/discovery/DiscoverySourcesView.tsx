@@ -7,11 +7,12 @@
  * view and scan history in the runs view.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Radar, Search, Server, X } from 'lucide-react';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { useI18n } from '../../providers/I18nProvider';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { fetchDiscoverySources } from './discovery-api';
 import type { DiscoverySource, PageInfo } from './discovery-types';
@@ -44,6 +45,8 @@ export function DiscoverySourcesView({
   reloadToken,
 }: Props) {
   const { t } = useI18n();
+  const location = useLocation();
+  const listLocation = currentListLocation('/discovery', location.search);
   const [sources, setSources] = useState<DiscoverySource[]>([]);
   const [page, setPage] = useState<PageInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -207,7 +210,7 @@ export function DiscoverySourcesView({
               {sources.map((source) => (
                 <tr key={source.sourceId}>
                   <td>
-                    <Link to={`/discovery/sources/${encodeURIComponent(source.sourceId)}`} className={styles.rowLink}>
+                    <Link to={withReturnTo(`/discovery/sources/${encodeURIComponent(source.sourceId)}`, listLocation)} className={styles.rowLink}>
                       {source.name}
                     </Link>
                   </td>
@@ -238,7 +241,7 @@ export function DiscoverySourcesView({
                       </button>
                       <Link
                         className="btn btn-ghost"
-                        to={`/discovery/sources/${encodeURIComponent(source.sourceId)}`}
+                        to={withReturnTo(`/discovery/sources/${encodeURIComponent(source.sourceId)}`, listLocation)}
                       >
                         {t('discovery_open_detail')}
                       </Link>

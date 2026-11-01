@@ -104,8 +104,9 @@ const EXPECTED_RUNTIME_ROUTES = new Set([
   'POST /api/runtime/bootstrap/preview',
   'POST /api/runtime/bootstrap/apply',
 ]);
-// NF alerts add exactly nine registrations: four read projections and five
-// governed mutations (rule create/update/delete, acknowledge, resolve).
+// NF alerts add exactly eleven registrations: four read projections and seven
+// governed mutations (rule create/update/delete, acknowledge, assign, recover,
+// resolve).
 const EXPECTED_NF_ALERT_ROUTES = new Set([
   'GET /api/nf-alerts/rules',
   'POST /api/nf-alerts/rules',
@@ -115,6 +116,8 @@ const EXPECTED_NF_ALERT_ROUTES = new Set([
   'GET /api/nf-alerts',
   'GET /api/nf-alerts/meta',
   'POST /api/nf-alerts/{alertId}/acknowledge',
+  'POST /api/nf-alerts/{alertId}/assign',
+  'POST /api/nf-alerts/{alertId}/recover',
   'POST /api/nf-alerts/{alertId}/resolve',
 ]);
 // The operations projection adds exactly two read registrations:

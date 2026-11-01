@@ -370,6 +370,71 @@ func (h *Handler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, alert)
 }
 
+// AssignAlert handles POST /api/nf-alerts/{alertId}/assign.
+func (h *Handler) AssignAlert(w http.ResponseWriter, r *http.Request) {
+	p := h.requireConfigure(w, r, "POST", "/api/nf-alerts/{alertId}/assign")
+	if p == nil {
+		return
+	}
+	if h.limiter != nil && !h.limiter.Enforce(w, r, "nf-alerts:assign:"+p.Username, 30, 60) {
+		return
+	}
+	alertID := r.PathValue("alertId")
+	if err := ValidateUUID(alertID); err != nil {
+		writeValidation(w, err)
+		return
+	}
+	var req struct {
+		AssignedTo string `json:"assignedTo"`
+	}
+	if err := decodeStrictJSON(r.Body, maxBodyBytes, &req); err != nil {
+		response.BadRequest(w, err.Error(), "INVALID_REQUEST_BODY")
+		return
+	}
+	req.AssignedTo = strings.TrimSpace(req.AssignedTo)
+	if req.AssignedTo == "" || len(req.AssignedTo) > 120 {
+		response.BadRequest(w, "assignedTo must be a non-empty value of at most 120 characters", "NF_ALERT_INVALID_ASSIGNEE")
+		return
+	}
+	alert, err := h.repo.AssignAlert(r.Context(), alertID, req.AssignedTo)
+	if err != nil {
+		writeAlertNotFound(w, err)
+		return
+	}
+	h.auditWrite(p, "nf_alert.alert.assigned", "nf_alert_instance", alertID, map[string]any{
+		"ruleId":     alert.RuleID,
+		"assignedTo": alert.AssignedTo,
+		"state":      alert.State,
+	})
+	response.JSON(w, http.StatusOK, alert)
+}
+
+// RecoverAlert handles POST /api/nf-alerts/{alertId}/recover.
+func (h *Handler) RecoverAlert(w http.ResponseWriter, r *http.Request) {
+	p := h.requireConfigure(w, r, "POST", "/api/nf-alerts/{alertId}/recover")
+	if p == nil {
+		return
+	}
+	if h.limiter != nil && !h.limiter.Enforce(w, r, "nf-alerts:recover:"+p.Username, 30, 60) {
+		return
+	}
+	alertID := r.PathValue("alertId")
+	if err := ValidateUUID(alertID); err != nil {
+		writeValidation(w, err)
+		return
+	}
+	alert, err := h.repo.RecoverAlert(r.Context(), alertID)
+	if err != nil {
+		writeAlertNotFound(w, err)
+		return
+	}
+	h.auditWrite(p, "nf_alert.alert.recovering", "nf_alert_instance", alertID, map[string]any{
+		"ruleId": alert.RuleID,
+		"state":  alert.State,
+	})
+	response.JSON(w, http.StatusOK, alert)
+}
+
 // ResolveAlert handles POST /api/nf-alerts/{alertId}/resolve.
 func (h *Handler) ResolveAlert(w http.ResponseWriter, r *http.Request) {
 	p := h.requireConfigure(w, r, "POST", "/api/nf-alerts/{alertId}/resolve")

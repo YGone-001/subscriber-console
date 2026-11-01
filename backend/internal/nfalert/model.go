@@ -11,6 +11,8 @@ const SchemaVersion = 1
 const (
 	AlertStateActive       = "active"
 	AlertStateAcknowledged = "acknowledged"
+	AlertStateAssigned     = "assigned"
+	AlertStateRecovering   = "recovering"
 	AlertStateResolved     = "resolved"
 )
 
@@ -127,6 +129,9 @@ type Alert struct {
 	Evidence         AlertEvidence `json:"evidence" bson:"evidence"`
 	AcknowledgedAt   string        `json:"acknowledgedAt,omitempty" bson:"acknowledgedAt,omitempty"`
 	AcknowledgedBy   string        `json:"acknowledgedBy,omitempty" bson:"acknowledgedBy,omitempty"`
+	AssignedTo       string        `json:"assignedTo,omitempty" bson:"assignedTo,omitempty"`
+	AssignedAt       string        `json:"assignedAt,omitempty" bson:"assignedAt,omitempty"`
+	RecoveringAt     string        `json:"recoveringAt,omitempty" bson:"recoveringAt,omitempty"`
 	ResolvedAt       string        `json:"resolvedAt,omitempty" bson:"resolvedAt,omitempty"`
 	ResolvedReason   string        `json:"resolvedReason,omitempty" bson:"resolvedReason,omitempty"`
 	UpdatedAt        string        `json:"updatedAt" bson:"updatedAt"`
@@ -177,7 +182,7 @@ type AlertListFilter struct {
 	// State selects exactly one lifecycle state. Scope selects the duty queue
 	// (open) or the resolved history, and the two are mutually exclusive so a
 	// request can never ask for "open, but only resolved".
-	State    string // "", active, acknowledged, resolved
+	State    string // "", active, acknowledged, assigned, recovering, resolved
 	Scope    string // "", open, history
 	Severity string
 	Query    string
@@ -208,7 +213,9 @@ type PageInfo struct {
 
 // Canonical vocabularies exposed by GET /api/nf-alerts/meta.
 var (
-	CanonicalAlertStates     = []string{AlertStateActive, AlertStateAcknowledged, AlertStateResolved}
+	CanonicalAlertStates = []string{AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering, AlertStateResolved}
+	// AlertOpenStates are the states that still demand operator attention.
+	AlertOpenStates          = []string{AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering}
 	CanonicalSeverities      = []string{SeverityCritical, SeverityWarning, SeverityInfo}
 	CanonicalConditionTypes  = []string{ConditionTypeState, ConditionTypeRunFailed}
 	CanonicalConditionScopes = []string{ScopeOverall, ScopeProcess, ScopeInterface, ScopeService}

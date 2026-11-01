@@ -11,9 +11,10 @@
  *   - an unavailable measurement renders as "-", never as zero;
  *   - no restart, no log path and no command line is offered here.
  */
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { useDialogFocus } from '../../components/ui/useDialogFocus';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { useI18n } from '../../providers/I18nProvider';
 import {
   cpuView,
@@ -45,6 +46,8 @@ export function ResourceDetailDrawer({
   onClose: () => void;
 }) {
   const { t, formatDateTime } = useI18n();
+  const location = useLocation();
+  const listLocation = currentListLocation('/inventory', location.search);
   const dialogRef = useDialogFocus({ open: Boolean(resource), onClose });
 
   if (!resource) return null;
@@ -221,7 +224,7 @@ export function ResourceDetailDrawer({
           </section>
 
           <div className={styles.drawerActions}>
-            <Link className="btn btn-secondary" to={`/inventory/${encodeURIComponent(resource.resourceId)}`}>
+            <Link className="btn btn-secondary" to={withReturnTo(`/inventory/${encodeURIComponent(resource.resourceId)}`, listLocation)}>
               {t('ops_open_resource')}
             </Link>
             {monitoring?.targetId ? (

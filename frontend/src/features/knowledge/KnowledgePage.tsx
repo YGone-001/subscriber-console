@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { BookOpen, ChevronRight, Plus, Search, Tag, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
@@ -8,6 +8,7 @@ import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { buildEntriesPath, fetchKnowledgeMeta } from './knowledge-api';
 import type { KnowledgeMeta, KnowledgeSummary } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
@@ -20,6 +21,8 @@ export function KnowledgePage() {
   const canConfigure = hasPermission(user, 'core.configure');
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const listLocation = currentListLocation('/knowledge', location.search);
   const q = searchParams.get('q') ?? '';
   const protocol = searchParams.get('protocol') ?? '';
   const tag = searchParams.get('tag') ?? '';
@@ -100,7 +103,7 @@ export function KnowledgePage() {
         title={t('kb_page_title')}
         description={t('kb_page_description')}
         actions={canConfigure ? (
-          <Link to="/knowledge/new" className={styles.newButton}>
+          <Link to={withReturnTo('/knowledge/new', listLocation)} className={styles.newButton}>
             <Plus size={15} /> {t('kb_new_entry')}
           </Link>
         ) : undefined}
@@ -180,7 +183,7 @@ export function KnowledgePage() {
           <ul className={styles.list}>
             {entries.map((entry) => (
               <li key={entry.id}>
-                <Link to={`/knowledge/${entry.id}`} className={styles.row}>
+                <Link to={withReturnTo(`/knowledge/${entry.id}`, listLocation)} className={styles.row}>
                   <div className={styles.rowBadge} aria-hidden="true"><BookOpen size={16} /></div>
                   <div className={styles.rowBody}>
                     <div className={styles.rowTitle}>

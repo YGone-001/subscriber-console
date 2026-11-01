@@ -96,6 +96,14 @@ func (w *Worker) Start(ctx context.Context) {
 	go w.loop(runCtx)
 }
 
+// Running reports whether the delivery loop is currently alive. It is a read
+// only probe used by platform health.
+func (w *Worker) Running() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.running
+}
+
 // Stop cancels the poll loop and waits for in-flight sends to finish.
 func (w *Worker) Stop() {
 	w.mu.Lock()

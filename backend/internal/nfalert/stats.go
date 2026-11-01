@@ -37,7 +37,7 @@ func (r *Repository) AlertSummary(ctx context.Context) (AlertSummary, error) {
 				{{Key: "$group", Value: bson.M{"_id": "$state", "count": bson.M{"$sum": 1}}}},
 			},
 			"openBySeverity": mongo.Pipeline{
-				{{Key: "$match", Value: bson.M{"state": bson.M{"$in": []string{AlertStateActive, AlertStateAcknowledged}}}}},
+				{{Key: "$match", Value: bson.M{"state": bson.M{"$in": AlertOpenStates}}}},
 				{{Key: "$group", Value: bson.M{"_id": "$severity", "count": bson.M{"$sum": 1}}}},
 			},
 		}}},

@@ -1,7 +1,7 @@
 import type { LayerSet } from '../nf-health/nf-health-types';
 
 // Alert lifecycle states mirror backend nfalert.AlertState*.
-export type AlertState = 'active' | 'acknowledged' | 'resolved';
+export type AlertState = 'active' | 'acknowledged' | 'assigned' | 'recovering' | 'resolved';
 
 // Operator-authored severities carried from the triggering rule.
 export type AlertSeverity = 'critical' | 'warning' | 'info';
@@ -79,6 +79,9 @@ export interface Alert {
   evidence: AlertEvidence;
   acknowledgedAt?: string;
   acknowledgedBy?: string;
+  assignedTo?: string;
+  assignedAt?: string;
+  recoveringAt?: string;
   resolvedAt?: string;
   resolvedReason?: ResolveReason;
   updatedAt: string;

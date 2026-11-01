@@ -6,9 +6,10 @@
  * evidence snapshot is immutable - acknowledging or resolving never rewrites
  * it - so it is rendered as a read-only block next to the lifecycle timeline.
  */
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Check, CheckCheck, X } from 'lucide-react';
+import { Check, CheckCheck, Play, UserRoundCheck, X } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import type { LayerEvidence, LayerState } from '../nf-health/nf-health-types';
 import type { Alert, AlertSeverity, AlertState, ResolveReason } from './nf-alerts-types';
@@ -20,6 +21,8 @@ type Props = {
   busy: boolean;
   onClose: () => void;
   onAcknowledge: (alert: Alert) => void;
+  onAssign: (alert: Alert, assignedTo: string) => void;
+  onRecover: (alert: Alert) => void;
   onResolve: (alert: Alert) => void;
 };
 
@@ -29,10 +32,24 @@ export function NfAlertEvidenceDrawer({
   busy,
   onClose,
   onAcknowledge,
+  onAssign,
+  onRecover,
   onResolve,
 }: Props) {
   const { t } = useI18n();
+  const [assignee, setAssignee] = useState('');
+  // The input is the single source while editing: falling back to the stored
+  // assignee on every keystroke would make clearing the field impossible.
+  useEffect(() => {
+    setAssignee(alert?.assignedTo ?? '');
+  }, [alert?.alertId, alert?.assignedTo]);
   if (!alert) return null;
+  const open = alert.state !== 'resolved';
+  // Assignment is only offered where the backend accepts it. A recovering
+  // alert is already being worked on; re-assigning it is a 409 transition,
+  // not an action the drawer should present.
+  const canAssign =
+    alert.state === 'active' || alert.state === 'acknowledged' || alert.state === 'assigned';
 
   const evidence = alert.evidence;
 
@@ -67,7 +84,39 @@ export function NfAlertEvidenceDrawer({
                 {t('nf_alerts_acknowledge_action')}
               </button>
             ) : null}
-            {alert.state !== 'resolved' && canConfigure ? (
+            {canAssign && canConfigure ? (
+              <div className={styles.assignInline}>
+                <input
+                  className="form-input"
+                  value={assignee}
+                  onChange={(event) => setAssignee(event.target.value)}
+                  placeholder={t('nf_alerts_assign_placeholder')}
+                  aria-label={t('nf_alerts_assign_placeholder')}
+                  disabled={busy}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => onAssign(alert, assignee.trim())}
+                  disabled={busy || !assignee.trim()}
+                >
+                  <UserRoundCheck size={15} />
+                  {t('nf_alerts_assign_action')}
+                </button>
+              </div>
+            ) : null}
+            {alert.state === 'assigned' && canConfigure ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => onRecover(alert)}
+                disabled={busy}
+              >
+                <Play size={15} />
+                {t('nf_alerts_recover_action')}
+              </button>
+            ) : null}
+            {open && canConfigure ? (
               <button
                 type="button"
                 className="btn btn-primary"
@@ -148,6 +197,21 @@ export function NfAlertEvidenceDrawer({
                     {formatTimestamp(alert.acknowledgedAt)}
                     {alert.acknowledgedBy ? ` (${alert.acknowledgedBy})` : ''}
                   </span>
+                </div>
+              ) : null}
+              {alert.assignedAt ? (
+                <div className={styles.detailRow}>
+                  <span className={styles.detailLabel}>{t('nf_alerts_lifecycle_assigned')}</span>
+                  <span className={styles.detailValue}>
+                    {formatTimestamp(alert.assignedAt)}
+                    {alert.assignedTo ? ` (${alert.assignedTo})` : ''}
+                  </span>
+                </div>
+              ) : null}
+              {alert.recoveringAt ? (
+                <div className={styles.detailRow}>
+                  <span className={styles.detailLabel}>{t('nf_alerts_lifecycle_recovering')}</span>
+                  <span className={styles.detailValue}>{formatTimestamp(alert.recoveringAt)}</span>
                 </div>
               ) : null}
               {alert.resolvedAt ? (
@@ -280,6 +344,8 @@ function severityBadge(severity: AlertSeverity, t: (key: string) => string): Rea
 function alertStateBadge(state: AlertState, t: (key: string) => string): React.ReactElement {
   if (state === 'active') return <span className={styles.badgeUnhealthy}>{t('nf_alerts_state_active')}</span>;
   if (state === 'acknowledged') return <span className={styles.badgeAcknowledged}>{t('nf_alerts_state_acknowledged')}</span>;
+  if (state === 'assigned') return <span className={styles.badgeAcknowledged}>{t('nf_alerts_state_assigned')}</span>;
+  if (state === 'recovering') return <span className={styles.badgeAcknowledged}>{t('nf_alerts_state_recovering')}</span>;
   return <span className={styles.badgeEnabled}>{t('nf_alerts_state_resolved')}</span>;
 }
 

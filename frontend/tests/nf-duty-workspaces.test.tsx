@@ -340,6 +340,8 @@ function renderDrawer(alert: Alert, canConfigure: boolean): string {
           busy: false,
           onClose: () => {},
           onAcknowledge: () => {},
+          onAssign: () => {},
+          onRecover: () => {},
           onResolve: () => {},
         }),
       ),
@@ -369,6 +371,15 @@ test('the drawer offers acknowledge and resolve only where they apply', () => {
   const acknowledged = renderDrawer(evidenceAlert({ state: 'acknowledged', acknowledgedAt: '2026-10-19T09:30:00Z' }), true);
   assert.ok(!action(acknowledged, en.nf_alerts_acknowledge_action), 'acknowledging twice is not an action');
   assert.ok(action(acknowledged, en.nf_alerts_resolve_action), 'an acknowledged alert can still be resolved');
+
+  const assigned = renderDrawer(evidenceAlert({ state: 'assigned', assignedTo: 'noc-shift-a', assignedAt: '2026-10-19T09:40:00Z' }), true);
+  assert.ok(action(assigned, en.nf_alerts_assign_action), 'an assigned alert can be reassigned');
+  assert.ok(action(assigned, en.nf_alerts_recover_action), 'an assigned alert can enter recovering');
+
+  const recovering = renderDrawer(evidenceAlert({ state: 'recovering', assignedTo: 'noc-shift-a', recoveringAt: '2026-10-19T09:45:00Z' }), true);
+  assert.ok(!action(recovering, en.nf_alerts_assign_action), 'a recovering alert is never re-assigned');
+  assert.ok(!action(recovering, en.nf_alerts_recover_action), 'recovering is already in progress');
+  assert.ok(action(recovering, en.nf_alerts_resolve_action), 'a recovering alert can still be closed');
 
   const resolved = renderDrawer(evidenceAlert({ state: 'resolved', resolvedAt: '2026-10-19T10:00:00Z', resolvedReason: 'recovery' }), true);
   assert.ok(!action(resolved, en.nf_alerts_resolve_action), 'a resolved alert has no action left');

@@ -11,12 +11,13 @@
  * healthy network interface.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, GitBranch, RefreshCw } from 'lucide-react';
 import { ErrorState, LoadingState } from '../../components/ui/StatePanel';
 import PageHeader from '../../components/ui/PageHeader';
 import { EmptyState } from '../../components/ui/OperationFeedback';
 import { useI18n } from '../../providers/I18nProvider';
+import { resolveReturnTo } from '../../lib/return-to';
 import { fetchTopologyNeighbors, fetchTopologyMeta } from './topology-api';
 import type {
   DirectionFilter,
@@ -36,6 +37,8 @@ const PAGE_LIMIT = 50;
 export function ResourceTopologyPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = resolveReturnTo(location.search, '/topology', ['/topology']);
   const { resourceId = '' } = useParams();
 
   const [meta, setMeta] = useState<TopologyMetaResponse | null>(null);
@@ -170,7 +173,7 @@ export function ResourceTopologyPage() {
         }
         actions={(
           <>
-            <button type="button" className="btn btn-secondary" onClick={() => navigate('/topology')}>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate(returnTo)}>
               <ArrowLeft size={16} />
               {t('topology_back_to_list')}
             </button>
@@ -197,7 +200,7 @@ export function ResourceTopologyPage() {
               title={t('topology_unknown_resource_title')}
               description={t('topology_unknown_resource_body')}
               action={(
-                <button type="button" className="btn btn-secondary" onClick={() => navigate('/topology')}>
+                <button type="button" className="btn btn-secondary" onClick={() => navigate(returnTo)}>
                   {t('topology_back_to_list')}
                 </button>
               )}

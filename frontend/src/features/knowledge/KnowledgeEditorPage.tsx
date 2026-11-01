@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
 import { ArrowLeft, FileText, Paperclip, Save, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
@@ -8,6 +8,7 @@ import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/u
 import { useI18n } from '../../providers/I18nProvider';
 import { MarkdownEditor } from './components/MarkdownEditor';
 import { TagInput } from './components/TagInput';
+import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
 import { attachmentUrl, createEntry, fetchEntry, fetchKnowledgeMeta, isKnowledgeEntryKey, updateEntry, uploadKnowledgeFile } from './knowledge-api';
 import { knowledgeErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize } from './knowledge-format';
@@ -22,9 +23,11 @@ const DEFAULT_MAX_FILE_BYTES = 8 * 1024 * 1024;
 export function KnowledgeEditorPage() {
   const { entryId } = useParams<{ entryId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { mutate } = useSWRConfig();
   const { t } = useI18n();
   const isEdit = Boolean(entryId);
+  const returnTo = resolveReturnTo(location.search, '/knowledge', ['/knowledge']);
 
   const [title, setTitle] = useState('');
   const [protocol, setProtocol] = useState('General');
@@ -71,9 +74,14 @@ export function KnowledgeEditorPage() {
 
   const protocols = useMemo(() => (meta?.protocols?.length ? meta.protocols : ['General']), [meta]);
   const maxFileBytes = meta?.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
+  const maxAttachments = meta?.maxAttachments ?? 10;
 
   const handleUpload = async (file: File) => {
     setError(null);
+    if (attachments.length >= maxAttachments) {
+      setError(t('kb_attachment_limit', { max: maxAttachments }));
+      return;
+    }
     if (file.size > maxFileBytes) {
       setError(t('kb_file_too_large', { size: formatFileSize(maxFileBytes) }));
       return;
@@ -92,12 +100,21 @@ export function KnowledgeEditorPage() {
 
   const handleInlineImage = async (file: File): Promise<{ url: string; name: string } | null> => {
     setError(null);
+    if (attachments.length >= maxAttachments) {
+      setError(t('kb_attachment_limit', { max: maxAttachments }));
+      return null;
+    }
     if (file.size > maxFileBytes) {
       setError(t('kb_file_too_large', { size: formatFileSize(maxFileBytes) }));
       return null;
     }
     try {
       const uploaded = await uploadKnowledgeFile(file);
+      /* An inline image is still an attachment: it must be claimed by the entry
+       * on save, otherwise the janitor treats it as an unbound upload and the
+       * Markdown image breaks after the cleanup window. */
+      setAttachments((prev) => [...prev, { ...uploaded }]);
+      setDirty(true);
       return { url: attachmentUrl(uploaded.fileId), name: uploaded.originalName };
     } catch (err) {
       setError(knowledgeErrorMessage(err, t, 'kb_upload_failed'));
@@ -151,7 +168,7 @@ export function KnowledgeEditorPage() {
         description={t('kb_editor_description')}
         actions={
           <div className={styles.headerActions}>
-            <Link to={isEdit && entryId ? `/knowledge/${entryId}` : '/knowledge'} className={styles.backButton}>
+            <Link to={isEdit && entryId ? withReturnTo(`/knowledge/${entryId}`, returnTo) : returnTo} className={styles.backButton}>
               <ArrowLeft size={15} /> {t('kb_back')}
             </Link>
             <button type="button" className={styles.newButton} onClick={handleSave} disabled={saving || !title.trim()}>

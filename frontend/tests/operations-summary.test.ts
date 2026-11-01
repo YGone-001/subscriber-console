@@ -53,7 +53,7 @@ const alertsSection = (
   alerts: {
     totalRules: 4,
     enabledRules: 3,
-    alertsByState: { active: 5, acknowledged: 2, resolved: 9 },
+    alertsByState: { active: 5, acknowledged: 2, assigned: 3, recovering: 1, resolved: 9 },
     openBySeverity: { critical: 1, warning: 4, info: 2 },
   },
   ...overrides,
@@ -115,17 +115,17 @@ test('health stale-or-unknown never goes negative when counts disagree', () => {
 
 test('alerts KPIs project queue totals from the full population', () => {
   const kpis = alertsKpisFromSummary(alertsSection());
-  assert.deepEqual(kpis, { rules: 4, active: 5, acknowledged: 2, criticalOpen: 1 });
+  assert.deepEqual(kpis, { rules: 4, active: 5, acknowledged: 2, assigned: 3, recovering: 1, criticalOpen: 1 });
 });
 
 test('alerts KPIs stay null when the section is unavailable', () => {
   const kpis = alertsKpisFromSummary(alertsSection({ completeness: 'unavailable' }));
-  assert.deepEqual(kpis, { rules: null, active: null, acknowledged: null, criticalOpen: null });
+  assert.deepEqual(kpis, { rules: null, active: null, acknowledged: null, assigned: null, recovering: null, criticalOpen: null });
 });
 
 test('alerts KPIs stay null when the section carries no alert counts', () => {
   const kpis = alertsKpisFromSummary(alertsSection({ alerts: undefined }));
-  assert.deepEqual(kpis, { rules: null, active: null, acknowledged: null, criticalOpen: null });
+  assert.deepEqual(kpis, { rules: null, active: null, acknowledged: null, assigned: null, recovering: null, criticalOpen: null });
 });
 
 test('isSectionComplete accepts only the complete marker', () => {

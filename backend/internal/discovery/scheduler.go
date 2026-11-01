@@ -82,6 +82,14 @@ func (s *Scheduler) Start(ctx context.Context) {
 	go s.loop(runCtx)
 }
 
+// Running reports whether the scheduler loop is currently alive. It is a read
+// only probe used by platform health.
+func (s *Scheduler) Running() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.running
+}
+
 // Stop cancels scheduled scanning and waits for in-flight work to finish.
 func (s *Scheduler) Stop() {
 	s.mu.Lock()

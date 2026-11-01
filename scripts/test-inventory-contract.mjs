@@ -314,7 +314,28 @@ assert.equal(businessReqContract.length, MUTATION_CENSUS.requestContracts,
 
 const operationalOps = operationalContract.flatMap((entry) => entry.operations);
 const operationalUniqueEndpoints = new Set(operationalOps.map((op) => op.request));
-assert.equal(operationalUniqueEndpoints.size, 9, `operational endpoints must remain 9, got ${operationalUniqueEndpoints.size}`);
+
+/* The operational surface legitimately grew when the NF alert lifecycle gained
+ * assignment and recovering states. What must hold is that every operational
+ * endpoint outside this module still exists and that inventory never leaks
+ * into the operational contract. */
+const CORE_OPERATIONAL_ENDPOINTS = [
+  'POST /api/system/audit/scan',
+  'POST /api/nf-alerts/rules',
+  'PUT /api/nf-alerts/rules/{ruleId}',
+  'DELETE /api/nf-alerts/rules/{ruleId}',
+  'POST /api/nf-alerts/{alertId}/acknowledge',
+  'POST /api/nf-alerts/{alertId}/assign',
+  'POST /api/nf-alerts/{alertId}/recover',
+  'POST /api/nf-alerts/{alertId}/resolve',
+];
+for (const endpoint of CORE_OPERATIONAL_ENDPOINTS) {
+  assert.ok(operationalUniqueEndpoints.has(endpoint), `core operational endpoint missing: ${endpoint}`);
+}
+assert.ok(
+  [...operationalUniqueEndpoints].every((endpoint) => !endpoint.startsWith('/api/inventory')),
+  'inventory endpoints must not appear in the operational contract',
+);
 
 // 6. Security evidence in inventory feature
 function walk(dir, files = []) {

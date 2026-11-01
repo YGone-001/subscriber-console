@@ -13,9 +13,10 @@
  * page N of a discarded filter set can never be requested.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { GitBranch, Plus, Search, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
@@ -96,6 +97,8 @@ export function TopologyPage() {
   const { t } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listLocation = currentListLocation('/topology', location.search);
 
   const [meta, setMeta] = useState<TopologyMetaResponse | null>(null);
   const [edges, setEdges] = useState<TopologyEdge[]>([]);
@@ -264,7 +267,7 @@ export function TopologyPage() {
       const created = await createTopologyEdge(req);
       setCreateOpen(false);
       await loadEdges(url.cursor);
-      navigate(`/topology/${encodeURIComponent(created.fromResourceId)}`);
+      navigate(withReturnTo(`/topology/${encodeURIComponent(created.fromResourceId)}`, listLocation));
     } catch (err) {
       setFormError(describeMutationError(err, t));
     } finally {
@@ -549,7 +552,7 @@ export function TopologyPage() {
             canConfigure={canConfigure}
             onActivateRow={(edgeId) => {
               const edge = edges.find((item) => item.edgeId === edgeId);
-              if (edge) navigate(`/topology/${encodeURIComponent(edge.fromResourceId)}`);
+              if (edge) navigate(withReturnTo(`/topology/${encodeURIComponent(edge.fromResourceId)}`, listLocation));
             }}
             onEdit={(edge) => {
               setFormError(null);
@@ -560,7 +563,7 @@ export function TopologyPage() {
               setRetireReason('');
               setRetireTarget(edge);
             }}
-            onViewResource={(resourceId) => navigate(`/topology/${encodeURIComponent(resourceId)}`)}
+            onViewResource={(resourceId) => navigate(withReturnTo(`/topology/${encodeURIComponent(resourceId)}`, listLocation))}
           />
         )}
 

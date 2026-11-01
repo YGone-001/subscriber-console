@@ -38,18 +38,52 @@ type MongoHealthReport struct {
 type SubsystemStatus string
 
 const (
-	StatusHealthy  SubsystemStatus = "healthy"
-	StatusDegraded SubsystemStatus = "degraded"
-	StatusCritical SubsystemStatus = "critical"
+	StatusHealthy     SubsystemStatus = "healthy"
+	StatusDegraded    SubsystemStatus = "degraded"
+	StatusCritical    SubsystemStatus = "critical"
+	StatusUnavailable SubsystemStatus = "unavailable"
 )
 
 // ComprehensiveSystemHealth represents the response for GET /api/system/health.
+//
+// Platform and DataConsistency are the two presentation sections the console
+// renders. Platform reports the runtime services and stores that must be alive
+// for the console to work; DataConsistency reports business-document anomalies.
+// The legacy Status/Score/Subsystems fields stay for backward compatibility.
 type ComprehensiveSystemHealth struct {
-	Status     SubsystemStatus  `json:"status"`
-	Score      int              `json:"score"`
-	CheckedAt  string           `json:"checkedAt"`
-	Subsystems SystemSubsystems `json:"subsystems"`
-	Summary    HealthSummary    `json:"summary"`
+	Status          SubsystemStatus        `json:"status"`
+	Score           int                    `json:"score"`
+	CheckedAt       string                 `json:"checkedAt"`
+	Subsystems      SystemSubsystems       `json:"subsystems"`
+	Summary         HealthSummary          `json:"summary"`
+	Platform        *PlatformHealthReport  `json:"platform,omitempty"`
+	DataConsistency *DataConsistencyReport `json:"dataConsistency,omitempty"`
+}
+
+// PlatformProbeResult is one runtime probe. Status is healthy, degraded or
+// unavailable; an unavailable probe is never rendered as healthy.
+type PlatformProbeResult struct {
+	Key       string          `json:"key"`
+	Status    SubsystemStatus `json:"status"`
+	Detail    string          `json:"detail,omitempty"`
+	CheckedAt string          `json:"checkedAt"`
+}
+
+// PlatformHealthReport summarizes runtime probes.
+type PlatformHealthReport struct {
+	Status    SubsystemStatus       `json:"status"`
+	CheckedAt string                `json:"checkedAt"`
+	Probes    []PlatformProbeResult `json:"probes"`
+}
+
+// DataConsistencyReport summarizes the business-document anomaly evaluation.
+// Sampled is false when the counts cover the whole collection. SampleSize is 0
+// for full evaluations.
+type DataConsistencyReport struct {
+	Status     SubsystemStatus `json:"status"`
+	Sampled    bool            `json:"sampled"`
+	SampleSize int             `json:"sampleSize"`
+	CheckedAt  string          `json:"checkedAt"`
 }
 
 // SystemSubsystems bundles health for database, ocs, hss, and security subsystems.

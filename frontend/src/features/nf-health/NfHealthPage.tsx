@@ -12,7 +12,7 @@
  * facts.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
   Boxes,
@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
@@ -84,6 +85,8 @@ export function NfHealthPage() {
   const { t } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listLocation = currentListLocation('/nf-health', location.search);
 
   const canRead = hasPermission(user, 'core.read');
   const canConfigure = hasPermission(user, 'core.configure');
@@ -614,7 +617,7 @@ export function NfHealthPage() {
                             {formatTimestamp(target.lastMeasuredAt)}
                           </span>
                           <Link
-                            to={`/nf-health/${encodeURIComponent(target.targetId)}`}
+                            to={withReturnTo(`/nf-health/${encodeURIComponent(target.targetId)}`, listLocation)}
                             className={styles.rowLink}
                           >
                             {t('nf_health_open_detail')}
@@ -740,7 +743,7 @@ export function NfHealthPage() {
                           <button
                             type="button"
                             className="btn btn-ghost"
-                            onClick={() => navigate(`/nf-health/${encodeURIComponent(target.targetId)}`)}
+                            onClick={() => navigate(withReturnTo(`/nf-health/${encodeURIComponent(target.targetId)}`, listLocation))}
                           >
                             {t('nf_health_open_detail')}
                           </button>
@@ -774,7 +777,7 @@ export function NfHealthPage() {
                   <tr key={row.targetId} data-nf-health-matrix-row={row.targetId}>
                     <th scope="row">
                       <Link
-                        to={`/nf-health/${encodeURIComponent(row.targetId)}`}
+                        to={withReturnTo(`/nf-health/${encodeURIComponent(row.targetId)}`, listLocation)}
                         className={styles.rowLink}
                       >
                         {row.name}

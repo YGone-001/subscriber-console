@@ -79,6 +79,14 @@ export async function acknowledgeNfAlert(alertId: string): Promise<Alert> {
   return postJson<Alert>(`/api/nf-alerts/${encodeURIComponent(alertId)}/acknowledge`, {});
 }
 
+export async function assignNfAlert(alertId: string, assignedTo: string): Promise<Alert> {
+  return postJson<Alert>(`/api/nf-alerts/${encodeURIComponent(alertId)}/assign`, { assignedTo });
+}
+
+export async function recoverNfAlert(alertId: string): Promise<Alert> {
+  return postJson<Alert>(`/api/nf-alerts/${encodeURIComponent(alertId)}/recover`, {});
+}
+
 export async function resolveNfAlert(alertId: string): Promise<Alert> {
   return postJson<Alert>(`/api/nf-alerts/${encodeURIComponent(alertId)}/resolve`, {});
 }

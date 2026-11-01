@@ -9,6 +9,7 @@ import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { copyText } from '../../lib/clipboard';
+import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
 import { MarkdownContent } from './components/MarkdownContent';
 import { attachmentUrl, deleteEntry, isKnowledgeListKey } from './knowledge-api';
 import { knowledgeErrorMessage } from './knowledge-errors';
@@ -24,6 +25,7 @@ export function KnowledgeDetailPage() {
   const { user } = useAuth();
   const { mutate } = useSWRConfig();
   const canConfigure = hasPermission(user, 'core.configure');
+  const listReturnTo = resolveReturnTo(location.search, '/knowledge', ['/knowledge']);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [deleting, setDeleting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -90,10 +92,10 @@ export function KnowledgeDetailPage() {
         title={data.title}
         actions={
           <div className={styles.headerActions}>
-            <Link to="/knowledge" className={styles.backButton}><ArrowLeft size={15} /> {t('kb_back')}</Link>
+            <Link to={listReturnTo} className={styles.backButton}><ArrowLeft size={15} /> {t('kb_back')}</Link>
             {canConfigure && (
               <>
-                <Link to={`/knowledge/${data.id}/edit`} className={styles.secondaryButton}><Edit size={15} /> {t('edit')}</Link>
+                <Link to={withReturnTo(`/knowledge/${data.id}/edit`, listReturnTo)} className={styles.secondaryButton}><Edit size={15} /> {t('edit')}</Link>
                 <button type="button" className={styles.dangerButton} onClick={() => setDeleteOpen(true)}>
                   <Trash2 size={15} /> {t('delete')}
                 </button>

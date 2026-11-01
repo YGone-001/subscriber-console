@@ -185,6 +185,7 @@ func buildListFilter(filter ListFilter) (bson.M, error) {
 			{"title": bson.M{"$regex": pattern, "$options": "i"}},
 			{"phenomenon": bson.M{"$regex": pattern, "$options": "i"}},
 			{"rootCause": bson.M{"$regex": pattern, "$options": "i"}},
+			{"solution": bson.M{"$regex": pattern, "$options": "i"}},
 			{"tags": bson.M{"$regex": pattern, "$options": "i"}},
 			{"protocol": bson.M{"$regex": pattern, "$options": "i"}},
 		}

@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -469,6 +470,50 @@ func main() {
 	knowledgeJanitor.Start(ctx)
 	defer knowledgeJanitor.Stop()
 
+	// Platform health probes: each component reports its own observable
+	// state. A component that is not running is unavailable, never healthy.
+	systemHandler.SetPlatformProbes([]system.PlatformProbe{
+		{Key: "api", Check: func(context.Context) (system.SubsystemStatus, string) {
+			return system.StatusHealthy, "process is serving the HTTP API"
+		}},
+		{Key: "discovery_scheduler", Check: func(context.Context) (system.SubsystemStatus, string) {
+			if discoveryScheduler.Running() {
+				return system.StatusHealthy, "scheduled discovery is running"
+			}
+			return system.StatusUnavailable, "scheduled discovery is not running"
+		}},
+		{Key: "nf_health_scheduler", Check: func(context.Context) (system.SubsystemStatus, string) {
+			if nfHealthScheduler.Running() {
+				return system.StatusHealthy, "scheduled NF health collection is running"
+			}
+			return system.StatusUnavailable, "scheduled NF health collection is not running"
+		}},
+		{Key: "notification_worker", Check: func(context.Context) (system.SubsystemStatus, string) {
+			if notifyWorker.Running() {
+				return system.StatusHealthy, "notification delivery worker is running"
+			}
+			return system.StatusUnavailable, "notification delivery worker is not running"
+		}},
+		{Key: "knowledge_storage", Check: func(context.Context) (system.SubsystemStatus, string) {
+			ok, detail := knowledgeStore.Status()
+			if ok {
+				return system.StatusHealthy, detail
+			}
+			return system.StatusUnavailable, detail
+		}},
+		{Key: "log_sources", Check: func(context.Context) (system.SubsystemStatus, string) {
+			total, readable := nfLogRegistry.Summary()
+			if total == 0 {
+				return system.StatusDegraded, "no log source is configured"
+			}
+			detail := fmt.Sprintf("%d configured, %d readable", total, readable)
+			if readable == 0 {
+				return system.StatusDegraded, detail
+			}
+			return system.StatusHealthy, detail
+		}},
+	})
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -675,6 +720,8 @@ func main() {
 	mux.Handle("PUT /api/nf-alerts/rules/{ruleId}", authMiddleware(http.HandlerFunc(nfAlertHandler.UpdateRule)))
 	mux.Handle("DELETE /api/nf-alerts/rules/{ruleId}", authMiddleware(http.HandlerFunc(nfAlertHandler.DeleteRule)))
 	mux.Handle("POST /api/nf-alerts/{alertId}/acknowledge", authMiddleware(http.HandlerFunc(nfAlertHandler.AcknowledgeAlert)))
+	mux.Handle("POST /api/nf-alerts/{alertId}/assign", authMiddleware(http.HandlerFunc(nfAlertHandler.AssignAlert)))
+	mux.Handle("POST /api/nf-alerts/{alertId}/recover", authMiddleware(http.HandlerFunc(nfAlertHandler.RecoverAlert)))
 	mux.Handle("POST /api/nf-alerts/{alertId}/resolve", authMiddleware(http.HandlerFunc(nfAlertHandler.ResolveAlert)))
 
 	// Runtime discovery (three reads, three governed mutations)

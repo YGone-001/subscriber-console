@@ -162,23 +162,27 @@ export interface AlertsKpis {
   rules: number | null;
   active: number | null;
   acknowledged: number | null;
+  assigned: number | null;
+  recovering: number | null;
   criticalOpen: number | null;
 }
 
 // alertsKpisFromSummary sources the alert queue KPIs from the full alert
-// population. criticalOpen counts open (active + acknowledged) critical
-// alerts, matching the backend openBySeverity projection.
+// population. criticalOpen counts open (active + acknowledged + assigned +
+// recovering) critical alerts, matching the backend openBySeverity projection.
 export function alertsKpisFromSummary(
   section: AlertsSummarySection | undefined,
 ): AlertsKpis {
   if (!section || section.completeness !== 'complete' || !section.alerts) {
-    return { rules: null, active: null, acknowledged: null, criticalOpen: null };
+    return { rules: null, active: null, acknowledged: null, assigned: null, recovering: null, criticalOpen: null };
   }
   const alerts = section.alerts;
   return {
     rules: alerts.totalRules,
     active: alerts.alertsByState?.active ?? 0,
     acknowledged: alerts.alertsByState?.acknowledged ?? 0,
+    assigned: alerts.alertsByState?.assigned ?? 0,
+    recovering: alerts.alertsByState?.recovering ?? 0,
     criticalOpen: alerts.openBySeverity?.critical ?? 0,
   };
 }

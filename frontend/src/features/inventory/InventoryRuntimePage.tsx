@@ -10,6 +10,7 @@ import { Server } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
 import { RuntimeDiscoveryView } from '../runtime/RuntimeDiscovery';
+import { InventoryViewSwitch } from './InventoryViewSwitch';
 
 export function InventoryRuntimePage() {
   const { t } = useI18n();
@@ -19,6 +20,7 @@ export function InventoryRuntimePage() {
       title={t('inventory_runtime_title')}
       description={t('inventory_runtime_description')}
       icon={<Server size={23} />}
+      viewSwitch={<InventoryViewSwitch active="runtime" />}
     >
       <RuntimeDiscoveryView />
     </OperationsPageFrame>

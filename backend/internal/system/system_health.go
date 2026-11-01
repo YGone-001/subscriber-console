@@ -9,10 +9,13 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"subscriber/internal/credential"
 )
 
 type hssSubscriberSample struct {
 	k       string
+	op      string
 	opc     string
 	slices  []any
 	profile string
@@ -34,7 +37,9 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 	subColl := xcloudDb.Collection("subscribers")
 	profileColl := appDb.Collection("app_profiles")
 	userColl := appDb.Collection("app_users")
-	alertColl := appDb.Collection("app_alerts")
+	// NF alerts are the only alert authority. The legacy app_alerts collection
+	// has no producer in this repository and is not read here.
+	alertColl := appDb.Collection("app_nf_alerts")
 	auditColl := appDb.Collection("app_audit_logs")
 
 	// Balance aggregation
@@ -54,11 +59,28 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 		_ = bCursor.All(ctx, &balanceAggResult)
 	}
 
-	// Balance samples (limit 500)
-	var balanceSamples []bson.M
-	sampleCursor, err := balanceColl.Find(ctx, bson.M{}, options.Find().SetLimit(500))
+	// Full balance invariant evaluation. The previous implementation sampled
+	// 500 documents and presented the count as the whole population; the
+	// aggregation below counts every balance document.
+	balanceInvariantPipeline := mongo.Pipeline{
+		{{Key: "$project", Value: bson.D{
+			{Key: "data_total", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$data_total", 0}}}},
+			{Key: "data_used", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$data_used", 0}}}},
+			{Key: "data_reserved", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$data_reserved", 0}}}},
+			{Key: "data_available", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$data_available", 0}}}},
+		}}},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "computed_total", Value: bson.D{{Key: "$add", Value: bson.A{"$data_used", "$data_reserved", "$data_available"}}}},
+		}}},
+		{{Key: "$match", Value: bson.D{
+			{Key: "$expr", Value: bson.D{{Key: "$ne", Value: bson.A{"$data_total", "$computed_total"}}}},
+		}}},
+		{{Key: "$count", Value: "count"}},
+	}
+	var balanceInvariantResult []bson.M
+	biCursor, err := balanceColl.Aggregate(ctx, balanceInvariantPipeline)
 	if err == nil {
-		_ = sampleCursor.All(ctx, &balanceSamples)
+		_ = biCursor.All(ctx, &balanceInvariantResult)
 	}
 
 	// Sessions aggregation
@@ -93,7 +115,9 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 	// Tariff plans count
 	tariffPlanCount, _ := tariffColl.CountDocuments(ctx, bson.M{})
 
-	// HSS subscribers sample (limit 1000)
+	// Full HSS subscriber evaluation. Only the fields needed for the checks are
+	// projected; the previous 1000-document limit made every count a sample that
+	// the console nevertheless presented as the whole population.
 	var hssDocs []bson.M
 	subCursor, err := subColl.Find(ctx, bson.M{}, options.Find().
 		SetProjection(bson.D{
@@ -103,22 +127,25 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 			{Key: "profile", Value: 1},
 			{Key: "profile_name", Value: 1},
 			{Key: "webui_meta.profile_name", Value: 1},
-		}).
-		SetLimit(1000))
+		}))
 	if err == nil {
 		_ = subCursor.All(ctx, &hssDocs)
 	}
 	hssSubscribers := make([]hssSubscriberSample, 0, len(hssDocs))
 	for _, doc := range hssDocs {
-		var k, opc string
+		var k, op, opc string
 		if sec, ok := doc["security"].(bson.M); ok {
 			k, _ = sec["k"].(string)
+			op, _ = sec["op"].(string)
 			opc, _ = sec["opc"].(string)
 		} else if secD, ok := doc["security"].(bson.D); ok {
 			for _, elem := range secD {
-				if elem.Key == "k" {
+				switch elem.Key {
+				case "k":
 					k, _ = elem.Value.(string)
-				} else if elem.Key == "opc" {
+				case "op":
+					op, _ = elem.Value.(string)
+				case "opc":
 					opc, _ = elem.Value.(string)
 				}
 			}
@@ -148,6 +175,7 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 
 		hssSubscribers = append(hssSubscribers, hssSubscriberSample{
 			k:       k,
+			op:      op,
 			opc:     opc,
 			slices:  slices,
 			profile: prof,
@@ -167,16 +195,40 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 		}
 	}
 
-	// App users count
-	usersCount, _ := userColl.CountDocuments(ctx, bson.M{})
+	// Active users and administrators. A user count is not proof that an
+	// administrator exists; the previous rootUserConfigured = usersCount > 0
+	// rule labelled any ordinary account as a configured super administrator.
+	activeUsersCount, _ := userColl.CountDocuments(ctx, bson.M{
+		"status": "active",
+		"locked": bson.M{"$ne": true},
+	})
+	activeAdminsCount, _ := userColl.CountDocuments(ctx, bson.M{
+		"role":   bson.M{"$in": bson.A{"admin", "root", "super_admin"}},
+		"status": "active",
+		"locked": bson.M{"$ne": true},
+	})
 
-	// Active Alerts aggregation
+	// NF alert aggregation. Open means active or acknowledged; resolved is
+	// closed. The field names are the NF alert contract, not the legacy alert
+	// contract.
 	alertAggPipeline := mongo.Pipeline{
 		{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: nil},
-			{Key: "unacknowledged", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{bson.D{{Key: "$eq", Value: bson.A{"$is_acknowledged", false}}}, 1, 0}}}}}},
-			{Key: "critical", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{bson.D{{Key: "$and", Value: bson.A{bson.D{{Key: "$eq", Value: bson.A{"$is_acknowledged", false}}}, bson.D{{Key: "$eq", Value: bson.A{"$level", "CRITICAL"}}}}}}, 1, 0}}}}}},
-			{Key: "warning", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{bson.D{{Key: "$and", Value: bson.A{bson.D{{Key: "$eq", Value: bson.A{"$is_acknowledged", false}}}, bson.D{{Key: "$eq", Value: bson.A{"$level", "WARNING"}}}}}}, 1, 0}}}}}},
+			{Key: "open", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{
+				bson.D{{Key: "$in", Value: bson.A{"$state", bson.A{"active", "acknowledged"}}}}, 1, 0,
+			}}}}}},
+			{Key: "critical", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{
+				bson.D{{Key: "$and", Value: bson.A{
+					bson.D{{Key: "$in", Value: bson.A{"$state", bson.A{"active", "acknowledged"}}}},
+					bson.D{{Key: "$eq", Value: bson.A{"$severity", "critical"}}},
+				}}}, 1, 0,
+			}}}}}},
+			{Key: "warning", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{
+				bson.D{{Key: "$and", Value: bson.A{
+					bson.D{{Key: "$in", Value: bson.A{"$state", bson.A{"active", "acknowledged"}}}},
+					bson.D{{Key: "$eq", Value: bson.A{"$severity", "warning"}}},
+				}}}, 1, 0,
+			}}}}}},
 		}}},
 	}
 	var alertAggResult []bson.M
@@ -189,16 +241,10 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 	oneDayAgo := time.Now().Add(-24 * time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
 	auditLogCount, _ := auditColl.CountDocuments(ctx, bson.M{"timestamp": bson.M{"$gte": oneDayAgo}})
 
-	// Balance invariant check
+	// Balance invariant check: full-collection count from the aggregation.
 	brokenInvariantsCount := 0
-	for _, b := range balanceSamples {
-		tot := toInt(b["data_total"])
-		used := toInt(b["data_used"])
-		res := toInt(b["data_reserved"])
-		avail := toInt(b["data_available"])
-		if tot != (used + res + avail) {
-			brokenInvariantsCount++
-		}
+	if len(balanceInvariantResult) > 0 {
+		brokenInvariantsCount = int(toInt(balanceInvariantResult[0]["count"]))
 	}
 
 	// Database subsystem evaluation
@@ -289,7 +335,9 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 	var missingSlicesCount int64
 	var danglingProfilesCount int64
 	for _, sub := range hssSubscribers {
-		if sub.k == "" || sub.opc == "" {
+		// A credential block is complete with K plus either OP or OPc. OP and
+		// OPc are alternative Milenage inputs, not a required pair.
+		if !credential.Configured(sub.k) || (!credential.Configured(sub.op) && !credential.Configured(sub.opc)) {
 			missingCredentialsCount++
 		}
 		if len(sub.slices) == 0 {
@@ -332,9 +380,10 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 	if len(alertAggResult) > 0 {
 		alertStats = alertAggResult[0]
 	}
-	rootUserConfigured := usersCount > 0
+	rootUserConfigured := activeAdminsCount > 0
 	criticalAlerts := toInt(alertStats["critical"])
 	warningAlerts := toInt(alertStats["warning"])
+	openAlerts := toInt(alertStats["open"])
 
 	var securityStatus SubsystemStatus = StatusHealthy
 	if !rootUserConfigured || criticalAlerts > 0 {
@@ -346,8 +395,8 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 	securitySubsystem := SecuritySubsystemHealth{
 		Status:                    securityStatus,
 		RootUserConfigured:        rootUserConfigured,
-		ActiveUsersCount:          usersCount,
-		UnacknowledgedAlertsCount: toInt(alertStats["unacknowledged"]),
+		ActiveUsersCount:          activeUsersCount,
+		UnacknowledgedAlertsCount: openAlerts,
 		CriticalAlertsCount:       criticalAlerts,
 		WarningAlertsCount:        warningAlerts,
 		RecentAuditLogsCount:      auditLogCount,
@@ -358,7 +407,7 @@ func CheckComprehensiveSystemHealth(ctx context.Context, xcloudDb, appDb *mongo.
 	actionableItemsCount := 0
 
 	if dbMissingCollections > 0 || dbMissingIndexes > 0 {
-		recommendations = append(recommendations, fmt.Sprintf("Run MongoDB index initialization (npm run mongo:init) to restore %d missing indexes", dbMissingIndexes))
+		recommendations = append(recommendations, fmt.Sprintf("Run MongoDB index initialization (npm run mongo:indexes) to restore %d missing indexes", dbMissingIndexes))
 		actionableItemsCount++
 	}
 	if brokenInvariantsCount > 0 {

@@ -35,6 +35,7 @@ var (
 	ErrAlertNotFound    = errors.New("NF_ALERT_INSTANCE_NOT_FOUND")
 	ErrRevisionConflict = errors.New("NF_ALERT_REVISION_CONFLICT")
 	ErrAlertResolved    = errors.New("NF_ALERT_INSTANCE_RESOLVED")
+	ErrAlertTransition  = errors.New("NF_ALERT_INVALID_TRANSITION")
 )
 
 // ValidateUUID checks an identifier is a canonical UUID (v4 or v7 shapes
@@ -150,10 +151,10 @@ func ValidateLimit(raw string) (int, error) {
 // handler boundary. The repository repeats the check for defense in depth.
 func ValidateAlertStateFilter(state string) error {
 	switch state {
-	case "", AlertStateActive, AlertStateAcknowledged, AlertStateResolved:
+	case "", AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering, AlertStateResolved:
 		return nil
 	}
-	return validationError("NF_ALERT_INVALID_STATE_FILTER", "state must be active, acknowledged or resolved")
+	return validationError("NF_ALERT_INVALID_STATE_FILTER", "state must be active, acknowledged, assigned, recovering or resolved")
 }
 
 // ValidateAlertSeverityFilter checks the severity filter vocabulary.

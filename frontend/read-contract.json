@@ -6,7 +6,6 @@
     "readEndpoints": [
       "GET /api/analytics/metrics",
       "GET /api/analytics/sparkline",
-      "GET /api/alerts",
       "GET /api/ocs/subscribers",
       "GET /api/operations/summary?sections=health,alerts",
       "GET /api/runtime/observations",

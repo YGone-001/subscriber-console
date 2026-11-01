@@ -43,6 +43,7 @@
 .subsystem-card.healthy { border-color: var(--status-success-border); }
 .subsystem-card.degraded { border-color: var(--status-warning-border); }
 .subsystem-card.critical { border-color: var(--status-danger-border); }
+.subsystem-card.unavailable { border-color: var(--surface-border); }
 
 .subsystem-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
 .subsystem-title-box { display: flex; align-items: center; gap: 0.75rem; }
@@ -73,6 +74,7 @@
 .subsystem-badge.healthy { background: var(--status-success-soft); color: var(--status-success); border: 1px solid var(--status-success-border); }
 .subsystem-badge.degraded { background: var(--status-warning-soft); color: var(--status-warning); border: 1px solid var(--status-warning-border); }
 .subsystem-badge.critical { background: var(--status-danger-soft); color: var(--status-danger); border: 1px solid var(--status-danger-border); }
+.subsystem-badge.unavailable { background: var(--surface-hover); color: var(--text-muted); border: 1px solid var(--surface-border); }
 
 .subsystem-metrics-grid {
   display: grid;

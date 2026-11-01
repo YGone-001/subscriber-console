@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit2, PowerOff, RefreshCw } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { LoadingState } from '../../components/ui/StatePanel';
 import { hasPermission } from '../../lib/permissions';
+import { resolveReturnTo } from '../../lib/return-to';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import {
@@ -31,8 +32,10 @@ import {
 
 export function InventoryDetailPage() {
   const { resourceId } = useParams<{ resourceId: string }>();
+  const location = useLocation();
   const { t } = useI18n();
   const { user } = useAuth();
+  const returnTo = resolveReturnTo(location.search, '/inventory', ['/inventory']);
 
   const [resource, setResource] = useState<Resource | null>(null);
   const [meta, setMeta] = useState<MetaResponse | null>(null);
@@ -243,7 +246,7 @@ export function InventoryDetailPage() {
   if (error || !resource) {
     return (
       <div className="page-container">
-        <Link to="/inventory" className="btn-secondary btn-sm mb-4 inline-flex items-center gap-1.5">
+        <Link to={returnTo} className="btn-secondary btn-sm mb-4 inline-flex items-center gap-1.5">
           <ArrowLeft size={16} />
           <span>{t('inventory_back_to_list')}</span>
         </Link>
@@ -259,7 +262,7 @@ export function InventoryDetailPage() {
   return (
     <div className="page-container">
       <div className="flex justify-between items-center mb-6">
-        <Link to="/inventory" className="btn-ghost btn-sm inline-flex items-center gap-1.5">
+        <Link to={returnTo} className="btn-ghost btn-sm inline-flex items-center gap-1.5">
           <ArrowLeft size={16} />
           <span>{t('inventory_back_to_list', { defaultValue: 'Back to Inventory' })}</span>
         </Link>

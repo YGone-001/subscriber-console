@@ -3,6 +3,7 @@ package system
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -12,20 +13,36 @@ import (
 	"subscriber/internal/response"
 )
 
+const comprehensiveHealthCacheTTL = 30 * time.Second
+
 // Handler handles HTTP requests for system diagnostics and health endpoints.
 type Handler struct {
 	xcloudDb *mongo.Database
 	appDb    *mongo.Database
 	limiter  *ratelimit.Limiter
+
+	probes []PlatformProbe
+
+	cacheMu       sync.Mutex
+	cachedHealth  *ComprehensiveSystemHealth
+	cachedAt      time.Time
+	cacheDuration time.Duration
 }
 
 // NewHandler creates a new system Handler.
 func NewHandler(xcloudDb, appDb *mongo.Database, limiter *ratelimit.Limiter) *Handler {
 	return &Handler{
-		xcloudDb: xcloudDb,
-		appDb:    appDb,
-		limiter:  limiter,
+		xcloudDb:      xcloudDb,
+		appDb:         appDb,
+		limiter:       limiter,
+		cacheDuration: comprehensiveHealthCacheTTL,
 	}
+}
+
+// SetPlatformProbes registers the runtime probes owned by the process. It must
+// be called after all background components have been constructed.
+func (h *Handler) SetPlatformProbes(probes []PlatformProbe) {
+	h.probes = probes
 }
 
 // MongoHealth handles GET /api/system/mongo/health.
@@ -62,10 +79,22 @@ func (h *Handler) MongoHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // SystemHealth handles GET /api/system/health.
+//
+// The response carries two presentation sections:
+//   - platform: runtime probes owned by this process;
+//   - dataConsistency: the business-document anomaly evaluation.
+//
+// The legacy subsystems field stays for compatibility. A failed evaluation
+// returns HTTP 500 with a body that carries no healthy default; the console
+// must render an explicit unavailable state instead.
 func (h *Handler) SystemHealth(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+	if !auth.HasPermission(p, "core.read") {
+		response.Error(w, http.StatusForbidden, "Forbidden", "PERMISSION_DENIED")
 		return
 	}
 
@@ -73,18 +102,54 @@ func (h *Handler) SystemHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	now := time.Now()
+	h.cacheMu.Lock()
+	if h.cachedHealth != nil && h.cacheDuration > 0 && now.Sub(h.cachedAt) < h.cacheDuration {
+		cached := *h.cachedHealth
+		h.cacheMu.Unlock()
+		response.JSON(w, http.StatusOK, cached)
+		return
+	}
+	h.cacheMu.Unlock()
+
 	health, err := CheckComprehensiveSystemHealth(r.Context(), h.xcloudDb, h.appDb)
 	if err != nil {
 		response.JSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"status":    "critical",
-			"score":     0,
-			"checkedAt": time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			"status":    "unavailable",
+			"checkedAt": now.UTC().Format("2006-01-02T15:04:05.000Z"),
 			"error":     "Comprehensive system health check failed",
+			"platform":  nil,
 		})
 		return
 	}
 
+	platform := CheckPlatformHealth(r.Context(), h.probes)
+	health.Platform = &platform
+	health.DataConsistency = &DataConsistencyReport{
+		Status:     dataConsistencyStatus(health),
+		Sampled:    false,
+		SampleSize: 0,
+		CheckedAt:  health.CheckedAt,
+	}
+
+	h.cacheMu.Lock()
+	h.cachedHealth = health
+	h.cachedAt = now
+	h.cacheMu.Unlock()
+
 	response.JSON(w, http.StatusOK, health)
+}
+
+func dataConsistencyStatus(health *ComprehensiveSystemHealth) SubsystemStatus {
+	if health == nil {
+		return StatusUnavailable
+	}
+	switch health.Status {
+	case StatusHealthy, StatusDegraded, StatusCritical:
+		return health.Status
+	default:
+		return StatusUnavailable
+	}
 }
 
 // AuditStatus handles GET /api/system/audit/status.

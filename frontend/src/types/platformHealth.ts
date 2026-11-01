@@ -12,7 +12,7 @@
  * `systemAuditRepository.ts`) so diagnostics UI keeps a typed view of Go responses.
  */
 
-export type SubsystemStatus = 'healthy' | 'degraded' | 'critical';
+export type SubsystemStatus = 'healthy' | 'degraded' | 'critical' | 'unavailable';
 
 export type CollectionHealth = {
   database: string;
@@ -87,6 +87,26 @@ export type SecuritySubsystemHealth = {
   recentAuditLogsCount: number;
 };
 
+export type PlatformProbe = {
+  key: string;
+  status: SubsystemStatus;
+  detail?: string;
+  checkedAt: string;
+};
+
+export type PlatformHealthReport = {
+  status: SubsystemStatus;
+  checkedAt: string;
+  probes: PlatformProbe[];
+};
+
+export type DataConsistencyReport = {
+  status: SubsystemStatus;
+  sampled: boolean;
+  sampleSize: number;
+  checkedAt: string;
+};
+
 export type ComprehensiveSystemHealth = {
   status: SubsystemStatus;
   score: number;
@@ -102,6 +122,8 @@ export type ComprehensiveSystemHealth = {
     actionableItemsCount: number;
     recommendations: string[];
   };
+  platform?: PlatformHealthReport;
+  dataConsistency?: DataConsistencyReport;
 };
 
 export type AnomalyType =

@@ -40,7 +40,9 @@ import { useI18n } from '../../providers/I18nProvider';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import {
   acknowledgeNfAlert,
+  assignNfAlert,
   deleteNfAlertRule,
+  recoverNfAlert,
   fetchNfAlertRules,
   fetchNfAlerts,
   fetchNfAlertsMeta,
@@ -275,6 +277,38 @@ export function NfAlertsPage() {
     }
   };
 
+  const handleAssign = async (alert: Alert, assignedTo: string) => {
+    setBusyId(alert.alertId);
+    setFeedback(null);
+    try {
+      const updated = await assignNfAlert(alert.alertId, assignedTo);
+      setSelectedAlert((current) => (current && current.alertId === updated.alertId ? updated : current));
+      setFeedback({ tone: 'success', message: t('nf_alerts_feedback_assigned', { assignee: assignedTo }) });
+      await loadAlerts(url.cursor);
+      void loadSummary();
+    } catch (err) {
+      setFeedback({ tone: 'danger', message: describeMutationError(err, t) });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRecover = async (alert: Alert) => {
+    setBusyId(alert.alertId);
+    setFeedback(null);
+    try {
+      const updated = await recoverNfAlert(alert.alertId);
+      setSelectedAlert((current) => (current && current.alertId === updated.alertId ? updated : current));
+      setFeedback({ tone: 'success', message: t('nf_alerts_feedback_recovering') });
+      await loadAlerts(url.cursor);
+      void loadSummary();
+    } catch (err) {
+      setFeedback({ tone: 'danger', message: describeMutationError(err, t) });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleResolve = async (alert: Alert) => {
     setBusyId(alert.alertId);
     setFeedback(null);
@@ -331,6 +365,20 @@ export function NfAlertsPage() {
       value: kpis.acknowledged ?? '-',
       detail: scopeKpiDetail(kpis.acknowledged, t),
       tone: kpis.acknowledged === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'assigned',
+      label: t('nf_alerts_kpi_assigned'),
+      value: kpis.assigned ?? '-',
+      detail: scopeKpiDetail(kpis.assigned, t),
+      tone: kpis.assigned === null ? 'muted' : 'primary',
+    },
+    {
+      key: 'recovering',
+      label: t('nf_alerts_kpi_recovering'),
+      value: kpis.recovering ?? '-',
+      detail: scopeKpiDetail(kpis.recovering, t),
+      tone: kpis.recovering === null ? 'muted' : 'primary',
     },
     {
       key: 'critical-open',
@@ -410,11 +458,11 @@ export function NfAlertsPage() {
       ) : null}
 
       {summaryLoading && kpis.active === null ? (
-        <SkeletonKpiStrip count={4} />
+        <SkeletonKpiStrip count={6} />
       ) : (
         <MetricStrip
           variant="cards"
-          columns={4}
+          columns={6}
           ariaLabel={t('nf_alerts_kpi_label')}
           items={kpiItems}
         />
@@ -781,6 +829,8 @@ export function NfAlertsPage() {
         busy={busyId !== null}
         onClose={() => setSelectedAlert(null)}
         onAcknowledge={(alert) => void handleAcknowledge(alert)}
+        onAssign={(alert, assignedTo) => void handleAssign(alert, assignedTo)}
+        onRecover={(alert) => void handleRecover(alert)}
         onResolve={(alert) => void handleResolve(alert)}
       />
 

@@ -35,18 +35,34 @@ type Candidate struct {
 	AgeDays      int    `json:"ageDays"`
 }
 
+// DataClassPolicy is one entry in the read-only retention matrix. It states
+// where a data class is retained and whether the console can purge it. A matrix
+// row does not imply an operation: only OCS terminated contracts are purgeable
+// from the console today.
+type DataClassPolicy struct {
+	Key           string `json:"key"`
+	Mode          string `json:"mode"`
+	RetentionDays int    `json:"retentionDays"`
+	Configurable  bool   `json:"configurable"`
+	Purgeable     bool   `json:"purgeable"`
+}
+
 type Preview struct {
-	Settings      Settings    `json:"settings"`
-	EligibleCount int         `json:"eligibleCount"`
-	Candidates    []Candidate `json:"candidates"`
+	Settings      Settings          `json:"settings"`
+	EligibleCount int               `json:"eligibleCount"`
+	Candidates    []Candidate       `json:"candidates"`
+	DataClasses   []DataClassPolicy `json:"dataClasses"`
 }
 
 type PurgeResult struct {
 	DryRun            bool     `json:"dryRun"`
 	Requested         int      `json:"requested"`
+	PurgedCandidates  int      `json:"purgedCandidates"`
 	PurgedContracts   int      `json:"purgedContracts"`
 	PurgedBalances    int      `json:"purgedBalances"`
 	PurgedAdjustments int      `json:"purgedAdjustments"`
+	Remaining         int      `json:"remaining"`
+	Truncated         bool     `json:"truncated"`
 	Skipped           []string `json:"skipped"`
 	Warnings          []string `json:"warnings"`
 }

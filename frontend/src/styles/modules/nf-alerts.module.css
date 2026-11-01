@@ -621,3 +621,15 @@
   color: var(--text-muted);
   font-size: 0.74rem;
 }
+
+.assignInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.assignInline input {
+  width: 150px;
+  min-height: var(--control-height);
+}
+

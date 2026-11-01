@@ -16,8 +16,8 @@
  * The structured sections, badges, lifecycle dialogs, reason capture and
  * last-active-administrator protection are unchanged from the reference.
  */
-import { useCallback, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, KeyRound, Lock, Pencil, Unlock, UserCheck, UserX } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
@@ -29,6 +29,7 @@ import { useRead } from '../../lib/api/use-read';
 import { usersApi, type UserDetailResponse } from '../../lib/api/users';
 import { mapUserManagementError } from '../../lib/auth-ui';
 import { userManagementActions } from '../../lib/userManagementPolicy';
+import { resolveReturnTo } from '../../lib/return-to';
 import { normalizeRole, normalizeStatus, formatDateTime, displayValue } from './utils';
 import { PasswordResetModal } from './components/PasswordResetModal';
 import type { RoleKey } from '../../types/iam';
@@ -40,6 +41,10 @@ export function UserDetailPage() {
   const { t } = useI18n();
   const { username: routeUsername } = useParams();
   const username = routeUsername ?? '';
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const mode = searchParams.get('mode');
+  const returnTo = resolveReturnTo(location.search, '/users', ['/users']);
   const { user: currentUser } = useAuth();
   const isSelf = !!currentUser && currentUser.username === username;
 
@@ -73,6 +78,7 @@ export function UserDetailPage() {
   const [pendingLifecycleAction, setPendingLifecycleAction] = useState<PendingLifecycleAction | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
+  const [modeApplied, setModeApplied] = useState(false);
   const [notice, setNotice] = useState('');
 
   /* Editing state is the dirty signal; discarding returns the form to read-only. */
@@ -86,6 +92,15 @@ export function UserDetailPage() {
     setFormError('');
     setEditing(true);
   }, [user]);
+
+  /* List actions link directly to the detail surface with an explicit mode.
+   * Apply it once so a later Cancel never reopens the form on every render. */
+  useEffect(() => {
+    if (!user || modeApplied) return;
+    if (mode === 'edit' && canUpdateProfile) startEdit();
+    if (mode === 'passwordReset' && canResetPassword) setShowResetModal(true);
+    setModeApplied(true);
+  }, [user, mode, modeApplied, canUpdateProfile, canResetPassword, startEdit]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -154,7 +169,7 @@ export function UserDetailPage() {
     return (
       <div className="page">
         <div className="page-header">
-          <Link to="/users" className="btn-icon" title={t('cancel')}><ArrowLeft size={18} /></Link>
+          <Link to={returnTo} className="btn-icon" title={t('cancel')}><ArrowLeft size={18} /></Link>
           <h1>{t('users_title')}</h1>
         </div>
         <p className={styles.errorText}>{mapUserManagementError(error, t)}</p>
@@ -166,7 +181,7 @@ export function UserDetailPage() {
     return (
       <div className="page">
         <div className="page-header">
-          <Link to="/users" className="btn-icon" title={t('cancel')}><ArrowLeft size={18} /></Link>
+          <Link to={returnTo} className="btn-icon" title={t('cancel')}><ArrowLeft size={18} /></Link>
           <h1>{t('users_title')}</h1>
         </div>
         <p>{t('loading')}</p>
@@ -178,7 +193,7 @@ export function UserDetailPage() {
     <div className="page">
       <div className="page-header">
         <div className="page-title-row">
-          <Link to="/users" className="btn-icon" title={t('cancel')}><ArrowLeft size={18} /></Link>
+          <Link to={returnTo} className="btn-icon" title={t('cancel')}><ArrowLeft size={18} /></Link>
           <h1>{user.username}</h1>
           {isSelf ? <span className="badge badge-subtle">{t('users_current_user')}</span> : null}
           <RoleBadge role={normalizedRole} />

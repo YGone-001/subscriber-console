@@ -25,6 +25,31 @@ func TestSettingsReflectRetentionWindow(t *testing.T) {
 	}
 }
 
+func TestDataClassesDescribeEveryRetentionMode(t *testing.T) {
+	policies := NewService(nil, nil, 365).DataClasses()
+	if len(policies) != 6 {
+		t.Fatalf("expected six data classes, got %d", len(policies))
+	}
+	foundOCS := false
+	for _, policy := range policies {
+		if policy.Key == "ocs_terminated_contracts" {
+			foundOCS = true
+			if !policy.Purgeable || policy.Mode != "manual_purge" || policy.RetentionDays != 365 {
+				t.Fatalf("unexpected OCS policy: %+v", policy)
+			}
+		}
+		if policy.Key == "nf_health_samples" && policy.Mode != "ttl" {
+			t.Fatalf("NF health samples must be TTL-governed: %+v", policy)
+		}
+		if policy.Key == "knowledge_unbound_attachments" && policy.Mode != "janitor" {
+			t.Fatalf("knowledge attachments must be janitor-governed: %+v", policy)
+		}
+	}
+	if !foundOCS {
+		t.Fatal("OCS terminated-contract policy must be present")
+	}
+}
+
 func TestPurgeValidation(t *testing.T) {
 	service := NewService(nil, nil, 365)
 	valid := PurgeOptions{Reason: "retention test", Confirmation: ConfirmationPhrase}

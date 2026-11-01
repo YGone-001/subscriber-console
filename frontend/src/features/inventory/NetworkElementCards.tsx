@@ -16,9 +16,10 @@
  *     healthy;
  *   - memory is rendered only when the server returned a sample.
  */
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Boxes } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { EmptyState } from '../../components/ui/OperationFeedback';
 import {
   formatBytes,
@@ -60,6 +61,8 @@ const GROUP_ORDER: DomainKey[] = [...OPERATIONAL_DOMAINS, 'unknown'];
 
 export function NetworkElementCards({ items }: { items: OperationalResource[] }) {
   const { t } = useI18n();
+  const location = useLocation();
+  const listLocation = currentListLocation('/inventory', location.search);
 
   const groups = GROUP_ORDER
     .map((domain) => ({ domain, items: items.filter((item) => item.domain === domain) }))
@@ -91,7 +94,7 @@ export function NetworkElementCards({ items }: { items: OperationalResource[] })
                 return (
                   <li key={item.resourceId} className={styles.card}>
                     <div className={styles.cardHead}>
-                      <Link className={styles.cardName} to={`/inventory/${encodeURIComponent(item.resourceId)}`}>
+                      <Link className={styles.cardName} to={withReturnTo(`/inventory/${encodeURIComponent(item.resourceId)}`, listLocation)}>
                         {item.name}
                       </Link>
                       <span className={`${styles.stateBadge} ${stateTone(state)}`}>{stateLabel(state, t)}</span>

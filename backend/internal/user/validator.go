@@ -60,6 +60,9 @@ func ValidateCreateUser(req CreateUserRequest) error {
 
 // ValidateUpdateUser validates an update user request.
 func ValidateUpdateUser(req UpdateUserRequest) error {
+	if req.Password != nil {
+		return fmt.Errorf("PASSWORD_RESET_ENDPOINT_REQUIRED")
+	}
 	if req.Role != nil && !canonicalWriteRoles[*req.Role] {
 		return fmt.Errorf("INVALID_ROLE")
 	}

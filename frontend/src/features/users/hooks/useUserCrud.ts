@@ -169,7 +169,19 @@ export function useUserCrud(options: UseUserCrudOptions) {
   const submitUpdate = async (targetUser: SysUser, payload: UpdatePayload, reason: string) => {
     setSavingAction(`update:${targetUser.username}`);
     try {
-      await usersApi.update(targetUser.username, { ...payload, reason: reason || undefined });
+      if (payload.password) {
+        /* Password changes have one authoritative endpoint. Sending a password
+         * through PATCH is rejected by the server and must never be presented
+         * as a successful reset. */
+        await usersApi.resetPassword(targetUser.username, payload.password, reason || undefined);
+        if (Object.keys(payload).length > 1) {
+          const rest: UpdatePayload = { ...payload };
+          delete rest.password;
+          await usersApi.update(targetUser.username, { ...rest, reason: reason || undefined });
+        }
+      } else {
+        await usersApi.update(targetUser.username, { ...payload, reason: reason || undefined });
+      }
       setDrawerMode("view");
       setEditForm((current) => ({ ...current, password: "" }));
       setPendingUpdate(null);

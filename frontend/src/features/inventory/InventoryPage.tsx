@@ -21,6 +21,7 @@ import { OperationsPageFrame } from '../operations/OperationsPageFrame';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { INVENTORY_URL_KEYS } from '../operations/inventory-url-keys';
 import NetworkElementView from './NetworkElementView';
+import { InventoryViewSwitch } from './InventoryViewSwitch';
 import {
   INVENTORY_DENSITIES,
   inventoryLegacyRedirect,
@@ -58,12 +59,15 @@ export function InventoryPage() {
       description={t('inventory_description')}
       icon={<Boxes size={23} />}
       viewSwitch={(
-        <ViewSwitch
-          options={densityOptions(t)}
-          value={density}
-          onChange={(value) => url.setFilter('density', value)}
-          ariaLabel={t('ops_view_density')}
-        />
+        <>
+          <InventoryViewSwitch active="network" />
+          <ViewSwitch
+            options={densityOptions(t)}
+            value={density}
+            onChange={(value) => url.setFilter('density', value)}
+            ariaLabel={t('ops_view_density')}
+          />
+        </>
       )}
       actions={
         canConfigure ? (

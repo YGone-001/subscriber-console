@@ -26,8 +26,8 @@ const goRouteKeys = new Set(goRegistrations.keys);
 
 const operationalRoutes = new Set(['/system-health', '/nf-alerts']);
 const expectedOperationsByRoute = new Map([
-  ['/system-health', 4],
-  ['/nf-alerts', 5],
+  ['/system-health', 1],
+  ['/nf-alerts', 7],
 ]);
 
 const walk = (directory, files = []) => {
@@ -168,14 +168,13 @@ assert.equal(contractValidation.authorizationMismatches, 0);
 
 // 3. Validate Operational Request Contracts
 const expectedOperationalEndpoints = new Set([
-  'POST /api/analytics/init',
   'POST /api/system/audit/scan',
-  'POST /api/system/audit/heal',
-  'POST /api/system/audit/batch-heal',
   'POST /api/nf-alerts/rules',
   'PUT /api/nf-alerts/rules/{ruleId}',
   'DELETE /api/nf-alerts/rules/{ruleId}',
   'POST /api/nf-alerts/{alertId}/acknowledge',
+  'POST /api/nf-alerts/{alertId}/assign',
+  'POST /api/nf-alerts/{alertId}/recover',
   'POST /api/nf-alerts/{alertId}/resolve',
 ]);
 
@@ -317,17 +316,11 @@ for (const line of testOutput.split('\n')) {
   }
 }
 
-const analyticsInitContract = passedUnitTests.has('analytics init has no fabricated body') ? 'PASS' : 'FAIL';
 const auditScanContract = (passedUnitTests.has('audit scan valid phases') && passedUnitTests.has('audit scan invalid phase rejection') && passedUnitTests.has('audit scan cursor preservation')) ? 'PASS' : 'FAIL';
-const singleHealContract = (passedUnitTests.has('single heal exact body') && passedUnitTests.has('single heal optional profile') && passedUnitTests.has('single heal malformed anomaly rejection')) ? 'PASS' : 'FAIL';
-const batchHealContract = (passedUnitTests.has('batch heal exact body') && passedUnitTests.has('batch heal empty-list rejection') && passedUnitTests.has('batch heal malformed-entry rejection')) ? 'PASS' : 'FAIL';
-const batchPartialResultSemantics = passedUnitTests.has('batch HTTP 200 with partial failure is not treated as total success') ? 'PASS' : 'FAIL';
+const retiredOperationsContract = passedUnitTests.has('the console offers only the read-only audit scan') ? 'PASS' : 'FAIL';
 
-assert.equal(analyticsInitContract, 'PASS');
 assert.equal(auditScanContract, 'PASS');
-assert.equal(singleHealContract, 'PASS');
-assert.equal(batchHealContract, 'PASS');
-assert.equal(batchPartialResultSemantics, 'PASS');
+assert.equal(retiredOperationsContract, 'PASS');
 
 // 6. Negative Sentinel Coverage
 const validContract = contracts[0];
@@ -359,11 +352,8 @@ console.log(`frontend_operational_authorization_errors=${contractValidation.auth
 console.log(`frontend_operational_request_contract_errors=${reqValidation.shapeErrors + reqValidation.keySetErrors}`);
 console.log(`frontend_operational_nested_contract_errors=${reqValidation.nestedContractErrors}`);
 console.log('');
-console.log(`frontend_operational_analytics_init_contract=${analyticsInitContract}`);
 console.log(`frontend_operational_audit_scan_contract=${auditScanContract}`);
-console.log(`frontend_operational_single_heal_contract=${singleHealContract}`);
-console.log(`frontend_operational_batch_heal_contract=${batchHealContract}`);
-console.log(`frontend_operational_batch_partial_result_semantics=${batchPartialResultSemantics}`);
+console.log(`frontend_operational_retired_operations_contract=${retiredOperationsContract}`);
 console.log('');
 console.log(`frontend_operational_raw_fetch_calls=0`);
 console.log(`frontend_operational_direct_go_urls=0`);

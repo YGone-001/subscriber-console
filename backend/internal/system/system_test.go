@@ -316,11 +316,11 @@ func TestSystemHandlersFailureTable(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
 			t.Fatalf("unmarshal error: %v", err)
 		}
-		if m["status"] != "critical" {
-			t.Errorf("expected status 'critical', got %v", m["status"])
+		if m["status"] != "unavailable" {
+			t.Errorf("expected status 'unavailable', got %v", m["status"])
 		}
-		if m["score"] != float64(0) {
-			t.Errorf("expected score 0, got %v", m["score"])
+		if _, exists := m["score"]; exists {
+			t.Errorf("a failed health read must not carry a score, got %v", m["score"])
 		}
 		if m["error"] != "Comprehensive system health check failed" {
 			t.Errorf("expected error 'Comprehensive system health check failed', got %v", m["error"])

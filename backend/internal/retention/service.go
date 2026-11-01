@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"subscriber/internal/audit"
+	"subscriber/internal/knowledge"
+	"subscriber/internal/nfhealth"
 )
 
 type Service struct {
@@ -36,7 +38,7 @@ func (s *Service) Settings() Settings {
 
 func (s *Service) Preview(ctx context.Context, limit int) (Preview, error) {
 	settings := s.Settings()
-	preview := Preview{Settings: settings, Candidates: []Candidate{}}
+	preview := Preview{Settings: settings, Candidates: []Candidate{}, DataClasses: s.DataClasses()}
 	if !settings.Enabled {
 		return preview, nil
 	}
@@ -53,6 +55,19 @@ func (s *Service) Preview(ctx context.Context, limit int) (Preview, error) {
 	return preview, nil
 }
 
+// DataClasses is the read-only retention matrix. It states the policy owner and
+// the cleanup mode; only the OCS terminated-contract class is purgeable here.
+func (s *Service) DataClasses() []DataClassPolicy {
+	return []DataClassPolicy{
+		{Key: "ocs_terminated_contracts", Mode: "manual_purge", RetentionDays: s.retentionDay, Configurable: true, Purgeable: true},
+		{Key: "nf_health_samples", Mode: "ttl", RetentionDays: nfhealth.DefaultRetentionDays, Configurable: false, Purgeable: false},
+		{Key: "knowledge_unbound_attachments", Mode: "janitor", RetentionDays: int(knowledge.UnboundFileTTL / (24 * time.Hour)), Configurable: false, Purgeable: false},
+		{Key: "notification_deliveries", Mode: "unbounded", RetentionDays: 0, Configurable: false, Purgeable: false},
+		{Key: "audit_logs", Mode: "unbounded", RetentionDays: 0, Configurable: false, Purgeable: false},
+		{Key: "legacy_alerts", Mode: "unbounded", RetentionDays: 0, Configurable: false, Purgeable: false},
+	}
+}
+
 // PreviewTarget shows one contract regardless of its age. It is used by the
 // explicit CLI maintenance path, never by the administrative console.
 func (s *Service) PreviewTarget(ctx context.Context, imsi string) (*Candidate, error) {
@@ -64,14 +79,24 @@ func (s *Service) Purge(ctx context.Context, opts PurgeOptions) (PurgeResult, er
 		return PurgeResult{}, err
 	}
 	limit := clampLimit(opts.Limit)
-	all, _, err := s.repo.ListCandidates(ctx, s.now().UTC().AddDate(0, 0, -s.retentionDay))
+	all, total, err := s.repo.ListCandidates(ctx, s.now().UTC().AddDate(0, 0, -s.retentionDay))
 	if err != nil {
 		return PurgeResult{}, err
 	}
-	if len(all) > limit {
+	truncated := len(all) > limit
+	if truncated {
 		all = all[:limit]
 	}
-	return s.purgeCandidates(ctx, all, opts)
+	result, err := s.purgeCandidates(ctx, all, opts)
+	if err != nil {
+		return result, err
+	}
+	result.Truncated = truncated
+	result.Remaining = total - result.PurgedCandidates
+	if result.Remaining < 0 {
+		result.Remaining = 0
+	}
+	return result, nil
 }
 
 func (s *Service) PurgeTarget(ctx context.Context, imsi string, opts PurgeOptions) (PurgeResult, error) {
@@ -112,6 +137,7 @@ func (s *Service) purgeCandidates(ctx context.Context, candidates []Candidate, o
 		if err != nil {
 			return result, fmt.Errorf("purge %s: %w", candidate.IMSI, err)
 		}
+		result.PurgedCandidates++
 		result.PurgedContracts += int(counts.Contracts)
 		result.PurgedBalances += int(counts.Balances)
 		result.PurgedAdjustments += int(counts.Adjustments)

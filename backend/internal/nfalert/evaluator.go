@@ -319,7 +319,7 @@ func (m *MongoEvaluatorRepository) FindOpenAlert(ctx context.Context, ruleID, ta
 	err := m.alerts.FindOne(ctx, bson.M{
 		"ruleId":   ruleID,
 		"targetId": targetID,
-		"state":    bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged}},
+		"state":    bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering}},
 	}).Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -348,7 +348,7 @@ func (m *MongoEvaluatorRepository) InsertAlert(ctx context.Context, alert *Alert
 // RecountAlert refreshes the trigger counter and evidence inside cooldown.
 func (m *MongoEvaluatorRepository) RecountAlert(ctx context.Context, alertID string, triggerCount int, lastTriggeredAt string, evidence AlertEvidence) error {
 	res := m.alerts.FindOneAndUpdate(ctx,
-		bson.M{"_id": alertID, "state": bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged}}},
+		bson.M{"_id": alertID, "state": bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering}}},
 		bson.M{"$set": bson.M{
 			"triggerCount":    triggerCount,
 			"lastTriggeredAt": lastTriggeredAt,
@@ -371,7 +371,7 @@ func (m *MongoEvaluatorRepository) RecountAlert(ctx context.Context, alertID str
 // ResolveAlertByRecovery closes an open alert with the recovery reason.
 func (m *MongoEvaluatorRepository) ResolveAlertByRecovery(ctx context.Context, alertID, resolvedAt string) error {
 	res := m.alerts.FindOneAndUpdate(ctx,
-		bson.M{"_id": alertID, "state": bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged}}},
+		bson.M{"_id": alertID, "state": bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged, AlertStateAssigned, AlertStateRecovering}}},
 		bson.M{"$set": bson.M{
 			"state":          AlertStateResolved,
 			"resolvedAt":     resolvedAt,

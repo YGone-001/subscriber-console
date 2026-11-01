@@ -198,7 +198,7 @@ func TestMetaVocabularyMatchesSelectableStates(t *testing.T) {
 }
 
 func TestCanonicalVocabularies(t *testing.T) {
-	if len(CanonicalAlertStates) != 3 || CanonicalAlertStates[0] != AlertStateActive {
+	if len(CanonicalAlertStates) != 5 || CanonicalAlertStates[0] != AlertStateActive {
 		t.Fatalf("alert states vocabulary mismatch: %v", CanonicalAlertStates)
 	}
 	if len(CanonicalSeverities) != 3 || CanonicalSeverities[0] != SeverityCritical {

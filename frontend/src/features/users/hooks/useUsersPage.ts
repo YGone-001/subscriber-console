@@ -21,6 +21,7 @@ import { useI18n } from '../../../providers/I18nProvider';
 import { useAuth } from '../../../providers/AuthProvider';
 import { hasPermission } from '../../../lib/permissions';
 import { useRead } from '../../../lib/api/use-read';
+import { currentListLocation, withReturnTo } from '../../../lib/return-to';
 import { userManagementActions, type UserOperation } from '../../../lib/userManagementPolicy';
 import type { UsersTableProps, UsersToolbarProps, UserDrawerProps } from '../components/types';
 import type { SysUser, RoleKey, RoleFilter, StatusFilter, SortKey, SortDirection, DrawerMode } from '../types';
@@ -61,10 +62,11 @@ export function useUsersPage() {
 
   const { data, error, isLoading, mutate: mutateList } = useRead<UserList>(can('users.read') ? `/api/users?${query}` : null);
   const users = useMemo(() => data?.items || [], [data?.items]);
-  const selectedUsername = params.get('user');
+  /* The drawer is creation-only. Detail, edit and password reset are owned by
+   * /users/:username, so stale `?user=` links cannot open a second detail form. */
   const rawMode = params.get('mode');
-  const mode: DrawerMode = rawMode === 'create' && can('users.create') ? 'create' : selectedUsername ? rawMode === 'edit' || rawMode === 'resetPassword' ? rawMode : 'view' : 'closed';
-  const drawer = useUserDrawer(users, selectedUsername, mode, (username, nextMode) => navigate({ user: username, mode: nextMode === 'closed' || nextMode === 'view' ? null : nextMode }, nextMode === 'closed'));
+  const mode: DrawerMode = rawMode === 'create' && can('users.create') ? 'create' : 'closed';
+  const drawer = useUserDrawer(users, null, mode, (_username, nextMode) => navigate({ user: null, mode: nextMode === 'create' ? 'create' : null }, nextMode === 'closed'));
   const selection = useUserSelection(users, users, currentUser?.username);
   const canManage = (target: SysUser, operation: UserOperation) => !!currentUser && userManagementActions(currentUser as never, target).includes(operation);
   const eligible = selection.selectedUsers.filter((user) => canManage(user, 'disable'));
@@ -85,10 +87,18 @@ export function useUsersPage() {
     }
   }, [data, page, params, navigateTo]);
 
+  const listLocation = currentListLocation('/users', params.size > 0 ? `?${params.toString()}` : '');
+  const detailPath = (username: string, mode?: 'edit' | 'passwordReset') => withReturnTo(
+    `/users/${encodeURIComponent(username)}${mode ? `?mode=${mode}` : ''}`,
+    listLocation,
+  );
+
   const openCreateDrawer = () => { crud.setNotice(null); crud.resetUsernameAvailability(); drawer.openCreateDrawer(); };
-  const openDetails = (user: SysUser) => { drawer.setOpenMenuUsername(null); drawer.openDetails(user); };
-  const startEdit = (user: SysUser) => { crud.setNotice(null); drawer.setOpenMenuUsername(null); drawer.startEdit(user); };
-  const startPasswordReset = (user: SysUser) => { crud.setNotice(null); drawer.setOpenMenuUsername(null); drawer.startPasswordReset(user); };
+  /* The route page is the single user-detail surface. The drawer is reserved
+   * for creation, so list actions navigate instead of opening a second form. */
+  const openDetails = (user: SysUser) => { drawer.setOpenMenuUsername(null); navigateTo(detailPath(user.username)); };
+  const startEdit = (user: SysUser) => { crud.setNotice(null); drawer.setOpenMenuUsername(null); navigateTo(detailPath(user.username, 'edit')); };
+  const startPasswordReset = (user: SysUser) => { crud.setNotice(null); drawer.setOpenMenuUsername(null); navigateTo(detailPath(user.username, 'passwordReset')); };
   const clearFilters = () => navigate({ q: null, role: null, status: null, page: 1 });
   const roles = data?.assignableRoles || [];
 

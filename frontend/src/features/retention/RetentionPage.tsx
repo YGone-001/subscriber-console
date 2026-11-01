@@ -22,17 +22,29 @@ type Candidate = {
   ageDays: number;
 };
 
+type DataClassPolicy = {
+  key: string;
+  mode: 'manual_purge' | 'ttl' | 'janitor' | 'unbounded';
+  retentionDays: number;
+  configurable: boolean;
+  purgeable: boolean;
+};
+
 type Preview = {
   settings: RetentionSettings;
   eligibleCount: number;
   candidates: Candidate[];
+  dataClasses?: DataClassPolicy[];
 };
 
 type PurgeResult = {
   requested: number;
+  purgedCandidates: number;
   purgedContracts: number;
   purgedBalances: number;
   purgedAdjustments: number;
+  remaining: number;
+  truncated: boolean;
   skipped: string[];
   warnings: string[];
 };
@@ -126,13 +138,16 @@ export function RetentionPage() {
       const warnings = result.warnings.length > 0
         ? ` ${t('retention_audit_warnings', { count: result.warnings.length })}`
         : '';
+      const remaining = result.remaining > 0
+        ? ` ${t('retention_remaining', { count: result.remaining })}`
+        : '';
       setFeedback({
-        tone: result.warnings.length > 0 ? 'danger' : 'success',
+        tone: result.warnings.length > 0 || result.remaining > 0 ? 'danger' : 'success',
         text: `${t('retention_apply_done', {
           contracts: result.purgedContracts,
           balances: result.purgedBalances,
           adjustments: result.purgedAdjustments,
-        })}${warnings}`,
+        })}${warnings}${remaining}`,
       });
       setDryRun(null);
       setReason('');
@@ -182,6 +197,45 @@ export function RetentionPage() {
               <p>
                 <strong>{t('retention_eligible')}:</strong> {eligibleCount}
               </p>
+            </div>
+          </div>
+
+          <div className="dash-card">
+            <div className="dash-card-body">
+              <h2 className="section-title">{t('retention_matrix_title')}</h2>
+              <p className="section-description">{t('retention_matrix_hint')}</p>
+              <div className="ocs-table-wrap">
+                <table className="ocs-table">
+                  <thead>
+                    <tr>
+                      <th>{t('retention_class')}</th>
+                      <th>{t('retention_policy')}</th>
+                      <th>{t('retention_cleanup_mode')}</th>
+                      <th>{t('retention_console_action')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.dataClasses ?? []).map((policy) => (
+                      <tr key={policy.key}>
+                        <td>{t(`retention_class_${policy.key}`)}</td>
+                        <td>
+                          {policy.retentionDays > 0
+                            ? t('retention_policy_days', { days: policy.retentionDays })
+                            : t('retention_policy_unbounded')}
+                        </td>
+                        <td>{t(`retention_mode_${policy.mode}`)}</td>
+                        <td>
+                          {policy.purgeable
+                            ? t('retention_action_manual')
+                            : policy.mode === 'ttl' || policy.mode === 'janitor'
+                              ? t('retention_action_automatic')
+                              : t('retention_action_none')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
