@@ -1,0 +1,519 @@
+{
+  "all_fields": {
+    "input": [
+      {
+        "access_restriction_data": 64,
+        "imsi": "454000000000001",
+        "plan_id": "plan_custom",
+        "sms_balance": 200,
+        "sms_total": 200,
+        "traffic_balance": 20000000000,
+        "traffic_total": 20000000000
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 64,
+        "traffic_total": 20000000000,
+        "traffic_balance": 20000000000,
+        "sms_total": 200,
+        "sms_balance": 200,
+        "plan_id": "plan_custom"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "absent",
+        "recordIntentHash": "1a5c32a87ded4a70c6f6cb189c86bf9011c3fb601a32bbc1ce3b5096ffe3e113"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "1a5c32a87ded4a70c6f6cb189c86bf9011c3fb601a32bbc1ce3b5096ffe3e113"
+    ],
+    "fileHash": "aecdbb270e0e9809dba3f843ca0537d65ec64cc116d69f892d2e23d1c8f93f88",
+    "operationFingerprint": "a73aa13a0ab8014b84c20d43aba97e0082c7039a8dbfe84a2050cffae47295d8",
+    "snapshotBytes": 749
+  },
+  "all_present": {
+    "input": [
+      {
+        "imsi": "454000000000001"
+      },
+      {
+        "imsi": "454000000000002"
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      },
+      {
+        "imsi": "454000000000002",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "present",
+        "recordIntentHash": "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1"
+      },
+      {
+        "imsi": "454000000000002",
+        "state": "present",
+        "recordIntentHash": "0f115c9a5f1e61fc2c3a2d438475489d92d8e308410dd6c7687236eeccc4bed0"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1",
+      "0f115c9a5f1e61fc2c3a2d438475489d92d8e308410dd6c7687236eeccc4bed0"
+    ],
+    "fileHash": "1bb4ddb2a9bc235e922acd88bf41d715258af25048ac13c7881d15a473ae6799",
+    "operationFingerprint": "b3315dab8893049f56efe451594802d82f09a8747b1c98e031d224e00441a56f",
+    "snapshotBytes": 1055
+  },
+  "ard_changed": {
+    "input": [
+      {
+        "access_restriction_data": 128,
+        "imsi": "454000000000001"
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 128,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "absent",
+        "recordIntentHash": "335d464655523a00576e6858465904446bfa0547205b81396d4dc306fb7c8334"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "335d464655523a00576e6858465904446bfa0547205b81396d4dc306fb7c8334"
+    ],
+    "fileHash": "d201e2033682122993290ac0b1dfda55632a665358db9a5e60cbc5fe5ac2e5b8",
+    "operationFingerprint": "ab9a4d892631276bd3b4ddcef20e674539b141e87d07b823b94e9d7b68e34fa4",
+    "snapshotBytes": 751
+  },
+  "imsi_only": {
+    "input": [
+      {
+        "imsi": "454000000000001"
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "absent",
+        "recordIntentHash": "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1"
+    ],
+    "fileHash": "fc9e0a712150c65f7a0a11a4b01df31d1a02a766ef4f4b7b973efa49635e5d8d",
+    "operationFingerprint": "9fc941c38ba5d3ef044f3daf1802c22434e099928f86f9a01a3a1e9f240b3c8a",
+    "snapshotBytes": 750
+  },
+  "plan_changed": {
+    "input": [
+      {
+        "imsi": "454000000000001",
+        "plan_id": "plan_other"
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "plan_other"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "absent",
+        "recordIntentHash": "75c21eb6d517f86916449c81cf2ca8508fd3cd5b47a79ab38f4db4bce64a0e18"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "75c21eb6d517f86916449c81cf2ca8508fd3cd5b47a79ab38f4db4bce64a0e18"
+    ],
+    "fileHash": "19fceb90c35ea11a5cc5f70ea1164eb3a8fab0f395c9f2ef51041299d67ed4d1",
+    "operationFingerprint": "f53c8985c3acec808d1645202ac94003166bacd0a522b62212ecfac555bd64dc",
+    "snapshotBytes": 748
+  },
+  "present_and_absent": {
+    "input": [
+      {
+        "imsi": "454000000000001"
+      },
+      {
+        "imsi": "454000000000002"
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      },
+      {
+        "imsi": "454000000000002",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "present",
+        "recordIntentHash": "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1"
+      },
+      {
+        "imsi": "454000000000002",
+        "state": "absent",
+        "recordIntentHash": "0f115c9a5f1e61fc2c3a2d438475489d92d8e308410dd6c7687236eeccc4bed0"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1",
+      "0f115c9a5f1e61fc2c3a2d438475489d92d8e308410dd6c7687236eeccc4bed0"
+    ],
+    "fileHash": "1bb4ddb2a9bc235e922acd88bf41d715258af25048ac13c7881d15a473ae6799",
+    "operationFingerprint": "57b09ac8473bf01443335af38e4be42ec2474fb6378c258c792852417db0a66b",
+    "snapshotBytes": 1054
+  },
+  "reversed_keys": {
+    "input": [
+      {
+        "access_restriction_data": 32,
+        "imsi": "454000000000001",
+        "plan_id": "plan_default_10gb",
+        "sms_balance": 100,
+        "sms_total": 100,
+        "traffic_balance": 10737418240,
+        "traffic_total": 10737418240
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "plan_default_10gb"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "absent",
+        "recordIntentHash": "37ebb7e1528eebfeda83e0fff8acdbba534dce13a511225796837557388822a4"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "37ebb7e1528eebfeda83e0fff8acdbba534dce13a511225796837557388822a4"
+    ],
+    "fileHash": "73d0f24992386f488b66b36701dc3f25c63c2ae5b4e9680156936b4124f01dbb",
+    "operationFingerprint": "15fe5f5d37fbd3532eae1ea30ce3fab38bb7dcfad7cc138e5ffc4135df7e52a4",
+    "snapshotBytes": 755
+  },
+  "reversed_order": {
+    "input": [
+      {
+        "imsi": "454000000000002"
+      },
+      {
+        "imsi": "454000000000001"
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      },
+      {
+        "imsi": "454000000000002",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "absent",
+        "recordIntentHash": "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1"
+      },
+      {
+        "imsi": "454000000000002",
+        "state": "absent",
+        "recordIntentHash": "0f115c9a5f1e61fc2c3a2d438475489d92d8e308410dd6c7687236eeccc4bed0"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1",
+      "0f115c9a5f1e61fc2c3a2d438475489d92d8e308410dd6c7687236eeccc4bed0"
+    ],
+    "fileHash": "1bb4ddb2a9bc235e922acd88bf41d715258af25048ac13c7881d15a473ae6799",
+    "operationFingerprint": "91c267d2cf05b2dc0e746002b6ab5c496783d0d6fd1bf0b3779febcf5ed0ca88",
+    "snapshotBytes": 1053
+  },
+  "sms_balance_only": {
+    "input": [
+      {
+        "imsi": "454000000000001",
+        "sms_balance": 50
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 50,
+        "sms_balance": 50,
+        "plan_id": "default_plan"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "absent",
+        "recordIntentHash": "fc4571f64a3e86be6050667c112a032840ec67343ebf321ae64492ee25e73b0a"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "fc4571f64a3e86be6050667c112a032840ec67343ebf321ae64492ee25e73b0a"
+    ],
+    "fileHash": "a4a17e03be2bb07e187aeb49dbc34e828cd2441231acc746bbeca26d3e4759ac",
+    "operationFingerprint": "5298bdda28bd02f694042eee89102bf185c230126ad894c73a64f8cd5193d945",
+    "snapshotBytes": 748
+  },
+  "traffic_balance_only": {
+    "input": [
+      {
+        "imsi": "454000000000001",
+        "traffic_balance": 5000000000
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 32,
+        "traffic_total": 5000000000,
+        "traffic_balance": 5000000000,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "absent",
+        "recordIntentHash": "7cc8e85de18768cbdbdbaf9efff9091f6a92c97f3d48556c9aa26e5683378143"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "7cc8e85de18768cbdbdbaf9efff9091f6a92c97f3d48556c9aa26e5683378143"
+    ],
+    "fileHash": "4c396aeabd2706f8a01051f4bc79b6dee1a75d7fd935aafc7d62739c05e80eb5",
+    "operationFingerprint": "af9beb56ba29d692c16fea69d98b678da86e361df64a81ade6d43f3c9ab586dc",
+    "snapshotBytes": 748
+  },
+  "two_absent": {
+    "input": [
+      {
+        "imsi": "454000000000001"
+      },
+      {
+        "imsi": "454000000000002"
+      }
+    ],
+    "normalizedRecords": [
+      {
+        "imsi": "454000000000001",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      },
+      {
+        "imsi": "454000000000002",
+        "access_restriction_data": 32,
+        "traffic_total": 10737418240,
+        "traffic_balance": 10737418240,
+        "sms_total": 100,
+        "sms_balance": 100,
+        "plan_id": "default_plan"
+      }
+    ],
+    "targets": [
+      {
+        "imsi": "454000000000001",
+        "state": "absent",
+        "recordIntentHash": "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1"
+      },
+      {
+        "imsi": "454000000000002",
+        "state": "absent",
+        "recordIntentHash": "0f115c9a5f1e61fc2c3a2d438475489d92d8e308410dd6c7687236eeccc4bed0"
+      }
+    ],
+    "fieldNames": [
+      "access_restriction_data",
+      "plan_id",
+      "sms_balance",
+      "sms_total",
+      "traffic_balance",
+      "traffic_total"
+    ],
+    "recordIntentHashes": [
+      "fa7bde2947058dbde7db9583a11f280af77f07d17fe547ff154a01588d18a4c1",
+      "0f115c9a5f1e61fc2c3a2d438475489d92d8e308410dd6c7687236eeccc4bed0"
+    ],
+    "fileHash": "1bb4ddb2a9bc235e922acd88bf41d715258af25048ac13c7881d15a473ae6799",
+    "operationFingerprint": "91c267d2cf05b2dc0e746002b6ab5c496783d0d6fd1bf0b3779febcf5ed0ca88",
+    "snapshotBytes": 1053
+  }
+}

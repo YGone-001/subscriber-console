@@ -3,7 +3,6 @@ package subscriber
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -106,8 +105,8 @@ func TestNormalizeImportRecord_Defaults(t *testing.T) {
 	if normalized.SmsBalance != importDefaultSms {
 		t.Fatalf("expected default sms balance %d, got %d", importDefaultSms, normalized.SmsBalance)
 	}
-	if normalized.PlanId != defaultPlanId {
-		t.Fatalf("expected default plan id %s, got %s", defaultPlanId, normalized.PlanId)
+	if normalized.PlanId != defaultPlanID {
+		t.Fatalf("expected default plan id %s, got %s", defaultPlanID, normalized.PlanId)
 	}
 	if normalized.AccessRestrictionData != importDefaultAccessRestr {
 		t.Fatalf("expected default access restriction %d, got %d", importDefaultAccessRestr, normalized.AccessRestrictionData)
@@ -226,58 +225,58 @@ func TestClassifyImportResult_FailedNoMutation(t *testing.T) {
 	}
 }
 
-func TestAssertFrozenImportV2_NilPayload(t *testing.T) {
-	err := AssertFrozenImportV2(nil)
+func TestAssertFrozenImport_NilPayload(t *testing.T) {
+	err := AssertFrozenImport(nil)
 	if err == nil {
 		t.Fatal("expected error for nil payload")
 	}
 }
 
-func TestAssertFrozenImportV2_EmptyRecords(t *testing.T) {
-	frozen := &FrozenImportV2{
-		Version:     "subscriber-import-v2",
+func TestAssertFrozenImport_EmptyRecords(t *testing.T) {
+	frozen := &FrozenImport{
+		Version:     importContractVersion,
 		Records:     []ImportRecord{},
 		Targets:     []ImportTarget{{Imsi: "454000000000001", State: "absent", RecordIntentHash: "abc"}},
 		TargetCount: 1,
 		Strategy:    "skip-existing-create-only",
 	}
-	err := AssertFrozenImportV2(frozen)
+	err := AssertFrozenImport(frozen)
 	if err == nil {
 		t.Fatal("expected error for empty records")
 	}
 }
 
-func TestAssertFrozenImportV2_EmptyTargets(t *testing.T) {
-	frozen := &FrozenImportV2{
-		Version:     "subscriber-import-v2",
+func TestAssertFrozenImport_EmptyTargets(t *testing.T) {
+	frozen := &FrozenImport{
+		Version:     importContractVersion,
 		Records:     []ImportRecord{{Imsi: "454000000000001"}},
 		Targets:     []ImportTarget{},
 		TargetCount: 0,
 		Strategy:    "skip-existing-create-only",
 	}
-	err := AssertFrozenImportV2(frozen)
+	err := AssertFrozenImport(frozen)
 	if err == nil {
 		t.Fatal("expected error for empty targets")
 	}
 }
 
-func TestAssertFrozenImportV2_MismatchedCounts(t *testing.T) {
-	frozen := &FrozenImportV2{
-		Version:     "subscriber-import-v2",
+func TestAssertFrozenImport_MismatchedCounts(t *testing.T) {
+	frozen := &FrozenImport{
+		Version:     importContractVersion,
 		Records:     []ImportRecord{{Imsi: "454000000000001"}},
 		Targets:     []ImportTarget{{Imsi: "454000000000001", State: "absent", RecordIntentHash: "abc"}, {Imsi: "454000000000002", State: "absent", RecordIntentHash: "def"}},
 		TargetCount: 2,
 		Strategy:    "skip-existing-create-only",
 	}
-	err := AssertFrozenImportV2(frozen)
+	err := AssertFrozenImport(frozen)
 	if err == nil {
 		t.Fatal("expected error for mismatched counts")
 	}
 }
 
-func TestAssertFrozenImportV2_UnsortedRecords(t *testing.T) {
-	frozen := &FrozenImportV2{
-		Version: "subscriber-import-v2",
+func TestAssertFrozenImport_UnsortedRecords(t *testing.T) {
+	frozen := &FrozenImport{
+		Version: importContractVersion,
 		Records: []ImportRecord{
 			{Imsi: "454000000000002"},
 			{Imsi: "454000000000001"},
@@ -289,15 +288,15 @@ func TestAssertFrozenImportV2_UnsortedRecords(t *testing.T) {
 		TargetCount: 2,
 		Strategy:    "skip-existing-create-only",
 	}
-	err := AssertFrozenImportV2(frozen)
+	err := AssertFrozenImport(frozen)
 	if err == nil {
 		t.Fatal("expected error for unsorted records")
 	}
 }
 
-func TestAssertFrozenImportV2_InvalidStrategy(t *testing.T) {
-	frozen := &FrozenImportV2{
-		Version: "subscriber-import-v2",
+func TestAssertFrozenImport_InvalidStrategy(t *testing.T) {
+	frozen := &FrozenImport{
+		Version: importContractVersion,
 		Records: []ImportRecord{
 			{Imsi: "454000000000001"},
 		},
@@ -307,13 +306,13 @@ func TestAssertFrozenImportV2_InvalidStrategy(t *testing.T) {
 		TargetCount: 1,
 		Strategy:    "wrong-strategy",
 	}
-	err := AssertFrozenImportV2(frozen)
+	err := AssertFrozenImport(frozen)
 	if err == nil {
 		t.Fatal("expected error for invalid strategy")
 	}
 }
 
-func TestAssertFrozenImportV2_Valid(t *testing.T) {
+func TestAssertFrozenImport_Valid(t *testing.T) {
 	record1 := ImportRecord{Imsi: "454000000000001", AccessRestrictionData: 32, TrafficTotal: 1000, TrafficBalance: 1000, SmsTotal: 100, SmsBalance: 100, PlanId: "plan1"}
 	record2 := ImportRecord{Imsi: "454000000000002", AccessRestrictionData: 32, TrafficTotal: 2000, TrafficBalance: 2000, SmsTotal: 200, SmsBalance: 200, PlanId: "plan2"}
 	records := []ImportRecord{record1, record2}
@@ -326,7 +325,7 @@ func TestAssertFrozenImportV2_Valid(t *testing.T) {
 	fieldNames := []string{"access_restriction_data", "plan_id", "sms_balance", "sms_total", "traffic_balance", "traffic_total"}
 	summary := ImportSummary{RowCount: 2, CreateCount: 1, SkipCount: 1, FieldNames: fieldNames, FileHash: fileHash}
 	snapshotBytes := len(stableJSON(map[string]any{
-		"version":              "subscriber-import-v2",
+		"version":              importContractVersion,
 		"records":              records,
 		"targets":              targets,
 		"targetCount":          2,
@@ -334,8 +333,8 @@ func TestAssertFrozenImportV2_Valid(t *testing.T) {
 		"strategy":             "skip-existing-create-only",
 		"operationFingerprint": fingerprint,
 	}))
-	frozen := &FrozenImportV2{
-		Version:              "subscriber-import-v2",
+	frozen := &FrozenImport{
+		Version:              importContractVersion,
 		Records:              records,
 		Targets:              targets,
 		TargetCount:          2,
@@ -344,9 +343,26 @@ func TestAssertFrozenImportV2_Valid(t *testing.T) {
 		SnapshotBytes:        snapshotBytes,
 		OperationFingerprint: fingerprint,
 	}
-	err := AssertFrozenImportV2(frozen)
+	err := AssertFrozenImport(frozen)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// A snapshot frozen under the retired v2 contract must not execute: its
+// normalized plan and hashes predate the canonical default plan.
+func TestAssertFrozenImport_RejectsSupersededVersion(t *testing.T) {
+	record := ImportRecord{Imsi: "454000000000001", AccessRestrictionData: 32, TrafficTotal: 1000, TrafficBalance: 1000, SmsTotal: 100, SmsBalance: 100, PlanId: "default_plan"}
+	targets := []ImportTarget{{Imsi: record.Imsi, State: "absent", RecordIntentHash: ComputeRecordIntentHash(record)}}
+	frozen := &FrozenImport{
+		Version:     "subscriber-import-v2",
+		Records:     []ImportRecord{record},
+		Targets:     targets,
+		TargetCount: 1,
+		Strategy:    "skip-existing-create-only",
+	}
+	if err := AssertFrozenImport(frozen); err == nil {
+		t.Fatal("expected the superseded v2 snapshot to be rejected")
 	}
 }
 
@@ -425,7 +441,7 @@ func newFakeImportRepo(existingImsis ...string) *fakeImportRepo {
 	}
 	return &fakeImportRepo{
 		existingImsis: existing,
-		tariffPlans:   map[string]bool{"plan_default_10gb": true, "custom_plan": true, "premium_plan": true, "plan_a": true, "plan_b": true},
+		tariffPlans:   map[string]bool{"default_plan": true, "plan_default_10gb": true, "custom_plan": true, "premium_plan": true, "plan_a": true, "plan_b": true},
 	}
 }
 
@@ -433,14 +449,14 @@ func newFakeImportRepo(existingImsis ...string) *fakeImportRepo {
 // Section 3: Prepare→Assert Production Invariant
 // ---------------------------------------------------------------------------
 
-func assertPrepareAssert(t *testing.T, repo *fakeImportRepo, rawRecords []map[string]any) *FrozenImportV2 {
+func assertPrepareAssert(t *testing.T, repo *fakeImportRepo, rawRecords []map[string]any) *FrozenImport {
 	t.Helper()
 	frozen, err := PrepareFrozenImport(context.Background(), rawRecords, repo)
 	if err != nil {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
-	if err := AssertFrozenImportV2(frozen); err != nil {
-		t.Fatalf("AssertFrozenImportV2: %v", err)
+	if err := AssertFrozenImport(frozen); err != nil {
+		t.Fatalf("AssertFrozenImport: %v", err)
 	}
 	return frozen
 }
@@ -539,7 +555,7 @@ func TestPrepareAssert_Invariant_MixedRows(t *testing.T) {
 // Section 5: Cross-runtime fixtures
 // ---------------------------------------------------------------------------
 
-func TestCrossRuntime_RowOrderInvariant(t *testing.T) {
+func TestImportIntent_RowOrderInvariant(t *testing.T) {
 	repo := newFakeImportRepo()
 	rawA := []map[string]any{
 		{"imsi": "454000000000003"},
@@ -570,7 +586,7 @@ func TestCrossRuntime_RowOrderInvariant(t *testing.T) {
 	}
 }
 
-func TestCrossRuntime_TrafficBalanceDefault(t *testing.T) {
+func TestImportIntent_TrafficBalanceDefault(t *testing.T) {
 	repo := newFakeImportRepo()
 	frozen, err := PrepareFrozenImport(context.Background(), []map[string]any{
 		{"imsi": "454000000000002", "traffic_balance": 5000000000},
@@ -583,7 +599,7 @@ func TestCrossRuntime_TrafficBalanceDefault(t *testing.T) {
 	}
 }
 
-func TestCrossRuntime_SmsBalanceDefault(t *testing.T) {
+func TestImportIntent_SmsBalanceDefault(t *testing.T) {
 	repo := newFakeImportRepo()
 	frozen, err := PrepareFrozenImport(context.Background(), []map[string]any{
 		{"imsi": "454000000000002", "sms_balance": 50},
@@ -596,7 +612,7 @@ func TestCrossRuntime_SmsBalanceDefault(t *testing.T) {
 	}
 }
 
-func TestCrossRuntime_PlanIdChangeAffectsHash(t *testing.T) {
+func TestImportIntent_PlanIdChangeAffectsHash(t *testing.T) {
 	repo := newFakeImportRepo()
 	a, err := PrepareFrozenImport(context.Background(), []map[string]any{
 		{"imsi": "454000000000002", "plan_id": "plan_a"},
@@ -618,7 +634,7 @@ func TestCrossRuntime_PlanIdChangeAffectsHash(t *testing.T) {
 	}
 }
 
-func TestCrossRuntime_ArdChangeAffectsHash(t *testing.T) {
+func TestImportIntent_ArdChangeAffectsHash(t *testing.T) {
 	repo := newFakeImportRepo()
 	a, err := PrepareFrozenImport(context.Background(), []map[string]any{
 		{"imsi": "454000000000002", "access_restriction_data": 32},
@@ -637,7 +653,7 @@ func TestCrossRuntime_ArdChangeAffectsHash(t *testing.T) {
 	}
 }
 
-func TestCrossRuntime_CanonicalFieldNames(t *testing.T) {
+func TestImportIntent_CanonicalFieldNames(t *testing.T) {
 	repo := newFakeImportRepo()
 	frozen, err := PrepareFrozenImport(context.Background(), []map[string]any{
 		{"imsi": "454000000000002"},
@@ -656,7 +672,7 @@ func TestCrossRuntime_CanonicalFieldNames(t *testing.T) {
 	}
 }
 
-func TestCrossRuntime_AllFieldsCanonicalValues(t *testing.T) {
+func TestImportIntent_AllFieldsCanonicalValues(t *testing.T) {
 	repo := newFakeImportRepo()
 	frozen, err := PrepareFrozenImport(context.Background(), []map[string]any{
 		{
@@ -672,8 +688,8 @@ func TestCrossRuntime_AllFieldsCanonicalValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
-	if err := AssertFrozenImportV2(frozen); err != nil {
-		t.Fatalf("AssertFrozenImportV2: %v", err)
+	if err := AssertFrozenImport(frozen); err != nil {
+		t.Fatalf("AssertFrozenImport: %v", err)
 	}
 	if frozen.SnapshotBytes <= 0 {
 		t.Fatal("expected positive snapshotBytes")
@@ -703,7 +719,7 @@ func TestTamper_InvalidImsiInRecords(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Records[0].Imsi = "invalid"
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for invalid IMSI")
 	}
 }
@@ -717,7 +733,7 @@ func TestTamper_RecordIntentHashModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Targets[0].RecordIntentHash = "tampered"
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered recordIntentHash")
 	}
 }
@@ -731,7 +747,7 @@ func TestTamper_TargetStateModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Targets[0].State = "present"
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered target state")
 	}
 }
@@ -746,7 +762,7 @@ func TestTamper_TargetOrderModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Targets[0], frozen.Targets[1] = frozen.Targets[1], frozen.Targets[0]
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered target order")
 	}
 }
@@ -761,7 +777,7 @@ func TestTamper_RecordOrderModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Records[0], frozen.Records[1] = frozen.Records[1], frozen.Records[0]
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered record order")
 	}
 }
@@ -775,7 +791,7 @@ func TestTamper_SummaryRowCountModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Summary.RowCount = 999
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered rowCount")
 	}
 }
@@ -789,7 +805,7 @@ func TestTamper_SummaryCreateCountModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Summary.CreateCount = 999
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered createCount")
 	}
 }
@@ -803,7 +819,7 @@ func TestTamper_SummarySkipCountModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Summary.SkipCount = 999
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered skipCount")
 	}
 }
@@ -817,7 +833,7 @@ func TestTamper_FieldNamesMissing(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Summary.FieldNames = []string{}
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for empty fieldNames")
 	}
 }
@@ -831,7 +847,7 @@ func TestTamper_FieldNamesExtra(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Summary.FieldNames = append(frozen.Summary.FieldNames, "extra")
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for extra fieldNames")
 	}
 }
@@ -848,7 +864,7 @@ func TestTamper_FieldNamesWrongOrder(t *testing.T) {
 	for i, j := 0, len(frozen.Summary.FieldNames)-1; i < j; i, j = i+1, j-1 {
 		frozen.Summary.FieldNames[i], frozen.Summary.FieldNames[j] = frozen.Summary.FieldNames[j], frozen.Summary.FieldNames[i]
 	}
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for reversed fieldNames")
 	}
 }
@@ -862,7 +878,7 @@ func TestTamper_FileHashModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.Summary.FileHash = "tampered"
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered fileHash")
 	}
 }
@@ -876,7 +892,7 @@ func TestTamper_FingerprintModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.OperationFingerprint = "tampered"
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered fingerprint")
 	}
 }
@@ -890,7 +906,7 @@ func TestTamper_SnapshotBytesModified(t *testing.T) {
 		t.Fatalf("PrepareFrozenImport: %v", err)
 	}
 	frozen.SnapshotBytes = 0
-	if err := AssertFrozenImportV2(frozen); err == nil {
+	if err := AssertFrozenImport(frozen); err == nil {
 		t.Fatal("expected error for tampered snapshotBytes")
 	}
 }
@@ -910,8 +926,8 @@ func TestSnapshotCap_NormalBelowCap(t *testing.T) {
 	if frozen.SnapshotBytes > maxImportSnapshotBytes {
 		t.Fatalf("expected snapshot within cap, got %d", frozen.SnapshotBytes)
 	}
-	if err := AssertFrozenImportV2(frozen); err != nil {
-		t.Fatalf("AssertFrozenImportV2: %v", err)
+	if err := AssertFrozenImport(frozen); err != nil {
+		t.Fatalf("AssertFrozenImport: %v", err)
 	}
 }
 
@@ -920,7 +936,7 @@ func TestSnapshotCap_NormalBelowCap(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestInsertRace_AbsentImsi_InsertSucceeds(t *testing.T) {
-	repo := &fakeImportRepo{existingImsis: map[string]bool{}, tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &fakeImportRepo{existingImsis: map[string]bool{}, tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	frozen, err := PrepareFrozenImport(context.Background(), []map[string]any{
 		{"imsi": "454000000000002"},
 	}, repo)
@@ -986,7 +1002,7 @@ func TestInsertRace_PreconditionDrift(t *testing.T) {
 	}
 }
 
-// Verify no replace/upsert in v2 execution path
+// Verify no replace/upsert in the import execution path
 func TestInsertRace_NoReplaceUpsert(t *testing.T) {
 	record := ImportRecord{
 		Imsi: "454000000000002", AccessRestrictionData: 32,
@@ -1055,33 +1071,4 @@ func TestPrepareFrozenImport_OversizedSnapshotRejected(t *testing.T) {
 	if govErr.Code != ErrApprovalSnapshotTooLarge {
 		t.Fatalf("expected APPROVAL_SNAPSHOT_TOO_LARGE, got %s", govErr.Code)
 	}
-}
-
-// Helper for test logging cross-runtime fixture values
-func TestCrossRuntime_PrintCanonicalValues(t *testing.T) {
-	repo := newFakeImportRepo()
-	frozen, err := PrepareFrozenImport(context.Background(), []map[string]any{
-		{
-			"imsi":                    "454000000000002",
-			"access_restriction_data": 32,
-			"traffic_total":           10737418240,
-			"traffic_balance":         10737418240,
-			"sms_total":               100,
-			"sms_balance":             100,
-			"plan_id":                 "plan_default_10gb",
-		},
-	}, repo)
-	if err != nil {
-		t.Fatalf("PrepareFrozenImport: %v", err)
-	}
-	if err := AssertFrozenImportV2(frozen); err != nil {
-		t.Fatalf("AssertFrozenImportV2: %v", err)
-	}
-	fmt.Printf("GO_CROSS_RUNTIME_FIXTURE_ALL_FIELDS: recordIntentHash=%s fileHash=%s fingerprint=%s snapshotBytes=%d fieldNames=%s\n",
-		frozen.Targets[0].RecordIntentHash,
-		frozen.Summary.FileHash,
-		frozen.OperationFingerprint,
-		frozen.SnapshotBytes,
-		strings.Join(frozen.Summary.FieldNames, ","),
-	)
 }

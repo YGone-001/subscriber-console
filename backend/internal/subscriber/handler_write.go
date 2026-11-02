@@ -616,7 +616,7 @@ func (h *WriteHandler) BatchCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prepare frozen v2 contract
+	// Prepare the frozen import contract
 	frozen, err := PrepareFrozenBatchCreate(r.Context(), *payload, profileData, profileData != nil)
 	if err != nil {
 		if govErr, ok := err.(*SubscriberGovernanceError); ok {
@@ -820,7 +820,7 @@ func (h *WriteHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prepare frozen v2 contract
+	// Prepare the frozen import contract
 	frozen, err := PrepareFrozenBatchUpdate(r.Context(), req.Imsis, req.Patch, h.effectiveFindSub())
 	if err != nil {
 		h.handleBatchUpdateError(w, err)
@@ -990,7 +990,7 @@ func (h *WriteHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prepare frozen v2
+	// Prepare the frozen import
 	// Use test seam if available, otherwise use repo
 	var bulkRepo BulkDeleteRepository = h.repo
 	if h.bulkDeleteRepo != nil {
@@ -1296,7 +1296,7 @@ func (h *WriteHandler) handleImportMutation(w http.ResponseWriter, r *http.Reque
 	// Tariff validation
 	repo := h.effectiveImportRepo()
 	for _, rec := range records {
-		planId := defaultPlanId
+		planId := defaultPlanID
 		if v, ok := rec["plan_id"].(string); ok && v != "" {
 			planId = v
 		}
@@ -1322,7 +1322,7 @@ func (h *WriteHandler) handleImportMutation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Prepare frozen v2
+	// Prepare the frozen import
 	frozen, err := PrepareFrozenImport(r.Context(), records, repo)
 	if err != nil {
 		if govErr, ok := err.(*SubscriberGovernanceError); ok {
@@ -1363,7 +1363,7 @@ func (h *WriteHandler) effectiveImportRepo() ImportRepository {
 }
 
 // executeDirectImport executes import directly for super_admin/root.
-func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Request, frozen *FrozenImportV2, fresh *FreshActor) {
+func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Request, frozen *FrozenImport, fresh *FreshActor) {
 	repo := h.effectiveImportRepo()
 
 	execResult, err := ExecuteFrozenImport(r.Context(), frozen, repo)

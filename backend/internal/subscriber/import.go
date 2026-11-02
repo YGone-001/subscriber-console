@@ -17,7 +17,7 @@ const (
 	importDefaultTraffic     = 10737418240 // 10 GiB
 	importDefaultSms         = 100
 	importDefaultAccessRestr = 32
-	defaultPlanId            = "plan_default_10gb"
+	importContractVersion    = "subscriber-import-v3"
 )
 
 // Error codes for import
@@ -60,8 +60,8 @@ type ImportSummary struct {
 	FileHash    string   `json:"fileHash"`
 }
 
-// FrozenImportV2 is the v2 frozen contract for import.
-type FrozenImportV2 struct {
+// FrozenImport is the frozen contract for import.
+type FrozenImport struct {
 	Version              string         `json:"version"              bson:"version"`
 	Records              []ImportRecord `json:"records"              bson:"records"`
 	Targets              []ImportTarget `json:"targets"              bson:"targets"`
@@ -99,7 +99,7 @@ type ImportRepository interface {
 // sensitiveKeys are the keys that must not be non-empty in import records.
 var sensitiveKeys = []string{"k", "op", "opc", "amf", "sqn"}
 
-// canonicalImportFieldNames is the fixed canonical fieldNames for subscriber-import-v2.
+// canonicalImportFieldNames is the fixed canonical fieldNames for the import contract.
 // Represents the effective normalized write intent, NOT raw CSV column presence.
 // Lexically sorted. Both Prepare and Assert must use this exact value.
 var canonicalImportFieldNames = []string{
@@ -292,7 +292,7 @@ func NormalizeImportRecord(rec map[string]any) ImportRecord {
 		}
 	}
 
-	planId := defaultPlanId
+	planId := defaultPlanID
 	if v, ok := rec["plan_id"].(string); ok && strings.TrimSpace(v) != "" {
 		planId = strings.TrimSpace(v)
 	}
@@ -335,12 +335,12 @@ func ComputeImportFingerprint(targets []ImportTarget, strategy string, fileHash 
 	return fmt.Sprintf("%x", h)
 }
 
-// PrepareFrozenImport prepares a frozen v2 import payload.
+// PrepareFrozenImport prepares a frozen import payload.
 func PrepareFrozenImport(
 	ctx context.Context,
 	rawRecords []map[string]any,
 	repo ImportRepository,
-) (*FrozenImportV2, error) {
+) (*FrozenImport, error) {
 	// Normalize records
 	records := make([]ImportRecord, 0, len(rawRecords))
 	for _, raw := range rawRecords {
@@ -394,7 +394,7 @@ func PrepareFrozenImport(
 		})
 	}
 
-	// Canonical fieldNames — fixed for subscriber-import-v2 (not derived from raw CSV)
+	// Canonical fieldNames — fixed for the import contract (not derived from raw CSV)
 	fieldNames := make([]string, len(canonicalImportFieldNames))
 	copy(fieldNames, canonicalImportFieldNames)
 
@@ -404,7 +404,7 @@ func PrepareFrozenImport(
 
 	// Compute snapshotBytes
 	snapshotBytes := len(stableJSON(map[string]any{
-		"version":     "subscriber-import-v2",
+		"version":     importContractVersion,
 		"records":     records,
 		"targets":     targets,
 		"targetCount": len(targets),
@@ -424,8 +424,8 @@ func PrepareFrozenImport(
 		return nil, &SubscriberGovernanceError{Code: ErrApprovalSnapshotTooLarge}
 	}
 
-	return &FrozenImportV2{
-		Version:     "subscriber-import-v2",
+	return &FrozenImport{
+		Version:     importContractVersion,
 		Records:     records,
 		Targets:     targets,
 		TargetCount: len(targets),
@@ -442,12 +442,12 @@ func PrepareFrozenImport(
 	}, nil
 }
 
-// AssertFrozenImportV2 validates a frozen import payload.
-func AssertFrozenImportV2(frozen *FrozenImportV2) error {
+// AssertFrozenImport validates a frozen import payload.
+func AssertFrozenImport(frozen *FrozenImport) error {
 	if frozen == nil {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
-	if frozen.Version != "subscriber-import-v2" {
+	if frozen.Version != importContractVersion {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
 	if len(frozen.Records) == 0 || len(frozen.Records) > maxImportRows {
@@ -550,7 +550,7 @@ func AssertFrozenImportV2(frozen *FrozenImportV2) error {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
 
-	// Verify fieldNames: exact canonical sorted value (fixed for subscriber-import-v2)
+	// Verify fieldNames: exact canonical sorted value (fixed for the import contract)
 	expectedFieldNames := canonicalImportFieldNames
 	if len(frozen.Summary.FieldNames) != len(expectedFieldNames) {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
@@ -626,13 +626,13 @@ func ClassifyImportResult(createdCount, intendedCreateCount, conflictCount, fail
 	return "FAILED_NO_MUTATION"
 }
 
-// ExecuteFrozenImport executes a frozen v2 import.
+// ExecuteFrozenImport executes a frozen import.
 func ExecuteFrozenImport(
 	ctx context.Context,
-	frozen *FrozenImportV2,
+	frozen *FrozenImport,
 	repo ImportRepository,
 ) (*ImportExecutionResult, error) {
-	if err := AssertFrozenImportV2(frozen); err != nil {
+	if err := AssertFrozenImport(frozen); err != nil {
 		return nil, err
 	}
 

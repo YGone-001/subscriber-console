@@ -105,7 +105,7 @@ func TestImport_Precheck(t *testing.T) {
 }
 
 func TestImport_EmptyRecords(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{}}
 	req := importRequest("import", body, "operator")
@@ -117,7 +117,7 @@ func TestImport_EmptyRecords(t *testing.T) {
 }
 
 func TestImport_InvalidImsi(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "invalid"}}}
 	req := importRequest("import", body, "operator")
@@ -129,7 +129,7 @@ func TestImport_InvalidImsi(t *testing.T) {
 }
 
 func TestImport_DuplicateImsi(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{
 		map[string]any{"imsi": "454000000000001"},
@@ -144,7 +144,7 @@ func TestImport_DuplicateImsi(t *testing.T) {
 }
 
 func TestImport_UnknownField(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001", "unknown_field": "value"}}}
 	req := importRequest("import", body, "operator")
@@ -156,7 +156,7 @@ func TestImport_UnknownField(t *testing.T) {
 }
 
 func TestImport_SensitiveKey(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "operator")
 	for _, key := range []string{"k", "op", "opc", "amf", "sqn"} {
 		body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001", key: "00000000000000000000000000000000"}}}
@@ -174,7 +174,7 @@ func TestImport_SensitiveKey(t *testing.T) {
 }
 
 func TestImport_Overwrite(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}, "overwrite": true}
 	req := importRequest("import", body, "operator")
@@ -198,7 +198,7 @@ func TestImport_MissingTariff(t *testing.T) {
 }
 
 func TestImport_OperatorDirect(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "operator")
@@ -214,7 +214,7 @@ func TestImport_OperatorDirect(t *testing.T) {
 }
 
 func TestImport_SuperAdminDirect(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "super_admin")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "super_admin")
@@ -234,7 +234,7 @@ func TestImport_SuperAdminDirect(t *testing.T) {
 }
 
 func TestImport_RootDirect(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "root")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "root")
@@ -271,7 +271,7 @@ func (d *driftImportRepo) FindSubscribersForImport(_ context.Context, imsis []st
 func TestImport_PreconditionDrift(t *testing.T) {
 	repo := &driftImportRepo{
 		mockImportRepo: mockImportRepo{
-			tariffPlans: map[string]bool{"plan_default_10gb": true},
+			tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true},
 		},
 	}
 	h := newImportTestHandler(repo, "super_admin")
@@ -290,7 +290,7 @@ func TestImport_PreconditionDrift(t *testing.T) {
 }
 
 func TestImport_OpsAdminDirect(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "ops_admin")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "ops_admin")
@@ -317,7 +317,7 @@ func (d *disabledTariffRepo) ValidateTariffPlan(_ context.Context, planId string
 func TestImport_DisabledTariff(t *testing.T) {
 	repo := &disabledTariffRepo{
 		mockImportRepo: mockImportRepo{
-			tariffPlans: map[string]bool{"plan_default_10gb": true},
+			tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true},
 		},
 	}
 	h := newImportTestHandler(repo, "operator")
@@ -335,7 +335,7 @@ func TestImport_DisabledTariff(t *testing.T) {
 }
 
 func TestImport_InsufficientPermissions(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}}
 	h := newImportTestHandler(repo, "read_only")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "read_only")
@@ -358,7 +358,7 @@ func (f *failingInsertRepo) InsertSubscriberImportCreateOnly(_ context.Context, 
 
 func TestImport_ZeroStorage_500(t *testing.T) {
 	repo := &failingInsertRepo{
-		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
+		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}},
 	}
 	h := newImportTestHandler(repo, "super_admin")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
@@ -387,7 +387,7 @@ func (f *failingOcsRepo) ProvisionImportedSubscriberOcs(_ context.Context, _ Ocs
 
 func TestImport_OcsFailure_PartialWrite(t *testing.T) {
 	repo := &failingOcsRepo{
-		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
+		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}},
 	}
 	h := newImportTestHandler(repo, "super_admin")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
@@ -454,7 +454,7 @@ func (p *partialInsertRepo) InsertSubscriberImportCreateOnly(_ context.Context, 
 
 func TestImport_TwoTargetPartialInsert_409(t *testing.T) {
 	repo := &partialInsertRepo{
-		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
+		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}},
 	}
 	h := newImportTestHandler(repo, "super_admin")
 	body := map[string]any{
@@ -488,7 +488,7 @@ func TestImport_TwoTargetPartialInsert_409(t *testing.T) {
 
 func TestImport_OversizedSnapshot_HTTP413(t *testing.T) {
 	repo := &trackingImportRepo{
-		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
+		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"default_plan": true, "plan_default_10gb": true}},
 	}
 	repo2 := &Repository{}
 	limiter := &mockRateLimiter{allowed: true}

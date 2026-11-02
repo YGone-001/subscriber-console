@@ -20,7 +20,7 @@ type ImportFixtureData struct {
 
 func loadImportFixture(t *testing.T, name string) ImportFixtureData {
 	t.Helper()
-	data, err := os.ReadFile("../../../frontend/tests/fixtures/subscriber-import-v2.json")
+	data, err := os.ReadFile("../../../frontend/tests/fixtures/subscriber-import-v3.json")
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
@@ -38,7 +38,7 @@ func loadImportFixture(t *testing.T, name string) ImportFixtureData {
 func assertHash(t *testing.T, label, expected, actual string) {
 	t.Helper()
 	if expected != actual {
-		t.Errorf("%s mismatch:\n  Node: %s\n  Go:   %s", label, expected, actual)
+		t.Errorf("%s mismatch:\n  expected: %s\n  actual:   %s", label, expected, actual)
 	}
 }
 
@@ -131,8 +131,8 @@ func TestImportFixture_ArdChanged(t *testing.T) {
 	assertHash(t, "recordIntentHash", f.RecordIntentHashes[0], ComputeRecordIntentHash(rec))
 }
 
-func TestImportFixture_CrossRuntimeParity(t *testing.T) {
-	data, err := os.ReadFile("../../../frontend/tests/fixtures/subscriber-import-v2.json")
+func TestImportFixture_ContractLock(t *testing.T) {
+	data, err := os.ReadFile("../../../frontend/tests/fixtures/subscriber-import-v3.json")
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestImportFixture_CrossRuntimeParity(t *testing.T) {
 
 	for name, f := range fixtures {
 		t.Run(name, func(t *testing.T) {
-			// Normalize records and sort by IMSI (matching Node fixture producer)
+			// Normalize records and sort by IMSI (matching the fixture producer)
 			var records []ImportRecord
 			for _, raw := range f.Input {
 				records = append(records, NormalizeImportRecord(raw))
@@ -154,14 +154,14 @@ func TestImportFixture_CrossRuntimeParity(t *testing.T) {
 			for i, rec := range records {
 				actual := ComputeRecordIntentHash(rec)
 				if f.RecordIntentHashes[i] != actual {
-					t.Errorf("recordIntentHash[%d] mismatch:\n  Node: %s\n  Go:   %s", i, f.RecordIntentHashes[i], actual)
+					t.Errorf("recordIntentHash[%d] mismatch:\n  expected: %s\n  actual:   %s", i, f.RecordIntentHashes[i], actual)
 				}
 			}
 
 			// Verify fileHash
 			actualFileHash := ComputeFileHash(records)
 			if f.FileHash != actualFileHash {
-				t.Errorf("fileHash mismatch:\n  Node: %s\n  Go:   %s", f.FileHash, actualFileHash)
+				t.Errorf("fileHash mismatch:\n  expected: %s\n  actual:   %s", f.FileHash, actualFileHash)
 			}
 
 			// Build targets using fixture's states and verify fingerprint
@@ -175,7 +175,7 @@ func TestImportFixture_CrossRuntimeParity(t *testing.T) {
 			}
 			actualFingerprint := ComputeImportFingerprint(targets, "skip-existing-create-only", actualFileHash)
 			if f.OperationFingerprint != actualFingerprint {
-				t.Errorf("operationFingerprint mismatch:\n  Node: %s\n  Go:   %s", f.OperationFingerprint, actualFingerprint)
+				t.Errorf("operationFingerprint mismatch:\n  expected: %s\n  actual:   %s", f.OperationFingerprint, actualFingerprint)
 			}
 
 			// Verify snapshotBytes
@@ -191,7 +191,7 @@ func TestImportFixture_CrossRuntimeParity(t *testing.T) {
 				}
 			}
 			snapshotSource := map[string]any{
-				"version":     "subscriber-import-v2",
+				"version":     importContractVersion,
 				"records":     records,
 				"targets":     targets,
 				"targetCount": len(targets),
@@ -207,7 +207,7 @@ func TestImportFixture_CrossRuntimeParity(t *testing.T) {
 			}
 			actualSnapshotBytes := len(stableJSON(snapshotSource))
 			if f.SnapshotBytes != actualSnapshotBytes {
-				t.Errorf("snapshotBytes mismatch:\n  Node: %d\n  Go:   %d", f.SnapshotBytes, actualSnapshotBytes)
+				t.Errorf("snapshotBytes mismatch:\n  expected: %d\n  actual:   %d", f.SnapshotBytes, actualSnapshotBytes)
 			}
 		})
 	}
