@@ -10,7 +10,7 @@
  * Writes use `replace`, so typing in the search box or switching a domain does
  * not fill the Back history with intermediate states.
  */
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { TopologyDomainMode } from './nf-classification';
 import { ACTUAL_DOMAIN_MODE_OPTIONS } from './actual-topology-model';
@@ -64,19 +64,38 @@ export function useLiveTopologyViewState(): LiveViewState & {
   setDomain: (value: TopologyDomainMode) => void;
   setFocus: (value: string | undefined) => void;
   setEdge: (value: string | undefined) => void;
+  /* Focus and edge are one selection: writing them in a single update avoids a
+   * second setter rebuilding the URL from the pre-update query and restoring
+   * the value the first setter just removed. */
+  setSelection: (focus: string | undefined, edge: string | undefined) => void;
 } {
   const [params, setParams] = useSearchParams();
-  const state = readLiveViewState(params);
+  const { search, domain, focus, edge } = readLiveViewState(params);
 
   const apply = useCallback((key: string, value: string | undefined) => {
     setParams((current) => withLiveViewParam(current, key, value), { replace: true });
   }, [setParams]);
 
-  return {
-    ...state,
-    setSearch: (value: string) => apply(LIVE_VIEW_SEARCH_PARAM, value),
-    setDomain: (value: TopologyDomainMode) => apply(LIVE_VIEW_DOMAIN_PARAM, value),
-    setFocus: (value: string | undefined) => apply(LIVE_VIEW_FOCUS_PARAM, value),
-    setEdge: (value: string | undefined) => apply(LIVE_VIEW_EDGE_PARAM, value),
-  };
+  /* Memoized so a panel prop keeps a stable identity between renders. The
+   * setter still follows the current location: a consumer must call the value
+   * from its latest render, never one captured when the panel first opened. */
+  const setSearch = useCallback((value: string) => apply(LIVE_VIEW_SEARCH_PARAM, value), [apply]);
+  const setDomain = useCallback((value: TopologyDomainMode) => apply(LIVE_VIEW_DOMAIN_PARAM, value), [apply]);
+  const setFocus = useCallback((value: string | undefined) => apply(LIVE_VIEW_FOCUS_PARAM, value), [apply]);
+  const setEdge = useCallback((value: string | undefined) => apply(LIVE_VIEW_EDGE_PARAM, value), [apply]);
+  const setSelection = useCallback((focusValue: string | undefined, edgeValue: string | undefined) => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (focusValue) next.set(LIVE_VIEW_FOCUS_PARAM, focusValue);
+      else next.delete(LIVE_VIEW_FOCUS_PARAM);
+      if (edgeValue) next.set(LIVE_VIEW_EDGE_PARAM, edgeValue);
+      else next.delete(LIVE_VIEW_EDGE_PARAM);
+      return next;
+    }, { replace: true });
+  }, [setParams]);
+
+  return useMemo(
+    () => ({ search, domain, focus, edge, setSearch, setDomain, setFocus, setEdge, setSelection }),
+    [search, domain, focus, edge, setSearch, setDomain, setFocus, setEdge, setSelection],
+  );
 }

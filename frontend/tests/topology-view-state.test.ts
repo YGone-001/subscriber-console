@@ -11,8 +11,14 @@ import { readFileSync } from 'node:fs';
 import { readLiveViewState, withLiveViewParam } from '../src/features/topology/live-topology-url';
 import test from 'node:test';
 import {
+  applyOperationsPatch,
+  OPERATIONS_CURSOR_PARAM,
+  OPERATIONS_VIEW_PARAM,
+} from '../src/features/operations/operations-url-state';
+import {
   canonicalizeTopologyViewSearch,
   resolveTopologyViewState,
+  TOPOLOGY_PAGE_URL_KEYS,
   topologyViewStatePatch,
   type TopologyViewState,
 } from '../src/features/topology/topology-view-state';
@@ -196,6 +202,77 @@ test('an unknown domain degrades to all and a default key leaves the address bar
 
   assert.equal(withLiveViewParam(new URLSearchParams(), 'focus', 'upf').get('focus'), 'upf');
   assert.equal(withLiveViewParam(new URLSearchParams('focus=upf'), 'focus', '').get('focus'), null);
+});
+
+/* ------------------------------------------- page URL key registration -- */
+
+/* The page-level normalizer must keep the sibling live canvas' keys. When it
+ * does not, selecting a node writes `focus` and the next render erases it, so
+ * the inspector closes immediately. */
+function pageAllowList(): string[] {
+  return [...TOPOLOGY_PAGE_URL_KEYS, OPERATIONS_VIEW_PARAM, OPERATIONS_CURSOR_PARAM];
+}
+
+test('the page URL contract preserves every key the live canvas writes', () => {
+  const live = '?view=graph&source=runtime&q=smf&domain=epc&focus=upf&edge=edge-1';
+  const normalized = applyOperationsPatch(live, {}, pageAllowList());
+  const params = new URLSearchParams(normalized.search.slice(1));
+
+  assert.deepEqual(readLiveViewState(params), {
+    search: 'smf',
+    domain: 'epc',
+    focus: 'upf',
+    edge: 'edge-1',
+  });
+  assert.equal(params.get(OPERATIONS_VIEW_PARAM), 'graph');
+  assert.equal(params.get('source'), 'runtime');
+  assert.equal(
+    applyOperationsPatch(normalized.search, {}, pageAllowList()).changed,
+    false,
+    'normalization must converge after one rewrite instead of fighting the live view',
+  );
+});
+
+test('a ledger filter write keeps the live canvas state and still resets the cursor', () => {
+  const result = applyOperationsPatch(
+    '?view=graph&source=runtime&q=smf&domain=epc&focus=upf&edge=edge-1&cursor=page-2',
+    { relationship: 'connects_to' },
+    pageAllowList(),
+  );
+  const params = new URLSearchParams(result.search.slice(1));
+
+  assert.equal(readLiveViewState(params).focus, 'upf');
+  assert.equal(params.get('relationship'), 'connects_to');
+  assert.equal(params.get(OPERATIONS_CURSOR_PARAM), null);
+});
+
+test('the topology page wires its URL state to the shared page key list', () => {
+  const source = readFileSync(new URL('../src/features/topology/TopologyPage.tsx', import.meta.url), 'utf8');
+  assert.ok(
+    source.includes('keys: TOPOLOGY_PAGE_URL_KEYS'),
+    'the page must use the exported key list, not a local copy that can drift',
+  );
+});
+
+test('selection writes once, so closing cannot restore the value it just removed', () => {
+  const live = readFileSync(new URL('../src/features/topology/LiveTopologyView.tsx', import.meta.url), 'utf8');
+  const hook = readFileSync(new URL('../src/features/topology/live-topology-url.ts', import.meta.url), 'utf8');
+
+  assert.match(
+    live,
+    /const closeInspector = useCallback\(\(\) => \{[\s\S]*?setSelection\(undefined, undefined\);[\s\S]*?\}, \[setSelection\]\);/,
+    'the close path must clear focus and edge in one URL write',
+  );
+  assert.match(live, /const setSelection = liveView\.setSelection;/, 'the view must use the atomic selection setter');
+  assert.ok(
+    !live.includes('setSelectedEdgeId'),
+    'focus and edge must never be written by two setters in the same tick',
+  );
+  assert.match(
+    hook,
+    /const setSelection = useCallback\(/,
+    'focus and edge must share one atomic URL update',
+  );
 });
 
 test('the live canvas keeps no local copy of its view state', () => {

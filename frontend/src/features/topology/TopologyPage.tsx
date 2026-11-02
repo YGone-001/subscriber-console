@@ -56,6 +56,7 @@ import { ActualTopologyView } from './ActualTopologyView';
 import { LiveTopologyView } from './LiveTopologyView';
 import {
   TOPOLOGY_GRAPH_SOURCES,
+  TOPOLOGY_PAGE_URL_KEYS,
   TOPOLOGY_PRIMARY_VIEWS,
   TOPOLOGY_RUNTIME_SCOPES,
   useTopologyViewState,
@@ -112,11 +113,12 @@ export function TopologyPage() {
   const source = topology.source;
   const runtimeScope = topology.runtimeScope;
 
-  /* `source` and `scope` are registered here so the ledger filter normalization
-   * never strips the graph's evidence context; `clearKeys` keeps the ledger's
-   * "clear filters" action scoped to its own parameters. */
+  /* The shared key list also covers the live canvas' `q`/`domain`/`focus`/`edge`,
+   * so the page normalizer cannot erase a selection it did not write.
+   * `clearKeys` keeps the ledger's "clear filters" action scoped to its own
+   * parameters. */
   const url = useOperationsUrlState({
-    keys: ['state', 'relationship', 'from', 'to', 'source', 'scope'],
+    keys: TOPOLOGY_PAGE_URL_KEYS,
     clearKeys: ['state', 'relationship', 'from', 'to'],
   });
 

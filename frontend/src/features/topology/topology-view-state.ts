@@ -28,6 +28,12 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { applyOperationsPatch, sanitizeOperationsValue } from '../operations/operations-url-state';
+import {
+  LIVE_VIEW_DOMAIN_PARAM,
+  LIVE_VIEW_EDGE_PARAM,
+  LIVE_VIEW_FOCUS_PARAM,
+  LIVE_VIEW_SEARCH_PARAM,
+} from './live-topology-url';
 
 export const TOPOLOGY_PRIMARY_VIEWS = ['graph', 'ledger', 'architecture'] as const;
 export type TopologyPrimaryView = (typeof TOPOLOGY_PRIMARY_VIEWS)[number];
@@ -48,6 +54,25 @@ export const TOPOLOGY_VIEW_KEYS = [
   TOPOLOGY_SOURCE_PARAM,
   TOPOLOGY_SCOPE_PARAM,
   TOPOLOGY_CURSOR_PARAM,
+] as const;
+
+/*
+ * Every filter key the `/topology` page carries. The live canvas is a sibling
+ * surface on the same route and writes `q`/`domain`/`focus`/`edge`; the page
+ * normalizer must keep them, or the selection it just wrote is erased on the
+ * next render and the inspector closes immediately.
+ */
+export const TOPOLOGY_PAGE_URL_KEYS = [
+  'state',
+  'relationship',
+  'from',
+  'to',
+  TOPOLOGY_SOURCE_PARAM,
+  TOPOLOGY_SCOPE_PARAM,
+  LIVE_VIEW_SEARCH_PARAM,
+  LIVE_VIEW_DOMAIN_PARAM,
+  LIVE_VIEW_FOCUS_PARAM,
+  LIVE_VIEW_EDGE_PARAM,
 ] as const;
 
 export type TopologyViewState = {

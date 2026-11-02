@@ -84,8 +84,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
   const liveView = useLiveTopologyViewState();
   const selectedComponentId = liveView.focus;
   const selectedEdgeId = liveView.edge;
-  const setSelectedComponentId = liveView.setFocus;
-  const setSelectedEdgeId = liveView.setEdge;
+  const setSelection = liveView.setSelection;
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | undefined>();
   const [focusedEdgeId, setFocusedEdgeId] = useState<string | undefined>();
   const [hoveredResourceId, setHoveredResourceId] = useState<string | undefined>();
@@ -178,11 +177,17 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
   }, [live.isLoading, live.error, data, selected, selectedEdge, search, domainMode, t]);
 
   useEffect(() => {
-    if (selectedComponentId && data && !data.nodes.some((node) => node.componentId === selectedComponentId)) {
-      setSelectedComponentId(undefined);
-    }
-    if (selectedEdgeId && data && !data.edges.some((edge) => edge.edgeId === selectedEdgeId)) {
-      setSelectedEdgeId(undefined);
+    const focusStale = Boolean(
+      selectedComponentId && data && !data.nodes.some((node) => node.componentId === selectedComponentId),
+    );
+    const edgeStale = Boolean(
+      selectedEdgeId && data && !data.edges.some((edge) => edge.edgeId === selectedEdgeId),
+    );
+    if (focusStale || edgeStale) {
+      setSelection(
+        focusStale ? undefined : selectedComponentId,
+        edgeStale ? undefined : selectedEdgeId,
+      );
     }
     if (hoveredEdgeId && !layout.links.some((link) => link.edgeId === hoveredEdgeId)) {
       setHoveredEdgeId(undefined);
@@ -196,7 +201,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
     if (focusedResourceId && !layout.nodes.some((node) => node.resourceId === focusedResourceId)) {
       setFocusedResourceId(undefined);
     }
-  }, [data, selectedComponentId, selectedEdgeId, layout.links, layout.nodes, hoveredEdgeId, focusedEdgeId, hoveredResourceId, focusedResourceId]);
+  }, [data, selectedComponentId, selectedEdgeId, setSelection, layout.links, layout.nodes, hoveredEdgeId, focusedEdgeId, hoveredResourceId, focusedResourceId]);
 
   const fitView = useCallback((mode: TopologyFitMode = fitModeRef.current) => {
     const viewport = canvasRef.current;
@@ -251,8 +256,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
     setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
   };
   const resetView = () => {
-    setSelectedComponentId(undefined);
-    setSelectedEdgeId(undefined);
+    setSelection(undefined, undefined);
     triggerRef.current = undefined;
     setHoveredEdgeId(undefined);
     setHoveredResourceId(undefined);
@@ -266,7 +270,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
   const selectNode = (componentId: string) => {
     if (componentId === selectedComponentId) {
       triggerRef.current = undefined;
-      setSelectedComponentId(undefined);
+      setSelection(undefined, undefined);
       return;
     }
     const active = typeof document !== 'undefined' ? document.activeElement : null;
@@ -275,13 +279,12 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
       id: componentId,
       element: active && active !== document.body ? active : null,
     };
-    setSelectedEdgeId(undefined);
-    setSelectedComponentId(componentId);
+    setSelection(componentId, undefined);
   };
   const selectEdge = (edgeId: string) => {
     if (edgeId === selectedEdgeId) {
       triggerRef.current = undefined;
-      setSelectedEdgeId(undefined);
+      setSelection(undefined, undefined);
       return;
     }
     const active = typeof document !== 'undefined' ? document.activeElement : null;
@@ -290,12 +293,10 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
       id: edgeId,
       element: active && active !== document.body ? active : null,
     };
-    setSelectedComponentId(undefined);
-    setSelectedEdgeId(edgeId);
+    setSelection(undefined, edgeId);
   };
   const closeInspector = useCallback(() => {
-    setSelectedComponentId(undefined);
-    setSelectedEdgeId(undefined);
+    setSelection(undefined, undefined);
     const trigger = triggerRef.current;
     triggerRef.current = undefined;
     if (!trigger) return;
@@ -309,7 +310,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
         : `[data-edge-id="${trigger.id}"]`;
       canvasRef.current?.querySelector<SVGElement>(selector)?.focus();
     });
-  }, []);
+  }, [setSelection]);
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
       void document.exitFullscreen?.();
