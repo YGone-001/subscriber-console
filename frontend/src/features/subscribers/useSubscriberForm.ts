@@ -9,9 +9,9 @@ import { sessionQosPreset } from '../../lib/imsQosPresets.js';
 import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
 import { deleteJson, MutationApiError, postJson, putJson } from '../../lib/api/mutation-client';
 import { buildSubscriberCreateRequest } from './mutation-contract';
-import { isRecommendedOnboardingPlan } from './onboarding-template';
 import type { Auth4GData } from '../../types/subscriber';
 import { resolveUsimType } from '../../types/credential';
+import { selectDefaultPlanId } from './plan-selection';
 
 type ApiRecord = Record<string, any>;
 
@@ -26,7 +26,9 @@ type TariffPlanOption = {
   name?: string;
   description?: string;
   status?: string;
+  isDefault?: boolean;
   validity_time?: number;
+  quota_per_grant?: number;
   volume_threshold?: number;
   rules?: any[];
 };
@@ -219,10 +221,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           /* Existing subscribers must not inherit a plan candidate before the
            * detail response proves a contract exists. */
           if (imsi) return current;
-          return plans.find((plan: TariffPlanOption) => isRecommendedOnboardingPlan(plan))?.plan_id
-            || plans.find((plan: TariffPlanOption) => (plan.status || "active") === "active")?.plan_id
-            || plans[0]?.plan_id
-            || current;
+          return selectDefaultPlanId(plans) || current;
         });
       } catch {
     /* Best-effort side effect: a failure here must not block the form. */

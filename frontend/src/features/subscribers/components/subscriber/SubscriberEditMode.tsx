@@ -7,7 +7,7 @@ import { Users, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plu
 import ProfileSliceEditor from '../../../profiles/components/ProfileSliceEditor';
 import RatingRuleLinkPanel from './RatingRuleLinkPanel';
 import { BYTE_INPUT_UNITS, TIME_INPUT_UNITS, formatBytes, composeByteInput, composeSecondsInput, splitByteInput, splitSecondsInput } from '../../../../lib/unitParser';
-import { ONBOARDING_TEMPLATE } from '../../onboarding-template';
+import { planThresholdExceedsQuota } from '../../plan-selection';
 import { AMBR_UNITS } from './utils';
 import type { Ambr, Auth4GData, Rating, Slice } from '../../../../types/subscriber';
 
@@ -19,7 +19,7 @@ interface SubscriberEditModeProps {
     msisdn: string;
     profileList: any[];
     ratingList: Rating[];
-    tariffPlanList: Array<{ plan_id: string; name?: string; status?: string; validity_time?: number; volume_threshold?: number }>;
+    tariffPlanList: Array<{ plan_id: string; name?: string; status?: string; validity_time?: number; quota_per_grant?: number; volume_threshold?: number }>;
     auth4GData: Auth4GData;
     usimType: "opc" | "op";
     ueAmbr: Ambr;
@@ -117,16 +117,10 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
 
   const isNewSubscriber = !imsi;
   const selectedPlan = tariffPlanList.find((plan) => plan.plan_id === ocsPlanId);
-  const selectedPlanValidity = Number(selectedPlan?.validity_time || 0);
   const selectedPlanThreshold = Number(selectedPlan?.volume_threshold ?? ocsVolumeThreshold ?? 0);
-  const planTemplateMismatch = isNewSubscriber && Boolean(selectedPlan)
-    && (selectedPlanValidity !== ONBOARDING_TEMPLATE.recommendedValiditySeconds
-      || selectedPlanThreshold !== ONBOARDING_TEMPLATE.recommendedVolumeThreshold);
+  const planQuotaInconsistent = isNewSubscriber && planThresholdExceedsQuota(selectedPlan);
   const thresholdDisplay = selectedPlanThreshold > 0
     ? formatBytes(selectedPlanThreshold)
-    : t("sub_not_configured");
-  const validityDisplay = selectedPlanValidity > 0
-    ? `${Math.round(selectedPlanValidity / 86400)}d`
     : t("sub_not_configured");
 
   return (
@@ -383,12 +377,12 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               })}
             </p>
           )}
-          {planTemplateMismatch && (
+          {planQuotaInconsistent && (
             <p className="warning-text auth-edit-full" role="note">
-              {t("sub_default_template_plan_mismatch", {
+              {t("sub_plan_threshold_over_quota", {
                 plan: selectedPlan?.name || selectedPlan?.plan_id || ocsPlanId,
-                validity: validityDisplay,
                 threshold: thresholdDisplay,
+                quota: formatBytes(Number(selectedPlan?.quota_per_grant ?? 0)),
               })}
             </p>
           )}

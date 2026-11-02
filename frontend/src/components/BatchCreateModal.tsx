@@ -32,7 +32,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
     () => (plansData?.plans || []).filter((plan: TariffPlan) => (plan.status || "active") === "active"),
     [plansData?.plans]
   );
-  const [batchForm, setBatchForm] = useState({ startImsi: "", count: "10", profileName: "", planId: "plan_default_10gb" });
+  const [batchForm, setBatchForm] = useState({ startImsi: "", count: "10", profileName: "", planId: "default_plan" });
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchResult, setBatchResult] = useState<any>(null);
 
@@ -194,7 +194,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
                 onChange={e => setBatchForm({ ...batchForm, planId: e.target.value })}
               >
                 {planOptions.length === 0 ? (
-                  <option value="plan_default_10gb">plan_default_10gb</option>
+                  <option value="default_plan">default_plan</option>
                 ) : planOptions.map((plan) => (
                   <option key={plan.plan_id} value={plan.plan_id}>
                     {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}

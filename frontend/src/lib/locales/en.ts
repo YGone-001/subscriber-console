@@ -1336,7 +1336,7 @@ export const en: Record<string, string> = {
     sub_ocs_provision_notice: "This subscriber has no OCS contract yet. Saving will provision billing with the selected plan, or the default plan when none is selected; empty quotas use server defaults.",
     sub_ocs_balance_notice: "This subscriber has no balance account. Saving will create one with server-default quotas.",
     sub_default_template_notice: "Initial quota comes from the selected tariff plan: {data} data / {voice} voice / {sms} SMS. A bucket the plan does not model stays unconfigured.",
-    sub_default_template_plan_mismatch: "The selected plan {plan} has validity ({validity}) or low-balance threshold ({threshold}) different from the recommended template (30 days / 1GB); adjust the plan or choose a matching plan.",
+    sub_plan_threshold_over_quota: "The selected plan {plan} has a usage alert threshold ({threshold}) above its quota per grant ({quota}); the low-balance state would be misleading. Fix the plan or choose another one.",
     traffic_success: "Traffic balance adjusted.",
     traffic_amount_invalid: "Enter an adjustment amount greater than 0.",
     traffic_reason_required: "An adjustment reason is required.",
