@@ -38,7 +38,7 @@ func NewRepository(
 	}
 }
 
-const defaultPlanID = "plan_default_10gb"
+const defaultPlanID = "default_plan"
 
 // usageWindowHours is the fixed trailing window for usage trend and top usage.
 const usageWindowHours = 24

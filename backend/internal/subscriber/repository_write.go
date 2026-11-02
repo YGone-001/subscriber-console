@@ -562,7 +562,7 @@ func (r *Repository) getOrCreateDefaultTariffPlan(ctx context.Context) (bson.M, 
 	now := time.Now()
 	defaultDoc := bson.M{
 		"plan_id":          defaultPlanID,
-		"name":             "Default 10GB Data Plan",
+		"name":             "Default 4G/5G Tariff Plan",
 		"description":      "",
 		"status":           "active",
 		"quota_per_grant":  defaultQuotaPerGrant,   // 10MB

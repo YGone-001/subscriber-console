@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultPlanID = "plan_default_10gb"
+	defaultPlanID = "default_plan"
 
 	// Summary fallbacks mirror Node DEFAULT_QUOTA_PER_GRANT,
 	// DEFAULT_VALIDITY_TIME and DEFAULT_VOLUME_THRESHOLD.

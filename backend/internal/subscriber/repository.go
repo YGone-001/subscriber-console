@@ -17,7 +17,7 @@ import (
 const (
 	defaultListLimit = 50
 	maxListLimit     = 200
-	defaultPlanID    = "plan_default_10gb"
+	defaultPlanID    = "default_plan"
 )
 
 // Repository provides subscriber data access.

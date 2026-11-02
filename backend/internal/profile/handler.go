@@ -923,7 +923,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 		"ocsDefaults": bson.M{
-			"planId":         "plan_default_10gb",
+			"planId":         "default_plan",
 			"trafficTotal":   int64(10737418240),
 			"trafficBalance": int64(10737418240),
 			"smsTotal":       int32(100),

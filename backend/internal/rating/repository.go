@@ -9,7 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-const defaultPlanID = "plan_default_10gb"
+const defaultPlanID = "default_plan"
 
 // Repository provides read-only access to rating policies.
 //

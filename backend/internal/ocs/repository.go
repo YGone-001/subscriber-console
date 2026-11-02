@@ -918,10 +918,10 @@ func mapBalance(doc bson.M, subMap map[string]bson.M) BalanceRecord {
 
 	planID := strWithDefault(doc, "plan_id", "")
 	if planID == "" && sub != nil {
-		planID = strWithDefault(sub, "plan_id", "plan_default_10gb")
+		planID = strWithDefault(sub, "plan_id", "default_plan")
 	}
 	if planID == "" {
-		planID = "plan_default_10gb"
+		planID = "default_plan"
 	}
 
 	status := strWithDefault(doc, "status", "")

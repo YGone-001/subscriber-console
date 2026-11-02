@@ -505,8 +505,8 @@ func TestGetOrCreateDefaultTariffPlan_Creates(t *testing.T) {
 	if plan["plan_id"] != defaultPlanID {
 		t.Errorf("plan_id = %v, want %v", plan["plan_id"], defaultPlanID)
 	}
-	if plan["name"] != "Default 10GB Data Plan" {
-		t.Errorf("name = %v, want 'Default 10GB Data Plan'", plan["name"])
+	if plan["name"] != "Default 4G/5G Tariff Plan" {
+		t.Errorf("name = %v, want 'Default 4G/5G Tariff Plan'", plan["name"])
 	}
 	if plan["status"] != "active" {
 		t.Errorf("status = %v, want active", plan["status"])

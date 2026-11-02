@@ -595,7 +595,7 @@ func TestDefaultProfileParity(t *testing.T) {
 			},
 		},
 		"ocsDefaults": bson.M{
-			"planId":         "plan_default_10gb",
+			"planId":         "default_plan",
 			"trafficTotal":   int64(10737418240),
 			"trafficBalance": int64(10737418240),
 			"smsTotal":       int32(100),
@@ -622,7 +622,7 @@ func TestDefaultProfileParity(t *testing.T) {
 	}
 
 	ocsDefaults, _ := profile["ocsDefaults"].(bson.M)
-	if ocsDefaults["planId"] != "plan_default_10gb" {
+	if ocsDefaults["planId"] != "default_plan" {
 		t.Error("ocsDefaults.planId mismatch")
 	}
 	if ocsDefaults["trafficTotal"] != int64(10737418240) {
@@ -2222,7 +2222,7 @@ func TestProfileCreateWithoutContentKeepsTheDefaultDocument(t *testing.T) {
 		t.Errorf("title: got %v", stored["title"])
 	}
 	ocs := storedRecord(stored["ocsDefaults"])
-	if ocs["planId"] != "plan_default_10gb" {
+	if ocs["planId"] != "default_plan" {
 		t.Errorf("a name-only create must keep the historical default: %v", ocs["planId"])
 	}
 }
