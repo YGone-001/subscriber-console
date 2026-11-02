@@ -594,6 +594,7 @@ export function TopologyPage() {
             edges={edges}
             directory={directory}
             caption={t('topology_table_caption')}
+            surface="ledger"
             canConfigure={canConfigure}
             onActivateRow={(edgeId) => {
               const edge = edges.find((item) => item.edgeId === edgeId);

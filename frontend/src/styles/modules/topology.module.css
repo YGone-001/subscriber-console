@@ -288,11 +288,14 @@
   overflow: auto;
   max-height: calc(100vh - 360px);
   min-height: 240px;
+  /* The ledger decides its column set from the width it is actually given,
+   * not from the window, so a wide sidebar or a shared split view is covered. */
+  container-type: inline-size;
 }
 
 .table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 1000px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -336,21 +339,68 @@
 /*
  * Column widths are proportional so the relationship table always fills the
  * content column exactly and never introduces a page-level horizontal
- * scrollbar. Below the small-screen breakpoint the table keeps a 1080px floor
- * and scrolls inside its own container instead.
+ * scrollbar. Widths live on the header cells rather than a <colgroup>: one col
+ * per cell keeps the header, body and actions column aligned.
+ *
+ * The ledger surface collapses progressively inside a narrow panel (below);
+ * the one-hop table keeps every column.
  *
  * The complete endpoint UUID remains reachable through the cell title and the
  * adjacent copy control even where the fixed-width column ellipsizes it.
  */
-.fromCol { width: 17%; }
-.relCol { width: 11%; }
+.fromCol { width: 18%; }
+.relCol { width: 12%; }
 .interfaceCol { width: 10%; }
-.dirCol { width: 7.5%; }
-.toCol { width: 17%; }
+.dirCol { width: 7%; }
+.toCol { width: 18%; }
 .stateCol { width: 7%; }
-.revCol { width: 7%; }
-.updatedCol { width: 11.5%; }
-.actionsCol { width: 13%; }
+.updatedCol { width: 11%; }
+.actionsCol { width: 17%; }
+
+/*
+ * Compact ledger columns.
+ *
+ * The ledger's direction cell is a decorative arrow (there is no root resource
+ * to orient against), so it goes first; the update time goes last, at which
+ * point the lifecycle cell carries it as a title and the row detail still shows
+ * it. Both rules are scoped to `data-surface="ledger"`; the one-hop table keeps
+ * the direction column and its full width.
+ */
+@container (max-width: 1000px) {
+  .table[data-surface='ledger'] {
+    min-width: 0;
+  }
+
+  .table[data-surface='ledger'] .dirCol {
+    display: none;
+  }
+
+  .table[data-surface='ledger'] .fromCol { width: 19%; }
+  .table[data-surface='ledger'] .relCol { width: 13%; }
+  .table[data-surface='ledger'] .interfaceCol { width: 10%; }
+  .table[data-surface='ledger'] .toCol { width: 19%; }
+  .table[data-surface='ledger'] .stateCol { width: 9%; }
+  .table[data-surface='ledger'] .updatedCol { width: 11%; }
+  .table[data-surface='ledger'] .actionsCol { width: 19%; }
+}
+
+@container (max-width: 760px) {
+  .table[data-surface='ledger'] .updatedCol {
+    display: none;
+  }
+
+  .table[data-surface='ledger'] .fromCol { width: 21%; }
+  .table[data-surface='ledger'] .relCol { width: 13%; }
+  .table[data-surface='ledger'] .interfaceCol { width: 10%; }
+  .table[data-surface='ledger'] .toCol { width: 21%; }
+  .table[data-surface='ledger'] .stateCol { width: 11%; }
+  .table[data-surface='ledger'] .actionsCol { width: 24%; }
+
+  .table[data-surface='ledger'] th,
+  .table[data-surface='ledger'] td {
+    padding: 0.5rem 0.6rem;
+  }
+}
 
 .endpoint {
   display: grid;
@@ -481,6 +531,7 @@
 .rowActions {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.35rem;
   justify-content: flex-end;
 }

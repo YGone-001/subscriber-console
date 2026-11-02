@@ -1401,6 +1401,20 @@ test('the relationship table exposes mutation controls only to authorised roles'
   assert.ok(markup.includes('Retire'), 'an authorised role must see retire');
 });
 
+test('the relationship table keeps one cell per declared column and marks the ledger surface', () => {
+  const markup = render(createElement(TopologyEdgeTable, {
+    edges: [edge()],
+    directory,
+    caption: 'Topology relationships',
+    canConfigure: false,
+    surface: 'ledger',
+  }));
+  assert.ok(!markup.includes('<colgroup'), 'column widths live on the header cells');
+  assert.equal((markup.match(/<th /g) ?? []).length, 8, 'the header declares exactly eight columns');
+  assert.equal((markup.match(/<td/g) ?? []).length, 8, 'each row has one cell per column');
+  assert.match(markup, /data-surface="ledger"/, 'the ledger opts into the compact column set');
+});
+
 test('retired relationships render without mutation controls and with a terminal label', () => {
   const markup = render(createElement(TopologyEdgeTable, {
     edges: [edge({ lifecycleState: 'retired', revision: 4 })],

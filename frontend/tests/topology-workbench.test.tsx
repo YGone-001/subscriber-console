@@ -357,6 +357,27 @@ test('the runtime canvas provides an equivalent node and relationship list', () 
   );
 });
 
+test('the ledger table collapses inside its own width instead of scrolling sideways', () => {
+  const css = read('../src/styles/modules/topology.module.css');
+  assert.ok(css.includes('container-type: inline-size'), 'the table scroll owns the width query');
+  assert.ok(
+    css.includes('@container (max-width: 1000px)'),
+    'the first collapse drops the decorative direction column',
+  );
+  assert.ok(
+    css.includes('@container (max-width: 760px)'),
+    'the second collapse drops the update-time column',
+  );
+  assert.ok(css.includes("data-surface='ledger'"), 'compact columns are scoped to the ledger');
+  assert.ok(css.includes('min-width: 1000px'), 'the wide table keeps a readable floor');
+  assert.match(css, /\.rowActions \{[\s\S]*?flex-wrap: wrap;/, 'row actions wrap instead of overflowing');
+
+  const table = read('../src/features/topology/components/TopologyEdgeTable.tsx');
+  assert.ok(table.includes('data-surface={surface}'), 'the table must expose the surface switch');
+  const page = read('../src/features/topology/TopologyPage.tsx');
+  assert.ok(page.includes('surface="ledger"'), 'the ledger opts into the compact column set');
+});
+
 test('the canvas page header keeps the title horizontal and lets the actions wrap', () => {
   const markup = render(createElement(PageHeader, {
     title: 'Topology relationships',

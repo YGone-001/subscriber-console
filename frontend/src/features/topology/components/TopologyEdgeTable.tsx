@@ -31,6 +31,9 @@ export interface TopologyEdgeTableProps {
   onEdit?: (edge: TopologyEdge) => void;
   onRetire?: (edge: TopologyEdge) => void;
   onViewResource?: (resourceId: string) => void;
+  /* The ledger collapses its secondary columns inside a narrow panel; the
+   * one-hop table keeps every column, so the compact rules never apply there. */
+  surface?: 'ledger';
 }
 
 function CopyIdButton({ value }: { value: string }) {
@@ -121,6 +124,7 @@ export function TopologyEdgeTable({
   onEdit,
   onRetire,
   onViewResource,
+  surface,
 }: TopologyEdgeTableProps) {
   const { t } = useI18n();
 
@@ -138,29 +142,18 @@ export function TopologyEdgeTable({
 
   return (
     <div className={styles.tableScroll}>
-      <table className={styles.table}>
+      <table className={styles.table} data-surface={surface}>
         <caption className="sr-only">{caption}</caption>
-        <colgroup>
-          <col className={styles.fromCol} />
-          <col className={styles.relCol} />
-          <col className={styles.interfaceCol} />
-          <col className={styles.dirCol} />
-          <col className={styles.toCol} />
-          <col className={styles.stateCol} />
-          <col className={styles.revCol} />
-          <col className={styles.updatedCol} />
-          <col className={styles.actionsCol} />
-        </colgroup>
         <thead>
           <tr>
-            <th scope="col">{t('topology_from_resource')}</th>
-            <th scope="col">{t('topology_relationship')}</th>
-            <th scope="col">{t('topology_interfaces')}</th>
-            <th scope="col">{t('topology_direction')}</th>
-            <th scope="col">{t('topology_to_resource')}</th>
-            <th scope="col">{t('topology_lifecycle')}</th>
-            <th scope="col">{t('topology_updated_at')}</th>
-            <th scope="col" className={styles.actionsCell}>
+            <th scope="col" className={styles.fromCol}>{t('topology_from_resource')}</th>
+            <th scope="col" className={styles.relCol}>{t('topology_relationship')}</th>
+            <th scope="col" className={styles.interfaceCol}>{t('topology_interfaces')}</th>
+            <th scope="col" className={styles.dirCol}>{t('topology_direction')}</th>
+            <th scope="col" className={styles.toCol}>{t('topology_to_resource')}</th>
+            <th scope="col" className={styles.stateCol}>{t('topology_lifecycle')}</th>
+            <th scope="col" className={styles.updatedCol}>{t('topology_updated_at')}</th>
+            <th scope="col" className={`${styles.actionsCol} ${styles.actionsCell}`}>
               {t('actions')}
             </th>
           </tr>
@@ -177,46 +170,49 @@ export function TopologyEdgeTable({
                 onClick={onActivateRow ? () => onActivateRow(edge.edgeId) : undefined}
                 data-edge-id={edge.edgeId}
               >
-                <td>
+                <td className={styles.fromCol}>
                   <EndpointCell
                     resourceId={edge.fromResourceId}
                     projection={directory[edge.fromResourceId]}
                     onView={onViewResource}
                   />
                 </td>
-                <td>
+                <td className={styles.relCol}>
                   <span className={styles.relBadge} data-relationship={edge.relationshipType}>
                     {relationshipLabel(edge.relationshipType)}
                   </span>
                 </td>
-                <td>
+                <td className={styles.interfaceCol}>
                   <InterfaceCell edge={edge} />
                 </td>
-                <td>
+                <td className={styles.dirCol}>
                   {direction ? (
                     <span className={styles.directionBadge}>{direction}</span>
                   ) : (
                     <ArrowRight size={14} className={styles.directionArrow} aria-hidden="true" />
                   )}
                 </td>
-                <td>
+                <td className={styles.toCol}>
                   <EndpointCell
                     resourceId={edge.toResourceId}
                     projection={directory[edge.toResourceId]}
                     onView={onViewResource}
                   />
                 </td>
-                <td>
+                <td
+                  className={styles.stateCol}
+                  title={`${t('topology_updated_at')}: ${formatTimestamp(edge.updatedAt)}`}
+                >
                   <span className={`badge ${retired ? 'badge-danger' : 'badge-success'}`}>
                     {retired ? t('topology_state_retired') : t('topology_state_active')}
                   </span>
                   <span className={styles.declaredNote}>{t('topology_declared_note')}</span>
                 </td>
 
-                <td>
+                <td className={styles.updatedCol}>
                   <span className={styles.dateCell}>{formatTimestamp(edge.updatedAt)}</span>
                 </td>
-                <td className={styles.actionsCell}>
+                <td className={`${styles.actionsCol} ${styles.actionsCell}`}>
                   <div className={styles.rowActions}>
                     {onSelectEdge ? (
                       <button
