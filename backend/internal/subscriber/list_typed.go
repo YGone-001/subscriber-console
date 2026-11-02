@@ -163,9 +163,10 @@ func (r *Repository) fetchSubscriberListOcs(ctx context.Context, imsis []string)
 
 	planIDs := make(map[string]struct{})
 	for index := range contractDocs {
-		planIDs[listContractPlanID(&contractDocs[index])] = struct{}{}
+		if planID := listContractPlanID(&contractDocs[index]); planID != "" {
+			planIDs[planID] = struct{}{}
+		}
 	}
-	planIDs[defaultPlanID] = struct{}{}
 	ids := make([]string, 0, len(planIDs))
 	for planID := range planIDs {
 		ids = append(ids, planID)
@@ -190,17 +191,16 @@ func (r *Repository) fetchSubscriberListOcs(ctx context.Context, imsis []string)
 	return result, nil
 }
 
-// listContractPlanID resolves the plan a contract references. A contract
-// without a stored plan id is read through the default plan, matching the
-// projection used before the list was typed.
+// listContractPlanID reports the plan a contract references, or "" when it
+// references none. A contract-less subscriber has no plan evidence, and an empty
+// plan_id is not a licence to project the default plan: a fabricated plan name
+// and status would claim an assignment the record never had.
 func listContractPlanID(contract *listContractDoc) string {
 	if contract == nil {
-		return defaultPlanID
+		return ""
 	}
-	if planID, ok := contract.PlanID.(string); ok && planID != "" {
-		return planID
-	}
-	return defaultPlanID
+	planID, _ := contract.PlanID.(string)
+	return planID
 }
 
 // toSubscriberRow converts one subscriber and its OCS records into a row. It is

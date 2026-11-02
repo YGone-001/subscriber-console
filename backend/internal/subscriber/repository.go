@@ -538,11 +538,15 @@ func (r *Repository) ListSubscriberRowsFiltered(ctx context.Context, page, limit
 	for index := range docs {
 		imsi := imsis[index]
 		contract := ocs.contracts[imsi]
+		var plan *listPlanDoc
+		if planID := listContractPlanID(contract); planID != "" {
+			plan = ocs.plans[planID]
+		}
 		rows[index] = toSubscriberRow(
 			docs[index],
 			contract,
 			ocs.balances[imsi],
-			ocs.plans[listContractPlanID(contract)],
+			plan,
 		)
 	}
 
