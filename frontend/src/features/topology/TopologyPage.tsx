@@ -385,24 +385,18 @@ export function TopologyPage() {
       )}
       onRefresh={primary === 'ledger' ? () => loadEdges(url.cursor) : undefined}
       actions={
-        primary === 'ledger' ? (
-          <>
-            {/* The ledger is read on demand; state when it was last read. */}
-            <TopologyFreshnessChip mode="read" sourceTime={ledgerReadAt || undefined} />
-            {canConfigure ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  setFormError(null);
-                  setCreateOpen(true);
-                }}
-              >
-                <Plus size={16} />
-                {t('topology_create_relationship')}
-              </button>
-            ) : null}
-          </>
+        primary === 'ledger' && canConfigure ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setFormError(null);
+              setCreateOpen(true);
+            }}
+          >
+            <Plus size={16} />
+            {t('topology_create_relationship')}
+          </button>
         ) : undefined
       }
     >
@@ -523,6 +517,9 @@ export function TopologyPage() {
               {t('topology_clear_filters')}
             </button>
           </div>
+          {/* The ledger is read on demand; state when it was last read. This is
+              ledger status, not a page action, so it stays out of the header. */}
+          <TopologyFreshnessChip mode="read" sourceTime={ledgerReadAt || undefined} />
         </div>
 
         {/* Source and target pickers are the heaviest controls on this page, so they

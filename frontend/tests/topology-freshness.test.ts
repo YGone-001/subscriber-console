@@ -91,6 +91,15 @@ test('every topology surface states the time it is showing', () => {
   const ledger = read('../src/features/topology/TopologyPage.tsx');
   assert.ok(ledger.includes('mode="read"'), 'the ledger reads on demand, so it states a read time');
   assert.ok(ledger.includes('setLedgerReadAt('), 'the ledger must record when the read succeeded');
+  assert.equal(
+    (ledger.match(/<TopologyFreshnessChip mode="read"/g) ?? []).length,
+    1,
+    'the ledger states its read time exactly once',
+  );
+  assert.ok(
+    ledger.indexOf('<TopologyFreshnessChip mode="read"') > ledger.indexOf('<div className={styles.toolbar}>'),
+    'the read time is ledger status and belongs to the ledger toolbar, not the page header actions',
+  );
 
   const architecture = read('../src/features/topology/ArchitectureView.tsx');
   assert.ok(architecture.includes('mode="read"'), 'the reference projection states a read time');
