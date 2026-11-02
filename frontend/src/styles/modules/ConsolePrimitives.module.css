@@ -47,6 +47,21 @@
   bottom: 0.85rem;
 }
 
+/*
+ * Canvas workspaces carry their navigation and actions in the header itself.
+ * The copy column keeps at least the title's natural width and the action
+ * cluster wraps inside the remaining space, so a wide toolbar can never
+ * collapse the title into a vertical strip. The <=900px stacking rule below
+ * still takes over on narrow viewports.
+ */
+.pageHeaderCanvas {
+  grid-template-columns: minmax(min-content, 1fr) auto;
+}
+
+.pageHeaderCanvas .title {
+  white-space: nowrap;
+}
+
 .pageHeaderCopy {
   min-width: 0;
 }

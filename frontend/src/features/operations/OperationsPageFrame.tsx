@@ -73,6 +73,7 @@ export function OperationsPageFrame({
       >
         <PageHeader
           compact
+          variant={canvas ? 'canvas' : 'default'}
           icon={icon}
           title={title}
           description={description}

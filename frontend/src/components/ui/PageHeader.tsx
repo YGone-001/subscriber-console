@@ -24,6 +24,10 @@ export type ConsolePageHeaderProps = {
   status?: ReactNode;
   tone?: PageHeaderTone;
   compact?: boolean;
+  /* `canvas` keeps the title at its natural width and lets the action cluster
+   * wrap inside the remaining space; the default layout keeps the historical
+   * single-row header. */
+  variant?: 'default' | 'canvas';
   className?: string;
 };
 
@@ -36,9 +40,15 @@ export default function ConsolePageHeader({
   status,
   tone = 'default',
   compact = false,
+  variant = 'default',
   className,
 }: ConsolePageHeaderProps) {
-  const classes = [styles.pageHeader, compact ? styles.pageHeaderCompact : '', className || '']
+  const classes = [
+    styles.pageHeader,
+    compact ? styles.pageHeaderCompact : '',
+    variant === 'canvas' ? styles.pageHeaderCanvas : '',
+    className || '',
+  ]
     .filter(Boolean)
     .join(' ');
 
@@ -73,6 +83,7 @@ export type PageHeaderProps = {
   status?: ReactNode;
   tone?: PageHeaderTone;
   compact?: boolean;
+  variant?: 'default' | 'canvas';
   className?: string;
 };
 

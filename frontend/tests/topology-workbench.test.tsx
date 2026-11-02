@@ -12,6 +12,7 @@ import test from 'node:test';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../src/providers/I18nProvider';
+import PageHeader from '../src/components/ui/PageHeader';
 import { TopologyGraphShell } from '../src/features/topology/components/TopologyGraphShell';
 import { TopologyGraphToolbar } from '../src/features/topology/components/TopologyGraphToolbar';
 import { TopologyInspector } from '../src/features/topology/components/TopologyInspector';
@@ -353,5 +354,34 @@ test('the runtime canvas provides an equivalent node and relationship list', () 
   assert.ok(
     live.includes('aria-label={`${sourceLabel} → ${targetLabel}`}'),
     'a relationship row action needs an explicit name',
+  );
+});
+
+test('the canvas page header keeps the title horizontal and lets the actions wrap', () => {
+  const markup = render(createElement(PageHeader, {
+    title: 'Topology relationships',
+    description: 'One workspace',
+    compact: true,
+    variant: 'canvas',
+    icon: createElement('span', null, 'icon'),
+    actions: createElement('button', { type: 'button' }, 'Refresh'),
+  }));
+  assert.match(markup, /pageHeaderCanvas/, 'the canvas header must opt into the protected title column');
+
+  const css = read('../src/styles/modules/ConsolePrimitives.module.css');
+  assert.ok(
+    css.includes('grid-template-columns: minmax(min-content, 1fr) auto'),
+    'the canvas copy column must keep its title min-content width',
+  );
+  assert.match(
+    css,
+    /\.pageHeaderCanvas \.title \{[\s\S]*?white-space: nowrap;/,
+    'the canvas title must never wrap into a vertical strip',
+  );
+
+  const frame = read('../src/features/operations/OperationsPageFrame.tsx');
+  assert.ok(
+    frame.includes("variant={canvas ? 'canvas' : 'default'}"),
+    'the canvas workspace mode must select the hardened header layout',
   );
 });
