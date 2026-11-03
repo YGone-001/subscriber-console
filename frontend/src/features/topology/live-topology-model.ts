@@ -105,6 +105,9 @@ export type ReconciliationRow = {
   interfaces: ReconciliationInterface[];
   claims: number;
   retired: boolean;
+  /* Present when the ledger row is backed by a persisted declared edge, so the
+   * diff can open the relationship itself instead of only its endpoint. */
+  edgeId?: string;
 };
 
 export type ReconciliationGroups = {
@@ -138,6 +141,7 @@ function reconciliationRow(
     })),
     claims: (item.declaredClaims ?? []).length,
     retired: Boolean(item.retired),
+    ...(item.edgeId ? { edgeId: item.edgeId } : {}),
   };
 }
 

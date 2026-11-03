@@ -31,6 +31,11 @@ export type EdgeLabelPlacement = {
   width: number;
   height: number;
   t: number;
+  /* Placement quality. A label that still overlaps a node card may be dropped
+   * by the caller when it is not on the focused path; the inspector keeps the
+   * full text either way. */
+  nodeOverlaps: number;
+  labelOverlaps: number;
 };
 
 export const EDGE_LABEL_HEIGHT = 18;
@@ -119,14 +124,49 @@ function boundaryPoint(
   return { x: centerX + deltaX * ratio, y: centerY + deltaY * ratio };
 }
 
+/* Two nodes belong to the same lane when both their band kind and their domain
+ * band match. Lanes are laid out as separate rectangles, so a relationship that
+ * crosses lanes must leave its lane before travelling sideways. */
+function laneKey(node: ActualTopologyNode): string {
+  return `${node.band}:${node.domainBand}`;
+}
+
 export function edgeGeometry(link: ActualTopologyLink): EdgeGeometry {
   const sourceCenterX = link.fromNode.x + ACTUAL_NODE_WIDTH / 2;
   const sourceCenterY = link.fromNode.y + ACTUAL_NODE_HEIGHT / 2;
   const targetCenterX = link.toNode.x + ACTUAL_NODE_WIDTH / 2;
   const targetCenterY = link.toNode.y + ACTUAL_NODE_HEIGHT / 2;
+  const offset = parallelOffset(link);
+  const crossesLanes = laneKey(link.fromNode) !== laneKey(link.toNode);
+  const stackedLanes = Math.abs(targetCenterY - sourceCenterY) > ACTUAL_NODE_HEIGHT * 0.75;
+
+  /* Cross-lane routing leaves through the side of the card that faces the other
+   * lane and runs through the corridor between the two rows, so an inter-domain
+   * relationship does not cut across the cards of the bands in between. */
+  if (crossesLanes && stackedLanes) {
+    const downward = targetCenterY > sourceCenterY;
+    const start = {
+      x: sourceCenterX,
+      y: downward ? link.fromNode.y + ACTUAL_NODE_HEIGHT : link.fromNode.y,
+    };
+    const end = {
+      x: targetCenterX,
+      y: downward ? link.toNode.y : link.toNode.y + ACTUAL_NODE_HEIGHT,
+    };
+    const corridorY = (start.y + end.y) / 2;
+    const control1 = { x: start.x + offset, y: corridorY };
+    const control2 = { x: end.x + offset, y: corridorY };
+    return {
+      path: `M ${start.x} ${start.y} C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${end.x} ${end.y}`,
+      start,
+      control1,
+      control2,
+      end,
+    };
+  }
+
   const start = boundaryPoint(link.fromNode, targetCenterX, targetCenterY);
   const end = boundaryPoint(link.toNode, sourceCenterX, sourceCenterY);
-  const offset = parallelOffset(link);
 
   if (Math.abs(targetCenterX - sourceCenterX) < 1) {
     const side = offset === 0 ? 1 : Math.sign(offset);
@@ -230,9 +270,15 @@ export function placeEdgeLabels(
   nodes: ActualTopologyNode[],
   canvasWidth: number,
   canvasHeight: number,
+  /* Lower rank wins the earliest placement choice. The canvas ranks the
+   * selected, focused and hovered path first, so a crowded graph keeps the
+   * labels the operator is actually reading. Omitted, every label is equal. */
+  rank?: (link: ActualTopologyLink) => number,
 ): EdgeLabelPlacement[] {
+  const rankOf = (link: ActualTopologyLink) => (rank ? rank(link) : 0);
   const ordered = [...links].sort(
-    (left, right) => left.fromResourceId.localeCompare(right.fromResourceId)
+    (left, right) => rankOf(left) - rankOf(right)
+      || left.fromResourceId.localeCompare(right.fromResourceId)
       || left.toResourceId.localeCompare(right.toResourceId)
       || left.edgeId.localeCompare(right.edgeId),
   );
@@ -253,7 +299,15 @@ export function placeEdgeLabels(
     const height = EDGE_LABEL_HEIGHT;
     const geometry = edgeGeometry(link);
     const base = bases.get(link.edgeId) ?? 0.5;
-    let best: { t: number; x: number; y: number; rect: Rect; score: number } | undefined;
+    let best: {
+      t: number;
+      x: number;
+      y: number;
+      rect: Rect;
+      score: number;
+      nodeOverlaps: number;
+      labelOverlaps: number;
+    } | undefined;
 
     for (let attempt = 0; attempt < LABEL_ATTEMPTS; attempt += 1) {
       const t = candidateT(base, attempt);
@@ -269,7 +323,9 @@ export function placeEdgeLabels(
         + nodeOverlaps * NODE_OVERLAP_PENALTY
         + labelOverlaps * LABEL_OVERLAP_PENALTY
         + Math.abs(t - base) * T_DRIFT_PENALTY;
-      if (!best || score < best.score) best = { t, x: point.x, y: point.y, rect, score };
+      if (!best || score < best.score) {
+        best = { t, x: point.x, y: point.y, rect, score, nodeOverlaps, labelOverlaps };
+      }
       if (score === 0) break;
     }
 
@@ -282,6 +338,8 @@ export function placeEdgeLabels(
       width,
       height,
       t: best.t,
+      nodeOverlaps: best.nodeOverlaps,
+      labelOverlaps: best.labelOverlaps,
     });
     placedRects.push(best.rect);
   }

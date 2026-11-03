@@ -52,6 +52,8 @@ import {
   ACTUAL_BAND_ROW_MAX_WIDTH,
   ACTUAL_DOMAIN_MODE_OPTIONS,
   ACTUAL_GROUP_WIDTH,
+  ACTUAL_NODE_HEIGHT,
+  ACTUAL_NODE_WIDTH,
   buildActualTopology,
   groupForResource,
   nodeMatches,
@@ -315,7 +317,15 @@ test('actual topology groups resources by role in a deterministic left-to-right 
   assert.equal(byName.get('nrf-01')?.group, 'discovery');
   assert.equal(byName.get('upf-01')?.group, 'user');
   assert.ok((byName.get('amf-01')?.x ?? 0) < (byName.get('smf-01')?.x ?? 0), 'access precedes session');
-  assert.ok((byName.get('nrf-01')?.x ?? 0) < (byName.get('upf-01')?.x ?? 0), 'discovery precedes user plane');
+  /* A 5GC lane reads access -> session -> user plane -> data/policy ->
+   * discovery, so the discovery/proxy column sits to the right of the user
+   * plane instead of interrupting the control-plane run. */
+  assert.ok((byName.get('upf-01')?.x ?? 0) < (byName.get('nrf-01')?.x ?? 0), 'user plane precedes discovery and proxy');
+  const laneColumns = layout.bands.find((band) => band.domain === '5gc')?.columns ?? [];
+  assert.deepEqual(laneColumns.map((column) => column.group), ['access', 'session', 'user', 'discovery']);
+  assert.deepEqual(laneColumns.map((column) => column.plane), ['control', 'control', 'user', 'control']);
+  assert.equal(laneColumns.find((column) => column.group === 'user')?.planeStart, true, 'the user-plane block opens with a divider');
+  assert.equal(laneColumns.find((column) => column.group === 'discovery')?.planeStart, true, 'returning to control opens a divider');
   assert.equal(groupForResource(roleProjection('eeeeeeee-5555-4555-8555-555555555555', 'custom-01', 'custom')), 'other');
 });
 
@@ -382,6 +392,154 @@ test('focused labels stay attached to their own edge curves and never stack', ()
 
   const reversed = placeEdgeLabels([...layout.links].reverse(), labels, layout.nodes, layout.width, layout.height);
   assert.deepEqual(reversed, placements, 'edge ordering must not move a label');
+});
+
+test('a relationship crossing stacked lanes is routed through the corridor between rows', () => {
+  /* Six columns per lane push the second lane onto its own row, which is the
+   * case an inter-domain relationship actually has to travel through. */
+  const fiveGc = [
+    domainProjection('d1000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc'),
+    domainProjection('d1000002-1111-4111-8111-000000000002', 'smf-01', 'smf', '5gc'),
+    domainProjection('d1000003-1111-4111-8111-000000000003', 'upf-01', 'upf', '5gc'),
+    domainProjection('d1000004-1111-4111-8111-000000000004', 'udm-01', 'udm', '5gc'),
+    domainProjection('d1000005-1111-4111-8111-000000000005', 'pcf-01', 'pcf', '5gc'),
+    domainProjection('d1000006-1111-4111-8111-000000000006', 'nrf-01', 'nrf', '5gc'),
+  ];
+  const epc = [
+    domainProjection('d2000001-1111-4111-8111-000000000001', 'mme-01', 'mme', 'epc'),
+    domainProjection('d2000002-1111-4111-8111-000000000002', 'sgwc-01', 'sgwc', 'epc'),
+    domainProjection('d2000003-1111-4111-8111-000000000003', 'sgwu-01', 'sgwu', 'epc'),
+    domainProjection('d2000004-1111-4111-8111-000000000004', 'hss-01', 'hss', 'epc'),
+    domainProjection('d2000005-1111-4111-8111-000000000005', 'pcrf-01', 'pcrf', 'epc'),
+    domainProjection('d2000006-1111-4111-8111-000000000006', 'dra-01', 'dra', 'epc'),
+  ];
+  const lanes = [...fiveGc, ...epc];
+  const laneDirectory = Object.fromEntries(lanes.map((item) => [item.resourceId, item]));
+  const laneEdges = [
+    edge({ edgeId: '5gc-1', fromResourceId: fiveGc[0].resourceId, toResourceId: fiveGc[1].resourceId }),
+    edge({ edgeId: '5gc-2', fromResourceId: fiveGc[1].resourceId, toResourceId: fiveGc[2].resourceId }),
+    edge({ edgeId: '5gc-3', fromResourceId: fiveGc[1].resourceId, toResourceId: fiveGc[3].resourceId }),
+    edge({ edgeId: '5gc-4', fromResourceId: fiveGc[1].resourceId, toResourceId: fiveGc[4].resourceId }),
+    edge({ edgeId: '5gc-5', fromResourceId: fiveGc[1].resourceId, toResourceId: fiveGc[5].resourceId }),
+    edge({ edgeId: 'epc-1', fromResourceId: epc[0].resourceId, toResourceId: epc[1].resourceId }),
+    edge({ edgeId: 'epc-2', fromResourceId: epc[1].resourceId, toResourceId: epc[2].resourceId }),
+    edge({ edgeId: 'epc-3', fromResourceId: epc[1].resourceId, toResourceId: epc[3].resourceId }),
+    edge({ edgeId: 'epc-4', fromResourceId: epc[1].resourceId, toResourceId: epc[4].resourceId }),
+    edge({ edgeId: 'epc-5', fromResourceId: epc[1].resourceId, toResourceId: epc[5].resourceId }),
+    edge({ edgeId: 'inter-domain', fromResourceId: fiveGc[0].resourceId, toResourceId: epc[0].resourceId }),
+  ];
+  const layout = buildActualTopology(laneEdges, laneDirectory);
+  const link = layout.links.find((candidate) => candidate.edgeId === 'inter-domain');
+  assert.ok(link, 'the inter-domain relationship must render');
+  const geometry = edgeGeometry(link);
+  assert.equal(
+    geometry.start.x,
+    link.fromNode.x + ACTUAL_NODE_WIDTH / 2,
+    'the path must leave the card side facing the other lane',
+  );
+  assert.equal(geometry.end.x, link.toNode.x + ACTUAL_NODE_WIDTH / 2);
+  assert.equal(geometry.control1.x, geometry.start.x, 'the corridor keeps a vertical tangent');
+  assert.ok(
+    geometry.control1.y > Math.min(geometry.start.y, geometry.end.y)
+      && geometry.control1.y < Math.max(geometry.start.y, geometry.end.y),
+    'the corridor runs between the rows instead of across the cards',
+  );
+  assert.equal(
+    geometry.start.y,
+    link.fromNode.y + ACTUAL_NODE_HEIGHT,
+    'a downward corridor leaves from the bottom edge of the source card',
+  );
+
+  /* Measured on the curve itself: the routed path never enters a card that is
+   * not one of its endpoints. */
+  const endpoints = new Set([link.fromResourceId, link.toResourceId]);
+  for (let step = 1; step < 20; step += 1) {
+    const point = pointOnGeometry(geometry, step / 20);
+    for (const node of layout.nodes) {
+      if (endpoints.has(node.resourceId)) continue;
+      const inside = point.x > node.x && point.x < node.x + ACTUAL_NODE_WIDTH
+        && point.y > node.y && point.y < node.y + ACTUAL_NODE_HEIGHT;
+      assert.ok(!inside, `the routed path must not cut through ${node.name}`);
+    }
+  }
+});
+
+test('the canvas accounts for every relationship label, including suppressed ones', () => {
+  const layout = buildActualTopology([
+    edge(),
+    edge({ edgeId: 'label-accounting', fromResourceId: AMF, toResourceId: PCF }),
+  ], directory);
+  const markup = render(createElement(ActualTopologyCanvas, {
+    layout,
+    search: '',
+    selectedResourceId: SMF,
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  const visible = Number(/data-visible-label-count="(\d+)"/.exec(markup)?.[1]);
+  const hidden = Number(/data-hidden-label-count="(\d+)"/.exec(markup)?.[1]);
+  assert.equal(visible + hidden, layout.links.length, 'no label may disappear from the accounting');
+  assert.ok(visible >= 1, 'the focused path keeps at least one label');
+});
+
+test('runtime and monitoring evidence never merge into one status indicator', () => {
+  const runtimeNode: ResourceProjection = {
+    resourceId: 'amf',
+    kind: 'network_function',
+    name: 'AMF',
+    displayName: 'AMF',
+    domain: '5gc',
+    role: 'amf',
+    lifecycleState: 'unknown',
+    runtimeStatus: 'stopped',
+  };
+  const layout = buildActualTopology([], { amf: runtimeNode }, {
+    domainMode: 'all',
+    resources: [runtimeNode],
+  });
+  const markup = render(createElement(ActualTopologyCanvas, {
+    layout,
+    search: '',
+    health: new Map([['amf', {
+      state: 'degraded' as const,
+      targetId: 'target-amf',
+      overallState: 'degraded',
+      freshness: 'fresh',
+      statusComplete: true,
+    }]]),
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  assert.ok(markup.includes('data-runtime-status="stopped"'), 'runtime evidence stays explicit');
+  assert.ok(markup.includes('data-health-state="degraded"'), 'monitoring evidence stays explicit');
+  assert.ok(markup.includes('actualRuntimeDot'), 'the runtime marker is drawn');
+  assert.ok(markup.includes('actualHealthDot'), 'the monitoring marker is drawn separately');
+  assert.ok(markup.includes('data-attention="true"'), 'a stopped runtime is flagged as needing attention');
+  assert.match(markup, /Runtime: stopped/, 'runtime is stated in text, not only colour');
+  assert.match(markup, /Monitoring: Degraded/, 'monitoring is stated in text, not only colour');
+});
+
+test('a long name truncates visually while the accessible name stays complete', () => {
+  const longName = 'amf-mobility-management-cluster-primary-01';
+  const node: ResourceProjection = {
+    resourceId: 'amf-long',
+    kind: 'network_function',
+    name: longName,
+    displayName: longName,
+    domain: '5gc',
+    role: 'amf',
+    lifecycleState: 'active',
+  };
+  const layout = buildActualTopology([], { 'amf-long': node }, { domainMode: 'all', resources: [node] });
+  const markup = render(createElement(ActualTopologyCanvas, {
+    layout,
+    search: '',
+    onSelectResource: () => {},
+    onHoverEdge: () => {},
+  }));
+  assert.ok(markup.includes('data-name-truncated="true"'), 'the card marks a truncated name');
+  assert.ok(markup.includes(`<title>AMF: ${longName}</title>`), 'the title keeps the complete name');
+  assert.ok(markup.includes(`AMF: ${longName}, 5GC`), 'the accessible name keeps the complete name');
 });
 
 test('monitoring overlay separates confirmed absence from unresolved association', () => {

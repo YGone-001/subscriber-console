@@ -9,6 +9,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   GitBranch,
   Layers,
   RefreshCw,
@@ -20,7 +23,17 @@ import { Link } from 'react-router-dom';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useBoundedEdges } from '../operations/use-bounded-edges';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
-import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology, nodeMatches, type ActualTopologyLink, type ActualTopologyNode } from './actual-topology-model';
+import { useLiveTopologyViewState } from './live-topology-url';
+import {
+  ACTUAL_DOMAIN_MODE_OPTIONS,
+  ACTUAL_NODE_HEIGHT,
+  ACTUAL_NODE_WIDTH,
+  buildActualTopology,
+  nodeMatches,
+  type ActualTopologyLayout,
+  type ActualTopologyLink,
+  type ActualTopologyNode,
+} from './actual-topology-model';
 import { nfRoleLabel, type TopologyDomainMode } from './nf-classification';
 import {
   edgeInterfaceNames,
@@ -68,16 +81,26 @@ function healthSwatchClass(state: NodeHealthState): string {
 export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => void } = {}) {
   const { t } = useI18n();
   const { edges, coverage, coverageReason, loading, refresh } = useBoundedEdges();
-  const [selectedResourceId, setSelectedResourceId] = useState<string | undefined>();
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
+  /* Search, domain and selection follow the same URL contract as the runtime
+   * canvas (`q`, `domain`, `focus`, `edge`), so a shared link or a source switch
+   * restores the same objects instead of dropping the operator's context. */
+  const topologyUrl = useLiveTopologyViewState();
+  const selectedResourceId = topologyUrl.focus;
+  const selectedEdgeId = topologyUrl.edge;
+  const search = topologyUrl.search;
+  const setSearch = topologyUrl.setSearch;
+  const domainMode = topologyUrl.domain;
+  const setDomainMode = topologyUrl.setDomain;
   const [focusedResourceId, setFocusedResourceId] = useState<string | undefined>();
   const [focusedEdgeId, setFocusedEdgeId] = useState<string | undefined>();
   const [listOpen, setListOpen] = useState(false);
+  const [directoryOpen, setDirectoryOpen] = useState(true);
+  const [oneHopOnly, setOneHopOnly] = useState(false);
+  const [searchCursor, setSearchCursor] = useState(0);
+  const [lostSelection, setLostSelection] = useState(false);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | undefined>();
-  const [search, setSearch] = useState('');
   const [showSupport, setShowSupport] = useState(false);
   const [showBoundary, setShowBoundary] = useState(true);
-  const [domainMode, setDomainMode] = useState<TopologyDomainMode>('all');
   const [interfaceFilter, setInterfaceFilter] = useState('');
   const [showAllInterfaceNames, setShowAllInterfaceNames] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -102,9 +125,26 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     () => filterEdgesByInterface(edges, interfaceFilter),
     [edges, interfaceFilter],
   );
+  /* One-hop focus is an explicit action, never a side effect of selection: it
+   * narrows the graph to the selected object and the relationships it already
+   * has in this source. Exiting restores the same deterministic layout. */
+  const selectedProjection = selectedResourceId ? directory[selectedResourceId] : undefined;
+  const oneHopEdges = useMemo(() => {
+    if (!oneHopOnly || !selectedResourceId) return interfaceScopedEdges;
+    return interfaceScopedEdges.filter((edge) => {
+      if (!edge || typeof edge !== 'object') return false;
+      const value = edge as { fromResourceId?: unknown; toResourceId?: unknown };
+      return value.fromResourceId === selectedResourceId || value.toResourceId === selectedResourceId;
+    });
+  }, [oneHopOnly, selectedResourceId, interfaceScopedEdges]);
   const layout = useMemo(
-    () => buildActualTopology(interfaceScopedEdges, directory, { showSupport, showBoundary, domainMode }),
-    [interfaceScopedEdges, directory, showSupport, showBoundary, domainMode],
+    () => buildActualTopology(oneHopEdges, directory, {
+      showSupport,
+      showBoundary,
+      domainMode,
+      resources: oneHopOnly && selectedProjection ? [selectedProjection] : undefined,
+    }),
+    [oneHopEdges, directory, showSupport, showBoundary, domainMode, oneHopOnly, selectedProjection],
   );
   const nodeIds = useMemo(
     () => layout.nodes.filter((node) => node.resourceClass !== 'support').map((node) => node.resourceId),
@@ -291,7 +331,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
   const selectNode = (resourceId: string) => {
     if (resourceId === selectedResourceId) {
       triggerRef.current = undefined;
-      setSelectedResourceId(undefined);
+      topologyUrl.setSelection(undefined, undefined);
       return;
     }
     const active = typeof document !== 'undefined' ? document.activeElement : null;
@@ -300,13 +340,12 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
       id: resourceId,
       element: active && active !== document.body ? active : null,
     };
-    setSelectedEdgeId(undefined);
-    setSelectedResourceId(resourceId);
+    topologyUrl.setSelection(resourceId, undefined);
   };
   const selectEdge = (edgeId: string) => {
     if (edgeId === selectedEdgeId) {
       triggerRef.current = undefined;
-      setSelectedEdgeId(undefined);
+      topologyUrl.setSelection(undefined, undefined);
       return;
     }
     const active = typeof document !== 'undefined' ? document.activeElement : null;
@@ -315,12 +354,32 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
       id: edgeId,
       element: active && active !== document.body ? active : null,
     };
-    setSelectedResourceId(undefined);
-    setSelectedEdgeId(edgeId);
+    topologyUrl.setSelection(undefined, edgeId);
+  };
+  const centerOn = useCallback((node: ActualTopologyNode) => {
+    const viewport = canvasRef.current;
+    if (!viewport) return;
+    const left = node.x * zoom + (ACTUAL_NODE_WIDTH * zoom) / 2 - viewport.clientWidth / 2;
+    const top = node.y * zoom + (ACTUAL_NODE_HEIGHT * zoom) / 2 - viewport.clientHeight / 2;
+    viewport.scrollTo({
+      left: Math.max(0, left),
+      top: Math.max(0, top),
+      behavior: 'smooth',
+    });
+  }, [zoom]);
+  const goToMatch = (delta: number) => {
+    const total = matchedNodes.length;
+    if (total === 0) return;
+    const next = ((searchCursor + delta) % total + total) % total;
+    setSearchCursor(next);
+    const node = matchedNodes[next];
+    /* Navigation always selects the located object; it must not toggle a
+     * single-match result back off when the operator asks for the next match. */
+    topologyUrl.setSelection(node.resourceId, undefined);
+    centerOn(node);
   };
   const closeInspector = useCallback(() => {
-    setSelectedResourceId(undefined);
-    setSelectedEdgeId(undefined);
+    topologyUrl.setSelection(undefined, undefined);
     const trigger = triggerRef.current;
     triggerRef.current = undefined;
     if (!trigger) return;
@@ -334,15 +393,26 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
         : `[data-edge-id="${trigger.id}"]`;
       canvasRef.current?.querySelector<SVGElement>(selector)?.focus();
     });
-  }, []);
+  }, [topologyUrl]);
 
   useEffect(() => {
-    if (selectedResourceId && !layout.nodes.some((node) => node.resourceId === selectedResourceId)) {
-      setSelectedResourceId(undefined);
+    /* An object that left the loaded set must not keep a stale selection in the
+     * URL: the reader would reopen a graph that no longer contains it. */
+    const hasSelection = Boolean(selectedResourceId) || Boolean(selectedEdgeId);
+    if (!hasSelection) return;
+    const nodeMissing = Boolean(selectedResourceId)
+      && !layout.nodes.some((node) => node.resourceId === selectedResourceId);
+    const edgeMissing = Boolean(selectedEdgeId)
+      && !layout.links.some((link) => link.edgeId === selectedEdgeId);
+    if (nodeMissing || edgeMissing) {
+      topologyUrl.setSelection(undefined, undefined);
+      /* The selection came from a link or the previous read; say why it closed
+       * instead of silently dropping the operator's context. */
+      setLostSelection(true);
     }
-    if (selectedEdgeId && !layout.links.some((link) => link.edgeId === selectedEdgeId)) {
-      setSelectedEdgeId(undefined);
-    }
+  }, [layout.nodes, layout.links, selectedResourceId, selectedEdgeId, topologyUrl]);
+
+  useEffect(() => {
     if (hoveredEdgeId && !layout.links.some((link) => link.edgeId === hoveredEdgeId)) {
       setHoveredEdgeId(undefined);
     }
@@ -352,7 +422,24 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     if (focusedEdgeId && !layout.links.some((link) => link.edgeId === focusedEdgeId)) {
       setFocusedEdgeId(undefined);
     }
-  }, [layout.nodes, layout.links, selectedResourceId, selectedEdgeId, focusedResourceId, focusedEdgeId, hoveredEdgeId]);
+  }, [layout.nodes, layout.links, focusedResourceId, focusedEdgeId, hoveredEdgeId]);
+
+  useEffect(() => {
+    setSearchCursor(0);
+  }, [search, domainMode, interfaceFilter, oneHopOnly]);
+
+  /* One-hop focus is a state of a selected object. Clearing the selection must
+   * leave the full graph on screen instead of a silently narrowed one. */
+  useEffect(() => {
+    if (!selectedResourceId && oneHopOnly) setOneHopOnly(false);
+  }, [selectedResourceId, oneHopOnly]);
+
+  /* At a 1280px-class viewport the directory would cost the graph more width
+   * than it returns, so it starts collapsed instead of squeezing the canvas. */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.innerWidth <= 1280) setDirectoryOpen(false);
+  }, []);
 
   useEffect(() => {
     if (!interfaceFilter || interfaceFilter === UNANNOTATED_INTERFACE_FILTER) return;
@@ -364,8 +451,7 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
   };
   const resetView = () => {
-    setSelectedResourceId(undefined);
-    setSelectedEdgeId(undefined);
+    topologyUrl.setSelection(undefined, undefined);
     setFocusedResourceId(undefined);
     setFocusedEdgeId(undefined);
     triggerRef.current = undefined;
@@ -376,6 +462,8 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     setDomainMode('all');
     setInterfaceFilter('');
     setShowAllInterfaceNames(false);
+    setOneHopOnly(false);
+    setSearchCursor(0);
     fitView('readable');
   };
   const toggleFullscreen = useCallback(() => {
@@ -505,6 +593,17 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
               {hiddenBoundaryNotice}
             </div>
           ) : null}
+          <button
+            type="button"
+            className={styles.actualSupportToggle}
+            data-action="toggle-directory"
+            aria-expanded={directoryOpen}
+            aria-pressed={directoryOpen}
+            onClick={() => setDirectoryOpen((current) => !current)}
+          >
+            {directoryOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+            {t('topology_directory_toggle')}
+          </button>
         </div>
         <div className={styles.actualToolbarFacts}>
           <div className={styles.actualSummary} role="status">
@@ -542,8 +641,51 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
                   >
                     {t('topology_search_clear')}
                   </button>
-                ) : null}
+                ) : (
+                  <span className={styles.actualSearchNav} role="group" aria-label={t('topology_search_nav_label')}>
+                    <span data-search-position="true">
+                      {t('topology_search_position', {
+                        index: (searchCursor % matchedNodes.length) + 1,
+                        total: matchedNodes.length,
+                      })}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.actualSupportToggle}
+                      data-action="search-previous"
+                      aria-label={t('topology_search_previous')}
+                      onClick={() => goToMatch(-1)}
+                    >
+                      <ChevronLeft size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.actualSupportToggle}
+                      data-action="search-next"
+                      aria-label={t('topology_search_next')}
+                      onClick={() => goToMatch(1)}
+                    >
+                      <ChevronRight size={14} aria-hidden="true" />
+                    </button>
+                  </span>
+                )}
               </>
+            ) : null}
+            {selectedResourceId ? (
+              <button
+                type="button"
+                className={styles.actualSupportToggle}
+                data-action="toggle-one-hop"
+                aria-pressed={oneHopOnly}
+                onClick={() => setOneHopOnly((current) => !current)}
+              >
+                {oneHopOnly ? t('topology_focus_exit') : t('topology_focus_one_hop')}
+              </button>
+            ) : null}
+            {oneHopOnly ? (
+              <span className={styles.actualHiddenSupport} data-one-hop-notice="true" role="status">
+                {t('topology_focus_notice')}
+              </span>
             ) : null}
           </div>
           <span className={styles.actualInterfaceCoverage} data-interface-coverage="true">
@@ -578,6 +720,19 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
           </span>
           <button type="button" className="btn btn-secondary" data-action="retry-partial" onClick={refresh}>
             {t('retry')}
+          </button>
+        </div>
+      ) : null}
+      {lostSelection ? (
+        <div className={styles.actualCoverageNote} role="status" data-context-lost="true">
+          <span>{t('topology_context_lost')}</span>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            data-action="dismiss-context-lost"
+            onClick={() => setLostSelection(false)}
+          >
+            {t('topology_context_lost_dismiss')}
           </button>
         </div>
       ) : null}
@@ -700,7 +855,18 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
         <div
           className={styles.archWorkspace}
           data-inspector-open={selected || selectedEdge ? 'true' : undefined}
+          data-directory-open={directoryOpen ? 'true' : undefined}
         >
+          {directoryOpen ? (
+            <ActualDirectory
+              layout={layout}
+              selectedResourceId={selectedResourceId}
+              onSelect={(node) => {
+                selectNode(node.resourceId);
+                centerOn(node);
+              }}
+            />
+          ) : null}
           <div className={styles.archWorkspaceMain}>
             {/*
               * Search and navigation float over the canvas corner: they act on the
@@ -791,7 +957,14 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
           summary={reconciliation.summary}
           groups={reconciliation.groups}
           onLocateResource={(resourceId) => {
-            if (layout.nodes.some((node) => node.resourceId === resourceId)) selectNode(resourceId);
+            if (!layout.nodes.some((node) => node.resourceId === resourceId)) return false;
+            selectNode(resourceId);
+            return true;
+          }}
+          onLocateEdge={(edgeId) => {
+            if (!layout.links.some((link) => link.edgeId === edgeId)) return false;
+            selectEdge(edgeId);
+            return true;
           }}
         />
       ) : null}
@@ -801,6 +974,72 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
 
 function inspectorNodeName(node: ActualTopologyNode): string {
   return node.displayName || node.name || node.resourceId;
+}
+
+/* Collapsible object directory: it locates an object that is already loaded in
+ * this source. It never duplicates the Inventory browser and never adds a node
+ * the layout could not place. */
+function ActualDirectory({
+  layout,
+  selectedResourceId,
+  onSelect,
+}: {
+  layout: ActualTopologyLayout;
+  selectedResourceId?: string;
+  onSelect: (node: ActualTopologyNode) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <aside
+      className={styles.actualDirectory}
+      data-topology-directory="true"
+      aria-label={t('topology_directory_title')}
+    >
+      <div className={styles.actualDirectoryScroll}>
+        {layout.bands.map((band) => {
+          const bandKey = `${band.kind}-${band.domain ?? 'none'}`;
+          const nodes = layout.nodes.filter((node) => (
+            node.band === band.kind && (band.kind !== 'domain' || node.domainBand === band.domain)
+          ));
+          if (nodes.length === 0) return null;
+          return (
+            <section key={bandKey} className={styles.actualDirectorySection}>
+              <h3 className={styles.actualDirectoryHeading}>
+                <span>{t(band.labelKey)}</span>
+                <span className={styles.actualDirectoryCount} data-directory-count={nodes.length}>
+                  {nodes.length}
+                </span>
+              </h3>
+              <ul className={styles.actualDirectoryList}>
+                {nodes.map((node) => {
+                  const name = node.displayName || node.name || node.resourceId;
+                  const role = node.resourceClass === 'support'
+                    ? t('topology_support_resource')
+                    : node.role
+                      ? nfRoleLabel(node.role)
+                      : (node.kind || t('unknown'));
+                  return (
+                    <li key={node.resourceId}>
+                      <button
+                        type="button"
+                        className={styles.actualDirectoryItem}
+                        data-directory-node={node.resourceId}
+                        aria-pressed={node.resourceId === selectedResourceId}
+                        onClick={() => onSelect(node)}
+                      >
+                        <span className={styles.actualDirectoryName}>{name}</span>
+                        <span className={styles.actualDirectoryMeta}>{role}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
+    </aside>
+  );
 }
 
 function ActualLists({

@@ -11,11 +11,16 @@ import {
   ACTUAL_GROUP_LABEL_KEYS,
   ACTUAL_NODE_HEIGHT,
   ACTUAL_NODE_WIDTH,
+  isAbnormalRuntimeStatus,
   nodeMatches,
   type ActualTopologyLayout,
   type ActualTopologyNode,
 } from '../actual-topology-model';
-import { edgeGeometry, placeEdgeLabels, resolveLabelVisibility } from '../actual-topology-labels';
+import {
+  edgeGeometry,
+  placeEdgeLabels,
+  resolveLabelVisibility,
+} from '../actual-topology-labels';
 import { nodeHealthLabelKey, type NodeHealth, type NodeHealthState } from '../actual-topology-health';
 import { nfRoleLabel } from '../nf-classification';
 import { edgeInterfaceNames, formatInterfaceNames } from '../interface-catalog';
@@ -30,8 +35,30 @@ function nodeRole(node: ActualTopologyNode): string {
   return node.kind ? node.kind.toUpperCase() : 'RESOURCE';
 }
 
-function truncate(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, Math.max(1, max - 3))}...` : value;
+/* Text is fitted by measured width rather than a fixed character count, so a
+ * CJK name and a Latin name of the same length truncate at the same visual
+ * width. The full text always stays in the accessible name and the title. */
+function estimateTextWidth(value: string, latin: number, cjk: number): number {
+  let width = 0;
+  for (const char of value) {
+    width += /[\u3400-\u9fff]/.test(char) ? cjk : latin;
+  }
+  return width;
+}
+
+function fitText(value: string, maxWidth: number, latin: number, cjk: number): string {
+  if (estimateTextWidth(value, latin, cjk) <= maxWidth) return value;
+  const ellipsis = '...';
+  const budget = maxWidth - estimateTextWidth(ellipsis, latin, cjk);
+  let width = 0;
+  let kept = '';
+  for (const char of value) {
+    const step = /[\u3400-\u9fff]/.test(char) ? cjk : latin;
+    if (width + step > budget) break;
+    width += step;
+    kept += char;
+  }
+  return `${kept.trimEnd()}${ellipsis}`;
 }
 
 function domainLabel(domain: string): string {
@@ -48,6 +75,7 @@ function healthDotClass(state: NodeHealthState): string {
     case 'disabled': return styles.actualHealthDisabled;
     case 'not_monitored': return styles.actualHealthNotMonitored;
     case 'unresolved': return styles.actualHealthUnresolved;
+    case 'unbound': return styles.actualHealthUnbound;
     default: return styles.actualHealthUnknown;
   }
 }
@@ -131,6 +159,25 @@ export function ActualTopologyCanvas({
     }),
     [layout.links, selectedResourceId, focusedResourceId, hoveredResourceId, hoveredEdgeId, showAllInterfaceNames, zoom],
   );
+  /* The selected, hovered and keyboard-focused path keeps its label even when
+   * the label would cover a card; ambient labels yield instead of overlapping
+   * node text, and the inspector still carries the full text. */
+  const pinnedEdgeIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (selectedEdgeId) ids.add(selectedEdgeId);
+    if (focusedEdgeId) ids.add(focusedEdgeId);
+    if (hoveredEdgeId) ids.add(hoveredEdgeId);
+    for (const link of layout.links) {
+      if (selectedResourceId && (link.fromResourceId === selectedResourceId || link.toResourceId === selectedResourceId)) {
+        ids.add(link.edgeId);
+      } else if (focusedResourceId && (link.fromResourceId === focusedResourceId || link.toResourceId === focusedResourceId)) {
+        ids.add(link.edgeId);
+      } else if (hoveredResourceId && (link.fromResourceId === hoveredResourceId || link.toResourceId === hoveredResourceId)) {
+        ids.add(link.edgeId);
+      }
+    }
+    return ids;
+  }, [layout.links, selectedEdgeId, focusedEdgeId, hoveredEdgeId, selectedResourceId, focusedResourceId, hoveredResourceId]);
   const labels = useMemo(() => {
     const relatedLinks = layout.links.filter((link) => visibility.visibleEdgeIds.has(link.edgeId));
     const text = new Map<string, string>();
@@ -147,8 +194,18 @@ export function ActualTopologyCanvas({
       const presentation = RELATIONSHIP_PRESENTATION[link.relationshipType];
       text.set(link.edgeId, presentation ? t(presentation.labelKey) : link.relationshipType);
     }
-    return placeEdgeLabels(relatedLinks, text, layout.nodes, layout.width, layout.height);
-  }, [layout.links, layout.nodes, layout.width, layout.height, visibility, t]);
+    const placements = placeEdgeLabels(
+      relatedLinks,
+      text,
+      layout.nodes,
+      layout.width,
+      layout.height,
+      (link) => (pinnedEdgeIds.has(link.edgeId) ? 0 : 1),
+    );
+    return placements.filter((placement) => placement.nodeOverlaps === 0 || pinnedEdgeIds.has(placement.edgeId));
+  }, [layout.links, layout.nodes, layout.width, layout.height, visibility, pinnedEdgeIds, t]);
+  const renderedLabelCount = labels.length;
+  const hiddenLabelCount = layout.links.length - renderedLabelCount;
 
   return (
     <svg
@@ -158,8 +215,8 @@ export function ActualTopologyCanvas({
       aria-label={t('topology_title')}
       preserveAspectRatio="xMidYMid meet"
       data-actual-canvas="true"
-      data-visible-label-count={visibility.visibleEdgeIds.size}
-      data-hidden-label-count={visibility.hiddenCount}
+      data-visible-label-count={renderedLabelCount}
+      data-hidden-label-count={hiddenLabelCount}
     >
       <title>{t('topology_title')}</title>
       <defs>
@@ -190,6 +247,18 @@ export function ActualTopologyCanvas({
               className={styles.actualLane}
               aria-hidden="true"
             />
+            {band.columns.filter((column) => column.planeStart).map((column) => (
+              <line
+                key={`plane-${bandKey}-${column.group}`}
+                x1={column.x + 2}
+                x2={column.x + 2}
+                y1={band.y + ACTUAL_BAND_HEADER_HEIGHT + 4}
+                y2={band.y + band.height - 8}
+                className={styles.actualPlaneDivider}
+                data-plane-divider={column.plane}
+                aria-hidden="true"
+              />
+            ))}
             {focusable ? (
               <g
                 role="button"
@@ -342,6 +411,7 @@ export function ActualTopologyCanvas({
           node.resourceClass === 'unresolved' ? t('topology_unresolved_resource') : '',
           node.resourceClass === 'nf' && node.domainBand === 'unclassified' ? t('topology_domain_unclassified') : '',
           runtimeLabel ? `${t('topology_runtime_label')}: ${runtimeLabel}` : '',
+          healthLabel ? `${t('topology_health_label')}: ${healthLabel}` : '',
           node.resolved && node.lifecycleState
             && node.lifecycleState !== 'active'
             && node.lifecycleState !== 'unknown'
@@ -350,6 +420,13 @@ export function ActualTopologyCanvas({
           .filter(Boolean)
           .join(' / ');
         const healthSuffix = healthLabel ? `, ${t('topology_health_label')}: ${healthLabel}` : '';
+        /* Runtime presence and monitoring are different evidence sources, so
+         * they keep separate indicators instead of one merged status dot. */
+        const attention = isAbnormalRuntimeStatus(node.runtimeStatus);
+        const displayRole = fitText(role, ACTUAL_NODE_WIDTH - 28, 6.9, 11.5);
+        const displayName = fitText(name, ACTUAL_NODE_WIDTH - 28, 7.1, 12);
+        const displayMeta = fitText(meta, ACTUAL_NODE_WIDTH - 26, 5.9, 10.5);
+        const nameTruncated = displayName !== name;
         return (
           <g
             key={node.resourceId}
@@ -364,9 +441,11 @@ export function ActualTopologyCanvas({
             data-role-deduped={duplicateRole ? 'true' : undefined}
             data-runtime-status={node.runtimeStatus}
             data-health-state={nodeHealth?.state}
+            data-attention={attention ? 'true' : undefined}
+            data-name-truncated={nameTruncated ? 'true' : undefined}
             aria-label={`${identity}, ${meta}${healthSuffix}`}
             aria-pressed={selected}
-            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${node.boundary ? styles.actualNodeBoundary : ''} ${node.proxy ? styles.actualNodeProxy : ''} ${node.runtimeStatus === 'stopped' ? styles.actualNodeStopped : ''} ${node.runtimeStatus === 'not_detected' ? styles.actualNodeNotDetected : ''} ${selected ? styles.actualNodeSelected : ''} ${focusedByEdge ? styles.actualNodeFocusRelated : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
+            className={`${styles.actualNode} ${styles[`actualGroup${node.group[0].toUpperCase()}${node.group.slice(1)}`]} ${node.resourceClass === 'support' ? styles.actualNodeSupport : ''} ${node.boundary ? styles.actualNodeBoundary : ''} ${node.proxy ? styles.actualNodeProxy : ''} ${node.runtimeStatus === 'stopped' ? styles.actualNodeStopped : ''} ${node.runtimeStatus === 'not_detected' ? styles.actualNodeNotDetected : ''} ${attention ? styles.actualNodeAttention : ''} ${selected ? styles.actualNodeSelected : ''} ${focusedByEdge ? styles.actualNodeFocusRelated : ''} ${node.resolved ? '' : styles.actualNodeUnresolved} ${search.trim() && matched && !selected ? styles.actualNodeMatch : ''} ${dimmed ? styles.actualDimmed : ''}`}
             onClick={() => onSelectResource(node.resourceId)}
             onFocus={() => onFocusResource?.(node.resourceId)}
             onBlur={() => onFocusResource?.(undefined)}
@@ -383,10 +462,10 @@ export function ActualTopologyCanvas({
             <rect x={node.x} y={node.y} width={ACTUAL_NODE_WIDTH} height={ACTUAL_NODE_HEIGHT} rx={8} className={styles.actualNodeRect} />
             <rect x={node.x} y={node.y + 8} width={4} height={ACTUAL_NODE_HEIGHT - 16} rx={2} className={styles.actualNodeBar} />
             {showRole ? (
-              <text x={node.x + 14} y={node.y + 21} className={styles.actualNodeRole}>{truncate(role, 14)}</text>
+              <text x={node.x + 14} y={node.y + 21} className={styles.actualNodeRole}>{displayRole}</text>
             ) : null}
-            <text x={node.x + 14} y={nameY} className={styles.actualNodeName}>{truncate(name, 22)}</text>
-            <text x={node.x + 14} y={metaY} className={styles.actualNodeMeta}>{truncate(meta, 24)}</text>
+            <text x={node.x + 14} y={nameY} className={styles.actualNodeName}>{displayName}</text>
+            <text x={node.x + 14} y={metaY} className={styles.actualNodeMeta}>{displayMeta}</text>
             {nodeHealth ? (
               <circle
                 cx={node.x + ACTUAL_NODE_WIDTH - 13}
@@ -394,11 +473,14 @@ export function ActualTopologyCanvas({
                 r={4}
                 className={`${styles.actualHealthDot} ${healthDotClass(nodeHealth.state)}`}
               />
-            ) : node.runtimeStatus ? (
-              <circle
-                cx={node.x + ACTUAL_NODE_WIDTH - 13}
-                cy={node.y + 12}
-                r={4}
+            ) : null}
+            {node.runtimeStatus ? (
+              <rect
+                x={node.x + ACTUAL_NODE_WIDTH - 17}
+                y={node.y + ACTUAL_NODE_HEIGHT - 12}
+                width={7}
+                height={7}
+                rx={2}
                 className={`${styles.actualRuntimeDot} ${runtimeDotClass(node.runtimeStatus)}`}
               />
             ) : null}

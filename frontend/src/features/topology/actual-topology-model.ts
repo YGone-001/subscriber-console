@@ -37,8 +37,16 @@ export type ActualTopologyGroup =
 
 export type ActualTopologyBandKind = 'domain' | 'boundary' | 'unclassified' | 'support';
 
+/* Reading plane of a column. This is a presentation classification only: it
+ * never becomes a relationship, a lifecycle state or an Inventory field. */
+export type ActualTopologyPlane = 'control' | 'user' | 'shared';
+
 export type ActualTopologyColumn = {
   group: ActualTopologyGroup;
+  plane: ActualTopologyPlane;
+  /* True when this column opens a new plane block inside its band, so the
+   * canvas can draw one divider instead of repeating plane captions. */
+  planeStart: boolean;
   x: number;
   width: number;
 };
@@ -196,10 +204,61 @@ export function nodeMatches(resource: ResourceProjection, query: string): boolea
   return haystack.toLowerCase().includes(normalized);
 }
 
+const GROUP_PLANES: Record<ActualTopologyGroup, ActualTopologyPlane> = {
+  access: 'control',
+  session: 'control',
+  discovery: 'control',
+  data: 'control',
+  policy: 'control',
+  ims: 'control',
+  user: 'user',
+  other: 'shared',
+  support: 'shared',
+};
+
+/* Domain reading order. A 5GC or EPC lane reads access -> session -> user
+ * plane -> data -> policy -> discovery, the order an operator follows when
+ * tracing one subscriber flow. Discovery and proxy sit last because they are
+ * reached from the consumer, not entered first. IMS and charging keep session
+ * control ahead of user data. */
+const DOMAIN_GROUP_ORDER: Record<KnownTopologyDomain, readonly ActualTopologyGroup[]> = {
+  '5gc': ['access', 'session', 'user', 'data', 'policy', 'discovery', 'other'],
+  epc: ['access', 'session', 'user', 'data', 'policy', 'discovery', 'other'],
+  ims: ['access', 'ims', 'data', 'policy', 'discovery', 'user', 'other'],
+  charging: ['policy', 'data', 'session', 'discovery', 'user', 'other'],
+};
+
+/* Bands that are not a single known domain keep the canonical control-first
+ * order, because a boundary or unclassified lane has no domain reading order. */
+function orderGroups(
+  presentGroups: readonly ActualTopologyGroup[],
+  band: ActualTopologyBandKind,
+  domain: TopologyDomain | undefined,
+): ActualTopologyGroup[] {
+  const preferred = band === 'domain' && domain && domain !== 'unclassified'
+    ? DOMAIN_GROUP_ORDER[domain]
+    : GROUPS;
+  const rank = new Map(preferred.map((group, index) => [group, index]));
+  return [...presentGroups].sort((left, right) => (
+    (rank.get(left) ?? preferred.length) - (rank.get(right) ?? preferred.length)
+    || GROUPS.indexOf(left) - GROUPS.indexOf(right)
+  ));
+}
+
+/* Code-unit comparison keeps placement identical across machines and locales;
+ * locale-aware collation can reorder the same dataset on a different host. */
+function compareText(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
+function resourceName(resource: ResourceProjection): string {
+  return resource.displayName || resource.name || resource.resourceId;
+}
+
 function sortResources(left: ResourceProjection, right: ResourceProjection): number {
-  const leftName = left.displayName || left.name || left.resourceId;
-  const rightName = right.displayName || right.name || right.resourceId;
-  return leftName.localeCompare(rightName) || left.resourceId.localeCompare(right.resourceId);
+  return compareText(resourceName(left), resourceName(right))
+    || compareText(left.resourceId, right.resourceId);
 }
 
 function isActiveEdge(value: unknown): value is TopologyEdge {
@@ -438,12 +497,21 @@ export function buildActualTopology(
       && (spec.kind !== 'domain' || node.domainBand === spec.domain)
     ));
     if (bandRecords.length === 0) continue;
-    const presentGroups = GROUPS.filter((group) => bandRecords.some((node) => node.group === group));
+    const presentGroups = orderGroups(
+      GROUPS.filter((group) => bandRecords.some((node) => node.group === group)),
+      spec.kind,
+      spec.domain,
+    );
     const columnLists = presentGroups.map((group) => {
       const nodesInGroup = bandRecords.filter((node) => node.group === group);
       /* Nodes reaching into another lane sit at the lane edge so cross-lane
-       * relationships leave the lane without crossing unrelated cards. */
-      if (verticalLanes) nodesInGroup.sort(crossLaneFirst);
+       * relationships leave the lane without crossing unrelated cards. The
+       * name/id tiebreak keeps the order total and reproducible. */
+      nodesInGroup.sort((left, right) => (
+        (verticalLanes ? crossLaneFirst(left, right) : 0)
+        || compareText(resourceName(left), resourceName(right))
+        || compareText(left.resourceId, right.resourceId)
+      ));
       return { group, nodes: nodesInGroup };
     });
     const laneRows = columnLists.reduce((max, entry) => Math.max(max, entry.nodes.length), 0);
@@ -472,8 +540,17 @@ export function buildActualTopology(
       columns: [],
     };
     let columnX = band.x;
+    let previousPlane: ActualTopologyPlane | undefined;
     for (const entry of columnLists) {
-      const column: ActualTopologyColumn = { group: entry.group, x: columnX, width: ACTUAL_GROUP_WIDTH };
+      const plane = GROUP_PLANES[entry.group];
+      const column: ActualTopologyColumn = {
+        group: entry.group,
+        plane,
+        planeStart: previousPlane !== undefined && previousPlane !== plane,
+        x: columnX,
+        width: ACTUAL_GROUP_WIDTH,
+      };
+      previousPlane = plane;
       columnX += ACTUAL_GROUP_WIDTH;
       band.columns.push(column);
       entry.nodes.forEach((node, rowIndex) => {

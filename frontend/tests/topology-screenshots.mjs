@@ -372,6 +372,20 @@ async function main() {
           await page.route('**/api/topology/edges**', (route) => route.fulfill({ json: edgePage(LARGE_EDGES, false) }));
           await page.route('**/api/inventory/resources**', (route) => {
             const url = new URL(route.request().url());
+            /* The declared canvas hydrates endpoint names through the bounded
+             * `resourceIds` batch read, so the fixture answers that shape first;
+             * the single-name search stays available for the picker flows. */
+            const batch = url.searchParams.get('resourceIds');
+            if (batch) {
+              const wanted = new Set(batch.split(','));
+              const items = LARGE_RESOURCES.filter((resource) => wanted.has(resource.resourceId));
+              return route.fulfill({
+                json: {
+                  resources: items,
+                  page: { limit: items.length, nextCursor: null, hasMore: false },
+                },
+              });
+            }
             const query = (url.searchParams.get('q') ?? '').toLowerCase();
             const items = query
               ? LARGE_RESOURCES.filter((resource) => (
@@ -438,7 +452,15 @@ async function main() {
 
       await viewButton(page, 'Overview').click();
       await page.locator('[data-architecture-overview]').waitFor({ state: 'visible', timeout: 15000 });
-      check(`architecture_overview_cards:${theme}`, (await page.locator('[data-overview-view]').count()) === 3, 'cards');
+      /* One card per canonical reference domain, in the published order. */
+      const overviewViews = await page
+        .locator('[data-overview-view]')
+        .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-overview-view')));
+      check(
+        `architecture_overview_cards:${theme}`,
+        overviewViews.join(',') === 'epc,5gc-sa,5gc-nsa,ims,charging',
+        `cards=${overviewViews.join(',')}`,
+      );
       await assertNoRawKeys(page, `overview-${theme}`);
       await capture(page, `topology-overview-desktop-${theme}.png`, {
         route: '/topology?view=architecture',
@@ -769,6 +791,9 @@ async function main() {
       await page.getByRole('option', { name: /SMF-01/i }).first().click();
       await page.locator('#topology-to-resource').fill('pcf-01');
       await page.getByRole('option', { name: /PCF-01/i }).first().click();
+      /* Creating is a decision: the form keeps the relationship type empty until
+       * the operator picks one, so the workflow must state it before submitting. */
+      await page.locator('#topology-relationship').selectOption('depends_on');
       /* Submit through the dialog form itself; the PageHeader also carries a
        * "Create Relationship" button that would only re-open the dialog. */
       await page.locator('form button[type="submit"]').first().click();

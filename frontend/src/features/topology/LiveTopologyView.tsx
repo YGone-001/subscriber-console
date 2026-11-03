@@ -24,6 +24,13 @@ import { TopologyAnnouncer } from './components/TopologyAnnouncer';
 import { TopologyReconciliationPanel } from './components/TopologyReconciliationPanel';
 import { TopologyFreshnessChip } from './components/TopologyFreshnessChip';
 import { useLiveTopologyViewState } from './live-topology-url';
+import { useTopologyHealth } from './use-topology-health';
+import {
+  isCanonicalInventoryResourceId,
+  nodeHealthLabelKey,
+  summarizeNodeHealth,
+  type NodeHealth,
+} from './actual-topology-health';
 import { ACTUAL_DOMAIN_MODE_OPTIONS, buildActualTopology } from './actual-topology-model';
 import { LABEL_DETAIL_MIN_ZOOM, resolveLabelVisibility } from './actual-topology-labels';
 import { interfaceCoverage } from './interface-catalog';
@@ -109,9 +116,39 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
     scrollTop: number;
   } | null>(null);
   const data = live.data;
+  /* Monitoring association is asked only for nodes with an explicit, canonical
+   * Inventory binding. A component id is a runtime identity, not an Inventory
+   * identity, so it never becomes a health query key. */
+  const inventoryIds = useMemo(() => {
+    const values = (data?.nodes ?? [])
+      .map((node) => node.inventoryResourceId)
+      .filter(isCanonicalInventoryResourceId);
+    return [...new Set(values)].sort();
+  }, [data]);
+  const monitoring = useTopologyHealth(inventoryIds);
+  const nodeHealth = useMemo(() => {
+    const projected = new Map<string, NodeHealth>();
+    for (const node of data?.nodes ?? []) {
+      if (!isCanonicalInventoryResourceId(node.inventoryResourceId)) {
+        projected.set(node.componentId, {
+          state: 'unbound',
+          targetId: '',
+          overallState: '',
+          freshness: '',
+          statusComplete: true,
+        });
+        continue;
+      }
+      const health = monitoring.byResource.get(node.inventoryResourceId);
+      if (health) projected.set(node.componentId, health);
+    }
+    return projected;
+  }, [data, monitoring.byResource]);
+  const healthCounts = useMemo(() => summarizeNodeHealth(nodeHealth), [nodeHealth]);
   const refresh = useCallback(() => {
     void live.mutate();
-  }, [live.mutate]);
+    monitoring.refresh();
+  }, [live.mutate, monitoring.refresh]);
   useRegisterOperationsRefresh('topology:actual:live', refresh);
 
   const directory = useMemo(() => liveDirectory(data), [data]);
@@ -661,6 +698,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
             edges={data.edges.filter((edge) => (
               edge.fromComponentId === selected.componentId || edge.toComponentId === selected.componentId
             ))}
+            health={nodeHealth.get(selected.componentId)}
             onSelectEdge={selectEdge}
           />
         ) : undefined}
@@ -668,6 +706,44 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
         onCloseInspector={closeInspector}
         legend={(
           <>
+            {monitoring.loading ? (
+              <span className={styles.liveLegendItem} data-health-loading="true">
+                {t('topology_health_loading')}
+              </span>
+            ) : null}
+            {monitoring.coverage === 'unavailable' ? (
+              <span className={styles.liveLegendItem} data-health-coverage="unavailable">
+                {t('topology_health_unavailable')}
+              </span>
+            ) : null}
+            {healthCounts.monitored > 0 ? (
+              <span className={styles.liveLegendItem} data-health-summary="monitored">
+                {t('topology_health_monitored')} {healthCounts.monitored}
+              </span>
+            ) : null}
+            {healthCounts.abnormal > 0 ? (
+              <span className={styles.liveLegendItem} data-health-summary="abnormal">
+                {t('topology_health_abnormal')} {healthCounts.abnormal}
+              </span>
+            ) : null}
+            {healthCounts.unbound > 0 ? (
+              <span
+                className={styles.liveLegendItem}
+                data-health-summary="unbound"
+                title={t('topology_health_unbound_hint')}
+              >
+                {t('topology_health_unbound')} {healthCounts.unbound}
+              </span>
+            ) : null}
+            {healthCounts.unresolved > 0 ? (
+              <span
+                className={styles.liveLegendItem}
+                data-health-summary="unresolved"
+                title={t('topology_health_unresolved_hint')}
+              >
+                {t('topology_health_unresolved')} {healthCounts.unresolved}
+              </span>
+            ) : null}
             <span className={styles.liveLegendItem}>
               <i className={styles.liveLegendLine} aria-hidden="true" />
               {t('topology_live_evidence_configured')}
@@ -728,7 +804,16 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
             <TopologyReconciliationPanel
               summary={reconciliation}
               groups={reconciliationDiff}
-              onLocate={selectNode}
+              onLocate={(componentId) => {
+                if (!data.nodes.some((node) => node.componentId === componentId)) return false;
+                selectNode(componentId);
+                return true;
+              }}
+              onLocateEdge={(edgeId) => {
+                if (!data.edges.some((edge) => edge.edgeId === edgeId)) return false;
+                selectEdge(edgeId);
+                return true;
+              }}
             />
           ) : null}
           </>
@@ -778,6 +863,7 @@ export function LiveTopologyView({ onRegisterRelationship }: LiveTopologyViewPro
                 hoveredEdgeId={hoveredEdgeId}
                 search={search}
                 zoom={zoom}
+                health={nodeHealth.size > 0 ? nodeHealth : undefined}
                 showAllInterfaceNames={showAllInterfaceNames}
                 onSelectResource={selectNode}
                 onSelectEdge={selectEdge}
@@ -799,11 +885,13 @@ function LiveNodeDetail({
   node,
   nodes,
   edges,
+  health,
   onSelectEdge,
 }: {
   node: LiveNode;
   nodes: LiveNode[];
   edges: LiveEdge[];
+  health?: NodeHealth;
   onSelectEdge: (edgeId: string) => void;
 }) {
   const { t } = useI18n();
@@ -830,6 +918,17 @@ function LiveNodeDetail({
         <div>
           <dt>{t('topology_runtime_label')}</dt>
           <dd data-runtime-status={node.runtimeStatus}>{runtimeStatusLabel(node.runtimeStatus)}</dd>
+        </div>
+        <div>
+          <dt>{t('topology_health_label')}</dt>
+          <dd data-live-health={health?.state ?? 'unavailable'}>
+            {health
+              ? t(nodeHealthLabelKey(health.state))
+              : t('ops_metric_unavailable')}
+            {health?.state === 'unbound' ? (
+              <span className={styles.liveMuted}> {t('topology_health_unbound_hint')}</span>
+            ) : null}
+          </dd>
         </div>
         <div>
           <dt>{t('topology_live_type_domain')}</dt>

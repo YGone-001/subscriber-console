@@ -9,7 +9,16 @@
 import type { LayerState } from '../nf-health/nf-health-types';
 import { monitoringFromTarget, type MonitoringView } from '../operations/operational-model';
 
-export type NodeHealthState = LayerState | 'disabled' | 'not_monitored' | 'unresolved';
+export type NodeHealthState = LayerState | 'disabled' | 'not_monitored' | 'unresolved' | 'unbound';
+
+/* Only a canonical Inventory identifier may be sent to the association lookup.
+ * A runtime component id, a process name or a host name is not an Inventory
+ * identity and must never be used as one. */
+const CANONICAL_RESOURCE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isCanonicalInventoryResourceId(value: unknown): value is string {
+  return typeof value === 'string' && CANONICAL_RESOURCE_ID.test(value);
+}
 
 export type NodeHealth = {
   state: NodeHealthState;
@@ -84,6 +93,7 @@ export type NodeHealthCounts = {
   disabled: number;
   notMonitored: number;
   unresolved: number;
+  unbound: number;
 };
 
 export function summarizeNodeHealth(byResource: ReadonlyMap<string, NodeHealth>): NodeHealthCounts {
@@ -97,6 +107,7 @@ export function summarizeNodeHealth(byResource: ReadonlyMap<string, NodeHealth>)
     disabled: 0,
     notMonitored: 0,
     unresolved: 0,
+    unbound: 0,
   };
   for (const health of byResource.values()) {
     switch (health.state) {
@@ -130,13 +141,16 @@ export function summarizeNodeHealth(byResource: ReadonlyMap<string, NodeHealth>)
       case 'unresolved':
         counts.unresolved += 1;
         break;
+      case 'unbound':
+        counts.unbound += 1;
+        break;
     }
   }
   return counts;
 }
 
 export function nodeHealthLabelKey(state: NodeHealthState): string {
-  if (state === 'disabled' || state === 'not_monitored' || state === 'unresolved') {
+  if (state === 'disabled' || state === 'not_monitored' || state === 'unresolved' || state === 'unbound') {
     return `topology_health_${state}`;
   }
   return `nf_health_state_${state}`;
