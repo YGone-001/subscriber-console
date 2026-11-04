@@ -30,7 +30,10 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const frontendRoot = resolve(here, '..');
 const repoRoot = resolve(frontendRoot, '..');
-const distDir = resolve(frontendRoot, 'dist');
+/* The production build under test. `TOPOLOGY_DIST_DIR` lets a run point at an
+ * equivalent build elsewhere (a clean checkout, a CI artefact) without copying
+ * files into the workspace; the default stays the canonical `dist`. */
+const distDir = resolve(frontendRoot, process.env.TOPOLOGY_DIST_DIR ?? 'dist');
 const outDir = resolve(repoRoot, 'reports', 'ops', 'topology-ui-screenshots');
 
 const EXPECTED_SCREENSHOT_COUNT = 41;

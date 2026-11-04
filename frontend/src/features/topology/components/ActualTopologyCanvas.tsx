@@ -3,7 +3,7 @@
  * Labels are intentionally conditional: the graph begins as a readable map,
  * then exposes relationship names for the focused or hovered path.
  */
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useI18n } from '../../../providers/I18nProvider';
 import { RELATIONSHIP_PRESENTATION } from '../topology-types';
 import {
@@ -14,12 +14,13 @@ import {
   isAbnormalRuntimeStatus,
   nodeMatches,
   type ActualTopologyLayout,
+  type ActualTopologyLink,
   type ActualTopologyNode,
 } from '../actual-topology-model';
 import {
-  edgeGeometry,
   placeEdgeLabels,
   resolveLabelVisibility,
+  routeGeometry,
 } from '../actual-topology-labels';
 import { nodeHealthLabelKey, type NodeHealth, type NodeHealthState } from '../actual-topology-health';
 import { nfRoleLabel } from '../nf-classification';
@@ -178,6 +179,17 @@ export function ActualTopologyCanvas({
     }
     return ids;
   }, [layout.links, selectedEdgeId, focusedEdgeId, hoveredEdgeId, selectedResourceId, focusedResourceId, hoveredResourceId]);
+  /* One routing decision per relationship per layout: the line, its arrow and
+   * its label then agree by construction. */
+  const geometries = useMemo(() => {
+    const byEdge = new Map<string, ReturnType<typeof routeGeometry>>();
+    for (const link of layout.links) byEdge.set(link.edgeId, routeGeometry(link, layout.nodes));
+    return byEdge;
+  }, [layout.links, layout.nodes]);
+  const geometryOf = useCallback(
+    (link: ActualTopologyLink) => geometries.get(link.edgeId) ?? routeGeometry(link),
+    [geometries],
+  );
   const labels = useMemo(() => {
     const relatedLinks = layout.links.filter((link) => visibility.visibleEdgeIds.has(link.edgeId));
     const text = new Map<string, string>();
@@ -201,9 +213,10 @@ export function ActualTopologyCanvas({
       layout.width,
       layout.height,
       (link) => (pinnedEdgeIds.has(link.edgeId) ? 0 : 1),
+      geometryOf,
     );
     return placements.filter((placement) => placement.nodeOverlaps === 0 || pinnedEdgeIds.has(placement.edgeId));
-  }, [layout.links, layout.nodes, layout.width, layout.height, visibility, pinnedEdgeIds, t]);
+  }, [layout.links, layout.nodes, layout.width, layout.height, visibility, pinnedEdgeIds, geometryOf, t]);
   const renderedLabelCount = labels.length;
   const hiddenLabelCount = layout.links.length - renderedLabelCount;
 
@@ -344,7 +357,7 @@ export function ActualTopologyCanvas({
             || (Boolean(focusedResourceId) && (
               link.fromResourceId === focusedResourceId || link.toResourceId === focusedResourceId
             ));
-          const geometry = edgeGeometry(link);
+          const geometry = geometryOf(link);
           const interfaceNames = edgeInterfaceNames(link);
           const edgeLabel = `${nodeName(link.fromNode)} -> ${nodeName(link.toNode)}, ${
             interfaceNames.length > 0 ? formatInterfaceNames(interfaceNames) : (link.protocol || link.relationshipType)

@@ -85,6 +85,7 @@ import {
   placeEdgeLabels,
   pointOnGeometry,
   resolveLabelVisibility,
+  routeGeometry,
 } from '../src/features/topology/actual-topology-labels';
 import {
   projectNodeHealth,
@@ -461,6 +462,100 @@ test('a relationship crossing stacked lanes is routed through the corridor betwe
         && point.y > node.y && point.y < node.y + ACTUAL_NODE_HEIGHT;
       assert.ok(!inside, `the routed path must not cut through ${node.name}`);
     }
+  }
+});
+
+test('routing keeps the corridor only where it hides fewer cards', () => {
+  const fiveGc = [
+    domainProjection('e1000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc'),
+    domainProjection('e1000002-1111-4111-8111-000000000002', 'smf-01', 'smf', '5gc'),
+    domainProjection('e1000003-1111-4111-8111-000000000003', 'upf-01', 'upf', '5gc'),
+    domainProjection('e1000004-1111-4111-8111-000000000004', 'pcf-01', 'pcf', '5gc'),
+    domainProjection('e1000005-1111-4111-8111-000000000005', 'nrf-01', 'nrf', '5gc'),
+  ];
+  const epc = [
+    domainProjection('e2000001-1111-4111-8111-000000000001', 'mme-01', 'mme', 'epc'),
+    domainProjection('e2000002-1111-4111-8111-000000000002', 'sgwc-01', 'sgwc', 'epc'),
+    domainProjection('e2000003-1111-4111-8111-000000000003', 'sgwu-01', 'sgwu', 'epc'),
+    domainProjection('e2000004-1111-4111-8111-000000000004', 'hss-01', 'hss', 'epc'),
+  ];
+  const lanes = [...fiveGc, ...epc];
+  const laneDirectory = Object.fromEntries(lanes.map((item) => [item.resourceId, item]));
+  const laneEdges = [
+    edge({ edgeId: 'routed-1', fromResourceId: fiveGc[0].resourceId, toResourceId: fiveGc[1].resourceId }),
+    edge({ edgeId: 'routed-2', fromResourceId: fiveGc[1].resourceId, toResourceId: fiveGc[2].resourceId }),
+    edge({ edgeId: 'routed-3', fromResourceId: fiveGc[1].resourceId, toResourceId: fiveGc[3].resourceId }),
+    edge({ edgeId: 'routed-4', fromResourceId: fiveGc[1].resourceId, toResourceId: fiveGc[4].resourceId }),
+    edge({ edgeId: 'routed-5', fromResourceId: fiveGc[0].resourceId, toResourceId: epc[0].resourceId }),
+    edge({ edgeId: 'routed-6', fromResourceId: fiveGc[2].resourceId, toResourceId: epc[1].resourceId }),
+    edge({ edgeId: 'routed-7', fromResourceId: fiveGc[3].resourceId, toResourceId: epc[2].resourceId }),
+    edge({ edgeId: 'routed-8', fromResourceId: fiveGc[4].resourceId, toResourceId: epc[3].resourceId }),
+    edge({ edgeId: 'routed-9', fromResourceId: epc[0].resourceId, toResourceId: epc[1].resourceId }),
+  ];
+  /* Dense sample: several relationships cross every domain pair at once, which
+   * is where a corridor run can sweep across cards of the neighbouring lanes. */
+  const denseDomains = ['5gc', 'epc', 'ims', 'charging'];
+  const dense: ResourceProjection[] = [];
+  for (let index = 0; index < 24; index += 1) {
+    const resourceId = `e3000000-1111-4111-8111-${String(index).padStart(12, '0')}`;
+    dense.push({
+      resourceId,
+      kind: 'network_function',
+      name: `dense-${index}`,
+      displayName: `DENSE-${index}`,
+      domain: denseDomains[index % denseDomains.length],
+      role: 'nf',
+      lifecycleState: 'active',
+    });
+  }
+  const denseDirectory = Object.fromEntries(dense.map((item) => [item.resourceId, item]));
+  const denseEdges = dense.slice(0, 20).map((item, index) => edge({
+    edgeId: `dense-${index}`,
+    fromResourceId: item.resourceId,
+    toResourceId: dense[(index + 5) % dense.length].resourceId,
+  }));
+  const combinedDirectory = { ...laneDirectory, ...denseDirectory };
+  const combinedEdges = [...laneEdges, ...denseEdges];
+  const layout = buildActualTopology(combinedEdges, combinedDirectory);
+  const cardHits = (geometry: ReturnType<typeof edgeGeometry>, link: typeof layout.links[number]) => {
+    const endpoints = new Set([link.fromResourceId, link.toResourceId]);
+    let hits = 0;
+    for (const node of layout.nodes) {
+      if (endpoints.has(node.resourceId)) continue;
+      for (let step = 1; step < 24; step += 1) {
+        const point = pointOnGeometry(geometry, step / 24);
+        const inside = point.x > node.x && point.x < node.x + ACTUAL_NODE_WIDTH
+          && point.y > node.y && point.y < node.y + ACTUAL_NODE_HEIGHT;
+        if (inside) {
+          hits += 1;
+          break;
+        }
+      }
+    }
+    return hits;
+  };
+
+  let keptCorridor = 0;
+  let choseDirect = 0;
+  for (const link of layout.links) {
+    const corridor = edgeGeometry(link);
+    const routed = routeGeometry(link, layout.nodes);
+    assert.ok(
+      cardHits(routed, link) <= cardHits(corridor, link),
+      'the routed curve must never hide more cards than the corridor alone',
+    );
+    if (routed.path === corridor.path) keptCorridor += 1;
+    else choseDirect += 1;
+  }
+  assert.equal(keptCorridor + choseDirect, layout.links.length);
+  assert.ok(choseDirect > 0, 'a dense cross-domain graph keeps the direct curve somewhere');
+
+  /* Same data, same layout, same routing: nothing here is random or cached. */
+  const rebuilt = buildActualTopology(combinedEdges, combinedDirectory);
+  for (const link of rebuilt.links) {
+    const first = routeGeometry(link, layout.nodes).path;
+    const second = routeGeometry(link, rebuilt.nodes).path;
+    assert.equal(first, second, 'routing must be deterministic for the same layout');
   }
 });
 

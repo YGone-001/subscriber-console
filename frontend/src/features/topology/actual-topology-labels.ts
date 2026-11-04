@@ -131,40 +131,49 @@ function laneKey(node: ActualTopologyNode): string {
   return `${node.band}:${node.domainBand}`;
 }
 
-export function edgeGeometry(link: ActualTopologyLink): EdgeGeometry {
+/* Cross-lane routing leaves through the side of the card that faces the other
+ * lane and runs through the corridor between the two rows, so an inter-domain
+ * relationship does not cut across the cards of the bands in between. */
+function usesCorridor(link: ActualTopologyLink): boolean {
+  const sourceCenterY = link.fromNode.y + ACTUAL_NODE_HEIGHT / 2;
+  const targetCenterY = link.toNode.y + ACTUAL_NODE_HEIGHT / 2;
+  return laneKey(link.fromNode) !== laneKey(link.toNode)
+    && Math.abs(targetCenterY - sourceCenterY) > ACTUAL_NODE_HEIGHT * 0.75;
+}
+
+function corridorGeometry(link: ActualTopologyLink): EdgeGeometry {
   const sourceCenterX = link.fromNode.x + ACTUAL_NODE_WIDTH / 2;
   const sourceCenterY = link.fromNode.y + ACTUAL_NODE_HEIGHT / 2;
   const targetCenterX = link.toNode.x + ACTUAL_NODE_WIDTH / 2;
   const targetCenterY = link.toNode.y + ACTUAL_NODE_HEIGHT / 2;
   const offset = parallelOffset(link);
-  const crossesLanes = laneKey(link.fromNode) !== laneKey(link.toNode);
-  const stackedLanes = Math.abs(targetCenterY - sourceCenterY) > ACTUAL_NODE_HEIGHT * 0.75;
+  const downward = targetCenterY > sourceCenterY;
+  const start = {
+    x: sourceCenterX,
+    y: downward ? link.fromNode.y + ACTUAL_NODE_HEIGHT : link.fromNode.y,
+  };
+  const end = {
+    x: targetCenterX,
+    y: downward ? link.toNode.y : link.toNode.y + ACTUAL_NODE_HEIGHT,
+  };
+  const corridorY = (start.y + end.y) / 2;
+  const control1 = { x: start.x + offset, y: corridorY };
+  const control2 = { x: end.x + offset, y: corridorY };
+  return {
+    path: `M ${start.x} ${start.y} C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${end.x} ${end.y}`,
+    start,
+    control1,
+    control2,
+    end,
+  };
+}
 
-  /* Cross-lane routing leaves through the side of the card that faces the other
-   * lane and runs through the corridor between the two rows, so an inter-domain
-   * relationship does not cut across the cards of the bands in between. */
-  if (crossesLanes && stackedLanes) {
-    const downward = targetCenterY > sourceCenterY;
-    const start = {
-      x: sourceCenterX,
-      y: downward ? link.fromNode.y + ACTUAL_NODE_HEIGHT : link.fromNode.y,
-    };
-    const end = {
-      x: targetCenterX,
-      y: downward ? link.toNode.y : link.toNode.y + ACTUAL_NODE_HEIGHT,
-    };
-    const corridorY = (start.y + end.y) / 2;
-    const control1 = { x: start.x + offset, y: corridorY };
-    const control2 = { x: end.x + offset, y: corridorY };
-    return {
-      path: `M ${start.x} ${start.y} C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${end.x} ${end.y}`,
-      start,
-      control1,
-      control2,
-      end,
-    };
-  }
-
+function directGeometry(link: ActualTopologyLink): EdgeGeometry {
+  const sourceCenterX = link.fromNode.x + ACTUAL_NODE_WIDTH / 2;
+  const sourceCenterY = link.fromNode.y + ACTUAL_NODE_HEIGHT / 2;
+  const targetCenterX = link.toNode.x + ACTUAL_NODE_WIDTH / 2;
+  const targetCenterY = link.toNode.y + ACTUAL_NODE_HEIGHT / 2;
+  const offset = parallelOffset(link);
   const start = boundaryPoint(link.fromNode, targetCenterX, targetCenterY);
   const end = boundaryPoint(link.toNode, sourceCenterX, sourceCenterY);
 
@@ -193,6 +202,63 @@ export function edgeGeometry(link: ActualTopologyLink): EdgeGeometry {
     control2,
     end,
   };
+}
+
+export function edgeGeometry(link: ActualTopologyLink): EdgeGeometry {
+  return usesCorridor(link) ? corridorGeometry(link) : directGeometry(link);
+}
+
+/* Card occlusion is the readability blocker: a line drawn through a card hides
+ * its name, while two lines crossing in open space stay traceable. The corridor
+ * therefore wins only when it measurably clears more cards than the direct
+ * boundary curve on this layout; otherwise the direct curve is kept. */
+const ROUTE_PROBE_STEPS = 12;
+
+function occlusionCount(
+  geometry: EdgeGeometry,
+  link: ActualTopologyLink,
+  nodes: readonly ActualTopologyNode[],
+): number {
+  const endpoints = new Set([link.fromResourceId, link.toResourceId]);
+  const xs = [geometry.start.x, geometry.control1.x, geometry.control2.x, geometry.end.x];
+  const ys = [geometry.start.y, geometry.control1.y, geometry.control2.y, geometry.end.y];
+  const bounds = {
+    left: Math.min(...xs),
+    right: Math.max(...xs),
+    top: Math.min(...ys),
+    bottom: Math.max(...ys),
+  };
+  const probes: Point[] = [];
+  for (let step = 1; step < ROUTE_PROBE_STEPS; step += 1) {
+    probes.push(pointOnGeometry(geometry, step / ROUTE_PROBE_STEPS));
+  }
+  let hits = 0;
+  for (const node of nodes) {
+    if (endpoints.has(node.resourceId)) continue;
+    /* A card outside the curve's own extent cannot be crossed; the filter keeps
+     * the cost proportional to what the curve actually passes over. */
+    if (node.x + ACTUAL_NODE_WIDTH < bounds.left || node.x > bounds.right) continue;
+    if (node.y + ACTUAL_NODE_HEIGHT < bounds.top || node.y > bounds.bottom) continue;
+    const right = node.x + ACTUAL_NODE_WIDTH;
+    const bottom = node.y + ACTUAL_NODE_HEIGHT;
+    for (const point of probes) {
+      if (point.x > node.x && point.x < right && point.y > node.y && point.y < bottom) {
+        hits += 1;
+        break;
+      }
+    }
+  }
+  return hits;
+}
+
+export function routeGeometry(
+  link: ActualTopologyLink,
+  nodes?: readonly ActualTopologyNode[],
+): EdgeGeometry {
+  if (!nodes || nodes.length === 0 || !usesCorridor(link)) return edgeGeometry(link);
+  const corridor = corridorGeometry(link);
+  const direct = directGeometry(link);
+  return occlusionCount(direct, link, nodes) < occlusionCount(corridor, link, nodes) ? direct : corridor;
 }
 
 export function pointOnGeometry(geometry: EdgeGeometry, t: number): Point {
@@ -274,6 +340,9 @@ export function placeEdgeLabels(
    * selected, focused and hovered path first, so a crowded graph keeps the
    * labels the operator is actually reading. Omitted, every label is equal. */
   rank?: (link: ActualTopologyLink) => number,
+  /* Labels sit on the path the canvas actually drew, so a routed relationship
+   * never carries its name on a line that is not on screen. */
+  geometryOf: (link: ActualTopologyLink) => EdgeGeometry = edgeGeometry,
 ): EdgeLabelPlacement[] {
   const rankOf = (link: ActualTopologyLink) => (rank ? rank(link) : 0);
   const ordered = [...links].sort(
@@ -297,7 +366,7 @@ export function placeEdgeLabels(
     if (!label) continue;
     const width = labelWidth(label);
     const height = EDGE_LABEL_HEIGHT;
-    const geometry = edgeGeometry(link);
+    const geometry = geometryOf(link);
     const base = bases.get(link.edgeId) ?? 0.5;
     let best: {
       t: number;
