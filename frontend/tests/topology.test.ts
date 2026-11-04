@@ -559,6 +559,94 @@ test('routing keeps the corridor only where it hides fewer cards', () => {
   }
 });
 
+test('a column is re-ordered by its relationships, not by name alone', () => {
+  const amf = [1, 2, 3].map((index) => domainProjection(
+    `f100000${index}-1111-4111-8111-00000000000${index}`,
+    `amf-0${index}`,
+    'amf',
+    '5gc',
+  ));
+  const smf = [1, 2, 3].map((index) => domainProjection(
+    `f200000${index}-1111-4111-8111-00000000000${index}`,
+    `smf-0${index}`,
+    'smf',
+    '5gc',
+  ));
+  const laneDirectory = Object.fromEntries([...amf, ...smf].map((item) => [item.resourceId, item]));
+  /* Reverse pairing: a name-ordered column would cross all three lines. */
+  const laneEdges = [
+    edge({ edgeId: 'cross-1', fromResourceId: amf[0].resourceId, toResourceId: smf[2].resourceId }),
+    edge({ edgeId: 'cross-2', fromResourceId: amf[1].resourceId, toResourceId: smf[1].resourceId }),
+    edge({ edgeId: 'cross-3', fromResourceId: amf[2].resourceId, toResourceId: smf[0].resourceId }),
+  ];
+  const layout = buildActualTopology(laneEdges, laneDirectory);
+  const rows = (role: string) => layout.nodes
+    .filter((node) => node.name.startsWith(role))
+    .sort((left, right) => left.y - right.y)
+    .map((node) => node.name);
+  assert.deepEqual(rows('amf'), ['amf-03', 'amf-02', 'amf-01'], 'the column follows its neighbours');
+  assert.deepEqual(rows('smf'), ['smf-01', 'smf-02', 'smf-03']);
+
+  const points = (link: typeof layout.links[number]) => {
+    const geometry = routeGeometry(link, layout.nodes);
+    return Array.from({ length: 25 }, (_, step) => pointOnGeometry(geometry, step / 24));
+  };
+  const orientation = (a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }) => (
+    Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x))
+  );
+  const crosses = (a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }, d: { x: number; y: number }) => (
+    orientation(a, b, c) !== orientation(a, b, d) && orientation(c, d, a) !== orientation(c, d, b)
+  );
+  const paths = layout.links.map(points);
+  let crossings = 0;
+  for (let i = 0; i < paths.length; i += 1) {
+    for (let j = i + 1; j < paths.length; j += 1) {
+      let hit = false;
+      for (let a = 0; a < paths[i].length - 1 && !hit; a += 1) {
+        for (let b = 0; b < paths[j].length - 1; b += 1) {
+          if (crosses(paths[i][a], paths[i][a + 1], paths[j][b], paths[j][b + 1])) {
+            hit = true;
+            break;
+          }
+        }
+      }
+      if (hit) crossings += 1;
+    }
+  }
+  assert.equal(crossings, 0, 'the re-ordered columns must not cross each other');
+});
+
+test('layout positions depend on structure only, never on refresh inputs', () => {
+  const nodes = [
+    domainProjection('a1000001-1111-4111-8111-000000000001', 'amf-01', 'amf', '5gc'),
+    domainProjection('a1000002-1111-4111-8111-000000000002', 'smf-01', 'smf', '5gc'),
+    domainProjection('a1000003-1111-4111-8111-000000000003', 'upf-01', 'upf', '5gc'),
+    domainProjection('a1000004-1111-4111-8111-000000000004', 'mme-01', 'mme', 'epc'),
+  ];
+  const directory = Object.fromEntries(nodes.map((node) => [node.resourceId, node]));
+  const edges = [
+    edge({ edgeId: 'stable-1', fromResourceId: nodes[0].resourceId, toResourceId: nodes[1].resourceId }),
+    edge({ edgeId: 'stable-2', fromResourceId: nodes[1].resourceId, toResourceId: nodes[2].resourceId }),
+    edge({ edgeId: 'stable-3', fromResourceId: nodes[2].resourceId, toResourceId: nodes[3].resourceId }),
+  ];
+  const positions = (built: ReturnType<typeof buildActualTopology>) => Object.fromEntries(
+    built.nodes.map((node) => [node.resourceId, `${node.x}:${node.y}`]),
+  );
+
+  const first = buildActualTopology(edges, directory);
+  const second = buildActualTopology(edges, directory);
+  assert.deepEqual(positions(second), positions(first), 'the same structure must produce the same positions');
+
+  const shuffled = buildActualTopology([edges[2], edges[0], edges[1]], directory);
+  assert.deepEqual(positions(shuffled), positions(first), 'payload order must not move a card');
+
+  const healthChanged = buildActualTopology(edges, Object.fromEntries(nodes.map((node) => [
+    node.resourceId,
+    { ...node, runtimeStatus: 'stopped' as const },
+  ])));
+  assert.deepEqual(positions(healthChanged), positions(first), 'a health change must not re-order the layout');
+});
+
 test('the canvas accounts for every relationship label, including suppressed ones', () => {
   const layout = buildActualTopology([
     edge(),

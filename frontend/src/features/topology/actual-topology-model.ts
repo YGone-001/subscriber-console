@@ -261,6 +261,59 @@ function sortResources(left: ResourceProjection, right: ResourceProjection): num
     || compareText(left.resourceId, right.resourceId);
 }
 
+/* One layout version may spend a fixed, bounded number of ordering passes to
+ * reduce crossings between adjacent columns. The result depends only on the
+ * relationship structure and authoritative identifiers: health, alerts, read
+ * timestamps and payload order never enter the key, so a refresh, a health
+ * change or a reordered response cannot move a card. The lane-edge rule and the
+ * name/id tiebreak stay in force, and the pass count is a constant. */
+const COLUMN_ORDER_PASSES = 4;
+
+function orderColumnNodes(
+  columns: Array<{ group: ActualTopologyGroup; nodes: ActualTopologyNode[] }>,
+  adjacency: ReadonlyMap<string, readonly string[]>,
+  columnOf: ReadonlyMap<string, ActualTopologyGroup>,
+  laneFirst: (left: ActualTopologyNode, right: ActualTopologyNode) => number,
+): void {
+  if (columns.length < 2) return;
+  const rowOf = new Map<string, number>();
+  const indexRows = () => {
+    for (const column of columns) {
+      column.nodes.forEach((node, row) => rowOf.set(node.resourceId, row));
+    }
+  };
+  indexRows();
+
+  for (let pass = 0; pass < COLUMN_ORDER_PASSES; pass += 1) {
+    /* Alternate the sweep direction so a pass cannot only push nodes one way. */
+    const sequence = pass % 2 === 0 ? columns : [...columns].reverse();
+    for (const column of sequence) {
+      const scored = column.nodes.map((node) => {
+        let sum = 0;
+        let count = 0;
+        for (const neighborId of adjacency.get(node.resourceId) ?? []) {
+          if (columnOf.get(neighborId) === column.group) continue;
+          const row = rowOf.get(neighborId);
+          if (row === undefined) continue;
+          sum += row;
+          count += 1;
+        }
+        return { node, barycenter: count > 0 ? sum / count : Number.POSITIVE_INFINITY };
+      });
+      scored.sort((left, right) => (
+        laneFirst(left.node, right.node)
+        || (left.barycenter === right.barycenter
+          ? 0
+          : left.barycenter < right.barycenter ? -1 : 1)
+        || compareText(resourceName(left.node), resourceName(right.node))
+        || compareText(left.node.resourceId, right.node.resourceId)
+      ));
+      column.nodes = scored.map((entry) => entry.node);
+      column.nodes.forEach((node, row) => rowOf.set(node.resourceId, row));
+    }
+  }
+}
+
 function isActiveEdge(value: unknown): value is TopologyEdge {
   if (!value || typeof value !== 'object') return false;
   const edge = value as Partial<TopologyEdge>;
@@ -514,6 +567,31 @@ export function buildActualTopology(
       ));
       return { group, nodes: nodesInGroup };
     });
+    /* Structure-aware row order inside the band: a fixed number of barycenter
+     * passes over the relationships this band can actually draw. */
+    const bandIds = new Set(bandRecords.map((node) => node.resourceId));
+    const adjacency = new Map<string, string[]>();
+    const addNeighbor = (resourceId: string, neighborId: string) => {
+      const bucket = adjacency.get(resourceId);
+      if (bucket) bucket.push(neighborId);
+      else adjacency.set(resourceId, [neighborId]);
+    };
+    for (const edge of visibleEdges) {
+      if (!bandIds.has(edge.fromResourceId) || !bandIds.has(edge.toResourceId)) continue;
+      addNeighbor(edge.fromResourceId, edge.toResourceId);
+      addNeighbor(edge.toResourceId, edge.fromResourceId);
+    }
+    for (const neighbors of adjacency.values()) neighbors.sort(compareText);
+    const columnOf = new Map<string, ActualTopologyGroup>();
+    for (const entry of columnLists) {
+      for (const node of entry.nodes) columnOf.set(node.resourceId, entry.group);
+    }
+    orderColumnNodes(
+      columnLists,
+      adjacency,
+      columnOf,
+      (left, right) => (verticalLanes ? crossLaneFirst(left, right) : 0),
+    );
     const laneRows = columnLists.reduce((max, entry) => Math.max(max, entry.nodes.length), 0);
     const bandWidth = presentGroups.length * ACTUAL_GROUP_WIDTH;
     const bandHeight = NODE_TOP_OFFSET
