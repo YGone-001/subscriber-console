@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (168 exact METHOD+PATH registrations)
+Read + write APIs (175 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 168
+Go registration set                  = 175
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -467,6 +467,7 @@ OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/term
 OCS balance writes = ocs_balances adjust (Direct Execution), reset (permanently disabled), Go-owned
 User Management writes = app_users CRUD + disable + password-reset (Direct Execution), Go-owned
 Platform Services writes = alerts acknowledge/workflow (Direct Execution), Go-owned
+Agent control-plane writes = app_agents registration, credentials, sessions and scoped latest observations, Ops-only, Go-owned
 ```
 
 写链：
@@ -544,8 +545,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 168 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，168 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 175 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，175 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -575,7 +576,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (168 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (175 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -625,9 +626,16 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **168 条** METHOD+PATH 精确注册（GET 82 / POST 60 / PUT 13 / DELETE 10 / PATCH 3）：
+路由权威为源码派生的 Go 注册集合，共 **175 条** METHOD+PATH 精确注册（GET 84 / POST 64 / PUT 14 / DELETE 10 / PATCH 3）：
 
 ```text
+GET    /api/agents
+GET    /api/agents/{agentId}
+POST   /api/agents
+PUT    /api/agents/{agentId}
+POST   /api/agents/{agentId}/credentials
+POST   /api/agent-sessions/{agentId}
+POST   /api/agent-reports/{agentId}
 GET    /api/analytics/metrics
 GET    /api/analytics/sparkline
 GET    /api/ratings
@@ -801,7 +809,7 @@ POST   /api/knowledge/files
 状态：
 
 ```text
-Go production API registrations = 168 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 175 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0

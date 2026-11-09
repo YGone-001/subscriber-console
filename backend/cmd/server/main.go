@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"subscriber/internal/agents"
 	"subscriber/internal/alert"
 	"subscriber/internal/analytics"
 	"subscriber/internal/audit"
@@ -437,6 +438,20 @@ func main() {
 	runtimeService.Start(context.Background())
 	defer runtimeService.Stop()
 
+	// The controller retains its in-process collector; remote collectors only
+	// publish bounded observations under independently provisioned identities.
+	agentContext, stopAgentSampler := context.WithCancel(context.Background())
+	agentSamplerDone := make(chan struct{})
+	agentSampler := agents.NewHostSampler()
+	go func() {
+		defer close(agentSamplerDone)
+		agentSampler.Run(agentContext)
+	}()
+	defer func() { stopAgentSampler(); <-agentSamplerDone }()
+	agentService := agents.NewService(agents.NewRepository(mc.Ops), userRepo, inventoryRepo,
+		agents.NewLocalCollector(runtimeService, agentSampler), auditWriter)
+	agentHandler := agents.NewHandler(agentService, limiter, auditWriter)
+
 	runtimeInventoryGateway := runtimewire.NewInventoryGateway(inventoryRepo)
 	runtimeTargetGateway := runtimewire.NewTargetGateway(nfHealthRepo, nfHealthDest, nfHealthUnits, nfHealthBindings, nfHealthResolvers)
 	runtimeBindingGateway := runtimewire.NewBindingGateway(bindingStore, nfHealthBindings)
@@ -733,6 +748,17 @@ func main() {
 
 	// Runtime snapshot SSE stream (single shared sample broadcast)
 	mux.Handle("GET /api/runtime/stream", authMiddleware(runtimeStreamHandler))
+
+	// Human management uses the existing cookie/RBAC/fresh-actor boundary.
+	mux.Handle("GET /api/agents", authMiddleware(http.HandlerFunc(agentHandler.List)))
+	mux.Handle("GET /api/agents/{agentId}", authMiddleware(http.HandlerFunc(agentHandler.Get)))
+	mux.Handle("POST /api/agents", authMiddleware(http.HandlerFunc(agentHandler.Create)))
+	mux.Handle("PUT /api/agents/{agentId}", authMiddleware(http.HandlerFunc(agentHandler.Update)))
+	mux.Handle("POST /api/agents/{agentId}/credentials", authMiddleware(http.HandlerFunc(agentHandler.Rotate)))
+	// Machine ingress has its own credential/session validation, never a
+	// browser-cookie fallback. It cannot modify Inventory or business domains.
+	mux.Handle("POST /api/agent-sessions/{agentId}", http.HandlerFunc(agentHandler.Session))
+	mux.Handle("POST /api/agent-reports/{agentId}", http.HandlerFunc(agentHandler.Report))
 
 	// Operations summary (single read, per-section full-collection statistics)
 	mux.Handle("GET /api/operations/summary", authMiddleware(http.HandlerFunc(operationsSummaryHandler.Summary)))

@@ -1,0 +1,26 @@
+[Unit]
+Description=xCloud read-only node collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xcloud-agent
+Group=xcloud-agent
+ExecStart=/usr/local/bin/xcloud-agent -config /etc/xcloud-agent/config.json
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

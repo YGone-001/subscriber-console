@@ -190,7 +190,18 @@ const EXPECTED_RETENTION_ROUTES = new Set([
  * behind the surface it was meant to pin. The total is never a literal either: it
  * is the frozen baseline plus the declared additions.
  */
+const EXPECTED_AGENT_ROUTES = new Set([
+  'GET /api/agents',
+  'GET /api/agents/{agentId}',
+  'POST /api/agents',
+  'PUT /api/agents/{agentId}',
+  'POST /api/agents/{agentId}/credentials',
+  'POST /api/agent-sessions/{agentId}',
+  'POST /api/agent-reports/{agentId}',
+]);
+
 const ALLOWED_ADDED_ROUTES = new Set([
+  ...EXPECTED_AGENT_ROUTES,
   ...EXPECTED_INVENTORY_ROUTES,
   ...EXPECTED_TOPOLOGY_ROUTES,
   ...EXPECTED_DISCOVERY_ROUTES,
