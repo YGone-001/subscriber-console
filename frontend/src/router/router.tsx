@@ -39,9 +39,12 @@ import { KnowledgePage } from '../features/knowledge/KnowledgePage';
 import { KnowledgeDetailPage } from '../features/knowledge/KnowledgeDetailPage';
 import { KnowledgeEditorPage } from '../features/knowledge/KnowledgeEditorPage';
 import { RetentionPage } from '../features/retention/RetentionPage';
+import { AgentsPage } from '../features/agents/AgentsPage';
 
 const pages: Record<string, ReactNode> = {
   '/': <DashboardPage />,
+  '/agents': <AgentsPage />,
+  '/agents/:agentId': <AgentsPage />,
   '/inventory': <InventoryPage />,
   '/inventory/assets': <InventoryAssetsPage />,
   '/inventory/runtime': <InventoryRuntimePage />,

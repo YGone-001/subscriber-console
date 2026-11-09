@@ -45,6 +45,7 @@ Canonical frontend SPA source     -> frontend/src/
 - [NF discovery foundation](architecture/nf-discovery.md)
 - [Operational overview and network element management](architecture/operational-overview.md) - current operational surfaces: authorities, projection, denominators and boundaries.
 - [UE information and EPC/5GC online users](architecture/ue-info.md) - read-only UE source allowlist, merge semantics, partial-source behavior and the current IMS scope boundary.
+- [Agent management](architecture/agent-management.md) - single controller, independent read-only Linux collectors, machine identity, node freshness and explicit management assignment.
 - [Host observation](architecture/runtime-discovery.md) - CNMS-compatible local process recognition, runtime status semantics and the governed monitoring bootstrap.
 - [Knowledge base](architecture/knowledge-base.md) - fault phenomena, root causes and resolutions with secure local attachment storage.
 - [Architecture evolution roadmap](architecture/architecture-evolution-roadmap.md) - planned architecture evolution authority; it distinguishes future targets from current production behavior.

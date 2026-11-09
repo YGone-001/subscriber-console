@@ -418,5 +418,21 @@
       "GET /api/knowledge/meta",
       "GET /api/knowledge/entries/{entryId}"
     ]
+  },
+  {
+    "route": "/agents",
+    "mode": "read",
+    "source": "frontend/src/features/agents/AgentsPage.tsx",
+    "readEndpoints": [
+      "GET /api/agents"
+    ]
+  },
+  {
+    "route": "/agents/:agentId",
+    "mode": "read",
+    "source": "frontend/src/features/agents/AgentsPage.tsx",
+    "readEndpoints": [
+      "GET /api/agents/{agentId}"
+    ]
   }
 ]

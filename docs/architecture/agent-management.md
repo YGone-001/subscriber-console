@@ -23,7 +23,7 @@ edges or NF Health targets and do not establish L3 service health.
   latest-report repository and host measurements.
 - `backend/internal/agentclient`: outbound HTTPS transport and collection loop.
 - `backend/cmd/agent`: standalone Linux collector binary.
-- Console integration is delivered separately from the backend and collector.
+- `frontend/src/features/agents`: management list and node evidence detail.
 - `deploy/systemd/xcloud-agent.service`: unprivileged service example.
 
 The local controller retains the existing runtime scanner and its registry.
@@ -184,13 +184,17 @@ the controller's existing API origin.
 Automated tests exercise independent node evidence, duplicate/out-of-order
 publication, session replacement, atomic revocation, disabled/fresh-actor
 rejection, missing values, partial scans, bounded schema, transport and redirect
-rules, metadata assignment and node status projection.
+rules, metadata assignment and UI status projection.
 
 The Linux integration test launches two actual collector binaries against a
 test-owned TLS controller on one host. It verifies executable/protocol/service
-integration without claiming a deployment across physical hosts.
+integration without claiming a deployment across physical hosts. UI verification
+uses an explicitly labelled, loopback-only demo fixture.
 
 Latest observations are retained; this is not a historical telemetry store.
+Remote process-observation memory currently lasts for the collector process.
+After a collector restart, an undetected component is not proof that its software
+was never installed; no stopped state is inferred from lost observation history.
 Remote log streaming, topology composition, NF Health ingestion, software
 deployment and agent-driven business mutations are not implemented. Real
 multi-host acceptance must use actual collector binaries and TLS transport;

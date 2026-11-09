@@ -206,5 +206,15 @@
     "dynamicParameters": [
       "entryId"
     ]
+  },
+  {
+    "route": "/agents",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/agents/:agentId",
+    "dynamicParameters": [
+      "agentId"
+    ]
   }
 ]
