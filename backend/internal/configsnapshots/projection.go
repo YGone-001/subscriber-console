@@ -30,7 +30,7 @@ func wordSet(s string) map[string]bool {
 // Projection is a positive allowlist, not a generic secret-name blacklist.
 // Values, comments and unknown key names never appear in diagnostics.
 func Projection(data []byte, format, profile string) (string, string, string) {
-	if profile == "metadata-only-v1" || format == "diameter_conf" {
+	if profile == "metadata-only-v1" || format == "diameter_conf" || format == "text" {
 		return "metadata_only", "profile_metadata_only", ""
 	}
 	if format == "json" && !json.Valid(data) {

@@ -20,17 +20,30 @@ Viewing requires `core.read`. Viewer mutations return 403. Auditing is best-effo
 ## Declaration and privacy
 
 `CONFIG_SNAPSHOT_MANIFEST` names an absolute JSON declaration. The declaration
-contains a stable local collector UUID, an absolute root and at most 128 sources.
+contains a stable local collector UUID, at most 16 non-overlapping absolute roots
+and at most 128 sources. The original `root` field remains supported; the optional
+`roots` array adds independent permitted directories or replaces `root` entirely.
+Every source resolves to exactly one permitted root before collection. Adding
+another root preserves existing source generations and baselines when their
+identity/path/profile stay the same. Neither paths nor root declarations are
+compiled defaults; operators must adjust them for each deployment.
 Each source has a UUID, display name, absolute regular-file path under the root,
 format, approved projection profile and optional explicit Inventory UUID.
 The browser supplies source IDs, never file paths or commands. Paths remain
 server-side. Symbolic links, special files, out-of-root paths, changed file
 identities, unsupported encoding and files over 1 MiB are rejected.
 
-`deploy/examples/config-snapshots.json` declares the user's approved EPC/5GC
-sources under `/usr/local/src/xcloud-5gs/install/etc`: 18 Open5GS YAML files and
-five matching freeDiameter `.conf` files. Charging OCS files, private keys,
-certificates and unrelated files are excluded. The example is not auto-loaded.
+`deploy/examples/config-snapshots.json` is a current-environment example. Its
+EPC/5GC root is `/usr/local/src/xcloud-5gs/install/etc`, with 18 Open5GS YAML files
+and five matching freeDiameter `.conf` files. IMS configurations use
+`/etc/xCloud/gcc/<NE>`, where `<NE>` is the network-element type directory, not a
+literal directory name. The example declares separate roots for `icscf`, `pcscf`,
+`scscf` and `smsc`, with 38 explicitly listed CFG/XML/CONF/LIST files. Names
+distinguish `EPC/5GC` and `IMS <NE>` sources. This naming does not create or resolve
+Inventory resource identity; that still requires an explicit resource UUID.
+Charging OCS files, private keys, certificates, Git data, database directories,
+scripts and schema files are excluded. The example is not auto-loaded and runtime
+collection never recursively discovers additional configuration files.
 Collectors on other installations must use their own stable UUIDs and explicitly
 review their paths and resource associations.
 
@@ -40,7 +53,11 @@ keys, excess depth/nodes and ambiguous documents. Only positively approved
 network endpoint/session fields and logger level are projected. Unknown fields,
 comments, database URIs, security configuration and credential-bearing URLs are
 omitted. The output is a deterministic JSON projection, not the original config.
-Diameter and other unprojectable documents remain metadata-only. No original
+Diameter and other unprojectable documents remain metadata-only. IMS CFG/XML and
+other approved UTF-8 configuration files use `format: "text"` with the mandatory
+`metadata-only-v1` profile. This retains collection time, byte size, private change
+evidence and version/baseline history without parsing or displaying IMS secrets.
+It does not provide a visible-field diff for these files. No original
 configuration content is stored, downloaded or rendered.
 
 `CONFIG_SNAPSHOT_KEY_FILE` must name a private regular file containing at least

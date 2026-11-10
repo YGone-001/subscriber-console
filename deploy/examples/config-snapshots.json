@@ -1,10 +1,16 @@
 {
   "collectorId": "71d0b29b-120a-4384-946f-d4210ed2bd52",
   "root": "/usr/local/src/xcloud-5gs/install/etc",
+  "roots": [
+    "/etc/xCloud/gcc/icscf",
+    "/etc/xCloud/gcc/pcscf",
+    "/etc/xCloud/gcc/scscf",
+    "/etc/xCloud/gcc/smsc"
+  ],
   "sources": [
     {
       "sourceId": "fc1e52cc-99db-9d8b-64d2-258d74cec272",
-      "name": "AMF YAML",
+      "name": "EPC/5GC AMF YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/amf.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -12,7 +18,7 @@
     },
     {
       "sourceId": "6e16f37d-9600-f6fa-d64f-e7c06d3fd857",
-      "name": "AUSF YAML",
+      "name": "EPC/5GC AUSF YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/ausf.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -20,7 +26,7 @@
     },
     {
       "sourceId": "f14bc625-4fbf-0056-3811-316464a00208",
-      "name": "BSF YAML",
+      "name": "EPC/5GC BSF YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/bsf.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -28,7 +34,7 @@
     },
     {
       "sourceId": "a0c03db2-24f0-9a0d-c3e4-eb805549dc96",
-      "name": "HSS YAML",
+      "name": "EPC/5GC HSS YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/hss.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -36,7 +42,7 @@
     },
     {
       "sourceId": "f65d910c-4e76-5553-5b47-ee6262d273c5",
-      "name": "MME YAML",
+      "name": "EPC/5GC MME YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/mme.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -44,7 +50,7 @@
     },
     {
       "sourceId": "650cefd0-e592-8ff8-007c-85b7c50fafdc",
-      "name": "NRF YAML",
+      "name": "EPC/5GC NRF YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/nrf.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -52,7 +58,7 @@
     },
     {
       "sourceId": "a5dba95b-81c1-306a-6e1d-61bbb0e1084f",
-      "name": "NSSF YAML",
+      "name": "EPC/5GC NSSF YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/nssf.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -60,7 +66,7 @@
     },
     {
       "sourceId": "b0044809-ccfc-5bf1-7bb9-958df3cf8d33",
-      "name": "PCF YAML",
+      "name": "EPC/5GC PCF YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/pcf.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -68,7 +74,7 @@
     },
     {
       "sourceId": "3b139a12-f5fd-a36a-8e32-c94f79031682",
-      "name": "PCRF YAML",
+      "name": "EPC/5GC PCRF YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/pcrf.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -76,7 +82,7 @@
     },
     {
       "sourceId": "0f289cd3-b615-2b7b-8ae7-00943910c3c2",
-      "name": "SCP YAML",
+      "name": "EPC/5GC SCP YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/scp.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -84,7 +90,7 @@
     },
     {
       "sourceId": "7195d44b-6ca9-6da8-d0f3-d339a932a4d9",
-      "name": "SEPP1 YAML",
+      "name": "EPC/5GC SEPP1 YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/sepp1.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -92,7 +98,7 @@
     },
     {
       "sourceId": "5d3e49f2-ffb6-c355-488d-a18d4b656ed4",
-      "name": "SEPP2 YAML",
+      "name": "EPC/5GC SEPP2 YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/sepp2.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -100,7 +106,7 @@
     },
     {
       "sourceId": "dff2f8a3-a56d-4949-4f26-016cd4012d90",
-      "name": "SGWC YAML",
+      "name": "EPC/5GC SGWC YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/sgwc.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -108,7 +114,7 @@
     },
     {
       "sourceId": "60f910a8-a775-09b4-1215-8307defd897b",
-      "name": "SGWU YAML",
+      "name": "EPC/5GC SGWU YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/sgwu.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -116,7 +122,7 @@
     },
     {
       "sourceId": "19cdb6ff-9f1f-0838-c040-9d5ba8034808",
-      "name": "SMF YAML",
+      "name": "EPC/5GC SMF YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/smf.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -124,7 +130,7 @@
     },
     {
       "sourceId": "da87b843-f587-1008-dce6-95557028250f",
-      "name": "UDM YAML",
+      "name": "EPC/5GC UDM YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/udm.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -132,7 +138,7 @@
     },
     {
       "sourceId": "e55e5abb-c6ee-0d74-28c9-687d5da26a90",
-      "name": "UDR YAML",
+      "name": "EPC/5GC UDR YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/udr.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -140,7 +146,7 @@
     },
     {
       "sourceId": "eb6f722a-3d2c-8765-2fbb-cb1f8f1b79bb",
-      "name": "UPF YAML",
+      "name": "EPC/5GC UPF YAML",
       "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/upf.yaml",
       "format": "yaml",
       "profile": "network-endpoints-v1",
@@ -148,7 +154,7 @@
     },
     {
       "sourceId": "7020576a-41e4-19a9-8aaa-a1eda0ce9482",
-      "name": "HSS Diameter",
+      "name": "EPC/5GC HSS Diameter",
       "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/hss.conf",
       "format": "diameter_conf",
       "profile": "metadata-only-v1",
@@ -156,7 +162,7 @@
     },
     {
       "sourceId": "4b174487-16ab-0ab2-a1e8-f5a4e50e1cc6",
-      "name": "MME Diameter",
+      "name": "EPC/5GC MME Diameter",
       "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/mme.conf",
       "format": "diameter_conf",
       "profile": "metadata-only-v1",
@@ -164,7 +170,7 @@
     },
     {
       "sourceId": "5b3962a4-ace0-828a-0065-4688990222b4",
-      "name": "PCF Diameter",
+      "name": "EPC/5GC PCF Diameter",
       "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/pcf.conf",
       "format": "diameter_conf",
       "profile": "metadata-only-v1",
@@ -172,7 +178,7 @@
     },
     {
       "sourceId": "2d06a4e2-1d5d-d032-bc4d-02a087f3fe61",
-      "name": "PCRF Diameter",
+      "name": "EPC/5GC PCRF Diameter",
       "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/pcrf.conf",
       "format": "diameter_conf",
       "profile": "metadata-only-v1",
@@ -180,9 +186,313 @@
     },
     {
       "sourceId": "a7e430f8-98cb-dfce-5a6d-4e0ec2998791",
-      "name": "SMF Diameter",
+      "name": "EPC/5GC SMF Diameter",
       "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/smf.conf",
       "format": "diameter_conf",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "637f4772-de56-421c-987d-12db692cb254",
+      "name": "IMS ICSCF icscf.cfg",
+      "path": "/etc/xCloud/gcc/icscf/icscf.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "b1206748-a1d6-4645-bc19-609642e647a3",
+      "name": "IMS ICSCF icscf.xml",
+      "path": "/etc/xCloud/gcc/icscf/icscf.xml",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "4df45579-20df-45b7-9180-7ed51c457f64",
+      "name": "IMS ICSCF icscf_main.cfg",
+      "path": "/etc/xCloud/gcc/icscf/icscf_main.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "2d475c72-a449-4f8b-8b8b-811456a27bcb",
+      "name": "IMS ICSCF vars.cfg",
+      "path": "/etc/xCloud/gcc/icscf/vars.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "e81f1fe4-5b5d-4f0f-ba61-4f8ede4d3c5f",
+      "name": "IMS PCSCF dialplan.conf",
+      "path": "/etc/xCloud/gcc/pcscf/dialplan.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "fb98c7c0-3e50-4d1b-9192-aa9f10fa3f69",
+      "name": "IMS PCSCF dispatcher.list",
+      "path": "/etc/xCloud/gcc/pcscf/dispatcher.list",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "dfdfb483-22b7-4b1e-9592-8eebd2b5f6cc",
+      "name": "IMS PCSCF pcscf.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/pcscf.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "f239653b-df36-4ff7-b3c5-6f325e3bc1be",
+      "name": "IMS PCSCF pcscf.xml",
+      "path": "/etc/xCloud/gcc/pcscf/pcscf.xml",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "3cc1c7b8-d35f-4cf2-a30a-5dbdfd590734",
+      "name": "IMS PCSCF pcscf_main.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/pcscf_main.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "1edf1aab-03eb-4c5a-b300-ac76628409d8",
+      "name": "IMS PCSCF vars.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/vars.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "ac8661fd-34b7-4c5d-a986-89ba96aa583d",
+      "name": "IMS PCSCF route/cdr.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/route/cdr.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "a6da2988-8da0-4755-b566-95d7c81b3175",
+      "name": "IMS PCSCF route/mo.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/route/mo.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "bdc0bf84-80f9-424a-9aaf-f508f77295d3",
+      "name": "IMS PCSCF route/mt.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/route/mt.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "49f3a910-625b-4793-a073-8461fa956bea",
+      "name": "IMS PCSCF route/register.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/route/register.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "0f7d6a2c-2642-4f0d-aac7-6f5c73b7240b",
+      "name": "IMS PCSCF route/rtp.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/route/rtp.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "b7d86ca2-6f75-4d32-9da0-860e7c01bc8c",
+      "name": "IMS PCSCF route/websocket.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/route/websocket.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "54e146fa-f2c3-4595-9a0a-b2ac74161b8b",
+      "name": "IMS PCSCF route/xmlrpc.cfg",
+      "path": "/etc/xCloud/gcc/pcscf/route/xmlrpc.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "13505f4b-2123-414d-a949-b7aeb8dcbce2",
+      "name": "IMS PCSCF sems/sems.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/sems.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "c0ae9e7a-b2df-4d54-9b56-7e6883d42c18",
+      "name": "IMS PCSCF sems/etc/methodmap.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/methodmap.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "25ecfe1f-5179-4638-b20d-f894dfcd9e79",
+      "name": "IMS PCSCF sems/etc/mo.sbcprofile.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/mo.sbcprofile.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "bc6572fe-614a-456e-bb86-bf27265acc22",
+      "name": "IMS PCSCF sems/etc/monitoring.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/monitoring.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "dc188127-5cab-4287-b07c-2f3743d6a6a6",
+      "name": "IMS PCSCF sems/etc/mt.sbcprofile.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/mt.sbcprofile.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "7678a2ad-1ae7-4db9-bc36-f4b270d7d503",
+      "name": "IMS PCSCF sems/etc/nocache.sbcprofile.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/nocache.sbcprofile.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "eb2899ee-9a14-48a4-b67a-ce2d9e699ba1",
+      "name": "IMS PCSCF sems/etc/refuse.sbcprofile.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/refuse.sbcprofile.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "d38f6cf3-0f2c-4aba-b68e-718a8127ebd0",
+      "name": "IMS PCSCF sems/etc/refuse_with_200.sbcprofile.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/refuse_with_200.sbcprofile.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "1f173a71-09c5-46cd-a6e2-4cdc68d52193",
+      "name": "IMS PCSCF sems/etc/register.sbcprofile.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/register.sbcprofile.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "999c9ab8-8f08-4cb9-b858-a7a05bf4bb0a",
+      "name": "IMS PCSCF sems/etc/rurimap.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/rurimap.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "59a0d74c-ce08-4e3d-b329-d22c0eef2b91",
+      "name": "IMS PCSCF sems/etc/sbc.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/sbc.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "9d61b8cf-40d4-4c8b-9474-73e863aae1e0",
+      "name": "IMS PCSCF sems/etc/stats.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/stats.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "e64eb347-2157-475e-b04d-c93135d70a8a",
+      "name": "IMS PCSCF sems/etc/xmlrpc2di.conf",
+      "path": "/etc/xCloud/gcc/pcscf/sems/etc/xmlrpc2di.conf",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "86cbaf20-a203-43c0-87f8-9d47f9c2272c",
+      "name": "IMS SCSCF dispatcher.list",
+      "path": "/etc/xCloud/gcc/scscf/dispatcher.list",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "cc9a599c-5642-4945-80f9-612e861d8d4a",
+      "name": "IMS SCSCF scscf.cfg",
+      "path": "/etc/xCloud/gcc/scscf/scscf.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "0a6bfa88-83ba-4b60-9143-124ede205fe7",
+      "name": "IMS SCSCF scscf.xml",
+      "path": "/etc/xCloud/gcc/scscf/scscf.xml",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "067bc556-ae2c-416c-86eb-8030aa8bcd21",
+      "name": "IMS SCSCF scscf_main.cfg",
+      "path": "/etc/xCloud/gcc/scscf/scscf_main.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "26e2c495-1b12-413f-99d9-efc3ff4de6c7",
+      "name": "IMS SCSCF vars.cfg",
+      "path": "/etc/xCloud/gcc/scscf/vars.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "bfac9d45-bea1-425a-91dc-9ac4d1b925b3",
+      "name": "IMS SMSC smsc.cfg",
+      "path": "/etc/xCloud/gcc/smsc/smsc.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "9b95c5f9-a9d3-4ac6-83a6-11b94aa54aa3",
+      "name": "IMS SMSC smsc_main.cfg",
+      "path": "/etc/xCloud/gcc/smsc/smsc_main.cfg",
+      "format": "text",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "18c2d277-a33e-45ad-b4ed-d99327149737",
+      "name": "IMS SMSC vars.cfg",
+      "path": "/etc/xCloud/gcc/smsc/vars.cfg",
+      "format": "text",
       "profile": "metadata-only-v1",
       "intervalSeconds": 0
     }

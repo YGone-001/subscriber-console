@@ -124,3 +124,63 @@ func TestManifestAndPrivateSerialization(t *testing.T) {
 		t.Fatal("out-of-root manifest accepted")
 	}
 }
+
+func TestMultipleRootsPreserveLegacyIdentityAndConfinement(t *testing.T) {
+	epcRoot, imsRoot := t.TempDir(), t.TempDir()
+	first := SourceDeclaration{SourceID: randomID(), Name: "EPC YAML", Path: filepath.Join(epcRoot, "amf.yaml"), Format: "yaml", Profile: PolicyVersion}
+	m := Manifest{CollectorID: randomID(), Root: epcRoot, Sources: []SourceDeclaration{first}}
+	parse := func() (Catalog, error) { data, _ := json.Marshal(m); return ParseCatalog(data) }
+	legacy, err := parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ims := SourceDeclaration{SourceID: randomID(), Name: "IMS PCSCF vars.cfg", Path: filepath.Join(imsRoot, "vars.cfg"), Format: "text", Profile: "metadata-only-v1"}
+	m.Roots = []string{imsRoot}
+	m.Sources = append(m.Sources, ims)
+	catalog, err := parse()
+	if err != nil || len(catalog.Sources) != 2 {
+		t.Fatal("separate declared roots were rejected")
+	}
+	for _, source := range catalog.Sources {
+		if source.SourceID == first.SourceID && (source.Root != epcRoot || source.Generation != legacy.Sources[0].Generation) {
+			t.Fatal("adding IMS roots changed existing source identity")
+		}
+		if source.SourceID == ims.SourceID && source.Root != imsRoot {
+			t.Fatal("IMS source selected another source root")
+		}
+	}
+	public, _ := json.Marshal(catalog.Sources)
+	if strings.Contains(string(public), epcRoot) || strings.Contains(string(public), imsRoot) {
+		t.Fatal("private filesystem scope reached the API")
+	}
+	m.Sources[1].Path = filepath.Join(t.TempDir(), "outside.cfg")
+	if _, err = parse(); err == nil {
+		t.Fatal("undeclared root was accepted")
+	}
+	m.Sources[1] = ims
+	m.Sources[1].Profile = PolicyVersion
+	if _, err = parse(); err == nil {
+		t.Fatal("opaque IMS text was allowed to enter a content projection")
+	}
+	m.Sources[1] = ims
+	for _, roots := range [][]string{{imsRoot, imsRoot}, {epcRoot}, {filepath.Join(imsRoot, "child"), imsRoot}, {"relative"}} {
+		m.Roots = roots
+		if _, err = parse(); err == nil {
+			t.Fatal("duplicate, overlapping or relative roots were accepted")
+		}
+	}
+	m.Root, m.Roots, m.Sources = "", []string{imsRoot}, []SourceDeclaration{ims}
+	if _, err = parse(); err != nil {
+		t.Fatal("roots-only declaration was rejected")
+	}
+	for len(m.Roots) <= MaxRoots {
+		m.Roots = append(m.Roots, t.TempDir())
+	}
+	if _, err = parse(); err == nil {
+		t.Fatal("unbounded root list was accepted")
+	}
+	mode, _, projection := Projection([]byte("password=SYNTHETIC_IMS_SECRET"), "text", PolicyVersion)
+	if mode != "metadata_only" || projection != "" {
+		t.Fatal("opaque text content reached a projection")
+	}
+}

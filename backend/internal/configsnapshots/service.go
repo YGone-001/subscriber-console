@@ -411,7 +411,11 @@ func (s *Service) capture(ctx context.Context, id string, req CaptureRequest, ac
 		return nil, fail(507, "CONFIG_CAPACITY_EXCEEDED", "Configuration storage capacity exceeded")
 	}
 	o := Observation{ObservationID: obsID, SourceID: id, Generation: source.Generation, ResourceID: source.ResourceID, CollectedAt: s.now(), Actor: actor, Status: "ok"}
-	data, reason := s.read(ctx, s.catalog.Root, source)
+	root := source.Root
+	if root == "" {
+		root = s.catalog.Root
+	}
+	data, reason := s.read(ctx, root, source)
 	var snapshot *Snapshot
 	if reason != "" {
 		o.Status = "unreadable"
@@ -689,5 +693,5 @@ func (s *Service) Meta() map[string]any {
 	s.workerMu.Lock()
 	worker := s.workerState
 	s.workerMu.Unlock()
-	return map[string]any{"catalogState": s.catalog.State, "fingerprintConfigured": len(s.key) >= 32, "workerState": worker, "profiles": []string{PolicyVersion, "metadata-only-v1"}, "formats": []string{"yaml", "json", "diameter_conf"}, "maxSources": MaxSources, "maxFileBytes": MaxFileBytes, "retentionDays": RetentionDays, "maxVersions": MaxVersions, "remoteCollectionSupported": false, "projectionScope": "allowlisted_network_fields", "intervalsEnabledByServerManifest": true}
+	return map[string]any{"catalogState": s.catalog.State, "fingerprintConfigured": len(s.key) >= 32, "workerState": worker, "profiles": []string{PolicyVersion, "metadata-only-v1"}, "formats": []string{"yaml", "json", "diameter_conf", "text"}, "maxSources": MaxSources, "maxRoots": MaxRoots, "maxFileBytes": MaxFileBytes, "retentionDays": RetentionDays, "maxVersions": MaxVersions, "remoteCollectionSupported": false, "projectionScope": "allowlisted_network_fields", "intervalsEnabledByServerManifest": true}
 }

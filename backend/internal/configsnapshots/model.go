@@ -9,6 +9,7 @@ import (
 
 const (
 	MaxSources         = 128
+	MaxRoots           = 16
 	MaxFileBytes       = 1 << 20
 	MaxProjectionBytes = 256 << 10
 	PolicyVersion      = "network-endpoints-v1"
@@ -40,11 +41,13 @@ type Source struct {
 	Generation      string `json:"generation" bson:"generation"`
 	IntervalSeconds int    `json:"intervalSeconds" bson:"intervalSeconds"`
 	Path            string `json:"-" bson:"-"`
+	Root            string `json:"-" bson:"-"`
 }
 
 type Manifest struct {
 	CollectorID string              `json:"collectorId"`
 	Root        string              `json:"root"`
+	Roots       []string            `json:"roots,omitempty"`
 	Sources     []SourceDeclaration `json:"sources"`
 }
 type SourceDeclaration struct {

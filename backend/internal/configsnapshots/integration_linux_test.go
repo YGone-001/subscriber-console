@@ -297,7 +297,7 @@ func TestApprovedFilesAreReadWithoutMutation(t *testing.T) {
 		if e != nil {
 			t.Fatal("approved source not readable")
 		}
-		data, reason := readSource(context.Background(), c.Root, source)
+		data, reason := readSource(context.Background(), source.Root, source)
 		if reason != "" {
 			t.Fatalf("approved source read failed: %s / %s", source.Name, reason)
 		}
@@ -382,5 +382,50 @@ func TestScheduleCollectsOtherSourcesAndStopsWorkers(t *testing.T) {
 	}
 	if s.Meta()["workerState"] != "stopped" {
 		t.Fatal("worker exit was not visible")
+	}
+}
+
+func TestMongoSeparateRootsAndOpaqueIMSContent(t *testing.T) {
+	db := isolatedMongo(t)
+	epcRoot, imsRoot := t.TempDir(), t.TempDir()
+	epcPath, imsPath := filepath.Join(epcRoot, "amf.yaml"), filepath.Join(imsRoot, "vars.cfg")
+	if err := os.WriteFile(epcPath, []byte("amf: {sbi: {server: {address: 127.0.0.5}}}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(imsPath, []byte("#!define DB_PASSWORD SYNTHETIC_IMS_SECRET\nlisten=tcp:127.0.0.1:5060"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m := Manifest{CollectorID: randomID(), Root: epcRoot, Roots: []string{imsRoot}, Sources: []SourceDeclaration{
+		{SourceID: randomID(), Name: "EPC AMF", Path: epcPath, Format: "yaml", Profile: PolicyVersion},
+		{SourceID: randomID(), Name: "IMS PCSCF vars.cfg", Path: imsPath, Format: "text", Profile: "metadata-only-v1"},
+	}}
+	data, _ := json.Marshal(m)
+	catalog, err := ParseCatalog(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(NewRepository(db), catalog, []byte(strings.Repeat("test-only-key-", 3)), &testActors{}, nil, nil)
+	p := &auth.Principal{Username: "operator", Role: "operator", NormalizedRole: "operator"}
+	for _, source := range catalog.Sources {
+		observation, err := service.Capture(context.Background(), p, source.SourceID, CaptureRequest{randomID()})
+		if err != nil || observation.Status != "ok" {
+			t.Fatal("a source did not use its own declared root")
+		}
+		snapshot, err := service.Snapshot(context.Background(), source.SourceID, observation.SnapshotID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if source.Format == "text" {
+			if snapshot.Mode != "metadata_only" || snapshot.Projection != "" {
+				t.Fatal("IMS text content was exposed")
+			}
+			if _, reason := readSource(context.Background(), epcRoot, source); reason != "path_rejected" {
+				t.Fatal("one root permitted access to another root")
+			}
+			var stored bson.M
+			if db.Collection("app_config_snapshots").FindOne(context.Background(), bson.M{"_id": snapshot.SnapshotID}).Decode(&stored) != nil || strings.Contains(fmt.Sprint(stored), "SYNTHETIC_IMS_SECRET") {
+				t.Fatal("IMS secret reached storage")
+			}
+		}
 	}
 }

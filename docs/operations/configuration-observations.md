@@ -7,9 +7,14 @@ in an already running server.
 
 ## Prepare
 
-1. Review `deploy/examples/config-snapshots.json`. It contains the approved local
-   EPC/5GC YAML and corresponding Diameter `.conf` sources, with fixed intervals
-   disabled. It does not include OCS, TLS private keys/certificates or IMS configs.
+1. Review `deploy/examples/config-snapshots.json`. It is a current-environment
+   example containing 23 EPC/5GC sources and 38 IMS sources, with fixed intervals
+   disabled. EPC/5GC currently uses `/usr/local/src/xcloud-5gs/install/etc`;
+   IMS uses `/etc/xCloud/gcc/<NE>`, with explicitly listed files under the actual
+   `icscf`, `pcscf`, `scscf` and `smsc` directories. Adjust these roots and each
+   source path for the target installation. The paths are not product defaults.
+   The example excludes OCS, TLS private keys/certificates, scripts, schemas,
+   database directories and Git data.
 2. Verify paths and read permission using the server's actual nonprivileged user.
    Do not grant root or broaden permissions merely to fill a dashboard.
 3. Preserve the collector/source UUIDs across restarts of this controller; use new
@@ -24,6 +29,16 @@ in an already running server.
 The feature validates the declaration/key independently. Invalid configuration
 disables capture and reports unavailable readiness while old observations remain
 readable. Existing platform functions continue using their previous configuration.
+
+The original `root` field is backward compatible. Add other allowed directories
+in `roots`, or use `roots` without `root`; there are at most 16 non-overlapping
+roots. Do not set a broad common root merely to cover both EPC/5GC and IMS.
+Every collected file must be explicitly declared under one root. Adding a new NE
+requires reviewing its real files and adding its root/sources to the declaration,
+not changing application code or granting arbitrary browser file access. Changing
+an existing source path changes its generation and requires a compatible baseline.
+Source names identify NE types for operator navigation; they do not infer resource
+UUIDs or prove that a running process has loaded those configurations.
 
 ## Initialise and operate
 
@@ -55,7 +70,10 @@ every interval was measured.
 - Read failure: inspect source/read permission. The old successful snapshot is
   historical evidence; it is not replaced by an empty configuration.
 - Metadata-only: the source is observed but has no approved content projection.
-  Diameter configuration and unrecognised structures are not raw-text downloads.
+  Diameter configuration, IMS `format: "text"` sources and unrecognised structures
+  are not raw-text downloads. IMS CFG/XML/CONF/LIST sources provide version and
+  private change evidence; visible-field diffs require a separately reviewed
+  projection policy. Unsupported encoding remains an explicit collection failure.
 - Incompatible baseline: source identity/path/binding/profile or fingerprint key
   changed. Review the new evidence and explicitly choose a compatible baseline.
 - Pending publication: storage interrupted a bounded write. A later authorized
