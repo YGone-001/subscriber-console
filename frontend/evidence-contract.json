@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "routes": ["/config-snapshots", "/config-snapshots/:sourceId", "/ops-reports"],
+  "readPermission": "core.read",
+  "platformWritePermission": "core.configure",
+  "freshActorRequired": true,
+  "platformMutations": ["POST /api/config-snapshots/sources/{sourceId}/captures", "PUT /api/config-snapshots/sources/{sourceId}/baseline"],
+  "rawConfigurationStored": false,
+  "browserPathsAccepted": false,
+  "remoteCollectionSupported": false,
+  "reportWrites": false,
+  "historicalAvailabilityClaimed": false,
+  "maximumWindowDays": 7,
+  "maximumExportRows": 10000,
+  "maximumExportBytes": 10485760
+}

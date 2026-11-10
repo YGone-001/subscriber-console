@@ -1,0 +1,60 @@
+/* Evidence workspaces use the existing console primitives and semantic tokens. */
+.page { display: grid; gap: var(--space-16); min-width: 0; }
+.page button { min-height: 44px; }
+.panel { min-width: 0; overflow: hidden; border: 1px solid var(--sys-color-border-default); border-radius: var(--ref-radius-panel); background: var(--sys-color-surface-panel); }
+.sectionHead, .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-12); padding: var(--space-16); border-bottom: 1px solid var(--sys-color-border-default); }
+.sectionHead h2, .dialog h2 { margin: 0; color: var(--sys-color-text-primary); font-size: var(--ref-font-size-heading); }
+.toolbar label { display: grid; gap: var(--space-8); flex: 1; min-width: 140px; color: var(--sys-color-text-muted); font-size: var(--ref-font-size-caption); }
+.toolbar input, .toolbar select { width: 100%; min-height: 44px; border: 1px solid var(--sys-color-border-default); border-radius: var(--ref-radius-control); background: var(--sys-color-surface-field); color: var(--sys-color-text-primary); padding: var(--space-8) var(--space-12); font: inherit; font-size: var(--ref-font-size-body-compact); }
+.toolbar input:focus-visible, .toolbar select:focus-visible, .code:focus-visible, .diff:focus-visible { outline: 2px solid var(--sys-color-action-primary); outline-offset: 2px; }
+.content { display: grid; gap: var(--space-12); padding: var(--space-16); min-width: 0; }
+.content p { margin: 0; line-height: 1.65; }
+.tableWrap { overflow-x: auto; min-width: 0; width: 100%; }
+.table { width: 100%; border-collapse: collapse; font-size: var(--ref-font-size-body-compact); }
+.table th { text-align: left; font-weight: 600; white-space: nowrap; background: var(--sys-color-surface-subtle); color: var(--sys-color-text-muted); padding: var(--space-12) var(--space-16); }
+.table td { color: var(--sys-color-text-primary); padding: var(--space-12) var(--space-16); border-top: 1px solid var(--sys-color-border-default); vertical-align: top; max-width: 360px; overflow-wrap: anywhere; }
+.table small, .facts small { display: block; margin-top: var(--space-4); color: var(--sys-color-text-muted); font-size: var(--ref-font-size-caption); }
+.table a { color: var(--sys-color-action-primary); text-decoration: none; font-weight: 600; }
+.table caption { padding: var(--space-12) var(--space-16); color: var(--sys-color-text-muted); text-align: left; }
+.table tr:hover td { background: var(--sys-color-surface-hover); }
+.badge { display: inline-flex; justify-self: start; width: fit-content; align-items: center; border: 1px solid var(--sys-color-border-default); border-radius: var(--ref-radius-pill); padding: var(--space-4) var(--space-8); font-size: var(--ref-font-size-caption); color: var(--sys-color-text-muted); background: var(--sys-color-surface-subtle); white-space: nowrap; }
+.badge[data-state="visible_changed"], .badge[data-state="unprojected_changed"], .badge[data-state="partial"], .badge[data-state="publication_pending"] { color: var(--sys-color-status-warning); border-color: var(--sys-color-status-warning); }
+.badge[data-state="unreadable"], .badge[data-state="storage_unavailable"], .badge[data-state="unavailable"] { color: var(--sys-color-action-danger); border-color: var(--sys-color-action-danger); }
+.facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-16); margin: 0; padding: var(--space-16); }
+.facts > div { min-width: 0; }
+.facts dt { color: var(--sys-color-text-muted); font-size: var(--ref-font-size-caption); margin-bottom: var(--space-8); }
+.facts dd { margin: 0; color: var(--sys-color-text-primary); overflow-wrap: anywhere; font-size: var(--ref-font-size-body-compact); }
+.facts a { color: var(--sys-color-action-primary); }
+.code, .mono, .diff { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.code { margin: 0; padding: var(--space-16); overflow: auto; max-height: 600px; background: var(--sys-color-surface-subtle); border-radius: var(--ref-radius-control); font-size: var(--ref-font-size-body-compact); color: var(--sys-color-text-primary); }
+.diff { overflow: auto; max-height: 640px; background: var(--sys-color-surface-subtle); font-size: var(--ref-font-size-body-compact); }
+.diff > div { display: grid; grid-template-columns: 4ch 4ch minmax(max-content, 1fr); gap: var(--space-8); min-width: max-content; line-height: 1.8; padding: 0 var(--space-8); }
+.diff > div > * { grid-row: 1; }
+.leftNumber { grid-column: 1; }
+.rightNumber { grid-column: 2; }
+.leftText, .rightText { display: none; }
+.unifiedText { grid-column: 3; }
+.diff > div > span { color: var(--sys-color-text-muted); text-align: right; user-select: none; }
+.diff code { white-space: pre; }
+.diff [data-kind="add"] { color: var(--sys-color-status-success); }
+.diff [data-kind="remove"] { color: var(--sys-color-action-danger); }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-8); }
+.notice, .error, .hintBlock { margin: 0; padding: var(--space-12) var(--space-16); line-height: 1.65; font-size: var(--ref-font-size-body-compact); }
+.notice { color: var(--sys-color-text-primary); border-left: 3px solid var(--sys-color-status-warning); background: var(--sys-color-surface-subtle); }
+.error { color: var(--sys-color-action-danger); }
+.hint, .hintBlock { color: var(--sys-color-text-muted); font-size: var(--ref-font-size-body-compact); line-height: 1.65; }
+.hint { margin: 0; }
+.dialog { display: grid; gap: var(--space-20); padding: var(--space-24); width: min(640px, calc(100vw - 48px)); max-height: calc(100vh - 80px); overflow-y: auto; }
+.dialog code { overflow-wrap: anywhere; }
+.reportGrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-16); }
+.reportStamp { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-12); color: var(--sys-color-text-muted); font-size: var(--ref-font-size-caption); }
+@media (min-width: 760px) {
+  .diff > div { grid-template-columns: 4ch minmax(24ch, 1fr) 4ch minmax(24ch, 1fr); }
+  .leftText { display: block; grid-column: 2; }
+  .rightNumber { grid-column: 3; }
+  .rightText { display: block; grid-column: 4; }
+  .unifiedText { display: none; }
+  .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .reportGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reportGrid .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

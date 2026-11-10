@@ -18,9 +18,9 @@ export async function getJsonWithSignal<T>(path: string, signal: AbortSignal): P
   return getJson<T>(path, (requestPath) => request(requestPath, signal));
 }
 
-export async function getBlob(path: string): Promise<Blob> {
+export async function getBlob(path: string, signal?: AbortSignal): Promise<Blob> {
   let response: Response;
-  try { response = await request(path); } catch { throw new ReadApiError(0, 'The service could not be reached.'); }
+  try { response = await request(path, signal); } catch { throw new ReadApiError(0, 'The service could not be reached.'); }
   if (!response.ok) { const body: unknown = await response.json().catch(() => undefined); throw new ReadApiError(response.status, readErrorMessage(response.status, body), body); }
   return response.blob();
 }

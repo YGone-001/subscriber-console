@@ -16,6 +16,9 @@ export type NavigationRoute = {
 export const APP_ROUTES: NavigationRoute[] = [
   { route: '/', targetRoute: '/', dynamicParameters: [], labelKey: 'nav_dashboard', icon: LayoutDashboard, visible: true },
   { route: '/agents', targetRoute: '/agents', dynamicParameters: [], labelKey: 'nav_agents', icon: Cpu, group: 'platform', visible: true },
+  { route: '/config-snapshots', targetRoute: '/config-snapshots', dynamicParameters: [], labelKey: 'nav_config_snapshots', icon: FileText, group: 'platform', visible: true },
+  { route: '/config-snapshots/:sourceId', targetRoute: '/config-snapshots/:sourceId', dynamicParameters: ['sourceId'], labelKey: 'nav_config_snapshots', icon: FileText },
+  { route: '/ops-reports', targetRoute: '/ops-reports', dynamicParameters: [], labelKey: 'nav_ops_reports', icon: Briefcase, group: 'platform', visible: true },
   { route: '/agents/:agentId', targetRoute: '/agents/:agentId', dynamicParameters: ['agentId'], labelKey: 'nav_agents', icon: Cpu },
   { route: '/login', targetRoute: '/login', dynamicParameters: [], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/inventory', targetRoute: '/inventory', dynamicParameters: [], labelKey: 'nav_inventory', icon: Boxes, group: 'network', visible: true },
@@ -148,7 +151,7 @@ export type SidebarGroup = {
  */
 const BUSINESS_CHILD_ORDER = ['/subscribers', '/profile', '/ocs/tariffs', '/ocs/contracts', '/ocs/balances'];
 const NETWORK_CHILD_ORDER = ['/inventory', '/inventory/assets', '/inventory/runtime', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info'];
-const PLATFORM_CHILD_ORDER = ['/system-health', '/agents', '/system/retention', '/users', '/logs', '/knowledge'];
+const PLATFORM_CHILD_ORDER = ['/system-health', '/agents', '/config-snapshots', '/ops-reports', '/system/retention', '/users', '/logs', '/knowledge'];
 
 /**
  * Grouped sidebar model derived from the current navigation authority.

@@ -40,10 +40,15 @@ import { KnowledgeDetailPage } from '../features/knowledge/KnowledgeDetailPage';
 import { KnowledgeEditorPage } from '../features/knowledge/KnowledgeEditorPage';
 import { RetentionPage } from '../features/retention/RetentionPage';
 import { AgentsPage } from '../features/agents/AgentsPage';
+import { ConfigSnapshotsPage } from '../features/config-snapshots/ConfigSnapshotsPage';
+import { OperationsReportsPage } from '../features/ops-reports/OperationsReportsPage';
 
 const pages: Record<string, ReactNode> = {
   '/': <DashboardPage />,
   '/agents': <AgentsPage />,
+  '/config-snapshots': <ConfigSnapshotsPage />,
+  '/config-snapshots/:sourceId': <ConfigSnapshotsPage />,
+  '/ops-reports': <OperationsReportsPage />,
   '/agents/:agentId': <AgentsPage />,
   '/inventory': <InventoryPage />,
   '/inventory/assets': <InventoryAssetsPage />,

@@ -216,5 +216,19 @@
     "dynamicParameters": [
       "agentId"
     ]
+  },
+  {
+    "dynamicParameters": [],
+    "route": "/config-snapshots"
+  },
+  {
+    "dynamicParameters": [
+      "sourceId"
+    ],
+    "route": "/config-snapshots/:sourceId"
+  },
+  {
+    "dynamicParameters": [],
+    "route": "/ops-reports"
   }
 ]

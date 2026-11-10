@@ -81,7 +81,7 @@ test('sidebar groups expose the restored navigation hierarchy for an administrat
 
   const platform = groups.find((group) => group.key === 'nav_platform');
   assert.ok(platform);
-  assert.deepEqual(platform.children.map((child) => child.targetRoute), ['/system-health', '/agents', '/system/retention', '/users', '/logs', '/knowledge']);
+  assert.deepEqual(platform.children.map((child) => child.targetRoute), ['/system-health', '/agents', '/config-snapshots', '/ops-reports', '/system/retention', '/users', '/logs', '/knowledge']);
 
   // The reference sidebar renders no Rating entry: the rating routes redirect to
   // the tariff surface, so exposing them would be a dead link.
@@ -103,14 +103,14 @@ test('sidebar grouping is role-aware and never exposes an unauthorised group', (
   assert.ok(operatorGroups.some((group) => group.key === 'nav_network_ops'));
   const operatorPlatform = operatorGroups.find((group) => group.key === 'nav_platform');
   assert.ok(operatorPlatform);
-  assert.deepEqual(operatorPlatform.children.map((child) => child.targetRoute), ['/system-health', '/agents', '/logs', '/knowledge']);
+  assert.deepEqual(operatorPlatform.children.map((child) => child.targetRoute), ['/system-health', '/agents', '/config-snapshots', '/ops-reports', '/logs', '/knowledge']);
 
   const viewerGroups = getSidebarGroups('viewer');
   assert.ok(viewerGroups.some((group) => group.key === 'nav_business'));
   assert.ok(viewerGroups.some((group) => group.key === 'nav_network_ops'));
   const viewerPlatform = viewerGroups.find((group) => group.key === 'nav_platform');
   assert.ok(viewerPlatform);
-  assert.deepEqual(viewerPlatform.children.map((child) => child.targetRoute), ['/system-health', '/agents', '/logs', '/knowledge']);
+  assert.deepEqual(viewerPlatform.children.map((child) => child.targetRoute), ['/system-health', '/agents', '/config-snapshots', '/ops-reports', '/logs', '/knowledge']);
 });
 
 test('role-filtered navigation hides administration routes from non-admins', () => {

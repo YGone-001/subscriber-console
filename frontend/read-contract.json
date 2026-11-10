@@ -434,5 +434,38 @@
     "readEndpoints": [
       "GET /api/agents/{agentId}"
     ]
+  },
+  {
+    "source": "frontend/src/features/config-snapshots/ConfigSnapshotsPage.tsx",
+    "mode": "read",
+    "route": "/config-snapshots",
+    "readEndpoints": [
+      "GET /api/config-snapshots/meta",
+      "GET /api/config-snapshots/sources"
+    ]
+  },
+  {
+    "source": "frontend/src/features/config-snapshots/ConfigSnapshotsPage.tsx",
+    "mode": "read",
+    "route": "/config-snapshots/:sourceId",
+    "readEndpoints": [
+      "GET /api/config-snapshots/meta",
+      "GET /api/config-snapshots/sources/{sourceId}",
+      "GET /api/config-snapshots/sources/{sourceId}/observations",
+      "GET /api/config-snapshots/sources/{sourceId}/snapshots",
+      "GET /api/config-snapshots/sources/{sourceId}/snapshots/{snapshotId}",
+      "GET /api/config-snapshots/sources/{sourceId}/diff"
+    ]
+  },
+  {
+    "source": "frontend/src/features/ops-reports/OperationsReportsPage.tsx",
+    "mode": "read",
+    "route": "/ops-reports",
+    "readEndpoints": [
+      "GET /api/ops-reports/summary",
+      "GET /api/ops-reports/alerts",
+      "GET /api/ops-reports/metrics",
+      "GET /api/ops-reports/export"
+    ]
   }
 ]

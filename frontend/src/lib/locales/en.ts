@@ -1,4 +1,7 @@
+import { evidenceEn } from './operations-evidence';
+
 export const en: Record<string, string> = {
+    ...evidenceEn,
     nav_agents: "Agent management",
     agents_title: "Agent management",
     agents_description: "One controller, multiple read-only collectors. Track node connectivity and the source of each observation.",
