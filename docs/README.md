@@ -38,6 +38,9 @@ Canonical frontend SPA source     -> frontend/src/
 
 ## Architecture
 
+- [Configuration observations](architecture/configuration-snapshots.md) - approved local sources, safe projections, immutable observations, baseline comparison and retention.
+- [Operations reports](architecture/operations-reports.md) - windowed alert/measurement evidence, scope completeness and bounded CSV exports.
+
 - [System architecture](architecture/system-architecture.md)
 - [Production topology](architecture/production-topology.md) - edge contract, single-process request path, frontend build-and-embed chain and the redeploy acceptance evidence.
 - [Inventory resource model](architecture/inventory-resource-model.md)
@@ -61,6 +64,8 @@ Canonical frontend SPA source     -> frontend/src/
 - [Page templates](architecture/page-templates.md)
 
 ## Operations
+
+- [Configuration observation operations](operations/configuration-observations.md) - declaration, private key, explicit indexes, acceptance and rollback.
 
 - [Deployment](operations/deployment.md)
 - [Authentication model](operations/authentication-model.md)

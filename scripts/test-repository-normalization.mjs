@@ -201,6 +201,19 @@ const EXPECTED_AGENT_ROUTES = new Set([
 ]);
 
 const ALLOWED_ADDED_ROUTES = new Set([
+  'GET /api/config-snapshots/meta',
+  'GET /api/config-snapshots/sources',
+  'GET /api/config-snapshots/sources/{sourceId}',
+  'POST /api/config-snapshots/sources/{sourceId}/captures',
+  'GET /api/config-snapshots/sources/{sourceId}/observations',
+  'GET /api/config-snapshots/sources/{sourceId}/snapshots',
+  'GET /api/config-snapshots/sources/{sourceId}/snapshots/{snapshotId}',
+  'GET /api/config-snapshots/sources/{sourceId}/diff',
+  'PUT /api/config-snapshots/sources/{sourceId}/baseline',
+  'GET /api/ops-reports/summary',
+  'GET /api/ops-reports/alerts',
+  'GET /api/ops-reports/metrics',
+  'GET /api/ops-reports/export',
   ...EXPECTED_AGENT_ROUTES,
   ...EXPECTED_INVENTORY_ROUTES,
   ...EXPECTED_TOPOLOGY_ROUTES,

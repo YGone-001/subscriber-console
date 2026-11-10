@@ -20,6 +20,7 @@ import (
 	"subscriber/internal/auth"
 	"subscriber/internal/balance"
 	"subscriber/internal/config"
+	"subscriber/internal/configsnapshots"
 	"subscriber/internal/discovery"
 	"subscriber/internal/handler"
 	"subscriber/internal/inventory"
@@ -34,6 +35,7 @@ import (
 	"subscriber/internal/notify"
 	"subscriber/internal/ocs"
 	"subscriber/internal/operationsview"
+	"subscriber/internal/opsreports"
 	"subscriber/internal/profile"
 	"subscriber/internal/ratelimit"
 	"subscriber/internal/rating"
@@ -452,6 +454,30 @@ func main() {
 		agents.NewLocalCollector(runtimeService, agentSampler), auditWriter)
 	agentHandler := agents.NewHandler(agentService, limiter, auditWriter)
 
+	configCatalog, catalogErr := configsnapshots.LoadCatalog(os.Getenv("CONFIG_SNAPSHOT_MANIFEST"))
+	if catalogErr != nil {
+		logger.Warn("configuration snapshot manifest rejected")
+	}
+	configKey, keyErr := configsnapshots.LoadKey(os.Getenv("CONFIG_SNAPSHOT_KEY_FILE"))
+	if keyErr != nil {
+		logger.Warn("configuration snapshot key rejected; capture disabled")
+	}
+	configSnapshotService := configsnapshots.NewService(configsnapshots.NewRepository(mc.Ops), configCatalog, configKey, userRepo, inventoryRepo, auditWriter)
+	configSnapshotHandler := configsnapshots.NewHandler(configSnapshotService, limiter)
+	configContext, stopConfigWorker := context.WithCancel(context.Background())
+	configWorkerDone := make(chan struct{})
+	go func() { defer close(configWorkerDone); configSnapshotService.Run(configContext) }()
+	defer func() { stopConfigWorker(); <-configWorkerDone }()
+	opsReportService := opsreports.NewService(opsreports.NewRepository(mc.Ops), configSnapshotService.Meta)
+	opsReportService.SetConfigCounts(func(ctx context.Context, resourceID string) (*map[string]int, error) {
+		page, e := configSnapshotService.List(ctx, configsnapshots.ListQuery{Limit: 1, ResourceID: resourceID})
+		if e != nil {
+			return nil, e
+		}
+		return page.Summary, nil
+	})
+	opsReportHandler := opsreports.NewHandler(opsReportService, limiter)
+
 	runtimeInventoryGateway := runtimewire.NewInventoryGateway(inventoryRepo)
 	runtimeTargetGateway := runtimewire.NewTargetGateway(nfHealthRepo, nfHealthDest, nfHealthUnits, nfHealthBindings, nfHealthResolvers)
 	runtimeBindingGateway := runtimewire.NewBindingGateway(bindingStore, nfHealthBindings)
@@ -759,6 +785,20 @@ func main() {
 	// browser-cookie fallback. It cannot modify Inventory or business domains.
 	mux.Handle("POST /api/agent-sessions/{agentId}", http.HandlerFunc(agentHandler.Session))
 	mux.Handle("POST /api/agent-reports/{agentId}", http.HandlerFunc(agentHandler.Report))
+
+	mux.Handle("GET /api/config-snapshots/meta", authMiddleware(http.HandlerFunc(configSnapshotHandler.Handle)))
+	mux.Handle("GET /api/config-snapshots/sources", authMiddleware(http.HandlerFunc(configSnapshotHandler.Handle)))
+	mux.Handle("GET /api/config-snapshots/sources/{sourceId}", authMiddleware(http.HandlerFunc(configSnapshotHandler.Handle)))
+	mux.Handle("POST /api/config-snapshots/sources/{sourceId}/captures", authMiddleware(http.HandlerFunc(configSnapshotHandler.Handle)))
+	mux.Handle("GET /api/config-snapshots/sources/{sourceId}/observations", authMiddleware(http.HandlerFunc(configSnapshotHandler.Handle)))
+	mux.Handle("GET /api/config-snapshots/sources/{sourceId}/snapshots", authMiddleware(http.HandlerFunc(configSnapshotHandler.Handle)))
+	mux.Handle("GET /api/config-snapshots/sources/{sourceId}/snapshots/{snapshotId}", authMiddleware(http.HandlerFunc(configSnapshotHandler.Handle)))
+	mux.Handle("GET /api/config-snapshots/sources/{sourceId}/diff", authMiddleware(http.HandlerFunc(configSnapshotHandler.Handle)))
+	mux.Handle("PUT /api/config-snapshots/sources/{sourceId}/baseline", authMiddleware(http.HandlerFunc(configSnapshotHandler.Handle)))
+	mux.Handle("GET /api/ops-reports/summary", authMiddleware(http.HandlerFunc(opsReportHandler.Handle)))
+	mux.Handle("GET /api/ops-reports/alerts", authMiddleware(http.HandlerFunc(opsReportHandler.Handle)))
+	mux.Handle("GET /api/ops-reports/metrics", authMiddleware(http.HandlerFunc(opsReportHandler.Handle)))
+	mux.Handle("GET /api/ops-reports/export", authMiddleware(http.HandlerFunc(opsReportHandler.Handle)))
 
 	// Operations summary (single read, per-section full-collection statistics)
 	mux.Handle("GET /api/operations/summary", authMiddleware(http.HandlerFunc(operationsSummaryHandler.Summary)))

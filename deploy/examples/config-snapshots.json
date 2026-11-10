@@ -1,0 +1,190 @@
+{
+  "collectorId": "71d0b29b-120a-4384-946f-d4210ed2bd52",
+  "root": "/usr/local/src/xcloud-5gs/install/etc",
+  "sources": [
+    {
+      "sourceId": "fc1e52cc-99db-9d8b-64d2-258d74cec272",
+      "name": "AMF YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/amf.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "6e16f37d-9600-f6fa-d64f-e7c06d3fd857",
+      "name": "AUSF YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/ausf.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "f14bc625-4fbf-0056-3811-316464a00208",
+      "name": "BSF YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/bsf.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "a0c03db2-24f0-9a0d-c3e4-eb805549dc96",
+      "name": "HSS YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/hss.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "f65d910c-4e76-5553-5b47-ee6262d273c5",
+      "name": "MME YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/mme.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "650cefd0-e592-8ff8-007c-85b7c50fafdc",
+      "name": "NRF YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/nrf.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "a5dba95b-81c1-306a-6e1d-61bbb0e1084f",
+      "name": "NSSF YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/nssf.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "b0044809-ccfc-5bf1-7bb9-958df3cf8d33",
+      "name": "PCF YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/pcf.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "3b139a12-f5fd-a36a-8e32-c94f79031682",
+      "name": "PCRF YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/pcrf.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "0f289cd3-b615-2b7b-8ae7-00943910c3c2",
+      "name": "SCP YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/scp.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "7195d44b-6ca9-6da8-d0f3-d339a932a4d9",
+      "name": "SEPP1 YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/sepp1.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "5d3e49f2-ffb6-c355-488d-a18d4b656ed4",
+      "name": "SEPP2 YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/sepp2.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "dff2f8a3-a56d-4949-4f26-016cd4012d90",
+      "name": "SGWC YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/sgwc.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "60f910a8-a775-09b4-1215-8307defd897b",
+      "name": "SGWU YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/sgwu.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "19cdb6ff-9f1f-0838-c040-9d5ba8034808",
+      "name": "SMF YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/smf.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "da87b843-f587-1008-dce6-95557028250f",
+      "name": "UDM YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/udm.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "e55e5abb-c6ee-0d74-28c9-687d5da26a90",
+      "name": "UDR YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/udr.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "eb6f722a-3d2c-8765-2fbb-cb1f8f1b79bb",
+      "name": "UPF YAML",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/open5gs/upf.yaml",
+      "format": "yaml",
+      "profile": "network-endpoints-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "7020576a-41e4-19a9-8aaa-a1eda0ce9482",
+      "name": "HSS Diameter",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/hss.conf",
+      "format": "diameter_conf",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "4b174487-16ab-0ab2-a1e8-f5a4e50e1cc6",
+      "name": "MME Diameter",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/mme.conf",
+      "format": "diameter_conf",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "5b3962a4-ace0-828a-0065-4688990222b4",
+      "name": "PCF Diameter",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/pcf.conf",
+      "format": "diameter_conf",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "2d06a4e2-1d5d-d032-bc4d-02a087f3fe61",
+      "name": "PCRF Diameter",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/pcrf.conf",
+      "format": "diameter_conf",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    },
+    {
+      "sourceId": "a7e430f8-98cb-dfce-5a6d-4e0ec2998791",
+      "name": "SMF Diameter",
+      "path": "/usr/local/src/xcloud-5gs/install/etc/freeDiameter/smf.conf",
+      "format": "diameter_conf",
+      "profile": "metadata-only-v1",
+      "intervalSeconds": 0
+    }
+  ]
+}
