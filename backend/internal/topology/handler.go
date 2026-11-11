@@ -12,6 +12,7 @@ import (
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/governance"
 	"subscriber/internal/response"
 )
 
@@ -38,13 +39,18 @@ type EdgeRepository interface {
 // Handler handles HTTP requests for the topology relationship foundation.
 type Handler struct {
 	repo        EdgeRepository
+	mutations   *MutationService
 	limiter     RateLimiter
 	auditWriter AuditWriter
 }
 
 // NewHandler creates a new topology HTTP handler.
-func NewHandler(repo EdgeRepository, limiter RateLimiter, auditWriter AuditWriter) *Handler {
-	return &Handler{repo: repo, limiter: limiter, auditWriter: auditWriter}
+func NewHandler(repo EdgeRepository, limiter RateLimiter, auditWriter AuditWriter, actors ...governance.ActorRepository) *Handler {
+	var accounts governance.ActorRepository
+	if len(actors) > 0 {
+		accounts = actors[0]
+	}
+	return &Handler{repo: repo, mutations: NewMutationService(repo, accounts), limiter: limiter, auditWriter: auditWriter}
 }
 
 func decodeStrictJSON(r io.Reader, maxBytes int64, dst any) error {
@@ -360,7 +366,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	edge, err := h.repo.Create(r.Context(), &req, p.Username)
+	edge, err := h.mutations.Create(r.Context(), p, &req)
+	if writeMutationError(w, err) {
+		return
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrEndpointNotFound):
@@ -434,7 +443,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	before, after, err := h.repo.Update(r.Context(), edgeID, &req, p.Username)
+	before, after, err := h.mutations.Update(r.Context(), p, edgeID, &req)
+	if writeMutationError(w, err) {
+		return
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrEdgeNotFound):
@@ -509,7 +521,10 @@ func (h *Handler) Retire(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	before, after, err := h.repo.Retire(r.Context(), edgeID, &req, p.Username)
+	before, after, err := h.mutations.Retire(r.Context(), p, edgeID, &req)
+	if writeMutationError(w, err) {
+		return
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrEdgeNotFound):

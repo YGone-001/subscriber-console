@@ -266,11 +266,28 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	for param := range q {
 		switch param {
-		case "state", "scope", "severity", "sort", "q", "limit", "cursor":
+		case "state", "scope", "severity", "sort", "q", "limit", "cursor", "alertId":
 		default:
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
 		}
+	}
+	if q.Has("alertId") {
+		if len(q) != 1 || len(q["alertId"]) != 1 {
+			response.BadRequest(w, "alertId cannot be combined with list filters", "UNSUPPORTED_QUERY_COMBINATION")
+			return
+		}
+		if err := ValidateUUID(q.Get("alertId")); err != nil {
+			writeValidation(w, err)
+			return
+		}
+		alert, err := h.repo.GetAlert(r.Context(), q.Get("alertId"))
+		if err != nil {
+			writeAlertNotFound(w, err)
+			return
+		}
+		response.JSON(w, http.StatusOK, ListAlertsResponse{Alerts: []Alert{*alert}, Page: PageInfo{Limit: 1}})
+		return
 	}
 	limit, err := ValidateLimit(q.Get("limit"))
 	if err != nil {

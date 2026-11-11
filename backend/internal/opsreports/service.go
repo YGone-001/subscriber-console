@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"subscriber/internal/operationsview"
 )
 
 type ReportRepository interface {
@@ -20,6 +21,10 @@ type Service struct {
 	repo         ReportRepository
 	configMeta   func() map[string]any
 	configCounts func(context.Context, string) (*map[string]int, error)
+	groups       interface {
+		ResolveGroupScope(context.Context, operationsview.GroupFilter) (operationsview.GroupScope, error)
+	}
+	groupConfigCounts func(context.Context, []string) (*map[string]int, error)
 }
 
 func NewService(repo ReportRepository, configMeta func() map[string]any) *Service {
@@ -28,15 +33,60 @@ func NewService(repo ReportRepository, configMeta func() map[string]any) *Servic
 func (s *Service) SetConfigCounts(f func(context.Context, string) (*map[string]int, error)) {
 	s.configCounts = f
 }
+
+func (s *Service) SetGroups(resolver interface {
+	ResolveGroupScope(context.Context, operationsview.GroupFilter) (operationsview.GroupScope, error)
+}, counts func(context.Context, []string) (*map[string]int, error)) {
+	s.groups = resolver
+	s.groupConfigCounts = counts
+}
 func (s *Service) Generate(ctx context.Context, q Query, section string) *Report {
+	if q.GroupFilter().HasGroups() {
+		// Never reuse an internal scope from an earlier request or report page.
+		q.ScopeIDs = nil
+		reason := "scope_unavailable"
+		if s.groups != nil {
+			scope, e := s.groups.ResolveGroupScope(ctx, q.GroupFilter())
+			if e == nil && scope.Inventory.Completeness == "complete" && scope.Topology.Completeness == "complete" {
+				expected := rowID(scope.Fingerprint + "|" + q.From.UTC().Format(time.RFC3339Nano) + "|" + q.To.UTC().Format(time.RFC3339Nano) + "|" + q.ResourceID + "|" + q.Severity)
+				if q.ScopeFingerprint == "" || q.ScopeFingerprint == expected {
+					q.ScopeIDs = scope.IDs
+					q.ScopeFingerprint = expected
+					if q.ResourceID != "" {
+						ids := []string{}
+						for _, id := range q.ScopeIDs {
+							if id == q.ResourceID {
+								ids = append(ids, id)
+							}
+						}
+						q.ScopeIDs = ids
+					}
+				} else {
+					reason = "scope_changed"
+				}
+			}
+		}
+		if q.ScopeIDs == nil {
+			unavailable := Section{Completeness: "unavailable", Scope: "current_assignment_requested_window", Reason: reason}
+			return &Report{GeneratedAt: time.Now().UTC(), Query: q, Consistency: "current_assignment_eventual_across_collections", Alerts: unavailable, Metrics: unavailable, Config: unavailable, Agents: unavailable, RowsLimited: map[string]bool{}}
+		}
+	}
 	r := s.repo.Generate(ctx, q, section)
+	if q.GroupFilter().HasGroups() {
+		r.Consistency = "current_assignment_eventual_across_collections"
+	}
 	if (section == "" || section == "config") && s.configMeta != nil && s.configMeta()["catalogState"] != "configured" && len(r.ConfigRows) == 0 {
 		r.Config = Section{Completeness: "unavailable", Scope: "requested_window", Reason: "config_sources_not_configured"}
 	}
 	if (section == "" || section == "config") && r.Config.Completeness != "unavailable" {
 		if data, ok := r.Config.Data.(map[string]any); ok {
 			data["currentNoBaseline"] = nil
-			if q.Domain == "" && q.Severity == "" && s.configCounts != nil {
+			if q.GroupFilter().HasGroups() && q.Severity == "" && s.groupConfigCounts != nil {
+				counts, e := s.groupConfigCounts(ctx, q.ScopeIDs)
+				if e == nil && counts != nil {
+					data["currentNoBaseline"] = (*counts)["currentNoBaseline"]
+				}
+			} else if !q.GroupFilter().HasGroups() && q.Domain == "" && q.Severity == "" && s.configCounts != nil {
 				counts, e := s.configCounts(ctx, q.ResourceID)
 				if e == nil && counts != nil {
 					data["currentNoBaseline"] = (*counts)["currentNoBaseline"]
@@ -53,14 +103,25 @@ func (s *Service) Page(ctx context.Context, q Query, section string) (*Page, err
 		rows, status = r.MetricRows, r.Metrics
 	}
 	if status.Completeness == "unavailable" {
+		if status.Reason == "scope_changed" {
+			return nil, fmt.Errorf("scope_changed")
+		}
 		return nil, fmt.Errorf("report source is unavailable")
 	}
 	if r.RowsLimited[section] {
 		return nil, fmt.Errorf("report row budget exceeded; narrow the filters")
 	}
-	p := &Page{GeneratedAt: r.GeneratedAt, Query: q, Items: []map[string]any{}, Completeness: status.Completeness, Reason: status.Reason}
+	after := q.Cursor
+	if q.GroupFilter().HasGroups() && q.Cursor != "" {
+		parts := strings.Split(q.Cursor, ".")
+		if len(parts) != 2 || parts[1] != rowID(r.Query.ScopeFingerprint+"|"+section) {
+			return nil, fmt.Errorf("scope_changed")
+		}
+		after = parts[0]
+	}
+	p := &Page{GeneratedAt: r.GeneratedAt, Query: r.Query, Items: []map[string]any{}, Completeness: status.Completeness, Reason: status.Reason}
 	for _, row := range rows {
-		if fmt.Sprint(row["rowId"]) <= q.Cursor {
+		if fmt.Sprint(row["rowId"]) <= after {
 			continue
 		}
 		p.Items = append(p.Items, row)
@@ -68,6 +129,9 @@ func (s *Service) Page(ctx context.Context, q Query, section string) (*Page, err
 			p.Items = p.Items[:q.Limit]
 			p.HasMore = true
 			c := fmt.Sprint(p.Items[len(p.Items)-1]["rowId"])
+			if q.GroupFilter().HasGroups() {
+				c += "." + rowID(r.Query.ScopeFingerprint+"|"+section)
+			}
 			p.NextCursor = &c
 			break
 		}
@@ -126,11 +190,17 @@ func (s *Service) Export(ctx context.Context, q Query, section string) ([]byte, 
 	b.Write([]byte{0xef, 0xbb, 0xbf})
 	w := csv.NewWriter(&b)
 	metadata := []string{"generatedAt", "from", "to", "timezone", "completeness", "sourceScope", "coverageReason", "filterResourceId", "filterDomain", "filterSeverity"}
-	header := append(append([]string{}, metadata...), columns...)
+	groupMetadata := []string{"filterNetworkKey", "filterSiteResourceId", "filterHostResourceId", "filterOperatorName", "filterPLMN", "includeRetired", "scopeFingerprint", "membershipMeaning"}
+	header := append(append(append([]string{}, metadata...), columns...), groupMetadata...)
 	_ = w.Write(header)
 	metadataValues := func(reason string) []string {
 		return []string{safeCSV(r.GeneratedAt), safeCSV(q.From), safeCSV(q.To), "UTC", status.Completeness, status.Scope, reason, safeCSV(q.ResourceID), safeCSV(q.Domain), safeCSV(q.Severity)}
 	}
+	meaning := "resource_filter"
+	if q.GroupFilter().HasGroups() {
+		meaning = "current_assignment"
+	}
+	groupValues := []string{safeCSV(q.NetworkKey), safeCSV(q.SiteResourceID), safeCSV(q.HostResourceID), safeCSV(q.OperatorName), safeCSV(q.PLMN), safeCSV(q.IncludeRetired), safeCSV(r.Query.ScopeFingerprint), meaning}
 	for _, row := range rows {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -139,6 +209,7 @@ func (s *Service) Export(ctx context.Context, q Query, section string) ([]byte, 
 		for _, key := range columns {
 			record = append(record, safeCSV(row[key]))
 		}
+		record = append(record, groupValues...)
 		if e := w.Write(record); e != nil {
 			return nil, e
 		}
@@ -154,6 +225,7 @@ func (s *Service) Export(ctx context.Context, q Query, section string) ([]byte, 
 	if len(rows) == 0 {
 		record := make([]string, len(header))
 		copy(record, metadataValues("no_matching_records"))
+		copy(record[len(metadata)+len(columns):], groupValues)
 		_ = w.Write(record)
 	}
 	w.Flush()

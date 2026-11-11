@@ -209,14 +209,14 @@ func main() {
 
 	// Inventory
 	inventoryRepo := inventory.NewRepository(mc.Ops.Collection("app_inventory_resources"))
-	inventoryHandler := inventory.NewHandler(inventoryRepo, limiter, auditWriter)
+	inventoryHandler := inventory.NewHandler(inventoryRepo, limiter, auditWriter, userRepo)
 
 	// Topology (edges only; Inventory remains the sole node authority)
 	topologyRepo := topology.NewMongoRepository(
 		mc.Ops.Collection("app_topology_edges"),
 		mc.Ops.Collection("app_inventory_resources"),
 	)
-	topologyHandler := topology.NewHandler(topologyRepo, limiter, auditWriter)
+	topologyHandler := topology.NewHandler(topologyRepo, limiter, auditWriter, userRepo)
 
 	// Discovery (read-only NF observation; Inventory remains authoritative)
 	discoveryAllowlist := discovery.NewDestinationAllowlist(cfg.DiscoveryAllowedTargets)
@@ -468,7 +468,16 @@ func main() {
 	configWorkerDone := make(chan struct{})
 	go func() { defer close(configWorkerDone); configSnapshotService.Run(configContext) }()
 	defer func() { stopConfigWorker(); <-configWorkerDone }()
+	groupService := operationsview.NewGroupService(operationsview.NewGroupRepository(mc.Ops), nfHealthRepo, configSnapshotService.List)
+	groupHandler := operationsview.NewGroupHandler(groupService, limiter, auditWriter)
 	opsReportService := opsreports.NewService(opsreports.NewRepository(mc.Ops), configSnapshotService.Meta)
+	opsReportService.SetGroups(groupService, func(ctx context.Context, ids []string) (*map[string]int, error) {
+		page, e := configSnapshotService.List(ctx, configsnapshots.ListQuery{Limit: 1, ResourceIDs: ids})
+		if e != nil || page == nil || page.Completeness != "complete" {
+			return nil, e
+		}
+		return page.Summary, nil
+	})
 	opsReportService.SetConfigCounts(func(ctx context.Context, resourceID string) (*map[string]int, error) {
 		page, e := configSnapshotService.List(ctx, configsnapshots.ListQuery{Limit: 1, ResourceID: resourceID})
 		if e != nil {
@@ -802,6 +811,9 @@ func main() {
 
 	// Operations summary (single read, per-section full-collection statistics)
 	mux.Handle("GET /api/operations/summary", authMiddleware(http.HandlerFunc(operationsSummaryHandler.Summary)))
+	mux.Handle("GET /api/operations/groups", authMiddleware(http.HandlerFunc(groupHandler.Handle)))
+	mux.Handle("GET /api/operations/groups/summary", authMiddleware(http.HandlerFunc(groupHandler.Handle)))
+	mux.Handle("GET /api/operations/groups/members", authMiddleware(http.HandlerFunc(groupHandler.Handle)))
 
 	// UE information (read-only EPC/5GC projection)
 	mux.Handle("GET /api/ue-info", authMiddleware(http.HandlerFunc(ueHandler.Get)))

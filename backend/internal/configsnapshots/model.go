@@ -139,6 +139,8 @@ type SourceView struct {
 type ListQuery struct {
 	Q, Cursor, ResourceID, Status string
 	Limit                         int
+	// ResourceIDs is an internal bounded scope; it is not an HTTP query alias.
+	ResourceIDs []string
 }
 type Page[T any] struct {
 	Items      []T     `json:"items"`
@@ -150,6 +152,12 @@ type SourceList struct {
 	Summary      *map[string]int `json:"summary"`
 	Completeness string          `json:"completeness"`
 	CatalogState string          `json:"catalogState"`
+}
+
+// ScopedStateRepository is an additive metadata-only read capability used by
+// resource-scoped operational projections, never a browser path declaration.
+type ScopedStateRepository interface {
+	StatesForResources(context.Context, []string, []string, int) ([]State, bool, error)
 }
 type CaptureRequest struct {
 	RequestID string `json:"requestId"`

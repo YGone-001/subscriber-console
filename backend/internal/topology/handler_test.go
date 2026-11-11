@@ -156,7 +156,7 @@ const (
 )
 
 func TestMetaRequiresReadPermission(t *testing.T) {
-	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{})
+	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{}, activeActors{})
 
 	w := httptest.NewRecorder()
 	h.Meta(w, httptest.NewRequest("GET", "/api/topology/meta", nil))
@@ -185,7 +185,7 @@ func TestMetaRequiresReadPermission(t *testing.T) {
 }
 
 func TestViewerCannotMutate(t *testing.T) {
-	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{})
+	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{}, activeActors{})
 
 	body := bytes.NewBufferString(`{"relationshipType":"depends_on","fromResourceId":"` + fromID + `","toResourceId":"` + toID + `"}`)
 	w := httptest.NewRecorder()
@@ -197,7 +197,7 @@ func TestViewerCannotMutate(t *testing.T) {
 
 func TestOperatorCreateUpdateRetire(t *testing.T) {
 	repo := newMockRepo()
-	h := NewHandler(repo, nil, &dummyAuditWriter{})
+	h := NewHandler(repo, nil, &dummyAuditWriter{}, activeActors{})
 
 	// Create
 	body := bytes.NewBufferString(`{"relationshipType":"depends_on","fromResourceId":"` + fromID + `","toResourceId":"` + toID + `","description":"SMF depends on PCF"}`)
@@ -278,7 +278,7 @@ func TestOperatorCreateUpdateRetire(t *testing.T) {
 }
 
 func TestCreateValidationErrorCodes(t *testing.T) {
-	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{})
+	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{}, activeActors{})
 
 	cases := []struct {
 		name string
@@ -312,7 +312,7 @@ func TestCreateValidationErrorCodes(t *testing.T) {
 
 func TestCreateUpdateInterfaceNames(t *testing.T) {
 	repo := newMockRepo()
-	h := NewHandler(repo, nil, &dummyAuditWriter{})
+	h := NewHandler(repo, nil, &dummyAuditWriter{}, activeActors{})
 
 	createBody := `{"relationshipType":"depends_on","fromResourceId":"` + fromID + `","toResourceId":"` + toID + `","interfaceNames":[" N11 ","N11"]}`
 	w := httptest.NewRecorder()
@@ -397,7 +397,7 @@ func TestLegacyEdgeWithoutInterfaceNamesSerializesAsEmptyArray(t *testing.T) {
 	}
 	repo.items[edge.EdgeID] = edge
 
-	h := NewHandler(repo, nil, &dummyAuditWriter{})
+	h := NewHandler(repo, nil, &dummyAuditWriter{}, activeActors{})
 	w := httptest.NewRecorder()
 	req := withPrincipal(httptest.NewRequest("GET", "/api/topology/edges/x", nil), "viewer")
 	req.SetPathValue("edgeId", edge.EdgeID)
@@ -427,7 +427,7 @@ func jsonEqual(left, right []string) bool {
 }
 
 func TestListRejectsUnknownQueryParameterAndBadLimit(t *testing.T) {
-	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{})
+	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{}, activeActors{})
 
 	w := httptest.NewRecorder()
 	h.List(w, withPrincipal(httptest.NewRequest("GET", "/api/topology/edges?bogus=1", nil), "viewer"))
@@ -449,7 +449,7 @@ func TestListRejectsUnknownQueryParameterAndBadLimit(t *testing.T) {
 }
 
 func TestNeighborsRejectsMalformedResourceID(t *testing.T) {
-	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{})
+	h := NewHandler(newMockRepo(), nil, &dummyAuditWriter{}, activeActors{})
 
 	w := httptest.NewRecorder()
 	req := withPrincipal(httptest.NewRequest("GET", "/api/topology/resources/nope/neighbors", nil), "viewer")

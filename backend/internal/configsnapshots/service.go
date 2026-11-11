@@ -159,14 +159,44 @@ func (s *Service) viewWithoutResource(source Source, state *State, registered bo
 	return v
 }
 func (s *Service) List(ctx context.Context, q ListQuery) (*SourceList, error) {
+	if len(q.ResourceIDs) > 1000 {
+		return nil, fail(400, "CONFIG_INVALID_QUERY", "Resource scope exceeds the bound")
+	}
+	selected := map[string]bool{}
+	for _, id := range q.ResourceIDs {
+		if !ValidID(id) {
+			return nil, fail(400, "CONFIG_INVALID_QUERY", "Invalid resource scope")
+		}
+		selected[id] = true
+	}
 	if q.Limit < 1 || q.Limit > 200 || len(q.Q) > 128 || (q.Cursor != "" && !ValidID(q.Cursor)) || (q.ResourceID != "" && !ValidID(q.ResourceID)) {
 		return nil, fail(400, "CONFIG_INVALID_QUERY", "Invalid source query")
 	}
 	out := &SourceList{Page: Page[SourceView]{Items: []SourceView{}}, Completeness: "complete", CatalogState: s.catalog.State}
-	states, e := s.repo.States(ctx)
+	var states []State
+	var e error
+	limited := false
+	if q.ResourceIDs != nil {
+		declared := []string{}
+		for _, source := range s.catalog.Sources {
+			if selected[source.ResourceID] {
+				declared = append(declared, source.SourceID)
+			}
+		}
+		if repo, ok := s.repo.(ScopedStateRepository); ok {
+			states, limited, e = repo.StatesForResources(ctx, q.ResourceIDs, declared, 1000)
+		} else {
+			e = fail(503, "CONFIG_SCOPE_UNAVAILABLE", "Bounded configuration scope is unavailable")
+		}
+	} else {
+		states, e = s.repo.States(ctx)
+	}
 	if e != nil {
 		out.Completeness = "unavailable"
 		return out, nil
+	}
+	if limited {
+		out.Completeness = "partial"
 	}
 	byID := map[string]*State{}
 	all := map[string]Source{}
@@ -184,6 +214,9 @@ func (s *Service) List(ctx context.Context, q ListQuery) (*SourceList, error) {
 	resourceIDs := []string{}
 	resourceSeen := map[string]bool{}
 	for id, source := range all {
+		if q.ResourceIDs != nil && !selected[source.ResourceID] {
+			continue
+		}
 		ids = append(ids, id)
 		if source.ResourceID != "" && !resourceSeen[source.ResourceID] {
 			resourceIDs = append(resourceIDs, source.ResourceID)
@@ -214,6 +247,9 @@ func (s *Service) List(ctx context.Context, q ListQuery) (*SourceList, error) {
 	counts := map[string]int{"total": 0, "changed": 0, "failed": 0, "noBaseline": 0, "currentNoBaseline": 0}
 	for _, id := range ids {
 		source := all[id]
+		if q.ResourceIDs != nil && !selected[source.ResourceID] {
+			continue
+		}
 		if q.ResourceID != "" && source.ResourceID != q.ResourceID {
 			continue
 		}
@@ -257,7 +293,9 @@ func (s *Service) List(ctx context.Context, q ListQuery) (*SourceList, error) {
 		id := out.Items[len(out.Items)-1].SourceID
 		out.NextCursor = &id
 	}
-	out.Summary = &counts
+	if out.Completeness == "complete" {
+		out.Summary = &counts
+	}
 	if s.catalog.State == "invalid_config" {
 		out.Completeness = "partial"
 		out.Summary = nil

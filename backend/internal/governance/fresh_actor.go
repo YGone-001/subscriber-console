@@ -34,6 +34,8 @@ type HTTPError struct {
 	Code    string
 }
 
+func (e *HTTPError) Error() string { return e.Message }
+
 // RevalidateFreshActor loads the actor's account and refuses the write when it is
 // missing, disabled, locked, carries an unrecognised role, no longer matches the
 // role the token asserts, or has had its session revoked. It fails closed when

@@ -121,7 +121,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
-		out, err = h.service.List(ctx, ListQuery{q.Get("q"), q.Get("cursor"), q.Get("resourceId"), q.Get("status"), limit})
+		out, err = h.service.List(ctx, ListQuery{Q: q.Get("q"), Cursor: q.Get("cursor"), ResourceID: q.Get("resourceId"), Status: q.Get("status"), Limit: limit})
 	case "GET /api/config-snapshots/sources/{sourceId}":
 		if !query(r) {
 			err = fail(400, "CONFIG_INVALID_QUERY", "Unsupported query")

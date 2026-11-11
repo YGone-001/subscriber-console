@@ -3,6 +3,7 @@ package opsreports
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"subscriber/internal/auth"
@@ -49,6 +50,10 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		}
 		page, e := h.service.Page(ctx, q, section)
 		if e != nil {
+			if strings.Contains(e.Error(), "scope_changed") {
+				response.Error(w, 409, "Group membership changed; restart the report", "GROUP_SCOPE_CHANGED")
+				return
+			}
 			response.Error(w, 503, e.Error(), "OPS_REPORT_UNAVAILABLE")
 			return
 		}

@@ -8,18 +8,34 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
+
+	"subscriber/internal/operationsview"
 )
 
 type Query struct {
-	From       time.Time `json:"from"`
-	To         time.Time `json:"to"`
-	ResourceID string    `json:"resourceId"`
-	Domain     string    `json:"domain"`
-	Severity   string    `json:"severity"`
-	Cursor     string    `json:"-"`
-	Limit      int       `json:"-"`
+	From             time.Time `json:"from"`
+	To               time.Time `json:"to"`
+	ResourceID       string    `json:"resourceId"`
+	Domain           string    `json:"domain"`
+	Severity         string    `json:"severity"`
+	Cursor           string    `json:"-"`
+	Limit            int       `json:"-"`
+	NetworkKey       string    `json:"networkKey,omitempty"`
+	SiteResourceID   string    `json:"siteResourceId,omitempty"`
+	HostResourceID   string    `json:"hostResourceId,omitempty"`
+	OperatorName     string    `json:"operatorName,omitempty"`
+	PLMN             string    `json:"plmn,omitempty"`
+	IncludeRetired   bool      `json:"includeRetired,omitempty"`
+	ScopeFingerprint string    `json:"scopeFingerprint,omitempty"`
+	ScopeIDs         []string  `json:"-"`
 }
+
+func (q Query) GroupFilter() operationsview.GroupFilter {
+	return operationsview.GroupFilter{NetworkKey: q.NetworkKey, SiteResourceID: q.SiteResourceID, HostResourceID: q.HostResourceID, OperatorName: q.OperatorName, PLMN: q.PLMN, Domain: q.Domain, IncludeRetired: q.IncludeRetired}
+}
+
 type Section struct {
 	Completeness string `json:"completeness"`
 	Scope        string `json:"scope"`
@@ -59,7 +75,7 @@ func ParseQuery(values url.Values, now time.Time) (Query, error) {
 			return q, fmt.Errorf("duplicate query parameter")
 		}
 		switch k {
-		case "from", "to", "period", "resourceId", "domain", "severity", "cursor", "limit", "section":
+		case "from", "to", "period", "resourceId", "domain", "severity", "cursor", "limit", "section", "networkKey", "siteResourceId", "hostResourceId", "operatorName", "plmn", "includeRetired", "scopeFingerprint":
 		default:
 			return q, fmt.Errorf("unsupported query parameter")
 		}
@@ -101,7 +117,29 @@ func ParseQuery(values url.Values, now time.Time) (Query, error) {
 	q.Domain = values.Get("domain")
 	q.Severity = values.Get("severity")
 	q.Cursor = values.Get("cursor")
-	if (q.ResourceID != "" && !uuid.MatchString(q.ResourceID)) || (q.Domain != "" && q.Domain != "epc" && q.Domain != "5gc" && q.Domain != "ims" && q.Domain != "charging") || (q.Severity != "" && q.Severity != "critical" && q.Severity != "warning" && q.Severity != "info") || (q.Cursor != "" && !cursorPattern.MatchString(q.Cursor)) {
+	f, groupErr := operationsview.ParseGroupFilter(values)
+	if groupErr != nil {
+		return q, groupErr
+	}
+	q.NetworkKey = f.NetworkKey
+	q.SiteResourceID = f.SiteResourceID
+	q.HostResourceID = f.HostResourceID
+	q.OperatorName = f.OperatorName
+	q.PLMN = f.PLMN
+	q.IncludeRetired = f.IncludeRetired
+	q.ScopeFingerprint = values.Get("scopeFingerprint")
+	if q.ScopeFingerprint != "" && !cursorPattern.MatchString(q.ScopeFingerprint) {
+		return q, fmt.Errorf("invalid scope fingerprint")
+	}
+	if f.HasGroups() && q.Cursor != "" && q.ScopeFingerprint == "" {
+		return q, fmt.Errorf("group pagination requires a scope fingerprint")
+	}
+	validCursor := q.Cursor == "" || cursorPattern.MatchString(q.Cursor)
+	if f.HasGroups() && q.Cursor != "" {
+		parts := strings.Split(q.Cursor, ".")
+		validCursor = len(parts) == 2 && cursorPattern.MatchString(parts[0]) && cursorPattern.MatchString(parts[1])
+	}
+	if (q.ResourceID != "" && !uuid.MatchString(q.ResourceID)) || (q.Severity != "" && q.Severity != "critical" && q.Severity != "warning" && q.Severity != "info") || !validCursor {
 		return q, fmt.Errorf("invalid filter")
 	}
 	if values.Has("limit") {

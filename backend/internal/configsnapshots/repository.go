@@ -41,6 +41,41 @@ func (r *MongoRepository) States(ctx context.Context) ([]State, error) {
 	}
 	return out, nil
 }
+
+func (r *MongoRepository) StatesForResources(ctx context.Context, resourceIDs, declaredSourceIDs []string, limit int) ([]State, bool, error) {
+	if len(resourceIDs) == 0 && len(declaredSourceIDs) == 0 {
+		return []State{}, false, nil
+	}
+	if resourceIDs == nil {
+		resourceIDs = []string{}
+	}
+	if declaredSourceIDs == nil {
+		declaredSourceIDs = []string{}
+	}
+	filter := bson.M{"$or": bson.A{bson.M{"source.resourceId": bson.M{"$in": resourceIDs}}, bson.M{"_id": bson.M{"$in": declaredSourceIDs}}}}
+	opts := options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(int64(limit + 1)).SetProjection(bson.M{"latestEvidence.projection": 0, "baselineEvidence.projection": 0, "pending.snapshot.projection": 0})
+	cur, err := r.sources.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, false, err
+	}
+	defer cur.Close(ctx)
+	out := []State{}
+	for cur.Next(ctx) {
+		var v State
+		if err = cur.Decode(&v); err != nil {
+			return nil, false, err
+		}
+		out = append(out, v)
+	}
+	if err = cur.Err(); err != nil {
+		return nil, false, err
+	}
+	more := len(out) > limit
+	if more {
+		out = out[:limit]
+	}
+	return out, more, nil
+}
 func (r *MongoRepository) GetState(ctx context.Context, id string) (*State, error) {
 	var s State
 	err := r.sources.FindOne(ctx, bson.M{"_id": id}).Decode(&s)

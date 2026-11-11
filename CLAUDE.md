@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (188 exact METHOD+PATH registrations)
+Read + write APIs (191 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 188
+Go registration set                  = 191
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -214,6 +214,7 @@ Next implementation direction   = complete
 - Runtime discovery / CNMS process compatibility = IMPLEMENTED（只读本地 /proc 扫描，24 个 CNMS 兼容组件 + 2 个 xCloud 专有身份（seppd/smscd）共 26 条识别项，由单一中央识别权威定义并被扫描器、API 投影与前端状态模型共同复用；状态语义以证据为准：仅正向验证的进程报告 running，`comm` 精确匹配 + `/proc/<pid>/exe` 身份校验（可执行文件基名必须精确等于组件进程名，registry 不设别名/同义词表——曾用 `kamailio` 别名放宽已按运营决定撤销：共享二进制按角色改进程标题的装法必须不显示，这正是暴露打包错误的信号，且 NF Health L1 巡检本就严格同名，两个身份权威对同一 PID 绝不允许结论相左；安装路径自由，基名不行） + 进程启动标识防 PID 复用，扫描不完整时缺失只报告 unknown 而绝不报告 stopped，从未观测的组件报告 not_detected；CPU 仅由真实采样区间差值计算（累计 CPU 时间绝不显示为百分比），内存为已验证进程组聚合且缺失测量不显示为 0；Java IMS HSS 采用「可执行文件校验 + 已批准启动标识位置」双重判定，歧义候选保持 unverified，原始命令行永不返回或持久化；纳管走受控预览/批准流程（`POST /api/runtime/bootstrap/preview`、`apply`），资源以 `source.kind=discovered` 的服务器权威来源创建、生命周期为 planned（PID 存在不等于 active），动态进程绑定持久化于 `xcloud_ops.app_nf_health_bindings`（静态配置优先、冲突拒绝、重启后继续调度 L1 采集）；监测资格与可纳管性是两件事：`monitoring_not_supported` 只否决 NF Health 目标与进程绑定，是否进入 Inventory 由 registry 的 `adoptable` 决定；DRA 作为无 NF 类型声明的支撑组件不可纳管，IMS HSS 可纳管为 `ims/hss` 资源但因 `java` 启动器无法界定进程绑定作用域而不建目标（缺失测量记为 unknown，绝不伪造）；观测层级（主机/域/组件）不落拓扑边，绝不伪造 SIP/Diameter/PFCP/SBI 连接。权威文档：`docs/architecture/runtime-discovery.md`）。
 - Agent Management = IMPLEMENTED in source (single Go controller + in-process local collector + standalone outbound-only Linux agents; controller-issued identity/credential/session, scoped latest reports in `xcloud_ops.app_agents`, server-receipt freshness, CAS management and fresh actor revalidation; `/agents` + `/agents/{agentId}`; admin manages collector access, operator/viewer read; operator/network/PLMN assignments are management metadata, not tenant isolation or roaming relationships; remote observations do not mutate Inventory/Topology/NF Health or change existing local runtime/log scopes; HTTPS and real multi-host deployment acceptance remain operator deployment work). Authority: `docs/architecture/agent-management.md`.
 - Configuration observations and operations reports = IMPLEMENTED in source (deployment-owned local file declarations with legacy `root` plus optional non-overlapping `roots`, maximum 16 roots; EPC/5GC and IMS paths are editable environment examples, with IMS CFG/XML/CONF/LIST using metadata-only text observations; positive safe projections, private HMAC fingerprints, immutable Ops observations, revision-protected baselines, fixed optional schedules and protected retention; read-only windowed operational reports with explicit scope/coverage and bounded CSV; no original config storage, remote commands, NF configuration writes, historical availability claims or Agent protocol changes). Authorities: `docs/architecture/configuration-snapshots.md`, `docs/architecture/operations-reports.md`.
+- Site / network group read foundation = IMPLEMENTED in source (three Go read endpoints, bounded Inventory UUID and active contains scope, explicit operational declarations, independent Agent metadata, shared report scope and metadata-only configuration reads; Inventory/Topology maintenance revalidates Fresh Actor and preserves CAS and best-effort audit; no new collection, remote command, tenant boundary or Agent protocol change).
 - Assurance correlation / RCA / AIOps / multi-hop analysis = 未实施。
 - 长期演进权威文档：`docs/architecture/architecture-evolution-roadmap.md`；在其实施阶段开始前，不得当作运行时部署指令。
 - 长期方向：模块化运维平台（inventory / topology、workflow、assurance、telemetry、厂商中立 adapter 边界）。逻辑边界先于部署拆分；仅在规模、故障隔离、运维归属或可用性要求时才引入独立服务。
@@ -548,8 +549,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 188 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，188 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 191 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，191 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -579,7 +580,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (188 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (191 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -629,7 +630,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **188 条** METHOD+PATH 精确注册（GET 95 / POST 65 / PUT 15 / DELETE 10 / PATCH 3）：
+路由权威为源码派生的 Go 注册集合，共 **191 条** METHOD+PATH 精确注册（GET 95 / POST 65 / PUT 15 / DELETE 10 / PATCH 3）：
 
 ```text
 GET    /api/agents
@@ -825,7 +826,7 @@ POST   /api/knowledge/files
 状态：
 
 ```text
-Go production API registrations = 188 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 191 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0

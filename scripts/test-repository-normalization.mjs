@@ -127,6 +127,9 @@ const EXPECTED_NF_ALERT_ROUTES = new Set([
 const EXPECTED_OPERATIONS_ROUTES = new Set([
   'GET /api/operations/summary',
   'GET /api/operations/resources',
+  'GET /api/operations/groups',
+  'GET /api/operations/groups/summary',
+  'GET /api/operations/groups/members',
 ]);
 // The template surface gained four registrations after normalization: the
 // authoritative meta vocabulary, the governed clone, the semantic drift probe and

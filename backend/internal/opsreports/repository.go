@@ -12,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"subscriber/internal/nfhealth"
+	"subscriber/internal/operationsview"
 )
 
 type Repository struct{ db *mongo.Database }
@@ -85,6 +86,9 @@ func plain(m bson.M) map[string]any {
 }
 func (r *Repository) scope(ctx context.Context, q Query) (bson.M, error) {
 	filter := bson.M{}
+	if q.ScopeIDs != nil {
+		return bson.M{"resourceId": bson.M{"$in": q.ScopeIDs}}, nil
+	}
 	if q.ResourceID != "" {
 		if e := r.db.Collection("app_inventory_resources").FindOne(ctx, bson.M{"_id": q.ResourceID}).Err(); e != nil {
 			return nil, fmt.Errorf("resource identity unavailable")
@@ -156,7 +160,7 @@ func (r *Repository) Generate(ctx context.Context, q Query, wanted string) *Repo
 		if q.ResourceID != "" || q.Domain != "" {
 			out.Agents = Section{Completeness: "unavailable", Scope: "unsupported_filter", Reason: "agent_resource_history_unavailable"}
 		} else {
-			out.Agents = r.agents(ctx, now)
+			out.Agents = r.agents(ctx, now, q.GroupFilter())
 		}
 	}
 	return out
@@ -331,8 +335,17 @@ func (r *Repository) config(ctx context.Context, q Query, scope bson.M) (Section
 	sortRows(rows)
 	return Section{Completeness: "complete", Scope: "observation_times", Data: map[string]any{"byStatus": docs(v["counts"]), "changed": count(v["changed"]), "timeMeaning": "observed_not_actual_modification"}}, rows, len(rows) > 10000
 }
-func (r *Repository) agents(ctx context.Context, now time.Time) Section {
-	v, e := r.aggregate(ctx, "app_agents", bson.A{bson.M{"$group": bson.M{"_id": bson.M{"$switch": bson.M{"branches": bson.A{bson.M{"case": bson.M{"$eq": bson.A{"$enabled", false}}, "then": "disabled"}, bson.M{"case": bson.M{"$eq": bson.A{bson.M{"$ifNull": bson.A{"$lastReceivedAt", nil}}, nil}}, "then": "pending"}, bson.M{"case": bson.M{"$gte": bson.A{"$lastReceivedAt", now.Add(-45 * time.Second)}}, "then": "online"}, bson.M{"case": bson.M{"$gte": bson.A{"$lastReceivedAt", now.Add(-120 * time.Second)}}, "then": "stale"}}, "default": "offline"}}, "count": bson.M{"$sum": 1}}}, bson.M{"$group": bson.M{"_id": nil, "states": bson.M{"$push": bson.M{"state": "$_id", "count": "$count"}}}}})
+func (r *Repository) agents(ctx context.Context, now time.Time, groups ...operationsview.GroupFilter) Section {
+	match := bson.M{}
+	if len(groups) > 0 {
+		f := groups[0]
+		for k, v := range map[string]string{"networkKey": f.NetworkKey, "siteResourceId": f.SiteResourceID, "hostResourceId": f.HostResourceID, "operatorName": f.OperatorName, "plmns": f.PLMN} {
+			if v != "" {
+				match["scope."+k] = v
+			}
+		}
+	}
+	v, e := r.aggregate(ctx, "app_agents", bson.A{bson.M{"$match": match}, bson.M{"$group": bson.M{"_id": bson.M{"$switch": bson.M{"branches": bson.A{bson.M{"case": bson.M{"$eq": bson.A{"$enabled", false}}, "then": "disabled"}, bson.M{"case": bson.M{"$eq": bson.A{bson.M{"$ifNull": bson.A{"$lastReceivedAt", nil}}, nil}}, "then": "pending"}, bson.M{"case": bson.M{"$gte": bson.A{"$lastReceivedAt", now.Add(-45 * time.Second)}}, "then": "online"}, bson.M{"case": bson.M{"$gte": bson.A{"$lastReceivedAt", now.Add(-120 * time.Second)}}, "then": "stale"}}, "default": "offline"}}, "count": bson.M{"$sum": 1}}}, bson.M{"$group": bson.M{"_id": nil, "states": bson.M{"$push": bson.M{"state": "$_id", "count": "$count"}}}}})
 	if e != nil {
 		return Section{Completeness: "unavailable", Scope: "current_remote_collectors", Reason: "source_unavailable"}
 	}

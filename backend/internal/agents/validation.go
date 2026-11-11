@@ -152,3 +152,6 @@ func project(r *Record, now time.Time, detail bool) View {
 	}
 	return v
 }
+
+// ListView reuses the collector authority's freshness and safe list projection.
+func ListView(r *Record, now time.Time) View { return project(r, now, false) }

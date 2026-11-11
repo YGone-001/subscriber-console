@@ -130,7 +130,7 @@ func makePrincipal(role string) *auth.Principal {
 
 func TestHandlerAuthAndPermissions(t *testing.T) {
 	repo := newMockRepo()
-	h := NewHandler(repo, nil, &dummyAuditWriter{})
+	h := NewHandler(repo, nil, &dummyAuditWriter{}, activeActors{})
 
 	// Pre-populate one resource
 	res, _ := repo.Create(context.Background(), &CreateResourceRequest{

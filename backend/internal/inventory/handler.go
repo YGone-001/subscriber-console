@@ -12,6 +12,7 @@ import (
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/governance"
 	"subscriber/internal/response"
 )
 
@@ -38,14 +39,20 @@ type ResourceRepository interface {
 // Handler handles HTTP requests for inventory resources.
 type Handler struct {
 	repo        ResourceRepository
+	mutations   *MutationService
 	limiter     RateLimiter
 	auditWriter AuditWriter
 }
 
 // NewHandler creates a new inventory HTTP handler.
-func NewHandler(repo ResourceRepository, limiter RateLimiter, auditWriter AuditWriter) *Handler {
+func NewHandler(repo ResourceRepository, limiter RateLimiter, auditWriter AuditWriter, actors ...governance.ActorRepository) *Handler {
+	var accounts governance.ActorRepository
+	if len(actors) > 0 {
+		accounts = actors[0]
+	}
 	return &Handler{
 		repo:        repo,
+		mutations:   NewMutationService(repo, accounts),
 		limiter:     limiter,
 		auditWriter: auditWriter,
 	}
@@ -304,7 +311,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.repo.Create(r.Context(), &req, p.Username)
+	res, err := h.mutations.Create(r.Context(), p, &req)
+	if writeMutationError(w, err) {
+		return
+	}
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error(), "INTERNAL_ERROR")
 		return
@@ -371,7 +381,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	before, after, err := h.repo.Update(r.Context(), resourceID, &req, p.Username)
+	before, after, err := h.mutations.Update(r.Context(), p, resourceID, &req)
+	if writeMutationError(w, err) {
+		return
+	}
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.Error(w, http.StatusNotFound, "Resource not found", "INVENTORY_RESOURCE_NOT_FOUND")
@@ -455,7 +468,10 @@ func (h *Handler) Retire(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	before, after, err := h.repo.Retire(r.Context(), resourceID, &req, p.Username)
+	before, after, err := h.mutations.Retire(r.Context(), p, resourceID, &req)
+	if writeMutationError(w, err) {
+		return
+	}
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.Error(w, http.StatusNotFound, "Resource not found", "INVENTORY_RESOURCE_NOT_FOUND")
