@@ -21,6 +21,7 @@ interface TopologyResourcePickerProps {
   excludeResourceId?: string;
   disabled?: boolean;
   describedBy?: string;
+  kind?: string;
 }
 
 const SEARCH_LIMIT = 8;
@@ -33,6 +34,7 @@ export function TopologyResourcePicker({
   excludeResourceId,
   disabled,
   describedBy,
+  kind,
 }: TopologyResourcePickerProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
@@ -50,7 +52,7 @@ export function TopologyResourcePicker({
     // Resolve the current selection's display facts without assuming the
     // dataset is held locally.
     let active = true;
-    fetchInventoryResources({ q: value, limit: 1 })
+    fetchInventoryResources({ resourceIds: [value] })
       .then((res) => {
         if (!active) return;
         const match = (res.resources || []).find((r) => r.resourceId === value) ?? null;
@@ -66,15 +68,15 @@ export function TopologyResourcePicker({
 
   useEffect(() => {
     const needle = query.trim();
+    const seq = ++requestSeq.current;
     if (!needle) {
       setResults([]);
       setFailed(false);
       return;
     }
-    const seq = ++requestSeq.current;
     setLoading(true);
     const handle = setTimeout(() => {
-      fetchInventoryResources({ q: needle, limit: SEARCH_LIMIT })
+      fetchInventoryResources({ q: needle, kind, limit: SEARCH_LIMIT })
         .then((res) => {
           if (seq !== requestSeq.current) return;
           setResults(res.resources || []);
@@ -90,11 +92,11 @@ export function TopologyResourcePicker({
         });
     }, 220);
     return () => clearTimeout(handle);
-  }, [query]);
+  }, [query, kind]);
 
   const visibleResults = useMemo(
-    () => results.filter((r) => r.resourceId !== excludeResourceId),
-    [results, excludeResourceId],
+    () => results.filter((r) => r.resourceId !== excludeResourceId && (!kind || r.kind === kind && r.lifecycleState !== 'retired')),
+    [results, excludeResourceId, kind],
   );
 
   return (

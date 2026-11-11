@@ -24,6 +24,7 @@ import { UserCreatePage } from '../features/users/UserCreatePage';
 import { InventoryPage } from '../features/inventory/InventoryPage';
 import { InventoryAssetsPage } from '../features/inventory/InventoryAssetsPage';
 import { InventoryRuntimePage } from '../features/inventory/InventoryRuntimePage';
+import { GroupsPage } from '../features/groups/GroupsPage';
 import { InventoryDetailPage } from '../features/inventory/InventoryDetailPage';
 import { InventoryCreatePage } from '../features/inventory/InventoryCreatePage';
 import { TopologyPage } from '../features/topology/TopologyPage';
@@ -53,6 +54,7 @@ const pages: Record<string, ReactNode> = {
   '/inventory': <InventoryPage />,
   '/inventory/assets': <InventoryAssetsPage />,
   '/inventory/runtime': <InventoryRuntimePage />,
+  '/inventory/groups': <GroupsPage />,
   '/inventory/:resourceId': <InventoryDetailPage />,
   '/inventory/create': <InventoryCreatePage />,
   '/topology': <TopologyPage />,

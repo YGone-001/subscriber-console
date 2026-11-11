@@ -20,6 +20,10 @@
     "dynamicParameters": []
   },
   {
+    "route": "/inventory/groups",
+    "dynamicParameters": []
+  },
+  {
     "route": "/inventory/:resourceId",
     "dynamicParameters": [
       "resourceId"

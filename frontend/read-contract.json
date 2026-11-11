@@ -467,5 +467,18 @@
       "GET /api/ops-reports/metrics",
       "GET /api/ops-reports/export"
     ]
+  },
+  {
+    "route": "/inventory/groups",
+    "mode": "read",
+    "source": "frontend/src/features/groups/GroupsPage.tsx",
+    "readEndpoints": [
+      "GET /api/operations/groups",
+      "GET /api/operations/groups/summary",
+      "GET /api/operations/groups/members",
+      "GET /api/inventory/resources",
+      "GET /api/inventory/resources/{resourceId}",
+      "GET /api/topology/edges"
+    ]
   }
 ]

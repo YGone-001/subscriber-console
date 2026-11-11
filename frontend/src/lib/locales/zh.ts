@@ -1,7 +1,9 @@
 import { evidenceZh } from './operations-evidence';
+import { groupsZh } from './site-network';
 
 export const zh: Record<string, string> = {
     ...evidenceZh,
+    ...groupsZh,
     nav_agents: "Agent 管理",
     agents_title: "Agent 管理",
     agents_description: "一个中心管理多个只读采集节点，按节点区分连接状态与观测来源。",

@@ -14,7 +14,7 @@ export const ALERT_VIEWS = ['open', 'history', 'rules'] as const;
 export type AlertView = (typeof ALERT_VIEWS)[number];
 export const DEFAULT_ALERT_VIEW: AlertView = 'open';
 
-export const ALERT_URL_KEYS = ['severity', 'q', 'enabled'] as const;
+export const ALERT_URL_KEYS = ['severity', 'q', 'enabled', 'alertId'] as const;
 
 export const ALERT_SEVERITIES = ['critical', 'warning', 'info'] as const;
 export type AlertSeverityFilter = (typeof ALERT_SEVERITIES)[number] | '';

@@ -64,7 +64,8 @@ export function OperationsReportsPage() {
       const next: ReportRequest = {};
       if (period === 'custom') { const to = new Date(String(form.get('to'))).toISOString(); const from = new Date(String(form.get('from'))).toISOString(); if (new Date(to).getTime() <= new Date(from).getTime() || new Date(to).getTime() - new Date(from).getTime() > 7 * 86400000) throw new Error('window'); next.from=from; next.to=to; }
       else { next.period = period === '1' ? '1h' : period === '168' ? '7d' : '24h'; }
-      for (const key of ['resourceId', 'domain', 'severity'] as const) { const value = String(form.get(key) || '').trim(); if (value) next[key] = value; }
+      for (const key of ['resourceId', 'domain', 'severity', 'networkKey', 'siteResourceId', 'hostResourceId', 'operatorName', 'plmn'] as const) { const value = String(form.get(key) || '').trim(); if (value) next[key] = value; }
+      if (form.has('includeRetired')) next.includeRetired = '1';
       setParams(new URLSearchParams(reportSearch(next)));
     } catch { setError(t('report_invalid_window')); }
   };
@@ -84,9 +85,11 @@ export function OperationsReportsPage() {
       <label>{t('report_period')}<select value={period} onChange={(event) => setPeriod(event.target.value)}><option value="1">{t('report_1h')}</option><option value="24">{t('report_24h')}</option><option value="168">{t('report_7d')}</option><option value="custom">{t('report_custom')}</option></select></label>
       {period === 'custom' ? <><label>{t('report_from')}<input type="datetime-local" name="from" required defaultValue={localInput(query?.from || report.data?.query.from || defaultTo)} /></label><label>{t('report_to')}<input type="datetime-local" name="to" required defaultValue={localInput(query?.to || report.data?.query.to || defaultTo)} /></label></> : null}
       <label>{t('config_resource')}<input name="resourceId" defaultValue={params.get('resourceId') || ''} placeholder={t('report_resource_placeholder')} /></label>
-      <label>{t('report_domain')}<select name="domain" defaultValue={params.get('domain') || ''}><option value="">{t('evidence_all')}</option>{['epc', '5gc', 'ims', 'charging'].map((domain) => <option key={domain} value={domain}>{domain.toUpperCase()}</option>)}</select></label>
+      <label>{t('report_domain')}<select name="domain" defaultValue={params.get('domain') || ''}><option value="">{t('evidence_all')}</option>{['platform', 'ran', 'epc', '5gc', 'ims', 'charging', 'transport', 'cloud', 'shared', 'other'].map((domain) => <option key={domain} value={domain}>{domain.toUpperCase()}</option>)}</select></label>
       <label>{t('report_severity')}<select name="severity" defaultValue={params.get('severity') || ''}><option value="">{t('evidence_all')}</option>{['critical', 'warning', 'info'].map((severity) => <option key={severity} value={severity}>{t(`report_severity_${severity}`)}</option>)}</select></label>
       <button className="btn btn-primary" type="submit">{t('report_generate')}</button>
+      {([['networkKey', 'groups_network'], ['siteResourceId', 'groups_site'], ['hostResourceId', 'groups_host'], ['operatorName', 'groups_operator'], ['plmn', 'groups_plmn']] as const).map(([key, label]) => <label key={key}>{t(label)}<input name={key} maxLength={key === 'operatorName' ? 128 : key === 'plmn' ? 6 : 64} defaultValue={params.get(key) || ''} /></label>)}
+      <label><input type="checkbox" name="includeRetired" defaultChecked={params.get('includeRetired') === '1'} />{t('groups_retired')}</label>
     </form>
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
     {!query ? <ErrorState title={t('report_invalid_window')} message={t('report_invalid_window')} /> : report.isLoading ? <LoadingState label={t('loading')} /> : report.error || !report.data ? <ErrorState title={t('report_unavailable')} message={t('report_fetch_failed')} retryLabel={t('refresh')} onRetry={() => { void refresh(); }} /> : <>
@@ -108,6 +111,7 @@ export function OperationsReportsPage() {
         </table></div>}
         <CursorPagination summary={t('report_detail_scope')} previousLabel={t('evidence_first_page')} nextLabel={t('next')} hasPrevious={Boolean(cursor)} hasNext={Boolean(rows.data?.hasMore)} onPrevious={() => page('')} onNext={() => page(rows.data?.nextCursor || '')} />
       </section>
+      {report.data.consistency === 'current_assignment_eventual_across_collections' ? <p className={styles.hint}>{t('groups_report_membership')}</p> : null}
       <p className={styles.hint}>{t('report_consistency_hint')}</p>
     </>}
   </div>;

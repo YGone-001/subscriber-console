@@ -45,6 +45,7 @@ import {
   recoverNfAlert,
   fetchNfAlertRules,
   fetchNfAlerts,
+  fetchNfAlert,
   fetchNfAlertsMeta,
   resolveNfAlert,
 } from './nf-alerts-api';
@@ -112,6 +113,13 @@ export function NfAlertsPage() {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+
+  useEffect(() => {
+    if (!url.filters.alertId || !canRead) return;
+    let active = true;
+    fetchNfAlert(url.filters.alertId).then((alert) => { if (active) setSelectedAlert(alert); }).catch(() => { if (active) setFeedback({ tone: 'danger', message: t('groups_read_error') }); });
+    return () => { active = false; };
+  }, [url.filters.alertId, canRead, t]);
 
   const [ruleSearchInput, setRuleSearchInput] = useState(filters.q);
   useEffect(() => {
@@ -827,7 +835,7 @@ export function NfAlertsPage() {
         alert={selectedAlert}
         canConfigure={canConfigure}
         busy={busyId !== null}
-        onClose={() => setSelectedAlert(null)}
+        onClose={() => { setSelectedAlert(null); if (url.filters.alertId) url.setFilter('alertId', ''); }}
         onAcknowledge={(alert) => void handleAcknowledge(alert)}
         onAssign={(alert, assignedTo) => void handleAssign(alert, assignedTo)}
         onRecover={(alert) => void handleRecover(alert)}

@@ -8,12 +8,13 @@ import { useNavigate } from 'react-router-dom';
 import { ViewSwitch, type ViewSwitchOption } from '../../components/ui/ViewSwitch';
 import { useI18n } from '../../providers/I18nProvider';
 
-type InventoryView = 'network' | 'assets' | 'runtime';
+type InventoryView = 'network' | 'assets' | 'runtime' | 'groups';
 
 const TARGETS: Record<InventoryView, string> = {
   network: '/inventory',
   assets: '/inventory/assets',
   runtime: '/inventory/runtime',
+  groups: '/inventory/groups',
 };
 
 export function InventoryViewSwitch({ active }: { active: InventoryView }) {
@@ -23,6 +24,7 @@ export function InventoryViewSwitch({ active }: { active: InventoryView }) {
     { value: 'network', label: t('inventory_title'), data: { 'data-inventory-view': 'network' } },
     { value: 'assets', label: t('inventory_assets_title'), data: { 'data-inventory-view': 'assets' } },
     { value: 'runtime', label: t('inventory_runtime_title'), data: { 'data-inventory-view': 'runtime' } },
+    { value: 'groups', label: t('groups_title'), data: { 'data-inventory-view': 'groups' } },
   ];
 
   return (

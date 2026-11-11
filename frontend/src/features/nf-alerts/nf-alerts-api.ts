@@ -75,6 +75,12 @@ export async function fetchNfAlerts(
   );
 }
 
+export async function fetchNfAlert(alertId: string): Promise<Alert> {
+  const result = await getJson<ListAlertsResponse>(`/api/nf-alerts?alertId=${encodeURIComponent(alertId)}`);
+  if (!result.alerts[0]) throw new Error('Alert not found');
+  return result.alerts[0];
+}
+
 export async function acknowledgeNfAlert(alertId: string): Promise<Alert> {
   return postJson<Alert>(`/api/nf-alerts/${encodeURIComponent(alertId)}/acknowledge`, {});
 }
