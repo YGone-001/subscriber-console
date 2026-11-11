@@ -35,6 +35,10 @@ func (f *groupFaultStore) Edges(ctx context.Context, ids []string, direction str
 	if f.failure.Load() == 1 {
 		return nil, false, context.DeadlineExceeded
 	}
+	if f.failure.Load() == 3 {
+		rows, _, err := f.GroupRepository.Edges(ctx, ids, direction, 1)
+		return rows, true, err
+	}
 	return f.GroupRepository.Edges(ctx, ids, direction, limit)
 }
 func (f *groupFaultStore) Resources(ctx context.Context, filter operationsview.GroupFilter, ids []string, limit int) ([]inventory.Resource, bool, error) {
@@ -189,6 +193,9 @@ func TestGroupBrowserPreview(t *testing.T) {
 		}
 		if r.PathValue("source") == "inventory" {
 			v = 2
+		}
+		if r.PathValue("source") == "partial" {
+			v = 3
 		}
 		store.failure.Store(v)
 		http.Redirect(w, r, "/inventory/groups?siteResourceId="+fixtureGroupID(1), 303)
