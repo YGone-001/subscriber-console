@@ -3,6 +3,7 @@ module subscriber
 go 1.24.0
 
 require (
+	github.com/go-sql-driver/mysql v1.9.3
 	go.mongodb.org/mongo-driver/v2 v2.6.0
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/crypto v0.33.0
@@ -10,6 +11,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect

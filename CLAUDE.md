@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (191 exact METHOD+PATH registrations)
+Read + write APIs (193 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 191
+Go registration set                  = 193
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -215,6 +215,7 @@ Next implementation direction   = complete
 - Agent Management = IMPLEMENTED in source (single Go controller + in-process local collector + standalone outbound-only Linux agents; controller-issued identity/credential/session, scoped latest reports in `xcloud_ops.app_agents`, server-receipt freshness, CAS management and fresh actor revalidation; `/agents` + `/agents/{agentId}`; admin manages collector access, operator/viewer read; operator/network/PLMN assignments are management metadata, not tenant isolation or roaming relationships; remote observations do not mutate Inventory/Topology/NF Health or change existing local runtime/log scopes; HTTPS and real multi-host deployment acceptance remain operator deployment work). Authority: `docs/architecture/agent-management.md`.
 - Configuration observations and operations reports = IMPLEMENTED in source (deployment-owned local file declarations with legacy `root` plus optional non-overlapping `roots`, maximum 16 roots; EPC/5GC and IMS paths are editable environment examples, with IMS CFG/XML/CONF/LIST using metadata-only text observations; positive safe projections, private HMAC fingerprints, immutable Ops observations, revision-protected baselines, fixed optional schedules and protected retention; read-only windowed operational reports with explicit scope/coverage and bounded CSV; no original config storage, remote commands, NF configuration writes, historical availability claims or Agent protocol changes). Authorities: `docs/architecture/configuration-snapshots.md`, `docs/architecture/operations-reports.md`.
 - Site / network grouping workbench = IMPLEMENTED in source (`/inventory/groups`; Inventory UUID identity and explicit `attributes.xcloudOperationalScopes`, active Topology `contains`, independent Agent metadata; shared read scope for group directory, evidence, reports and CSV, bounded traversals and context-bound cursors; site/resource/edge maintenance reuses governed Inventory/Topology APIs with Fresh Actor, CAS and best-effort audit; no inferred network inheritance, tenant isolation, roaming agreement, remote collection or Agent protocol change). Authority: `docs/architecture/site-network-workbench.md`.
+- IMS registration observation backend = IMPLEMENTED in source (two Go-owned GET reads, bounded native MySQL projections, dedicated read-only accounts, explicit group scope and independent binding/identity evidence; memory-only persistence is unavailable, with no NF control, Agent protocol extension or registration-history write).
 - Assurance correlation / RCA / AIOps / multi-hop analysis = 未实施。
 - 长期演进权威文档：`docs/architecture/architecture-evolution-roadmap.md`；在其实施阶段开始前，不得当作运行时部署指令。
 - 长期方向：模块化运维平台（inventory / topology、workflow、assurance、telemetry、厂商中立 adapter 边界）。逻辑边界先于部署拆分；仅在规模、故障隔离、运维归属或可用性要求时才引入独立服务。
@@ -549,8 +550,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 191 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，191 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 193 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，193 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -580,7 +581,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (191 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (193 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -630,7 +631,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **191 条** METHOD+PATH 精确注册（GET 95 / POST 65 / PUT 15 / DELETE 10 / PATCH 3）：
+路由权威为源码派生的 Go 注册集合，共 **193 条** METHOD+PATH 精确注册（GET 100 / POST 65 / PUT 15 / DELETE 10 / PATCH 3）：
 
 ```text
 GET    /api/agents
@@ -826,7 +827,7 @@ POST   /api/knowledge/files
 状态：
 
 ```text
-Go production API registrations = 191 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 193 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0

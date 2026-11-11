@@ -23,6 +23,7 @@ import (
 	"subscriber/internal/configsnapshots"
 	"subscriber/internal/discovery"
 	"subscriber/internal/handler"
+	"subscriber/internal/imsreg"
 	"subscriber/internal/inventory"
 	"subscriber/internal/knowledge"
 	"subscriber/internal/livetopology"
@@ -470,6 +471,14 @@ func main() {
 	defer func() { stopConfigWorker(); <-configWorkerDone }()
 	groupService := operationsview.NewGroupService(operationsview.NewGroupRepository(mc.Ops), nfHealthRepo, configSnapshotService.List)
 	groupHandler := operationsview.NewGroupHandler(groupService, limiter, auditWriter)
+	imsCatalog, imsCatalogErr := imsreg.LoadCatalog(os.Getenv("IMS_REGISTRATION_SOURCES_FILE"))
+	if imsCatalogErr != nil {
+		logger.Warn("IMS observation source configuration rejected")
+	}
+	imsReader := imsreg.NewMySQLReader(nil)
+	defer imsReader.Close()
+	imsService := imsreg.NewService(imsCatalog, imsCatalogErr, imsReader, groupService)
+	imsHandler := imsreg.NewHandler(imsService, limiter)
 	opsReportService := opsreports.NewService(opsreports.NewRepository(mc.Ops), configSnapshotService.Meta)
 	opsReportService.SetGroups(groupService, func(ctx context.Context, ids []string) (*map[string]int, error) {
 		page, e := configSnapshotService.List(ctx, configsnapshots.ListQuery{Limit: 1, ResourceIDs: ids})
@@ -817,6 +826,8 @@ func main() {
 
 	// UE information (read-only EPC/5GC projection)
 	mux.Handle("GET /api/ue-info", authMiddleware(http.HandlerFunc(ueHandler.Get)))
+	mux.Handle("GET /api/ims/registrations", authMiddleware(http.HandlerFunc(imsHandler.Get)))
+	mux.Handle("GET /api/ims/registrations/summary", authMiddleware(http.HandlerFunc(imsHandler.Get)))
 
 	// Knowledge base (five reads, three mutations)
 	mux.Handle("GET /api/knowledge/meta", authMiddleware(http.HandlerFunc(knowledgeHandler.Meta)))

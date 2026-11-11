@@ -143,6 +143,8 @@ const EXPECTED_PROFILE_EXTENSION_ROUTES = new Set([
 // Online-subscriber observation: one read projection, no write owner.
 const EXPECTED_UE_INFO_ROUTES = new Set([
   'GET /api/ue-info',
+  'GET /api/ims/registrations',
+  'GET /api/ims/registrations/summary',
 ]);
 // Knowledge base: entry CRUD, the search vocabulary and attachment transfer.
 const EXPECTED_KNOWLEDGE_ROUTES = new Set([
