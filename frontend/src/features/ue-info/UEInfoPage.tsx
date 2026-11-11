@@ -17,6 +17,7 @@ import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
+import { UEViewSwitch } from './UEViewSwitch';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import {
   buildUEInfoPath,
@@ -285,12 +286,14 @@ export function UEInfoPage() {
     url.setCursor(cursor);
   };
 
-  const showSourceStrip = data && data.sources.length > 0;
+  const ueSources = data?.sources.filter((source) => source.id !== 'ims') ?? [];
+  const showSourceStrip = ueSources.length > 0;
   const partial = data ? (!data.complete || hasUnavailableSource(data)) : false;
   const noSources = data && !data.configured;
 
   return (
     <OperationsPageFrame
+      viewSwitch={<UEViewSwitch />}
       title={t('ue_page_title')}
       description={t('ue_page_description')}
       icon={<Smartphone size={23} />}
@@ -322,7 +325,7 @@ export function UEInfoPage() {
             </span>
           </div>
           <div className={styles.sourceStrip} role="list">
-            {data.sources.map((source) => <SourceChip key={source.id} source={source} />)}
+            {ueSources.map((source) => <SourceChip key={source.id} source={source} />)}
           </div>
           <p className={styles.sourceNote}>{t('ue_ims_pending_note')}</p>
         </section>

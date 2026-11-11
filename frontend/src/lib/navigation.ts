@@ -35,6 +35,7 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/nf-health/:targetId', targetRoute: '/nf-health/:targetId', dynamicParameters: ['targetId'], labelKey: 'nav_nf_health', icon: FileText },
   { route: '/nf-alerts', targetRoute: '/nf-alerts', dynamicParameters: [], labelKey: 'nav_nf_alerts', icon: BellRing, group: 'network', visible: true },
   { route: '/ue-info', targetRoute: '/ue-info', dynamicParameters: [], labelKey: 'nav_ue_info', icon: Smartphone, group: 'network', visible: true },
+  { route: '/ims-registrations', targetRoute: '/ims-registrations', dynamicParameters: [], labelKey: 'ims_title', icon: Smartphone, group: 'network' },
   { route: '/logs', targetRoute: '/logs', dynamicParameters: [], labelKey: 'nav_logs', icon: ScrollText, group: 'platform', visible: true },
   { route: '/knowledge', targetRoute: '/knowledge', dynamicParameters: [], labelKey: 'nav_knowledge', icon: BookOpen, group: 'platform', visible: true },
   { route: '/knowledge/new', targetRoute: '/knowledge/new', dynamicParameters: [], labelKey: 'nav_knowledge_new', icon: BookOpen },

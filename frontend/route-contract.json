@@ -234,5 +234,9 @@
   {
     "dynamicParameters": [],
     "route": "/ops-reports"
+  },
+  {
+    "route": "/ims-registrations",
+    "dynamicParameters": []
   }
 ]

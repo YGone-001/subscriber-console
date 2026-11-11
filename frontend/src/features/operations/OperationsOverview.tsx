@@ -28,6 +28,7 @@ import { reasonLabelKey } from '../runtime/runtime-model';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import type { RuntimeCounts, RuntimeObservations } from '../runtime/runtime-types';
 import type { UEInfoResponse } from '../ue-info/types';
+import type { IMSResponse } from '../ims-registration/ims-model';
 import {
   buildOperationsPosture,
   runtimeAttentionItems,
@@ -100,6 +101,7 @@ export default function OperationsOverview() {
   );
   const runtimeRead = useRead<RuntimeObservations>('/api/runtime/observations');
   const ueRead = useRead<UEInfoResponse>(UE_SUMMARY_PATH);
+  const imsRead = useRead<IMSResponse>('/api/ims/registrations/summary');
   const stream = useRuntimeStream();
   const runtimeData = resolveRuntimeObservations(stream, runtimeRead.data);
   const counts: RuntimeCounts | undefined = runtimeData?.snapshot.counts;
@@ -115,6 +117,7 @@ export default function OperationsOverview() {
     const timer = window.setInterval(() => {
       if (!summaryRead.isValidating) void summaryRead.mutate();
       if (!ueRead.isValidating) void ueRead.mutate();
+      if (!imsRead.isValidating && !document.hidden) void imsRead.mutate();
       if (stream.status !== 'connected' && !runtimeRead.isValidating) void runtimeRead.mutate();
       setRefreshSignal((value) => value + 1);
     }, SUMMARY_REFRESH_MS);
@@ -124,6 +127,8 @@ export default function OperationsOverview() {
     summaryRead.mutate,
     ueRead.isValidating,
     ueRead.mutate,
+    imsRead.isValidating,
+    imsRead.mutate,
     runtimeRead.isValidating,
     runtimeRead.mutate,
     stream.status,
@@ -132,9 +137,10 @@ export default function OperationsOverview() {
   const refresh = useCallback(() => {
     void summaryRead.mutate();
     void ueRead.mutate();
+    void imsRead.mutate();
     if (stream.status !== 'connected') void runtimeRead.mutate();
     setRefreshSignal((value) => value + 1);
-  }, [summaryRead, ueRead, runtimeRead, stream.status]);
+  }, [summaryRead, ueRead, imsRead, runtimeRead, stream.status]);
 
   const runtimeLoading = runtimeRead.isLoading && !counts;
   const summaryLoading = summaryRead.isLoading;
@@ -153,6 +159,17 @@ export default function OperationsOverview() {
     source.state === 'unavailable' || source.state === 'invalid_config');
 
   const kpiItems: MetricStripItem[] = [
+    {
+      key: 'ims-registrations',
+      icon: <Users size={16} />,
+      label: t('ims_active_identities'),
+      value: imsRead.error ? unavailable : imsRead.data?.counts.activePublicIdentities ?? unavailable,
+      detail: imsRead.error ? t('ims_load_error') : !imsRead.data ? loading : imsRead.data.configurationState !== 'ok'
+        ? t(`ims_${imsRead.data.configurationState}`)
+        : `${t('ims_active_bindings')}: ${imsRead.data.counts.activeBindings ?? unavailable}`,
+      tone: imsRead.error || imsRead.data?.counts.activePublicIdentities == null ? 'muted' : 'primary',
+      onClick: () => navigate('/ims-registrations'),
+    },
     {
       key: 'runtime',
       icon: <Server size={16} />,
@@ -240,7 +257,7 @@ export default function OperationsOverview() {
     <div className={styles.overviewPage}>
       <MetricStrip
         variant="cards"
-        columns={4}
+        columns={5}
         className={styles.kpiStrip}
         ariaLabel={t('dashboard_title')}
         items={kpiItems}

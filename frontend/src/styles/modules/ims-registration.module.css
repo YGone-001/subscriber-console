@@ -1,0 +1,55 @@
+.workspace { display: grid; gap: var(--space-16); min-width: 0; }
+.metricLabel { display: block; white-space: normal; overflow-wrap: anywhere; }
+.databaseCompact { display: none; }
+.filterDisclosure { width: 100%; min-width: 0; }
+.filterDisclosure > summary { min-height: 44px; padding-block: var(--space-12); cursor: pointer; font-size: var(--ref-font-size-label); }
+.filters { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--space-12); align-items: end; width: 100%; }
+.scopeFilters { grid-column: 1 / -1; min-width: 0; }
+.scopeFilters summary, .sourceDisclosure summary { min-height: 44px; cursor: pointer; padding-block: 10px; font-size: var(--ref-font-size-label); }
+.scopeFields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-12); }
+.sourceDisclosure { min-width: 0; border-block: 1px solid var(--surface-border); }
+.sourceDisclosure summary > span { margin-inline-start: var(--space-16); color: var(--text-muted); font-size: var(--ref-font-size-caption); }
+.filters input, .filters select { width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); background: var(--surface-field); color: var(--text-main); font: inherit; }
+.actions, .context, .toolbar { display: flex; gap: var(--space-12); align-items: center; flex-wrap: wrap; min-width: 0; }
+.context { font-size: var(--ref-font-size-label); line-height: 1.6; }
+.context > span:first-child { flex: 1 1 450px; }
+.context a { color: var(--primary); }
+.toolbar { justify-content: space-between; }
+.note { margin: 0; color: var(--text-muted); font-size: var(--ref-font-size-caption); line-height: 1.7; }
+.toolbar .note { flex: 1 1 420px; }
+.auto { display: flex; gap: var(--space-8); align-items: center; font-size: var(--ref-font-size-label); min-height: 44px; }
+.auto input { width: 18px; height: 18px; }
+.sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: var(--space-12); }
+.source { min-width: 0; border: 1px solid var(--surface-border); background: var(--surface); border-radius: var(--ref-radius-panel); padding: var(--space-16); }
+.source header { display: flex; align-items: start; justify-content: space-between; gap: var(--space-12); }
+.source h3 { font-size: var(--ref-font-size-body-compact); margin: 0; overflow-wrap: anywhere; }
+.source header > span { font-size: var(--ref-font-size-caption); color: var(--text-muted); flex-shrink: 0; }
+.source[data-state='unavailable'] header > span, .source[data-state='unsupported_schema'] header > span { color: var(--warning); }
+.reason { min-height: 1.7em; font-size: var(--ref-font-size-caption); color: var(--text-muted); line-height: 1.7; margin-block: var(--space-8); }
+.facts { margin: 0; display: grid; gap: var(--space-8); font-size: var(--ref-font-size-caption); }
+.facts > div { display: flex; align-items: start; justify-content: space-between; gap: var(--space-16); padding-block: 4px; border-bottom: 1px solid var(--surface-border); }
+.facts dt { color: var(--text-muted); flex-shrink: 0; }
+.facts dd { margin: 0; text-align: end; overflow-wrap: anywhere; min-width: 0; font-variant-numeric: tabular-nums; }
+.warning { padding: var(--space-12); border: 1px solid var(--surface-border); border-inline-start: 3px solid var(--warning); border-radius: var(--ref-radius-control); background: var(--surface-subtle); font-size: var(--ref-font-size-body-compact); }
+.warning p { margin: 4px 0 0; color: var(--text-muted); }
+.tableWrap { overflow-x: auto; min-width: 0; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-panel); background: var(--surface); }
+.table { border-collapse: collapse; table-layout: fixed; width: 100%; font-size: var(--ref-font-size-body-compact); }
+.table caption { text-align: start; padding: var(--space-12) var(--space-16); font-weight: 600; }
+.table th, .table td { text-align: start; padding: var(--space-12); vertical-align: top; border-bottom: 1px solid var(--surface-border); overflow-wrap: anywhere; }
+.table th { color: var(--text-muted); font-size: var(--ref-font-size-caption); }
+.table th:first-child { width: 28%; }
+.table th:last-child { width: 120px; }
+.table button { min-height: 44px; white-space: normal; }
+.identity { overflow-wrap: anywhere; font-family: var(--font-data); font-size: var(--ref-font-size-body-compact); }
+.overlay { position: fixed; inset: 0; z-index: 1200; display: flex; justify-content: end; background: var(--overlay-scrim); }
+.drawer { width: min(660px, 100%); max-height: 100dvh; overflow-y: auto; background: var(--surface); color: var(--text-main); padding: var(--space-24); border-inline-start: 1px solid var(--surface-border); }
+.drawerHead { position: sticky; top: -24px; background: var(--surface); display: flex; align-items: center; justify-content: space-between; gap: var(--space-12); padding-block: var(--space-12); z-index: 1; }
+.drawerHead h2 { margin: 0; font-size: var(--ref-font-size-heading); }
+.evidence { display: grid; gap: var(--space-16); }
+.evidence p, .evidence h3 { margin: 0; }
+.evidence h3 { font-size: var(--ref-font-size-heading-sm); }
+.bindings { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-12); }
+.bindings li { display: grid; gap: var(--space-8); padding: var(--space-12); background: var(--surface-subtle); border-radius: var(--ref-radius-control); font-size: var(--ref-font-size-caption); }
+@media (max-width: 900px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .table th:nth-child(4), .table td:nth-child(4) { display: none; } }
+@media (max-width: 600px) { .context .databaseFull { display: none; } .context .databaseCompact { display: block; } .workspace .metrics[data-columns] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .filters, .scopeFields { grid-template-columns: minmax(0, 1fr); } .table th:nth-child(2), .table td:nth-child(2) { display: none; } .table th:first-child { width: 38%; } .table th:last-child { width: 88px; } .table th, .table td { padding: var(--space-8); } .drawer { padding: var(--space-16); } }

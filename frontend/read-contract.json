@@ -9,7 +9,8 @@
       "GET /api/ocs/subscribers",
       "GET /api/operations/summary?sections=health,alerts",
       "GET /api/runtime/observations",
-      "GET /api/ue-info?summary=1"
+      "GET /api/ue-info?summary=1",
+      "GET /api/ims/registrations/summary"
     ]
   },
   {
@@ -479,6 +480,14 @@
       "GET /api/inventory/resources",
       "GET /api/inventory/resources/{resourceId}",
       "GET /api/topology/edges"
+    ]
+  },
+  {
+    "route": "/ims-registrations",
+    "mode": "read",
+    "source": "frontend/src/features/ims-registration/IMSRegistrationsPage.tsx",
+    "readEndpoints": [
+      "GET /api/ims/registrations"
     ]
   }
 ]

@@ -92,3 +92,6 @@ Canonical frontend SPA source     -> frontend/src/
 `docs/archive/**` contains concise historical summaries only. It is not current
 architecture authority. Detailed historical development evidence remains
 available from Git history.
+
+- [IMS registration observation architecture](architecture/ims-registration-observation.md)
+- [IMS registration observation runbook](operations/ims-registration-observation.md)

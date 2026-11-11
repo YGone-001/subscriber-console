@@ -24,7 +24,9 @@ The operations overview consumes `/api/ue-info?summary=1` for the
 `EPC/5GC online users` KPI. No collection, write path or background worker is
 introduced.
 
-The first delivery covers EPC/5GC only. IMS online users and HSS SIP URIs are
+The UE API covers EPC/5GC only. The shared workspace also links to the independent
+[IMS registration observation surface](ims-registration-observation.md). Its new
+counts do not change this API's legacy nullable IMS fields. IMS online users and HSS SIP URIs are
 explicitly unavailable until a separate read-only MySQL integration is approved
 and configured; they are never reported as zero.
 

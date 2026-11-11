@@ -10,7 +10,7 @@
  * visible focus ring and an `aria-current` marker so the current surface is never
  * only implied by colour.
  */
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { BellRing, Boxes, ChevronDown, HeartPulse, Network, Radar, Users } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import styles from '../../styles/modules/operations-nav.module.css';
@@ -26,12 +26,13 @@ const TABS = [
 
 export function OperationsNav() {
   const { t } = useI18n();
+  const ims = useLocation().pathname === '/ims-registrations';
   return (
     <nav className={styles.nav} aria-label={t('ops_nav_label')} data-operations-nav="workbench">
       {TABS.map(({ to, labelKey, icon: Icon }) => (
         <NavLink
           key={to}
-          to={to}
+          to={to === '/ue-info' && ims ? '/ims-registrations' : to}
           className={({ isActive }) => `${styles.tab} ${isActive ? styles.tabActive : ''}`}
         >
           <Icon size={15} aria-hidden="true" />
@@ -49,6 +50,7 @@ export function OperationsNav() {
  */
 export function OperationsNavCompact() {
   const { t } = useI18n();
+  const ims = useLocation().pathname === '/ims-registrations';
   return (
     <details className={styles.compact} data-operations-nav="compact">
       <summary className={styles.compactSummary}>
@@ -60,7 +62,7 @@ export function OperationsNavCompact() {
         {TABS.map(({ to, labelKey, icon: Icon }) => (
           <NavLink
             key={to}
-            to={to}
+            to={to === '/ue-info' && ims ? '/ims-registrations' : to}
             aria-label={t(labelKey)}
             className={({ isActive }) => `${styles.compactLink} ${isActive ? styles.compactLinkActive : ''}`}
           >

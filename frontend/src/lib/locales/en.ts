@@ -1,9 +1,11 @@
 import { evidenceEn } from './operations-evidence';
 import { groupsEn } from './site-network';
+import { imsEn } from './ims-registration';
 
 export const en: Record<string, string> = {
     ...evidenceEn,
     ...groupsEn,
+    ...imsEn,
     nav_agents: "Agent management",
     agents_title: "Agent management",
     agents_description: "One controller, multiple read-only collectors. Track node connectivity and the source of each observation.",

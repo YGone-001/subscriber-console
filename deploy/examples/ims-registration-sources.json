@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "local-scscf",
+      "name": "Local IMS S-CSCF",
+      "resourceId": "00000000-0000-4000-8000-000000000001",
+      "authority": "local-ims",
+      "persistence": "memory_only",
+      "scscf": {
+        "address": "127.0.0.1:3306",
+        "database": "scscf",
+        "user": "xcloud_ims_scscf_reader",
+        "passwordEnv": "IMS_LOCAL_SCSCF_PASSWORD"
+      },
+      "hss": {
+        "address": "127.0.0.1:3306",
+        "database": "hss_db",
+        "user": "xcloud_ims_hss_reader",
+        "passwordEnv": "IMS_LOCAL_HSS_PASSWORD"
+      }
+    }
+  ]
+}

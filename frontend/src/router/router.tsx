@@ -36,6 +36,7 @@ import { NfHealthDetailPage } from '../features/nf-health/NfHealthDetailPage';
 import { NfAlertsPage } from '../features/nf-alerts/NfAlertsPage';
 import { LogCenterPage } from '../features/logs/LogCenterPage';
 import { UEInfoPage } from '../features/ue-info/UEInfoPage';
+import { IMSRegistrationsPage } from '../features/ims-registration/IMSRegistrationsPage';
 import { KnowledgePage } from '../features/knowledge/KnowledgePage';
 import { KnowledgeDetailPage } from '../features/knowledge/KnowledgeDetailPage';
 import { KnowledgeEditorPage } from '../features/knowledge/KnowledgeEditorPage';
@@ -65,6 +66,7 @@ const pages: Record<string, ReactNode> = {
   '/nf-health/:targetId': <NfHealthDetailPage />,
   '/nf-alerts': <NfAlertsPage />,
   '/ue-info': <UEInfoPage />,
+  '/ims-registrations': <IMSRegistrationsPage />,
   '/logs': <LogCenterPage />,
   '/knowledge': <KnowledgePage />,
   '/knowledge/new': <KnowledgeEditorPage />,
