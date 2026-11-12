@@ -238,5 +238,15 @@
   {
     "route": "/ims-registrations",
     "dynamicParameters": []
+  },
+  {
+    "route": "/investigations",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/investigations/:investigationId",
+    "dynamicParameters": [
+      "investigationId"
+    ]
   }
 ]

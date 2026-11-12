@@ -94,4 +94,5 @@ architecture authority. Detailed historical development evidence remains
 available from Git history.
 
 - [IMS registration observation architecture](architecture/ims-registration-observation.md)
+- [Alert investigation architecture](architecture/alert-investigations.md) / [操作说明](operations/alert-investigations.md)
 - [IMS registration observation runbook](operations/ims-registration-observation.md)

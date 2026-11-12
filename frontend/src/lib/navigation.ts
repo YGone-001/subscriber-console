@@ -1,4 +1,4 @@
-import { Activity, BellRing, BookOpen, Boxes, Briefcase, CreditCard, Cpu, DatabaseBackup, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, ScrollText, Settings, Smartphone, Table2, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { Activity, BellRing, BookOpen, Boxes, Briefcase, CreditCard, Cpu, DatabaseBackup, FileText, Gauge, HeartPulse, LayoutDashboard, Network, SearchCheck, Radar, Radio, ScrollText, Settings, Smartphone, Table2, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 import type { CanonicalRole } from '../types/auth';
 import { hasNavigationPermission } from './permissions';
 
@@ -35,6 +35,8 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/nf-health/:targetId', targetRoute: '/nf-health/:targetId', dynamicParameters: ['targetId'], labelKey: 'nav_nf_health', icon: FileText },
   { route: '/nf-alerts', targetRoute: '/nf-alerts', dynamicParameters: [], labelKey: 'nav_nf_alerts', icon: BellRing, group: 'network', visible: true },
   { route: '/ue-info', targetRoute: '/ue-info', dynamicParameters: [], labelKey: 'nav_ue_info', icon: Smartphone, group: 'network', visible: true },
+  { route: '/investigations', targetRoute: '/investigations', dynamicParameters: [], labelKey: 'inv_title', icon: SearchCheck, group: 'network', visible: true },
+  { route: '/investigations/:investigationId', targetRoute: '/investigations/:investigationId', dynamicParameters: ['investigationId'], labelKey: 'inv_title', icon: SearchCheck, group: 'network' },
   { route: '/ims-registrations', targetRoute: '/ims-registrations', dynamicParameters: [], labelKey: 'ims_title', icon: Smartphone, group: 'network' },
   { route: '/logs', targetRoute: '/logs', dynamicParameters: [], labelKey: 'nav_logs', icon: ScrollText, group: 'platform', visible: true },
   { route: '/knowledge', targetRoute: '/knowledge', dynamicParameters: [], labelKey: 'nav_knowledge', icon: BookOpen, group: 'platform', visible: true },
@@ -152,7 +154,7 @@ export type SidebarGroup = {
  * list sort last so a newly added surface never displaces a canonical entry.
  */
 const BUSINESS_CHILD_ORDER = ['/subscribers', '/profile', '/ocs/tariffs', '/ocs/contracts', '/ocs/balances'];
-const NETWORK_CHILD_ORDER = ['/inventory', '/inventory/assets', '/inventory/runtime', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info'];
+const NETWORK_CHILD_ORDER = ['/inventory', '/inventory/assets', '/inventory/runtime', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/investigations', '/ue-info'];
 const PLATFORM_CHILD_ORDER = ['/system-health', '/agents', '/config-snapshots', '/ops-reports', '/system/retention', '/users', '/logs', '/knowledge'];
 
 /**

@@ -48,3 +48,9 @@ test('a URL-selected source remains selected while its catalog is loading', () =
     assert.doesNotMatch(html, /<option value="" selected=""/);
   }
 });
+
+test('source read timestamps retain the full date and clock when seconds are shown', () => {
+ const source = { id:'a',name:'Source A',persistence:'write_back',state:'ok',reason:'',completeness:'complete',readAt:'2026-11-12T01:02:03Z',sourceAsOf:null,freshness:'unknown',identityState:'not_configured' } as IMSSource;
+ const html=renderToStaticMarkup(createElement(I18nProvider,null,createElement(IMSSourceCard,{source})));
+ assert.ok(html.includes('2026')); assert.match(html,/\d{1,2}:\d{2}:\d{2}/);
+});

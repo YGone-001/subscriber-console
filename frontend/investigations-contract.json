@@ -1,0 +1,79 @@
+{
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/investigations/context",
+      "permission": "core.read",
+      "query": [
+        "alertId",
+        "from",
+        "to",
+        "investigationId"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/investigations",
+      "permission": "core.read",
+      "query": [
+        "q",
+        "status",
+        "alertId",
+        "resourceId",
+        "cursor",
+        "limit"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/investigations",
+      "permission": "core.configure",
+      "freshActor": true,
+      "body": [
+        "requestId",
+        "alertId",
+        "title",
+        "from",
+        "to"
+      ],
+      "idempotency": "request UUID, creator and normalized digest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/investigations/{investigationId}",
+      "permission": "core.read",
+      "query": []
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/investigations/{investigationId}",
+      "permission": "core.configure",
+      "freshActor": true,
+      "body": [
+        "expectedRevision",
+        "title",
+        "status",
+        "notes",
+        "conclusion",
+        "knowledgeIds"
+      ],
+      "cas": true
+    }
+  ],
+  "domainWriteCollections": [
+    "xcloud_ops.app_investigations"
+  ],
+  "evidenceReadOnly": true,
+  "maximumWindowHours": 24,
+  "maximumOneHopEdges": 20,
+  "maximumPerSourceRows": 128,
+  "maximumEvents": 384,
+  "maximumKnowledgeReferences": 8,
+  "sourceCompleteness": [
+    "complete",
+    "partial",
+    "unavailable",
+    "not_applicable"
+  ],
+  "historicalCoverage": "unknown"
+}

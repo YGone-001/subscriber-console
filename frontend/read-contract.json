@@ -489,5 +489,24 @@
     "readEndpoints": [
       "GET /api/ims/registrations"
     ]
+  },
+  {
+    "route": "/investigations",
+    "mode": "read",
+    "source": "frontend/src/features/investigations/InvestigationsPage.tsx",
+    "readEndpoints": [
+      "GET /api/investigations",
+      "GET /api/investigations/context"
+    ]
+  },
+  {
+    "route": "/investigations/:investigationId",
+    "mode": "read",
+    "source": "frontend/src/features/investigations/InvestigationsPage.tsx",
+    "readEndpoints": [
+      "GET /api/investigations/{investigationId}",
+      "GET /api/investigations/context",
+      "GET /api/knowledge/entries"
+    ]
   }
 ]

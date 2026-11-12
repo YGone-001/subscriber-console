@@ -8,7 +8,8 @@
  */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { investigationEntry } from '../investigations/investigation-model';
 import { Check, CheckCheck, Play, UserRoundCheck, X } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import type { LayerEvidence, LayerState } from '../nf-health/nf-health-types';
@@ -37,6 +38,7 @@ export function NfAlertEvidenceDrawer({
   onResolve,
 }: Props) {
   const { t } = useI18n();
+  const location = useLocation();
   const [assignee, setAssignee] = useState('');
   // The input is the single source while editing: falling back to the stored
   // assignee on every keystroke would make clearing the field impossible.
@@ -65,6 +67,7 @@ export function NfAlertEvidenceDrawer({
             </p>
           </div>
           <div className={styles.drawerHeadActions}>
+            <Link className="btn btn-secondary" onClick={onClose} to={investigationEntry(alert.alertId, `/nf-alerts${location.search}`)}>{t('inv_entry')}</Link>
             {alert.resourceId ? (
               <Link
                 to={`/logs?resourceId=${encodeURIComponent(alert.resourceId)}`}

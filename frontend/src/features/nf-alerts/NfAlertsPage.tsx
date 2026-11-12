@@ -19,9 +19,10 @@
  * blank the queue.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Bell, BellRing, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
+import { investigationEntry } from '../investigations/investigation-model';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
@@ -77,6 +78,7 @@ const PAGE_LIMIT = 20;
 type Feedback = { tone: 'success' | 'danger' | 'warning' | 'info'; message: string } | null;
 
 export function NfAlertsPage() {
+  const location = useLocation();
   const { t } = useI18n();
   const { user } = useAuth();
 
@@ -773,6 +775,7 @@ export function NfAlertsPage() {
                       <td>{formatTimestamp(alert.lastTriggeredAt)}</td>
                       <td>
                         <div className={styles.rowActions}>
+                          <Link className="btn btn-ghost" to={investigationEntry(alert.alertId, `/nf-alerts${location.search}`)}>{t('inv_entry')}</Link>
                           <button
                             type="button"
                             className="btn btn-ghost"

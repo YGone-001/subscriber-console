@@ -1,0 +1,64 @@
+.workspace { display: grid; gap: var(--space-16); min-width: 0; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-12); }
+.toolbar > :first-child { margin-inline-end: auto; }
+.filters { width: 100%; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto; gap: var(--space-12); align-items: end; }
+.split { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr); gap: var(--space-16); align-items: start; }
+.panel { min-width: 0; padding: var(--space-16); background: var(--surface); border: 1px solid var(--surface-border); border-radius: var(--ref-radius-panel); }
+.panel h2, .panel h3 { margin: 0 0 var(--space-12); font-size: var(--ref-font-size-heading-sm); }
+.panel p { margin: var(--space-8) 0; }
+.note { color: var(--text-muted); font-size: var(--ref-font-size-caption); line-height: 1.6; overflow-wrap: anywhere; }
+.warning { border-inline-start: 3px solid var(--warning); padding: var(--space-12); background: var(--surface-subtle); font-size: var(--ref-font-size-body-compact); }
+.coverage { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-8); }
+.source { padding: var(--space-12); min-width: 0; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); font-size: var(--ref-font-size-caption); overflow-wrap: anywhere; }
+.source strong { display: block; margin-bottom: var(--space-8); }
+.source[data-state="unavailable"] { border-inline-start: 3px solid var(--danger); }
+.source[data-state="partial"] { border-inline-start: 3px solid var(--warning); }
+.source p { margin: 4px 0; }
+.tableWrap { min-width: 0; overflow-x: auto; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-panel); background: var(--surface); }
+.table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--ref-font-size-body-compact); }
+.table caption { text-align: start; padding: var(--space-16); font-weight: 600; }
+.table th, .table td { text-align: start; padding: var(--space-12); border-bottom: 1px solid var(--surface-border); vertical-align: top; overflow-wrap: anywhere; }
+.table th { color: var(--text-muted); font-size: var(--ref-font-size-caption); }
+.table th:first-child { width: 40%; }
+.table td small { display: block; margin-top: var(--space-8); color: var(--text-muted); }
+.timeline { list-style: none; padding: 0; margin: 0; }
+.timelineItem { position: relative; padding: var(--space-16) 0 var(--space-16) var(--space-20); border-inline-start: 1px solid var(--surface-border); }
+.timelineItem::before { content: ''; position: absolute; inset-inline-start: -4px; top: 24px; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.timelineItem[data-kind="configuration"]::before { background: var(--warning); }
+.timelineItem header { display: flex; flex-wrap: wrap; gap: var(--space-8) var(--space-16); align-items: baseline; }
+.timelineItem time { color: var(--text-muted); font-size: var(--ref-font-size-caption); font-variant-numeric: tabular-nums; }
+.timelineItem p { margin: var(--space-8) 0; }
+.timelineItem details { font-size: var(--ref-font-size-caption); }
+.timelineItem summary, .panel > summary { min-height: 44px; cursor: pointer; padding-block: var(--space-12); }
+.identity { overflow-wrap: anywhere; font-family: var(--font-data); font-size: var(--ref-font-size-caption); }
+.facts { display: grid; gap: var(--space-8); margin-block: var(--space-12); }
+.facts > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); border-bottom: 1px solid var(--surface-border); padding-block: 4px; }
+.facts dt { color: var(--text-muted); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.form { display: grid; gap: var(--space-16); min-width: 0; }
+.form textarea { width: 100%; min-height: 100px; resize: vertical; }
+.form input, .form select { width: 100%; min-width: 0; }
+.knowledge { display: grid; gap: var(--space-8); }
+.knowledge ul, .relations { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-12); }
+.knowledge li { display: flex; gap: var(--space-8); align-items: start; overflow-wrap: anywhere; }
+.knowledge li input { flex: 0 0 auto; width: auto; margin-top: 4px; }
+.relations li { padding-block: var(--space-8); border-bottom: 1px solid var(--surface-border); overflow-wrap: anywhere; }
+.relations li small { display: block; margin-top: 4px; }
+.window { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: var(--space-12); align-items: end; }
+.window input { width: 100%; min-width: 0; }
+.metricLabel { display: block; white-space: normal; }
+.confirmOverlay { position: fixed; inset: 0; background: var(--overlay-scrim); z-index: 1200; display: grid; place-items: center; padding: var(--space-16); }
+.confirm { width: min(480px,100%); background: var(--surface); border: 1px solid var(--surface-border); border-radius: var(--ref-radius-panel); padding: var(--space-24); }
+.confirm h2 { font-size: var(--ref-font-size-heading-sm); }
+@media (max-width: 1100px) { .split { grid-template-columns: minmax(0,1fr); } .coverage { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 600px) { .filters, .window { grid-template-columns: minmax(0,1fr); } .coverage { grid-template-columns: repeat(2,minmax(0,1fr)); } .table th:nth-child(4), .table td:nth-child(4) { display:none; } .table th:first-child { width: 48%; } .panel { padding: var(--space-12); } .workspace .metrics[data-columns] { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+.coverageDisclosure { min-width: 0; border-block: 1px solid var(--surface-border); }
+.coverageDisclosure > summary { cursor: pointer; min-height: 44px; padding-block: var(--space-12); font-size: var(--ref-font-size-caption); }
+.windowSummary { display: flex; flex-wrap: wrap; gap: var(--space-8) var(--space-16); font-size: var(--ref-font-size-body-compact); }
+.windowSummary span { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.recordArea:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
+.knowledge li label { min-height: 44px; display: block; }
+
+.panel { overflow-wrap: anywhere; }

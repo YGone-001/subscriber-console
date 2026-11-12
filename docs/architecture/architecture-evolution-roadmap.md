@@ -77,7 +77,7 @@ Platform Evolution Status:
 - Topology / Dependency Model Foundation = IMPLEMENTED (manual authoritative relationship management in `xcloud_ops.app_topology_edges`, 7 Go endpoints, 2 SPA routes, nine directed relationship types, partial-unique active-edge deduplication, revision CAS, terminal retirement, one-hop neighbour projection; see `docs/architecture/topology-dependency-model.md`).
 - Discovery / NF Observation Foundation = IMPLEMENTED (vendor-neutral read-only NRF NFManagement observation into `xcloud_ops.app_nf_observations`, 12 Go endpoints, 2 SPA routes; see `docs/architecture/nf-discovery.md`).
 - NF Health / Telemetry Foundation = IMPLEMENTED (read-only three-layer measurement evidence in `xcloud_ops.app_nf_health_targets` + `app_nf_health_runs` + `app_nf_health_samples`, 10 Go endpoints, 2 SPA routes; see `docs/architecture/nf-health-telemetry.md`).
-- Assurance correlation, RCA, AIOps and multi-hop analysis remain future work and are not implemented by the discovery or telemetry foundations.
+- Bounded alert investigations are implemented in source; see [Alert investigations](alert-investigations.md). Full RCA, statistical AIOps and multi-hop analysis remain future work and are not implied by this evidence workbench.
 
 ### Internal Backend Direction
 

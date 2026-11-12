@@ -1,3 +1,4 @@
+import { EVIDENCE_TIME_FORMAT } from '../../lib/evidence-time';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import useSWR from 'swr';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -47,7 +48,7 @@ export function IMSSourceCard({ source }: { source: IMSSource }) {
     <p className={styles.reason}>{source.reason ? t(`ims_reason_${source.reason}`) : t(`ims_source_${source.completeness}`)}</p>
     <dl className={styles.facts}>
       <div><dt>{t('ims_persistence')}</dt><dd>{t(`ims_mode_${source.persistence}`)}</dd></div>
-      <div><dt>{t('ims_read_at')}</dt><dd>{source.readAt ? formatDateTime(source.readAt, { second: '2-digit' }) : t('ims_unknown')}</dd></div>
+      <div><dt>{t('ims_read_at')}</dt><dd>{source.readAt ? formatDateTime(source.readAt, EVIDENCE_TIME_FORMAT) : t('ims_unknown')}</dd></div>
       <div><dt>{t('ims_source_asof')}</dt><dd>{source.sourceAsOf ? formatDateTime(source.sourceAsOf) : t('ims_unknown')}</dd></div>
       <div><dt>{t('ims_freshness')}</dt><dd>{t('ims_unknown')}</dd></div>
       <div><dt>{t('ims_mapping')}</dt><dd>{t(`ims_identity_${source.identityState}`)}</dd></div>
