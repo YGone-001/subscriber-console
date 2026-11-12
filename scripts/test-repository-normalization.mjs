@@ -143,6 +143,11 @@ const EXPECTED_PROFILE_EXTENSION_ROUTES = new Set([
 // Online-subscriber observation: one read projection, no write owner.
 const EXPECTED_UE_INFO_ROUTES = new Set([
   'GET /api/ue-info',
+  'POST /api/investigations',
+  'PATCH /api/investigations/{investigationId}',
+  'GET /api/investigations',
+  'GET /api/investigations/context',
+  'GET /api/investigations/{investigationId}',
   'GET /api/ims/registrations',
   'GET /api/ims/registrations/summary',
 ]);

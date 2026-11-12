@@ -25,6 +25,7 @@ import (
 	"subscriber/internal/handler"
 	"subscriber/internal/imsreg"
 	"subscriber/internal/inventory"
+	"subscriber/internal/investigation"
 	"subscriber/internal/knowledge"
 	"subscriber/internal/livetopology"
 	"subscriber/internal/middleware"
@@ -365,6 +366,9 @@ func main() {
 	)
 	nfAlertEvaluator := nfalert.NewEvaluator(nfalert.NewMongoEvaluatorRepository(nfAlertRepo))
 	nfAlertHandler := nfalert.NewHandler(nfAlertRepo, limiter, auditWriter)
+	investigationRepo := investigation.NewRepository(mc.Ops)
+	investigationService := investigation.NewService(investigationRepo, investigationRepo, userRepo, auditWriter, jwtSecretBytes)
+	investigationHandler := investigation.NewHandler(investigationService, limiter)
 
 	// Notification channels, escalation rules and the delivery ledger are a
 	// separate out-of-band surface. Alert writes only enqueue a delivery intent;
@@ -772,6 +776,11 @@ func main() {
 	mux.Handle("GET /api/nf-logs/stream", authMiddleware(http.HandlerFunc(nfLogHandler.Stream)))
 
 	mux.Handle("GET /api/nf-alerts", authMiddleware(http.HandlerFunc(nfAlertHandler.ListAlerts)))
+	mux.Handle("GET /api/investigations/context", authMiddleware(http.HandlerFunc(investigationHandler.Handle)))
+	mux.Handle("GET /api/investigations", authMiddleware(http.HandlerFunc(investigationHandler.Handle)))
+	mux.Handle("POST /api/investigations", authMiddleware(http.HandlerFunc(investigationHandler.Handle)))
+	mux.Handle("GET /api/investigations/{investigationId}", authMiddleware(http.HandlerFunc(investigationHandler.Handle)))
+	mux.Handle("PATCH /api/investigations/{investigationId}", authMiddleware(http.HandlerFunc(investigationHandler.Handle)))
 	mux.Handle("GET /api/nf-alerts/meta", authMiddleware(http.HandlerFunc(nfAlertHandler.Meta)))
 	mux.Handle("GET /api/nf-alerts/rules", authMiddleware(http.HandlerFunc(nfAlertHandler.ListRules)))
 	mux.Handle("POST /api/nf-alerts/rules", authMiddleware(http.HandlerFunc(nfAlertHandler.CreateRule)))
