@@ -423,3 +423,29 @@ func TestSubMillisecondWindowCannotCreateAnUnreadableRecord(t *testing.T) {
 		t.Fatal("window collapsed after canonicalization")
 	}
 }
+
+func TestNFAnchorAliasPreservesLegacyIdentityAndIdempotency(t *testing.T) {
+	e := fixtureEvidence()
+	r := newRecords()
+	s := testService(e, r, &testActors{})
+	req := CreateRequest{RequestID: testID(120), AnchorKind: "nf_alert", AnchorID: e.anchor.ID, Title: "NF alias", From: testWindow().From, To: testWindow().To}
+	v, err := s.Create(context.Background(), operator(), req)
+	if err != nil || v.AlertID != e.anchor.ID {
+		t.Fatal("NF anchor alias lost its legacy identity", err)
+	}
+	req.AnchorKind = ""
+	req.AnchorID = ""
+	req.AlertID = e.anchor.ID
+	replay, err := s.Create(context.Background(), operator(), req)
+	if err != nil || replay.ID != v.ID {
+		t.Fatal("legacy replay diverged from NF alias", err)
+	}
+	q := testWindow()
+	q.AlertID = ""
+	q.AnchorKind = "nf_alert"
+	q.AnchorID = e.anchor.ID
+	q.InvestigationID = v.ID
+	if _, err = s.Context(context.Background(), q); err != nil {
+		t.Fatal("saved NF alias context could not be resolved", err)
+	}
+}

@@ -349,6 +349,9 @@ func (s *Service) Create(ctx context.Context, p *auth.Principal, q CreateRequest
 	if anchorErr != nil {
 		return nil, anchorErr
 	}
+	if kind == "nf_alert" {
+		q.AlertID = id
+	}
 	if !validID(q.RequestID) {
 		return nil, fail(400, "INVESTIGATION_INVALID_ID", "Request and alert IDs must be UUID v4")
 	}
