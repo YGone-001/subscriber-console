@@ -303,7 +303,7 @@ assert.equal(genericExecutorCalls, 0, 'generic remote/system execution patterns 
 assert.ok(!existsSync(legacyParityContractPath), 'legacy operational-mutation-parity-contract.json must be absent');
 
 // 5. Run dedicated test suite to verify builders and partial-result semantics
-const testOutput = execSync('npx tsx --test tests/system-health-operational.test.ts', {
+const testOutput = execSync('npx tsx --test --test-reporter=tap tests/system-health-operational.test.ts', {
   cwd: spa,
   encoding: 'utf8',
 });

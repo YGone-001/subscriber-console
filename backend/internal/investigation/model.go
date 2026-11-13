@@ -26,19 +26,29 @@ func fail(status int, code, message string) error { return &Failure{status, code
 
 // Evidence facts are positive projections; no raw bodies or configuration content.
 type AlertFact struct {
-	ID           string `json:"alertId" bson:"_id"`
-	ResourceID   string `json:"resourceId" bson:"resourceId"`
-	TargetID     string `json:"targetId" bson:"targetId"`
-	Name         string `json:"name" bson:"ruleName"`
-	Severity     string `json:"severity" bson:"severity"`
-	State        string `json:"state" bson:"state"`
-	First        string `json:"firstTriggeredAt" bson:"firstTriggeredAt"`
-	Last         string `json:"lastTriggeredAt" bson:"lastTriggeredAt"`
-	Acknowledged string `json:"acknowledgedAt,omitempty" bson:"acknowledgedAt"`
-	Assigned     string `json:"assignedAt,omitempty" bson:"assignedAt"`
-	Recovering   string `json:"recoveringAt,omitempty" bson:"recoveringAt"`
-	Resolved     string `json:"resolvedAt,omitempty" bson:"resolvedAt"`
-	TriggerCount int    `json:"triggerCount" bson:"triggerCount"`
+	AnchorKind           string `json:"anchorKind,omitempty"`
+	AnchorID             string `json:"anchorId,omitempty"`
+	SourceID             string `json:"sourceId,omitempty"`
+	BaselineID           string `json:"baselineId,omitempty"`
+	BaselineRevision     int64  `json:"baselineRevision,omitempty"`
+	TriggerSnapshotID    string `json:"triggerSnapshotId,omitempty"`
+	LatestSnapshotID     string `json:"latestSnapshotId,omitempty"`
+	TriggerObservationID string `json:"triggerObservationId,omitempty"`
+	LatestObservationID  string `json:"latestObservationId,omitempty"`
+	EndReason            string `json:"endReason,omitempty"`
+	ID                   string `json:"alertId" bson:"_id"`
+	ResourceID           string `json:"resourceId" bson:"resourceId"`
+	TargetID             string `json:"targetId" bson:"targetId"`
+	Name                 string `json:"name" bson:"ruleName"`
+	Severity             string `json:"severity" bson:"severity"`
+	State                string `json:"state" bson:"state"`
+	First                string `json:"firstTriggeredAt" bson:"firstTriggeredAt"`
+	Last                 string `json:"lastTriggeredAt" bson:"lastTriggeredAt"`
+	Acknowledged         string `json:"acknowledgedAt,omitempty" bson:"acknowledgedAt"`
+	Assigned             string `json:"assignedAt,omitempty" bson:"assignedAt"`
+	Recovering           string `json:"recoveringAt,omitempty" bson:"recoveringAt"`
+	Resolved             string `json:"resolvedAt,omitempty" bson:"resolvedAt"`
+	TriggerCount         int    `json:"triggerCount" bson:"triggerCount"`
 }
 type ResourceFact struct {
 	ID        string `json:"resourceId" bson:"_id"`
@@ -102,6 +112,7 @@ type Coverage struct {
 	HistoryCoverage string `json:"historyCoverage"`
 }
 type Event struct {
+	AnchorKind string     `json:"anchorKind,omitempty"`
 	Key        string     `json:"key"`
 	Kind       string     `json:"kind"`
 	ID         string     `json:"id"`
@@ -117,7 +128,10 @@ type Event struct {
 	Layers     *Layers    `json:"layers,omitempty"`
 	MeasuredAt *time.Time `json:"measuredAt,omitempty"`
 }
-type ContextQuery struct{ AlertID, From, To, InvestigationID string }
+type ContextQuery struct {
+	AlertID, From, To, InvestigationID string
+	AnchorKind, AnchorID               string
+}
 type ContextView struct {
 	GeneratedAt       time.Time           `json:"generatedAt"`
 	From              time.Time           `json:"from"`
@@ -137,6 +151,8 @@ type Change struct {
 	Status   string    `json:"status" bson:"status"`
 }
 type Record struct {
+	AnchorKind    string    `json:"anchorKind,omitempty" bson:"anchorKind,omitempty"`
+	AnchorID      string    `json:"anchorId,omitempty" bson:"anchorId,omitempty"`
 	ID            string    `json:"investigationId" bson:"_id"`
 	AlertID       string    `json:"alertId" bson:"alertId"`
 	ResourceID    string    `json:"resourceId" bson:"resourceId"`
@@ -161,11 +177,13 @@ type RecordView struct {
 	KnowledgeCoverage Coverage        `json:"knowledgeCoverage"`
 }
 type CreateRequest struct {
-	RequestID string `json:"requestId"`
-	AlertID   string `json:"alertId"`
-	Title     string `json:"title"`
-	From      string `json:"from"`
-	To        string `json:"to"`
+	AnchorKind string `json:"anchorKind,omitempty"`
+	AnchorID   string `json:"anchorId,omitempty"`
+	RequestID  string `json:"requestId"`
+	AlertID    string `json:"alertId"`
+	Title      string `json:"title"`
+	From       string `json:"from"`
+	To         string `json:"to"`
 }
 type UpdateRequest struct {
 	ExpectedRevision int64    `json:"expectedRevision"`
@@ -178,8 +196,11 @@ type UpdateRequest struct {
 type ListQuery struct {
 	Q, Status, AlertID, ResourceID, Cursor string
 	Limit                                  int
+	AnchorKind, AnchorID                   string
 }
 type RecordSummary struct {
+	AnchorKind string    `json:"anchorKind,omitempty"`
+	AnchorID   string    `json:"anchorId,omitempty"`
 	ID         string    `json:"investigationId"`
 	AlertID    string    `json:"alertId"`
 	ResourceID string    `json:"resourceId"`

@@ -10,6 +10,8 @@ import (
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/configsnapshots"
+	"subscriber/internal/governance"
 	"subscriber/internal/response"
 )
 
@@ -32,12 +34,15 @@ type Handler struct {
 	repo        *Repository
 	limiter     RateLimiter
 	auditWriter AuditWriter
+	actors      governance.ActorRepository
 }
 
 // NewHandler constructs the notification HTTP handler.
 func NewHandler(repo *Repository, limiter RateLimiter, auditWriter AuditWriter) *Handler {
 	return &Handler{repo: repo, limiter: limiter, auditWriter: auditWriter}
 }
+
+func (h *Handler) UseActorRepository(a governance.ActorRepository) { h.actors = a }
 
 const maxBodyBytes = 32 << 10
 
@@ -103,6 +108,7 @@ func (h *Handler) auditWrite(p *auth.Principal, method, path, resourceID string,
 }
 
 func (h *Handler) requireRead(w http.ResponseWriter, r *http.Request, method, path string) *auth.Principal {
+	w.Header().Set("Cache-Control", "no-store")
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
@@ -117,6 +123,7 @@ func (h *Handler) requireRead(w http.ResponseWriter, r *http.Request, method, pa
 }
 
 func (h *Handler) requireConfigure(w http.ResponseWriter, r *http.Request, method, path string) *auth.Principal {
+	w.Header().Set("Cache-Control", "no-store")
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
@@ -126,6 +133,17 @@ func (h *Handler) requireConfigure(w http.ResponseWriter, r *http.Request, metho
 		h.recordDenial(p, method, path)
 		response.Forbidden(w, "Forbidden")
 		return nil
+	}
+	if h.actors != nil {
+		a, f := governance.RevalidateFreshActor(r.Context(), h.actors, p)
+		if f != nil {
+			response.Error(w, f.Status, f.Message, f.Code)
+			return nil
+		}
+		if !auth.HasPermission(&auth.Principal{NormalizedRole: a.NormalizedRole}, "core.configure") {
+			response.Forbidden(w, "Forbidden")
+			return nil
+		}
 	}
 	return p
 }
@@ -304,6 +322,7 @@ func (h *Handler) UpdateEscalation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ValidateEscalation(CreateEscalationRequest{
+		SubjectKinds: req.Escalation.SubjectKinds, SourceIDs: req.Escalation.SourceIDs,
 		Name:                 req.Escalation.Name,
 		Severities:           req.Escalation.Severities,
 		RuleIDs:              req.Escalation.RuleIDs,
@@ -350,9 +369,13 @@ func (h *Handler) ListDeliveries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := r.URL.Query()
-	for param := range query {
+	for param, values := range query {
+		if len(values) != 1 {
+			response.BadRequest(w, "Duplicate query parameter", "NOTIFY_INVALID_REQUEST")
+			return
+		}
 		switch param {
-		case "alertId", "status", "limit", "cursor":
+		case "alertId", "status", "limit", "cursor", "subjectKind", "subjectId":
 		default:
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
@@ -374,7 +397,13 @@ func (h *Handler) ListDeliveries(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	kind, subjectID := query.Get("subjectKind"), query.Get("subjectId")
+	if (kind != "" && kind != "nf_alert" && kind != "config_drift") || (subjectID != "" && (!configsnapshots.ValidID(subjectID) || kind != "config_drift")) || (kind == "config_drift" && query.Get("alertId") != "") {
+		response.BadRequest(w, "Invalid notification subject", "NOTIFY_INVALID_SUBJECT")
+		return
+	}
 	deliveries, next, hasMore, err := h.repo.ListDeliveries(r.Context(), DeliveryListFilter{
+		SubjectKind: kind, SubjectID: subjectID,
 		AlertID: strings.TrimSpace(query.Get("alertId")),
 		Status:  status,
 		Limit:   limit,

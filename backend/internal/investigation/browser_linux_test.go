@@ -74,7 +74,7 @@ func TestInvestigationBrowserPreview(t *testing.T) {
 	}
 	operator := &auth.Principal{Username: "demo-operator", Role: "operator", NormalizedRole: "operator"}
 	for n := 1000; n < 1027; n++ {
-		_, err := services["normal"].Create(context.Background(), operator, CreateRequest{testID(n), testID(10), "DEMO investigation " + testID(n)[:8], at.Add(-30 * time.Minute).Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano)})
+		_, err := services["normal"].Create(context.Background(), operator, CreateRequest{RequestID: testID(n), AlertID: testID(10), Title: "DEMO investigation " + testID(n)[:8], From: at.Add(-30 * time.Minute).Format(time.RFC3339Nano), To: time.Now().UTC().Format(time.RFC3339Nano)})
 		if err != nil {
 			t.Fatal(err)
 		}

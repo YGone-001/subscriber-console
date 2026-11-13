@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (198 exact METHOD+PATH registrations)
+Read + write APIs (205 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 198
+Go registration set                  = 205
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -217,6 +217,7 @@ Next implementation direction   = complete
 - Site / network grouping workbench = IMPLEMENTED in source (`/inventory/groups`; Inventory UUID identity and explicit `attributes.xcloudOperationalScopes`, active Topology `contains`, independent Agent metadata; shared read scope for group directory, evidence, reports and CSV, bounded traversals and context-bound cursors; site/resource/edge maintenance reuses governed Inventory/Topology APIs with Fresh Actor, CAS and best-effort audit; no inferred network inheritance, tenant isolation, roaming agreement, remote collection or Agent protocol change). Authority: `docs/architecture/site-network-workbench.md`.
 - IMS registration observations = IMPLEMENTED in source (two Go-owned read APIs and `/ims-registrations`, bounded native S-CSCF MySQL projections with optional explicit HSS identity enrichment, independent Contact/IMPU counts and freshness, shared Inventory group scope, fixed SELECT queries and dedicated read-only-account enforcement; memory-only or unverified persistence is unavailable, no runtime control/Agent protocol/history write; real-source runtime acceptance remains operator work). Authority: `docs/architecture/ims-registration-observation.md`.
 - Alert investigations = IMPLEMENTED in source (five Go APIs and two SPA routes, bounded resource-identity and current one-hop evidence correlation with published configuration events; operator-authored Ops records with Fresh Actor, idempotency, CAS and explicit knowledge references; no automatic cause, network action or source mutation). Authority: `docs/architecture/alert-investigations.md`.
+- Configuration drift alerts = IMPLEMENTED in source (source-lease-owned opt-in policy and ordered durable publication/control journal, independent Ops episode lifecycle and replayable projections, protected retention, explicit notification subjects and configuration investigation anchors; no configuration writes, installer or Agent protocol change). Authorities: `docs/architecture/configuration-drift.md`, `docs/operations/configuration-drift.md`.
 - Full RCA / statistical AIOps / multi-hop analysis = 未实施。
 - 长期演进权威文档：`docs/architecture/architecture-evolution-roadmap.md`；在其实施阶段开始前，不得当作运行时部署指令。
 - 长期方向：模块化运维平台（inventory / topology、workflow、assurance、telemetry、厂商中立 adapter 边界）。逻辑边界先于部署拆分；仅在规模、故障隔离、运维归属或可用性要求时才引入独立服务。
@@ -474,6 +475,7 @@ User Management writes = app_users CRUD + disable + password-reset (Direct Execu
 Platform Services writes = alerts acknowledge/workflow (Direct Execution), Go-owned
 Agent control-plane writes = app_agents registration, credentials, sessions and scoped latest observations, Ops-only, Go-owned
 Configuration observation writes = app_config_sources + app_config_snapshots + app_config_observations, Ops-only, Go-owned
+Configuration drift writes = source-owned policy/journal + app_config_drift_sources + app_config_drift_alerts + app_config_drift_events, Ops-only, Go-owned
 Investigation record writes = app_investigations, Ops-only, Go-owned; evidence sources remain read-only
 ```
 
@@ -552,8 +554,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 198 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，198 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 205 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，205 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -583,7 +585,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (198 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (205 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -633,9 +635,16 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **198 条** METHOD+PATH 精确注册（GET 103 / POST 66 / PUT 15 / DELETE 10 / PATCH 4）：
+路由权威为源码派生的 Go 注册集合，共 **205 条** METHOD+PATH 精确注册（GET 108 / POST 67 / PUT 16 / DELETE 10 / PATCH 4）：
 
 ```text
+GET    /api/config-drift/meta
+GET    /api/config-drift/sources/{sourceId}/policy
+PUT    /api/config-drift/sources/{sourceId}/policy
+GET    /api/config-drift/alerts
+GET    /api/config-drift/alerts/{driftAlertId}
+POST   /api/config-drift/alerts/{driftAlertId}/acknowledge
+GET    /api/config-drift/alerts/{driftAlertId}/events
 GET    /api/agents
 GET    /api/config-snapshots/meta
 GET    /api/config-snapshots/sources
@@ -829,7 +838,7 @@ POST   /api/knowledge/files
 状态：
 
 ```text
-Go production API registrations = 198 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 205 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0

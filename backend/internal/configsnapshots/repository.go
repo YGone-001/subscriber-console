@@ -27,7 +27,7 @@ func missing(err error) error {
 	return err
 }
 func (r *MongoRepository) States(ctx context.Context) ([]State, error) {
-	c, err := r.sources.Find(ctx, bson.M{}, options.Find().SetLimit(4097))
+	c, err := r.sources.Find(ctx, bson.M{}, options.Find().SetLimit(4097).SetProjection(bson.M{"driftQueue": 0}))
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (r *MongoRepository) StatesForResources(ctx context.Context, resourceIDs, d
 		declaredSourceIDs = []string{}
 	}
 	filter := bson.M{"$or": bson.A{bson.M{"source.resourceId": bson.M{"$in": resourceIDs}}, bson.M{"_id": bson.M{"$in": declaredSourceIDs}}}}
-	opts := options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(int64(limit + 1)).SetProjection(bson.M{"latestEvidence.projection": 0, "baselineEvidence.projection": 0, "pending.snapshot.projection": 0})
+	opts := options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(int64(limit + 1)).SetProjection(bson.M{"driftQueue": 0, "latestEvidence.projection": 0, "baselineEvidence.projection": 0, "pending.snapshot.projection": 0})
 	cur, err := r.sources.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, false, err
@@ -94,7 +94,7 @@ func (r *MongoRepository) Acquire(ctx context.Context, source Source, token stri
 	return &state, err
 }
 func (r *MongoRepository) Save(ctx context.Context, s *State) error {
-	res, err := r.sources.UpdateOne(ctx, bson.M{"_id": s.SourceID, "version": s.Version, "leaseToken": s.LeaseToken, "leaseUntil": bson.M{"$gt": time.Now().UTC()}}, bson.M{"$set": bson.M{"source": s.Source, "revision": s.Revision, "latestSnapshotId": s.LatestSnapshotID, "latestEvidence": s.LatestEvidence, "baselineEvidence": s.BaselineEvidence, "latest": s.Latest, "baselineId": s.BaselineID, "baselineBy": s.BaselineBy, "baselineAt": s.BaselineAt, "pending": s.Pending}, "$inc": bson.M{"version": 1}})
+	res, err := r.sources.UpdateOne(ctx, bson.M{"_id": s.SourceID, "version": s.Version, "leaseToken": s.LeaseToken, "leaseUntil": bson.M{"$gt": time.Now().UTC()}}, bson.M{"$set": bson.M{"source": s.Source, "revision": s.Revision, "latestSnapshotId": s.LatestSnapshotID, "latestEvidence": s.LatestEvidence, "baselineEvidence": s.BaselineEvidence, "latest": s.Latest, "baselineId": s.BaselineID, "baselineBy": s.BaselineBy, "baselineAt": s.BaselineAt, "pending": s.Pending, "driftPolicy": s.DriftPolicy, "driftSequence": s.DriftSequence, "driftQueue": s.DriftQueue, "driftEnvironment": s.DriftEnvironment}, "$inc": bson.M{"version": 1}})
 	if err != nil {
 		return err
 	}

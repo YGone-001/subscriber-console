@@ -20,6 +20,7 @@ import (
 	"subscriber/internal/auth"
 	"subscriber/internal/balance"
 	"subscriber/internal/config"
+	"subscriber/internal/configdrift"
 	"subscriber/internal/configsnapshots"
 	"subscriber/internal/discovery"
 	"subscriber/internal/handler"
@@ -379,13 +380,15 @@ func main() {
 		mc.Ops.Collection("app_nf_notification_deliveries"),
 		logger,
 	)
+	configDriftRepo := configdrift.NewRepository(mc.Ops)
 	notifyWorker := notify.NewWorker(
 		notifyRepo,
 		notify.NewWebhookSender(nil),
-		notify.NewAlertStateReader(nfAlertRepo),
+		notify.NewSubjectStateReader(notify.NewAlertStateReader(nfAlertRepo), configDriftRepo),
 		logger,
 	)
 	notifyHandler := notify.NewHandler(notifyRepo, limiter, auditWriter)
+	notifyHandler.UseActorRepository(userRepo)
 	nfAlertRepo.SetAlertEventSink(notifyRepo)
 	notifyWorker.Start(context.Background())
 	defer notifyWorker.Stop()
@@ -475,6 +478,13 @@ func main() {
 	defer func() { stopConfigWorker(); <-configWorkerDone }()
 	groupService := operationsview.NewGroupService(operationsview.NewGroupRepository(mc.Ops), nfHealthRepo, configSnapshotService.List)
 	groupHandler := operationsview.NewGroupHandler(groupService, limiter, auditWriter)
+	configDriftService := configdrift.NewService(configDriftRepo, configSnapshotService, userRepo, auditWriter)
+	configDriftService.SetSink(notifyRepo)
+	configDriftService.SetGroups(groupService)
+	configDriftHandler := configdrift.NewHandler(configDriftService, limiter)
+	driftWorkerDone := make(chan struct{})
+	go func() { defer close(driftWorkerDone); configDriftService.Run(configContext) }()
+	defer func() { stopConfigWorker(); <-driftWorkerDone }()
 	imsCatalog, imsCatalogErr := imsreg.LoadCatalog(os.Getenv("IMS_REGISTRATION_SOURCES_FILE"))
 	if imsCatalogErr != nil {
 		logger.Warn("IMS observation source configuration rejected")
@@ -776,6 +786,13 @@ func main() {
 	mux.Handle("GET /api/nf-logs/stream", authMiddleware(http.HandlerFunc(nfLogHandler.Stream)))
 
 	mux.Handle("GET /api/nf-alerts", authMiddleware(http.HandlerFunc(nfAlertHandler.ListAlerts)))
+	mux.Handle("GET /api/config-drift/meta", authMiddleware(http.HandlerFunc(configDriftHandler.Handle)))
+	mux.Handle("GET /api/config-drift/sources/{sourceId}/policy", authMiddleware(http.HandlerFunc(configDriftHandler.Handle)))
+	mux.Handle("PUT /api/config-drift/sources/{sourceId}/policy", authMiddleware(http.HandlerFunc(configDriftHandler.Handle)))
+	mux.Handle("GET /api/config-drift/alerts", authMiddleware(http.HandlerFunc(configDriftHandler.Handle)))
+	mux.Handle("GET /api/config-drift/alerts/{driftAlertId}", authMiddleware(http.HandlerFunc(configDriftHandler.Handle)))
+	mux.Handle("POST /api/config-drift/alerts/{driftAlertId}/acknowledge", authMiddleware(http.HandlerFunc(configDriftHandler.Handle)))
+	mux.Handle("GET /api/config-drift/alerts/{driftAlertId}/events", authMiddleware(http.HandlerFunc(configDriftHandler.Handle)))
 	mux.Handle("GET /api/investigations/context", authMiddleware(http.HandlerFunc(investigationHandler.Handle)))
 	mux.Handle("GET /api/investigations", authMiddleware(http.HandlerFunc(investigationHandler.Handle)))
 	mux.Handle("POST /api/investigations", authMiddleware(http.HandlerFunc(investigationHandler.Handle)))

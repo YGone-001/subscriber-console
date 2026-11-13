@@ -33,19 +33,9 @@ The browser supplies source IDs, never file paths or commands. Paths remain
 server-side. Symbolic links, special files, out-of-root paths, changed file
 identities, unsupported encoding and files over 1 MiB are rejected.
 
-`deploy/examples/config-snapshots.json` is a current-environment example. Its
-EPC/5GC root is `/usr/local/src/xcloud-5gs/install/etc`, with 18 Open5GS YAML files
-and five matching freeDiameter `.conf` files. IMS configurations use
-`/etc/xCloud/gcc/<NE>`, where `<NE>` is the network-element type directory, not a
-literal directory name. The example declares separate roots for `icscf`, `pcscf`,
-`scscf` and `smsc`, with 38 explicitly listed CFG/XML/CONF/LIST files. Names
-distinguish `EPC/5GC` and `IMS <NE>` sources. This naming does not create or resolve
-Inventory resource identity; that still requires an explicit resource UUID.
-Charging OCS files, private keys, certificates, Git data, database directories,
-scripts and schema files are excluded. The example is not auto-loaded and runtime
-collection never recursively discovers additional configuration files.
-Collectors on other installations must use their own stable UUIDs and explicitly
-review their paths and resource associations.
+`deploy/examples/config-snapshots.json` is the reviewed package-layout example, with root `/etc/xCloud` and 54 explicitly declared YAML, Diameter and metadata-only text candidates. EPC/5GC paths use `gnc/gdm/gdg/gpc/gsp`; CSCF/SMSC paths use `gcc`, and IPSMGW uses `gnc/ipsmgw`. It excludes keys, certificates, database files, scripts, schemas and `/etc/ld.so.conf.d` helper declarations. Names and directory labels never establish Inventory identity: resource UUIDs must be explicit. The example is not auto-loaded and collection never recursively discovers files. The explicitly selected older source-tree layout remains in `deploy/examples/config-snapshots-source-tree.json`; it is not a default or automatic fallback.
+
+[Configuration drift](configuration-drift.md) adds a separately ordered, policy-controlled comparison lifecycle. Observation.changed continues to mean adjacent-observation change. Collectors on other installations require stable UUIDs and reviewed path/resource associations.
 
 The `network-endpoints-v1` profile parses YAML/JSON with the YAML organization's
 maintained [`go.yaml.in/yaml/v3` parser](https://pkg.go.dev/go.yaml.in/yaml/v3@v3.0.6). It rejects aliases, custom tags, duplicate

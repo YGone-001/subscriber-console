@@ -90,6 +90,9 @@ type ChannelMutable struct {
 // Escalation maps alert severities (and optionally one or more rules) onto
 // channels, with an optional delayed escalation to a second channel set.
 type Escalation struct {
+	SubjectKinds []string `json:"subjectKinds,omitempty" bson:"subjectKinds,omitempty"`
+	SourceIDs    []string `json:"sourceIds,omitempty" bson:"sourceIds,omitempty"`
+
 	ID                   string   `json:"id" bson:"_id"`
 	Name                 string   `json:"name" bson:"name"`
 	Enabled              bool     `json:"enabled" bson:"enabled"`
@@ -105,6 +108,9 @@ type Escalation struct {
 
 // CreateEscalationRequest is the body for POST /api/nf-notifications/escalations.
 type CreateEscalationRequest struct {
+	SubjectKinds []string `json:"subjectKinds,omitempty" bson:"subjectKinds,omitempty"`
+	SourceIDs    []string `json:"sourceIds,omitempty" bson:"sourceIds,omitempty"`
+
 	Name                 string   `json:"name"`
 	Enabled              *bool    `json:"enabled,omitempty"`
 	Severities           []string `json:"severities"`
@@ -122,6 +128,9 @@ type UpdateEscalationRequest struct {
 
 // EscalationMutable is the operator-mutable projection of an escalation rule.
 type EscalationMutable struct {
+	SubjectKinds []string `json:"subjectKinds,omitempty" bson:"subjectKinds,omitempty"`
+	SourceIDs    []string `json:"sourceIds,omitempty" bson:"sourceIds,omitempty"`
+
 	Name                 string   `json:"name"`
 	Enabled              bool     `json:"enabled"`
 	Severities           []string `json:"severities"`
@@ -133,33 +142,41 @@ type EscalationMutable struct {
 
 // Delivery is one outbox record: one alert transition, one channel.
 type Delivery struct {
-	ID            string    `json:"id" bson:"_id"`
-	DeliveryKey   string    `json:"deliveryKey" bson:"deliveryKey"`
-	Event         string    `json:"event" bson:"event"`
-	AlertID       string    `json:"alertId" bson:"alertId"`
-	RuleID        string    `json:"ruleId" bson:"ruleId"`
-	RuleName      string    `json:"ruleName" bson:"ruleName"`
-	TargetID      string    `json:"targetId" bson:"targetId"`
-	TargetName    string    `json:"targetName" bson:"targetName"`
-	Severity      string    `json:"severity" bson:"severity"`
-	TriggerCount  int       `json:"triggerCount" bson:"triggerCount"`
-	OccurredAt    string    `json:"occurredAt" bson:"occurredAt"`
-	ChannelID     string    `json:"channelId" bson:"channelId"`
-	Status        string    `json:"status" bson:"status"`
-	Attempts      int       `json:"attempts" bson:"attempts"`
-	NotBefore     time.Time `json:"notBefore" bson:"notBefore"`
-	NextAttemptAt time.Time `json:"nextAttemptAt" bson:"nextAttemptAt"`
-	LastError     string    `json:"lastError,omitempty" bson:"lastError,omitempty"`
-	CreatedAt     string    `json:"createdAt" bson:"createdAt"`
-	CompletedAt   string    `json:"completedAt,omitempty" bson:"completedAt,omitempty"`
+	SubjectKind    string    `json:"subjectKind,omitempty" bson:"subjectKind,omitempty"`
+	SubjectID      string    `json:"subjectId,omitempty" bson:"subjectId,omitempty"`
+	SourceID       string    `json:"sourceId,omitempty" bson:"sourceId,omitempty"`
+	SourceName     string    `json:"sourceName,omitempty" bson:"sourceName,omitempty"`
+	ResourceID     string    `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
+	PayloadVersion int       `json:"payloadVersion,omitempty" bson:"payloadVersion,omitempty"`
+	ID             string    `json:"id" bson:"_id"`
+	DeliveryKey    string    `json:"deliveryKey" bson:"deliveryKey"`
+	Event          string    `json:"event" bson:"event"`
+	AlertID        string    `json:"alertId" bson:"alertId"`
+	RuleID         string    `json:"ruleId" bson:"ruleId"`
+	RuleName       string    `json:"ruleName" bson:"ruleName"`
+	TargetID       string    `json:"targetId" bson:"targetId"`
+	TargetName     string    `json:"targetName" bson:"targetName"`
+	Severity       string    `json:"severity" bson:"severity"`
+	TriggerCount   int       `json:"triggerCount" bson:"triggerCount"`
+	OccurredAt     string    `json:"occurredAt" bson:"occurredAt"`
+	ChannelID      string    `json:"channelId" bson:"channelId"`
+	Status         string    `json:"status" bson:"status"`
+	Attempts       int       `json:"attempts" bson:"attempts"`
+	SendingUntil   time.Time `json:"-" bson:"sendingUntil"`
+	NotBefore      time.Time `json:"notBefore" bson:"notBefore"`
+	NextAttemptAt  time.Time `json:"nextAttemptAt" bson:"nextAttemptAt"`
+	LastError      string    `json:"lastError,omitempty" bson:"lastError,omitempty"`
+	CreatedAt      string    `json:"createdAt" bson:"createdAt"`
+	CompletedAt    string    `json:"completedAt,omitempty" bson:"completedAt,omitempty"`
 }
 
 // DeliveryListFilter filters the delivery ledger listing.
 type DeliveryListFilter struct {
-	AlertID string
-	Status  string
-	Limit   int
-	Cursor  string
+	SubjectKind, SubjectID string
+	AlertID                string
+	Status                 string
+	Limit                  int
+	Cursor                 string
 }
 
 // PageInfo mirrors the shared pagination envelope.

@@ -299,7 +299,7 @@ func TestConclusionKnowledgeAndCAS(t *testing.T) {
 	e := fixtureEvidence()
 	r := newRecords()
 	s := testService(e, r, &testActors{})
-	v, err := s.Create(context.Background(), operator(), CreateRequest{testID(100), e.anchor.ID, "Investigate", testWindow().From, testWindow().To})
+	v, err := s.Create(context.Background(), operator(), CreateRequest{RequestID: testID(100), AlertID: e.anchor.ID, Title: "Investigate", From: testWindow().From, To: testWindow().To})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +353,7 @@ func TestSavedContextRejectsReboundAnchorAndPreservesWindow(t *testing.T) {
 	e := fixtureEvidence()
 	records := newRecords()
 	s := testService(e, records, &testActors{})
-	v, err := s.Create(context.Background(), operator(), CreateRequest{testID(100), e.anchor.ID, "Bound context", testWindow().From, testWindow().To})
+	v, err := s.Create(context.Background(), operator(), CreateRequest{RequestID: testID(100), AlertID: e.anchor.ID, Title: "Bound context", From: testWindow().From, To: testWindow().To})
 	if err != nil {
 		t.Fatal(err)
 	}

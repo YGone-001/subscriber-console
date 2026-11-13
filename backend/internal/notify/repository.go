@@ -3,7 +3,9 @@ package notify
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -212,6 +214,8 @@ func (r *Repository) CreateEscalation(ctx context.Context, req *CreateEscalation
 		ID:                   newUUID(),
 		Name:                 strings.TrimSpace(req.Name),
 		Enabled:              enabled,
+		SubjectKinds:         append([]string(nil), req.SubjectKinds...),
+		SourceIDs:            append([]string(nil), req.SourceIDs...),
 		Severities:           append([]string(nil), req.Severities...),
 		RuleIDs:              append([]string(nil), req.RuleIDs...),
 		ChannelIDs:           append([]string(nil), req.ChannelIDs...),
@@ -248,6 +252,12 @@ func (r *Repository) UpdateEscalation(ctx context.Context, id string, req *Updat
 		"escalateChannelIds":   append([]string(nil), mut.EscalateChannelIDs...),
 		"updatedAt":            now,
 		"revision":             req.ExpectedRevision + 1,
+	}
+	if mut.SubjectKinds != nil {
+		set["subjectKinds"] = mut.SubjectKinds
+	}
+	if mut.SourceIDs != nil {
+		set["sourceIds"] = mut.SourceIDs
 	}
 	res := r.escalations.FindOneAndUpdate(ctx,
 		bson.M{"_id": id, "revision": req.ExpectedRevision},
@@ -286,6 +296,14 @@ func (r *Repository) ListDeliveries(ctx context.Context, filter DeliveryListFilt
 		limit = 50
 	}
 	query := bson.M{}
+	if filter.SubjectKind == "config_drift" {
+		query["subjectKind"] = "config_drift"
+		if filter.SubjectID != "" {
+			query["subjectId"] = filter.SubjectID
+		}
+	} else {
+		query["$and"] = bson.A{bson.M{"$or": bson.A{bson.M{"subjectKind": bson.M{"$exists": false}}, bson.M{"subjectKind": ""}, bson.M{"subjectKind": "nf_alert"}}}}
+	}
 	if filter.AlertID != "" {
 		query["alertId"] = filter.AlertID
 	}
@@ -298,6 +316,14 @@ func (r *Repository) ListDeliveries(ctx context.Context, filter DeliveryListFilt
 	cursorData, err := decodeDeliveryCursor(filter.Cursor)
 	if err != nil {
 		return nil, nil, false, err
+	}
+	filterScope := ""
+	if filter.SubjectKind == "config_drift" {
+		sum := sha256.Sum256([]byte(filter.SubjectKind + ":" + filter.SubjectID + ":" + filter.Status))
+		filterScope = hex.EncodeToString(sum[:])
+	}
+	if filter.Cursor != "" && cursorData.Scope != filterScope {
+		return nil, nil, false, invalid("NOTIFY_INVALID_CURSOR", "Cursor belongs to another subject filter")
 	}
 	if cursorData.At != "" {
 		query["$or"] = bson.A{
@@ -314,6 +340,9 @@ func (r *Repository) ListDeliveries(ctx context.Context, filter DeliveryListFilt
 	if err := cursor.All(ctx, &docs); err != nil {
 		return nil, nil, false, err
 	}
+	if docs == nil && filter.SubjectKind == "config_drift" {
+		docs = []Delivery{}
+	}
 	hasMore := len(docs) > limit
 	if hasMore {
 		docs = docs[:limit]
@@ -321,7 +350,7 @@ func (r *Repository) ListDeliveries(ctx context.Context, filter DeliveryListFilt
 	var next *string
 	if hasMore && len(docs) > 0 {
 		last := docs[len(docs)-1]
-		next = encodeDeliveryCursor(last.CreatedAt, last.ID)
+		next = encodeDeliveryCursor(last.CreatedAt, last.ID, filterScope)
 	}
 	return docs, next, hasMore, nil
 }
@@ -363,7 +392,7 @@ func (r *Repository) NotifyAlert(ctx context.Context, event nfalert.AlertEvent) 
 }
 
 func escalationMatches(rule Escalation, event nfalert.AlertEvent) bool {
-	if !rule.Enabled {
+	if !subjectMatches(rule.SubjectKinds, "nf_alert") || !rule.Enabled {
 		return false
 	}
 	severityHit := false
@@ -438,11 +467,11 @@ func (r *Repository) enqueue(ctx context.Context, event nfalert.AlertEvent, chan
 func (r *Repository) ClaimDue(ctx context.Context, now time.Time) (*Delivery, error) {
 	res := r.deliveries.FindOneAndUpdate(ctx,
 		bson.M{
-			"status":        bson.M{"$in": bson.A{DeliveryPending, DeliveryFailed}},
+			"$or":           bson.A{bson.M{"status": bson.M{"$in": bson.A{DeliveryPending, DeliveryFailed}}}, bson.M{"status": DeliverySending, "sendingUntil": bson.M{"$lte": now}}},
 			"nextAttemptAt": bson.M{"$lte": now},
 			"notBefore":     bson.M{"$lte": now},
 		},
-		bson.M{"$set": bson.M{"status": DeliverySending}},
+		bson.M{"$set": bson.M{"status": DeliverySending, "sendingUntil": now.Add(30 * time.Second)}},
 		options.FindOneAndUpdate().SetSort(bson.D{{Key: "nextAttemptAt", Value: 1}}).SetReturnDocument(options.After),
 	)
 	var doc Delivery
@@ -508,12 +537,17 @@ func backoffDelay(attempts int, now time.Time) time.Time {
 /* ------------------------------------------------------------------- cursor -- */
 
 type deliveryCursor struct {
-	At string `json:"at"`
-	ID string `json:"id"`
+	At    string `json:"at"`
+	ID    string `json:"id"`
+	Scope string `json:"scope,omitempty"`
 }
 
-func encodeDeliveryCursor(at, id string) *string {
-	raw, _ := json.Marshal(deliveryCursor{At: at, ID: id})
+func encodeDeliveryCursor(at, id string, scopes ...string) *string {
+	scope := ""
+	if len(scopes) > 0 {
+		scope = scopes[0]
+	}
+	raw, _ := json.Marshal(deliveryCursor{At: at, ID: id, Scope: scope})
 	s := base64.RawURLEncoding.EncodeToString(raw)
 	return &s
 }
@@ -521,6 +555,9 @@ func encodeDeliveryCursor(at, id string) *string {
 func decodeDeliveryCursor(cursor string) (deliveryCursor, error) {
 	if cursor == "" {
 		return deliveryCursor{}, nil
+	}
+	if len(cursor) > 2048 {
+		return deliveryCursor{}, invalid("NOTIFY_INVALID_CURSOR", "Cursor exceeds its bound")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {

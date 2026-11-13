@@ -73,7 +73,11 @@ type cursorData struct {
 }
 
 func listFingerprint(q ListQuery) string {
-	b, _ := json.Marshal([]string{q.Q, q.Status, q.AlertID, q.ResourceID})
+	parts := []string{q.Q, q.Status, q.AlertID, q.ResourceID}
+	if q.AnchorKind != "" || q.AnchorID != "" {
+		parts = append(parts, q.AnchorKind, q.AnchorID)
+	}
+	b, _ := json.Marshal(parts)
 	s := sha256.Sum256(b)
 	return hex.EncodeToString(s[:])
 }

@@ -485,7 +485,7 @@ const subscriberEditUnintendedFields = brokenEditHardcodedAccess;
 // Execute builder tests and parse TAP results
 let tapOutput = '';
 try {
-  tapOutput = execSync('npx tsx --test tests/subscriber-mutation-builders.test.ts', {
+  tapOutput = execSync('npx tsx --test --test-reporter=tap tests/subscriber-mutation-builders.test.ts', {
     cwd: spa,
     encoding: 'utf8',
     stdio: 'pipe',

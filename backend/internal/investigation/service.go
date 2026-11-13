@@ -69,8 +69,9 @@ func incomplete(c Coverage, reason string) Coverage {
 	return c
 }
 func (s *Service) Context(ctx context.Context, q ContextQuery) (*ContextView, error) {
-	if !validID(q.AlertID) {
-		return nil, fail(400, "INVESTIGATION_INVALID_ID", "alertId must be UUID v4")
+	kind, id, anchorErr := anchorIdentity(q.AlertID, q.AnchorKind, q.AnchorID)
+	if anchorErr != nil {
+		return nil, anchorErr
 	}
 	select {
 	case s.slots <- struct{}{}:
@@ -90,12 +91,13 @@ func (s *Service) Context(ctx context.Context, q ContextQuery) (*ContextView, er
 		if recordErr != nil {
 			return nil, recordErr
 		}
-		if saved.AlertID != q.AlertID {
+		savedKind, savedID := recordAnchor(saved)
+		if savedKind != kind || savedID != id {
 			return nil, fail(409, "INVESTIGATION_CONTEXT_CHANGED", "Saved alert context changed")
 		}
 		q.From, q.To = saved.From.Format(time.RFC3339Nano), saved.To.Format(time.RFC3339Nano)
 	}
-	a, err := s.evidence.Anchor(ctx, q.AlertID)
+	a, err := s.anchor(ctx, kind, id)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +247,7 @@ func (s *Service) Context(ctx context.Context, q ContextQuery) (*ContextView, er
 				out.Coverage["alerts"] = incomplete(out.Coverage["alerts"], "invalid_record")
 				continue
 			}
-			if v.ID == a.ID {
+			if a.AnchorKind != "config_drift" && v.ID == a.ID {
 				seenAnchor = true
 			}
 			addAlertEvents(out, v, basis(v.ResourceID))
@@ -323,7 +325,7 @@ func addAlertEvents(out *ContextView, a AlertFact, basis string) {
 		if e != nil {
 			continue
 		}
-		out.Events = append(out.Events, Event{Key: v.kind + ":" + a.ID, Kind: v.kind, ID: a.ID, ResourceID: a.ResourceID, TargetID: a.TargetID, At: at.UTC(), Name: a.Name, Outcome: a.Severity, Basis: basis})
+		out.Events = append(out.Events, Event{AnchorKind: a.AnchorKind, Key: v.kind + ":" + a.ID + a.AnchorID, Kind: v.kind, ID: a.ID + a.AnchorID, SourceID: a.SourceID, ResourceID: a.ResourceID, TargetID: a.TargetID, At: at.UTC(), Name: a.Name, Outcome: a.Severity, Basis: basis})
 	}
 }
 func (s *Service) checkWriter(ctx context.Context, p *auth.Principal) (*governance.FreshActor, error) {
@@ -343,7 +345,11 @@ func (s *Service) Create(ctx context.Context, p *auth.Principal, q CreateRequest
 	if p == nil || !auth.HasPermission(p, "core.configure") {
 		return nil, fail(403, "PERMISSION_DENIED", "Forbidden")
 	}
-	if !validID(q.RequestID) || !validID(q.AlertID) {
+	kind, id, anchorErr := anchorIdentity(q.AlertID, q.AnchorKind, q.AnchorID)
+	if anchorErr != nil {
+		return nil, anchorErr
+	}
+	if !validID(q.RequestID) {
 		return nil, fail(400, "INVESTIGATION_INVALID_ID", "Request and alert IDs must be UUID v4")
 	}
 	validation := UpdateRequest{ExpectedRevision: 1, Title: q.Title, Status: "open"}
@@ -355,7 +361,7 @@ func (s *Service) Create(ctx context.Context, p *auth.Principal, q CreateRequest
 	if e != nil {
 		return nil, e
 	}
-	anchor, e := s.evidence.Anchor(ctx, q.AlertID)
+	anchor, e := s.anchor(ctx, kind, id)
 	if e != nil {
 		return nil, e
 	}
@@ -367,9 +373,17 @@ func (s *Service) Create(ctx context.Context, p *auth.Principal, q CreateRequest
 		return nil, e
 	}
 	requestBytes, _ := json.Marshal([]string{q.AlertID, q.Title, from.Format(time.RFC3339Nano), to.Format(time.RFC3339Nano)})
+	if kind == "config_drift" {
+		requestBytes, _ = json.Marshal([]string{kind, id, q.Title, from.Format(time.RFC3339Nano), to.Format(time.RFC3339Nano)})
+	}
 	digest := sha256.Sum256(requestBytes)
 	now := s.now()
 	v := &Record{ID: q.RequestID, AlertID: q.AlertID, ResourceID: anchor.ResourceID, From: from, To: to, Title: q.Title, Status: "open", KnowledgeIDs: []string{}, Revision: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: actor.Username, UpdatedBy: actor.Username, RecentChanges: []Change{{1, now, actor.Username, "open"}}, RequestDigest: hex.EncodeToString(digest[:])}
+	if kind == "config_drift" {
+		v.AnchorKind = kind
+		v.AnchorID = id
+		v.AlertID = ""
+	}
 	out, e := s.records.Create(ctx, v)
 	if e == nil {
 		s.log(p, "create", out)
@@ -442,6 +456,15 @@ func (s *Service) Get(ctx context.Context, id string) (*RecordView, error) {
 	return &RecordView{v, k, c}, nil
 }
 func (s *Service) List(ctx context.Context, q ListQuery) (*ListView, error) {
+	if q.AnchorKind != "" && q.AnchorKind != "nf_alert" && q.AnchorKind != "config_drift" && q.AnchorKind != "all" {
+		return nil, fail(400, "INVESTIGATION_INVALID_QUERY", "Invalid anchor kind")
+	}
+	if q.AnchorID != "" && (!validID(q.AnchorID) || (q.AnchorKind != "nf_alert" && q.AnchorKind != "config_drift")) {
+		return nil, fail(400, "INVESTIGATION_INVALID_QUERY", "Invalid anchor ID")
+	}
+	if q.AlertID != "" && (q.AnchorKind != "" || q.AnchorID != "") {
+		return nil, fail(400, "INVESTIGATION_ANCHOR_CONFLICT", "Conflicting anchor filters")
+	}
 	q.Q = strings.TrimSpace(q.Q)
 	if !validText(q.Q, 640) || len([]rune(q.Q)) > 160 || (q.Status != "" && q.Status != "open" && q.Status != "investigating" && q.Status != "resolved") || (q.AlertID != "" && !validID(q.AlertID)) || (q.ResourceID != "" && !validID(q.ResourceID)) {
 		return nil, fail(400, "INVESTIGATION_INVALID_QUERY", "Invalid investigation filter")
@@ -462,7 +485,7 @@ func (s *Service) List(ctx context.Context, q ListQuery) (*ListView, error) {
 	}
 	out := &ListView{Items: []RecordSummary{}, HasMore: more}
 	for _, r := range v {
-		out.Items = append(out.Items, RecordSummary{r.ID, r.AlertID, r.ResourceID, r.Title, r.Status, r.Revision, r.UpdatedAt, r.UpdatedBy})
+		out.Items = append(out.Items, RecordSummary{ID: r.ID, AlertID: r.AlertID, ResourceID: r.ResourceID, Title: r.Title, Status: r.Status, Revision: r.Revision, UpdatedAt: r.UpdatedAt, UpdatedBy: r.UpdatedBy, AnchorKind: r.AnchorKind, AnchorID: r.AnchorID})
 	}
 	if more && len(v) > 0 {
 		cursor := s.encodeCursor(q, v[len(v)-1])

@@ -2,6 +2,7 @@ package notify
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -35,7 +36,7 @@ func (r *alertStateReader) AlertState(ctx context.Context, alertID string) (stri
 		return "", err
 	}
 	if alert == nil {
-		return nfalert.AlertStateResolved, nil
+		return "", errors.New("alert state unavailable")
 	}
 	return alert.State, nil
 }
@@ -165,8 +166,26 @@ func (w *Worker) deliver(delivery *Delivery) {
 
 	// A delayed escalation that found the alert already closed is skipped, not
 	// sent: an escalation after recovery would be a false alarm.
-	if delivery.Event == DeliveryEventEscalate && w.state != nil {
-		if state, err := w.state.AlertState(sendCtx, delivery.AlertID); err == nil && state == nfalert.AlertStateResolved {
+	if delivery.Event == DeliveryEventEscalate {
+		var state string
+		var err error
+		if reader, ok := w.state.(SubjectStateReader); ok {
+			kind, id := delivery.SubjectKind, delivery.SubjectID
+			if kind == "" || kind == "nf_alert" {
+				kind = "nf_alert"
+				id = delivery.AlertID
+			}
+			state, err = reader.SubjectState(sendCtx, kind, id)
+		} else if w.state != nil && delivery.SubjectKind != "config_drift" {
+			state, err = w.state.AlertState(sendCtx, delivery.AlertID)
+		} else {
+			err = errors.New("subject state reader unavailable")
+		}
+		if err != nil || (state != "resolved" && state != "active" && state != "acknowledged" && state != "assigned" && state != "recovering") {
+			_ = w.store.MarkFailed(sendCtx, delivery.ID, delivery.Attempts, "subject state unavailable", w.now())
+			return
+		}
+		if state == nfalert.AlertStateResolved {
 			_ = w.store.MarkSkipped(sendCtx, delivery.ID, w.now())
 			return
 		}

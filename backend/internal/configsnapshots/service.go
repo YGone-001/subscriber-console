@@ -372,6 +372,11 @@ func (s *Service) recover(ctx context.Context, state *State) error {
 		state.LatestSnapshotID = o.SnapshotID
 		state.LatestEvidence = snap
 	}
+	if p.Observation.DriftInput != nil {
+		if e := appendDrift(state, *p.Observation.DriftInput); e != nil {
+			return e
+		}
+	}
 	state.Pending = nil
 	return s.repo.Save(ctx, state)
 }
@@ -412,6 +417,9 @@ func (s *Service) capture(ctx context.Context, id string, req CaptureRequest, ac
 			return nil, ErrConflict
 		}
 		if !previous.Published {
+			if previous.PreparedVersion != state.Version {
+				return nil, ErrConflict
+			}
 			fresh := false
 			if previous.SnapshotID != "" {
 				snap, e := s.repo.Snapshot(ctx, id, previous.SnapshotID)
@@ -437,6 +445,13 @@ func (s *Service) capture(ctx context.Context, id string, req CaptureRequest, ac
 	resource := s.checkResource(ctx, source)
 	if resource != "valid" && resource != "unassociated" {
 		return nil, fail(409, "CONFIG_RESOURCE_UNAVAILABLE", "Referenced resource is unavailable or retired")
+	}
+	needed := 1
+	if source.Generation != state.Source.Generation {
+		needed++
+	}
+	if state.DriftPolicy.Revision > 0 && len(state.DriftQueue)+needed > MaxDriftJournal {
+		return nil, fail(503, "CONFIG_DRIFT_BACKLOG_FULL", "Configuration drift backlog is full")
 	}
 	if e = s.repo.Prune(ctx, state, s.now()); e != nil {
 		return nil, e
@@ -494,6 +509,34 @@ func (s *Service) capture(ctx context.Context, id string, req CaptureRequest, ac
 		if err := check(ctx); err != nil {
 			return nil, err
 		}
+	}
+	if state.DriftPolicy.Revision > 0 && source.Generation != state.Source.Generation {
+		in := s.driftInput(state, source, "environment")
+		in.Reason = "source_reconfigured"
+		if e = appendDrift(state, in); e != nil {
+			return nil, e
+		}
+		state.DriftEnvironment = source.Generation + ":" + source.ResourceID
+	}
+	o.PreparedVersion = state.Version
+	if state.DriftPolicy.Revision > 0 {
+		in := s.driftInput(state, source, "observation")
+		in.ObservationID = o.ObservationID
+		in.SnapshotID = o.SnapshotID
+		in.Status = o.Status
+		in.At = o.CollectedAt
+		in.Reason = o.Reason
+		if o.Status == "ok" {
+			current := snapshot
+			if current == nil {
+				current, e = s.repo.Snapshot(ctx, id, o.SnapshotID)
+				if e != nil {
+					return nil, e
+				}
+			}
+			in.Comparison = Compare(state.BaselineEvidence, current)
+		}
+		o.DriftInput = &in
 	}
 	if snapshot != nil {
 		if e = s.repo.InsertSnapshot(ctx, snapshot); e != nil {
@@ -555,6 +598,12 @@ func (s *Service) Baseline(ctx context.Context, p *auth.Principal, id string, re
 	state.BaselineBy = actor
 	state.BaselineAt = &now
 	state.Revision++
+	if state.DriftPolicy.Revision > 0 {
+		in := s.driftInput(state, source, "baseline")
+		if e = appendDrift(state, in); e != nil {
+			return nil, e
+		}
+	}
 	if _, err := s.actor(ctx, p); err != nil {
 		return nil, err
 	}

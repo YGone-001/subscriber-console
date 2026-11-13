@@ -74,6 +74,9 @@ func isLoopbackHost(host string) bool {
 
 // ValidateEscalation validates an escalation rule payload.
 func ValidateEscalation(req CreateEscalationRequest) error {
+	if err := validateSubjects(req.SubjectKinds, req.SourceIDs); err != nil {
+		return err
+	}
 	if strings.TrimSpace(req.Name) == "" {
 		return invalid("NOTIFY_ESCALATION_NAME_REQUIRED", "name is required")
 	}

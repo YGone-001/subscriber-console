@@ -125,7 +125,7 @@ func TestMongoEvidenceProjectionAndConcurrentCaseLifecycle(t *testing.T) {
 			t.Fatalf("GET changed source %s", name)
 		}
 	}
-	q := CreateRequest{testID(100), testID(10), "DEMO investigation", testWindow().From, testWindow().To}
+	q := CreateRequest{RequestID: testID(100), AlertID: testID(10), Title: "DEMO investigation", From: testWindow().From, To: testWindow().To}
 	record, err := s.Create(ctx, operator(), q)
 	if err != nil {
 		t.Fatal(err)

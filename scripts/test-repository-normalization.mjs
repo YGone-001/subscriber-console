@@ -211,6 +211,13 @@ const EXPECTED_AGENT_ROUTES = new Set([
 ]);
 
 const ALLOWED_ADDED_ROUTES = new Set([
+  "GET /api/config-drift/meta",
+  "GET /api/config-drift/sources/{sourceId}/policy",
+  "PUT /api/config-drift/sources/{sourceId}/policy",
+  "GET /api/config-drift/alerts",
+  "GET /api/config-drift/alerts/{driftAlertId}",
+  "POST /api/config-drift/alerts/{driftAlertId}/acknowledge",
+  "GET /api/config-drift/alerts/{driftAlertId}/events",
   'GET /api/config-snapshots/meta',
   'GET /api/config-snapshots/sources',
   'GET /api/config-snapshots/sources/{sourceId}',

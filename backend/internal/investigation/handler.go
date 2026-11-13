@@ -94,13 +94,13 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	status := 200
 	switch r.Pattern {
 	case "GET /api/investigations/context":
-		if !queryAllowed(r, "alertId", "from", "to", "investigationId") {
+		if !queryAllowed(r, "alertId", "from", "to", "investigationId", "anchorKind", "anchorId") {
 			err = fail(400, "INVESTIGATION_INVALID_QUERY", "Unsupported query")
 			break
 		}
-		out, err = h.service.Context(ctx, ContextQuery{q.Get("alertId"), q.Get("from"), q.Get("to"), q.Get("investigationId")})
+		out, err = h.service.Context(ctx, ContextQuery{AlertID: q.Get("alertId"), From: q.Get("from"), To: q.Get("to"), InvestigationID: q.Get("investigationId"), AnchorKind: q.Get("anchorKind"), AnchorID: q.Get("anchorId")})
 	case "GET /api/investigations":
-		if !queryAllowed(r, "q", "status", "alertId", "resourceId", "cursor", "limit") {
+		if !queryAllowed(r, "q", "status", "alertId", "resourceId", "cursor", "limit", "anchorKind", "anchorId") {
 			err = fail(400, "INVESTIGATION_INVALID_QUERY", "Unsupported query")
 			break
 		}
@@ -112,7 +112,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
-		out, err = h.service.List(ctx, ListQuery{q.Get("q"), q.Get("status"), q.Get("alertId"), q.Get("resourceId"), q.Get("cursor"), n})
+		out, err = h.service.List(ctx, ListQuery{Q: q.Get("q"), Status: q.Get("status"), AlertID: q.Get("alertId"), ResourceID: q.Get("resourceId"), Cursor: q.Get("cursor"), Limit: n, AnchorKind: q.Get("anchorKind"), AnchorID: q.Get("anchorId")})
 	case "GET /api/investigations/{investigationId}":
 		if !queryAllowed(r) {
 			err = fail(400, "INVESTIGATION_INVALID_QUERY", "Unsupported query")

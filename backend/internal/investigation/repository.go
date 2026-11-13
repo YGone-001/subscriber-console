@@ -176,6 +176,17 @@ func (r *MongoRepository) Update(ctx context.Context, id string, version int64, 
 }
 func (r *MongoRepository) List(ctx context.Context, q ListQuery, after *cursorData) ([]Record, bool, error) {
 	f := bson.M{}
+	if q.AnchorKind == "config_drift" {
+		f["anchorKind"] = "config_drift"
+		if q.AnchorID != "" {
+			f["anchorId"] = q.AnchorID
+		}
+	} else if q.AnchorKind != "all" {
+		f["$and"] = bson.A{bson.M{"$or": bson.A{bson.M{"anchorKind": bson.M{"$exists": false}}, bson.M{"anchorKind": ""}, bson.M{"anchorKind": "nf_alert"}}}}
+		if q.AnchorID != "" {
+			f["alertId"] = q.AnchorID
+		}
+	}
 	if q.Q != "" {
 		f["title"] = bson.M{"$regex": regexp.QuoteMeta(q.Q), "$options": "i"}
 	}
@@ -187,5 +198,5 @@ func (r *MongoRepository) List(ctx context.Context, q ListQuery, after *cursorDa
 	if after != nil {
 		f["$or"] = bson.A{bson.M{"updatedAt": bson.M{"$lt": after.At}}, bson.M{"updatedAt": after.At, "_id": bson.M{"$lt": after.ID}}}
 	}
-	return facts[Record](ctx, r.cases, f, projection("alertId", "resourceId", "title", "status", "revision", "updatedAt", "updatedBy"), bson.D{{Key: "updatedAt", Value: -1}, {Key: "_id", Value: -1}}, q.Limit)
+	return facts[Record](ctx, r.cases, f, projection("alertId", "anchorKind", "anchorId", "resourceId", "title", "status", "revision", "updatedAt", "updatedBy"), bson.D{{Key: "updatedAt", Value: -1}, {Key: "_id", Value: -1}}, q.Limit)
 }

@@ -49,6 +49,9 @@ func NewWebhookSender(client *http.Client) *WebhookSender {
 // Send performs one bounded POST. A 2xx is success; anything else is a
 // delivery error the worker will retry with backoff.
 func (s *WebhookSender) Send(ctx context.Context, channel *NotificationChannel, delivery *Delivery) error {
+	if delivery.SubjectKind == "config_drift" && delivery.PayloadVersion != 1 {
+		return fmt.Errorf("unsupported configuration notification payload version")
+	}
 	payload := WebhookPayload{
 		DeliveryID:   delivery.ID,
 		Event:        delivery.Event,
@@ -61,7 +64,11 @@ func (s *WebhookSender) Send(ctx context.Context, channel *NotificationChannel, 
 		TriggerCount: delivery.TriggerCount,
 		OccurredAt:   delivery.OccurredAt,
 	}
-	body, err := json.Marshal(payload)
+	var wire any = payload
+	if delivery.SubjectKind == "config_drift" {
+		wire = map[string]any{"schemaVersion": 1, "deliveryId": delivery.ID, "event": delivery.Event, "subjectKind": "config_drift", "subjectId": delivery.SubjectID, "sourceId": delivery.SourceID, "sourceName": delivery.SourceName, "resourceId": delivery.ResourceID, "severity": delivery.Severity, "triggerCount": delivery.TriggerCount, "occurredAt": delivery.OccurredAt}
+	}
+	body, err := json.Marshal(wire)
 	if err != nil {
 		return err
 	}

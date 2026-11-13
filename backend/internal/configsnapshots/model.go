@@ -84,17 +84,19 @@ type Snapshot struct {
 	Published      bool      `json:"-" bson:"published"`
 }
 type Observation struct {
-	ObservationID string    `json:"observationId" bson:"_id"`
-	SourceID      string    `json:"sourceId" bson:"sourceId"`
-	Generation    string    `json:"generation" bson:"generation"`
-	ResourceID    string    `json:"resourceId" bson:"resourceId"`
-	CollectedAt   time.Time `json:"collectedAt" bson:"collectedAt"`
-	Actor         string    `json:"actor" bson:"actor"`
-	Status        string    `json:"status" bson:"status"`
-	Reason        string    `json:"reason" bson:"reason"`
-	SnapshotID    string    `json:"snapshotId" bson:"snapshotId"`
-	Changed       *bool     `json:"changed" bson:"changed"`
-	Published     bool      `json:"-" bson:"published"`
+	ObservationID   string      `json:"observationId" bson:"_id"`
+	SourceID        string      `json:"sourceId" bson:"sourceId"`
+	Generation      string      `json:"generation" bson:"generation"`
+	ResourceID      string      `json:"resourceId" bson:"resourceId"`
+	CollectedAt     time.Time   `json:"collectedAt" bson:"collectedAt"`
+	Actor           string      `json:"actor" bson:"actor"`
+	Status          string      `json:"status" bson:"status"`
+	Reason          string      `json:"reason" bson:"reason"`
+	SnapshotID      string      `json:"snapshotId" bson:"snapshotId"`
+	Changed         *bool       `json:"changed" bson:"changed"`
+	Published       bool        `json:"-" bson:"published"`
+	DriftInput      *DriftInput `json:"-" bson:"driftInput,omitempty"`
+	PreparedVersion int64       `json:"-" bson:"preparedVersion,omitempty"`
 }
 
 // Pending is a durable publication journal. Reads never repair or write it.
@@ -116,6 +118,10 @@ type State struct {
 	BaselineBy       string       `bson:"baselineBy"`
 	BaselineAt       *time.Time   `bson:"baselineAt"`
 	Pending          *Pending     `bson:"pending,omitempty"`
+	DriftPolicy      DriftPolicy  `bson:"driftPolicy"`
+	DriftSequence    int64        `bson:"driftSequence"`
+	DriftQueue       []DriftInput `bson:"driftQueue"`
+	DriftEnvironment string       `bson:"driftEnvironment"`
 	LeaseToken       string       `bson:"leaseToken"`
 	LeaseUntil       time.Time    `bson:"leaseUntil"`
 }
