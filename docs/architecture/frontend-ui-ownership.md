@@ -118,9 +118,13 @@ Configuration comparisons reuse the source page's `view=diff`, `left` and
 `right` parameters, with the episode's fixed baseline and evidence versions.
 
 `frontend/src/lib/api/use-bounded-read.ts` owns the shared `useBoundedRead`
-SWR fetcher. It uses the existing signal-aware read client, aborts an earlier
-request for the same key, and cancels the outgoing key on change or unmount.
-Previous-key data, focus revalidation and automatic error retries are disabled;
+SWR fetcher. It uses the existing signal-aware read client and scopes shared
+request ownership to the SWR cache and key. StrictMode effect replays and other
+active consumers preserve a deduplicated request; leaving the last consumer
+cancels it after a microtask. A replacement read cancels its earlier request.
+`npm --prefix frontend run acceptance:bounded-read` verifies these behaviors
+against an owned Vite development fixture. Previous-key data, focus revalidation
+and automatic error retries are disabled;
 polling is explicit per caller. `features/investigations/use-investigation-read.ts`
 keeps `useInvestigationRead` as a compatibility re-export of this hook.
 Drift presentations suppress cached scope evidence on failed reads; the policy
