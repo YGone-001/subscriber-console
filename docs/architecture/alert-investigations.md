@@ -8,11 +8,13 @@ Go owns five additive routes:
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | /api/investigations/context | Bounded evidence for one NF alert |
+| GET | /api/investigations/context | Bounded evidence for one NF or configuration-drift anchor |
 | GET | /api/investigations | Cursor-paginated record directory |
 | POST | /api/investigations | Idempotent manual record creation |
 | GET | /api/investigations/{investigationId} | Saved record and knowledge references |
 | PATCH | /api/investigations/{investigationId} | Revision-protected manual update |
+
+Configuration anchors use anchorKind=config_drift and anchorId, as an additive alternative to alertId. Legacy requests and records retain NF semantics; default record lists remain NF-only, while explicit anchorKind=all includes both domains. A configuration ID is never written into the old AlertID field. See [configuration drift](configuration-drift.md) for the fixed baseline cycle and notification identity boundary.
 
 The SPA routes are /investigations and /investigations/:investigationId. NF alert rows and the alert evidence drawer enter the workspace with safe return context. The operations tabs and network navigation expose the directory.
 

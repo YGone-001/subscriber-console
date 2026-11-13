@@ -57,4 +57,4 @@
 `C:/Users/pc/.codex/visualizations/2026/11/09/01a1bf3b-fa31-7f32-8ce2-f19dea4b9eb0/configuration-drift-debs-20261112/source-packages.sha256`：26 个原始 deb 的 SHA256。
 `C:/Users/pc/.codex/visualizations/2026/11/09/01a1bf3b-fa31-7f32-8ce2-f19dea4b9eb0/configuration-drift-debs-20261112/inspect_debs.py`：只读检查器。
 
-相关：[deb 登记契约](PACKAGE_REGISTRATION.md)、[开发计划](DEVELOPMENT_PLAN.md)。
+相关：[deb 登记契约](CONTRACT.md)、[配置漂移架构](../../docs/architecture/configuration-drift.md)。

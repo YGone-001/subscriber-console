@@ -50,8 +50,8 @@ export async function deleteNotificationEscalation(escalationId: string): Promis
   return deleteJson<{ status: string }>(`/api/nf-notifications/escalations/${encodeURIComponent(escalationId)}`);
 }
 
-export async function fetchNotificationDeliveries(limit = 20): Promise<DeliveriesResponse> {
+export async function fetchNotificationDeliveries(limit = 20,subjectKind: 'nf_alert'|'config_drift' = 'nf_alert'): Promise<DeliveriesResponse> {
   return getJson<DeliveriesResponse>(
-    `/api/nf-notifications/deliveries?limit=${encodeURIComponent(String(limit))}`,
+    `/api/nf-notifications/deliveries?limit=${encodeURIComponent(String(limit))}&subjectKind=${subjectKind}`,
   );
 }

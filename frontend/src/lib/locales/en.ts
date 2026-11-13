@@ -1,9 +1,11 @@
+import { driftEn } from './config-drift';
 import { evidenceEn } from './operations-evidence';
 import { groupsEn } from './site-network';
 import { imsEn } from './ims-registration';
 import { investigationsEn } from './investigations';
 
 export const en: Record<string, string> = {
+    ...driftEn,
     ...evidenceEn,
     ...groupsEn,
     ...imsEn,

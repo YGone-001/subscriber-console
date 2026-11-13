@@ -19,7 +19,8 @@
  * blank the queue.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { ConfigDriftWorkspace } from '../config-drift/ConfigDriftWorkspace';
 import { Bell, BellRing, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { investigationEntry } from '../investigations/investigation-model';
@@ -77,7 +78,10 @@ const PAGE_LIMIT = 20;
 
 type Feedback = { tone: 'success' | 'danger' | 'warning' | 'info'; message: string } | null;
 
-export function NfAlertsPage() {
+export function NfAlertsPage(){const [params]=useSearchParams();return params.get("view")==="config"?<ConfigDriftWorkspace/>:<NfHealthAlertsPage/>;}
+
+function NfHealthAlertsPage() {
+  const navigate=useNavigate();
   const location = useLocation();
   const { t } = useI18n();
   const { user } = useAuth();
@@ -341,10 +345,10 @@ export function NfAlertsPage() {
   // page arrays.
   const kpis = useMemo(() => alertsKpisFromSummary(summary ?? undefined), [summary]);
 
-  const viewOptions = useMemo<ViewSwitchOption<AlertView>[]>(
-    () => ALERT_VIEWS.map((option) => ({
+  const viewOptions = useMemo<ViewSwitchOption<AlertView|'config'>[]>(
+    () => [...ALERT_VIEWS,'config' as const].map((option) => ({
       value: option,
-      label: option === 'open'
+      label: option === 'config' ? t('drift_view') : option === 'open'
         ? t('nf_alerts_view_open')
         : option === 'history'
           ? t('nf_alerts_view_history')
@@ -433,7 +437,7 @@ export function NfAlertsPage() {
         <ViewSwitch
           options={viewOptions}
           value={view}
-          onChange={(option) => url.setView(option)}
+          onChange={(option) => option==='config'?navigate('/nf-alerts?view=config'):url.setView(option)}
           ariaLabel={t('nf_alerts_view_label')}
         />
       )}

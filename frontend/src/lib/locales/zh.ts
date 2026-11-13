@@ -1,9 +1,11 @@
+import { driftZh } from './config-drift';
 import { evidenceZh } from './operations-evidence';
 import { groupsZh } from './site-network';
 import { imsZh } from './ims-registration';
 import { investigationsZh } from './investigations';
 
 export const zh: Record<string, string> = {
+    ...driftZh,
     ...evidenceZh,
     ...groupsZh,
     ...imsZh,

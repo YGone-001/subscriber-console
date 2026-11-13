@@ -13,6 +13,7 @@ import { withReturnTo, resolveReturnTo } from '../../lib/return-to';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { captureConfig, captureRequestId, readConfig, setConfigBaseline, sourceListPath, sourcePath, type ConfigDiff, type ConfigMeta, type ConfigSource, type Observation, type Page, type Snapshot, type SourceList } from './config-api';
+import { DriftPolicyPanel } from '../config-drift/DriftPolicyPanel';
 import styles from '../../styles/modules/operations-evidence.module.css';
 
 export function ConfigStatus({ value }: { value: string }) {
@@ -55,7 +56,7 @@ export function ConfigSnapshotsPage() {
   const right = params.get('right') || detail.data?.latestSnapshot?.snapshotId || '';
   const diff = useSWR<ConfigDiff>(sourceId && view === 'diff' && left && right ? `${base}/diff?left=${encodeURIComponent(left)}&right=${encodeURIComponent(right)}` : null, readConfig);
   const update = (changes: Record<string, string>) => { const next = new URLSearchParams(params); for (const [key, value] of Object.entries(changes)) { if (value) next.set(key, value); else next.delete(key); } if (!('cursor' in changes)) next.delete('cursor'); setParams(next); };
-  const refresh = async () => { await mutate((key) => typeof key === 'string' && key.startsWith('/api/config-snapshots/')); };
+  const refresh = async () => { await mutate((key) => typeof key === 'string' && (key.startsWith('/api/config-snapshots/') || key.startsWith('/api/config-drift/'))); };
   const capture = async () => {
     if (!sourceId) return; setBusy(true); setFeedback(null);
     try { const result = await captureConfig(sourceId, captureRequestId()); setFeedback({ error: result.status !== 'ok', text: t(result.status === 'ok' ? 'config_captured' : `evidence_${result.reason}`) }); await refresh(); }
@@ -113,6 +114,7 @@ export function ConfigSnapshotsPage() {
         {current.latest && current.latest.status !== 'ok' ? <p className={styles.error}>{t(`evidence_${current.latest.reason}`)}</p> : null}
         <p className={styles.hintBlock}>{t('config_no_runtime_claim')}</p>
       </section>
+      <DriftPolicyPanel key={sourceId} sourceId={sourceId} canConfigure={canConfigure}/>
       <ViewSwitch ariaLabel={t('config_views')} value={view} options={['versions', 'observations', 'diff'].map((value) => ({ value, label: t(`config_view_${value}`) }))} onChange={(value) => update({ view: value, snapshot: '' })} />
       {view === 'diff' ? <section className={styles.panel}>
         <div className={styles.toolbar}>{(['left', 'right'] as const).map((side) => <label key={side}>{t(`config_${side}`)}<select value={side === 'left' ? left : right} onChange={(event) => update({ [side]: event.target.value })}><option value="">{t('config_select_version')}</option>{versionChoices.map((id) => <option key={id} value={id}>{id.slice(0, 12)}{id === current.baselineId ? ` / ${t('config_baseline')}` : ''}</option>)}</select></label>)}</div>
@@ -126,7 +128,7 @@ export function ConfigSnapshotsPage() {
       </section>}
       {selectedId && selected.error ? errorPanel(t('config_version_failed')) : snapshot ? <SnapshotEvidence snapshot={snapshot} /> : null}
     </>}
-    {baseline !== null ? <Dialog open onClose={() => { if (!busy) setBaseline(null); }} ariaLabel={t('config_set_baseline')} overlayClassName="modal-overlay" className="modal-content"><div className={styles.dialog}><h2>{t(baseline ? 'config_set_baseline' : 'config_clear_baseline')}</h2><p>{t('config_baseline_hint')}</p><code>{baseline || t('evidence_no_baseline')}</code><footer className={styles.actions}><button className="btn btn-secondary" disabled={busy} onClick={() => setBaseline(null)}>{t('cancel')}</button><button className="btn btn-primary" disabled={busy} onClick={() => { void saveBaseline(); }}>{t('confirm')}</button></footer></div></Dialog> : null}
+    {baseline !== null ? <Dialog open onClose={() => { if (!busy) setBaseline(null); }} ariaLabel={t('config_set_baseline')} overlayClassName="modal-overlay" className="modal-content"><div className={styles.dialog}><h2>{t(baseline ? 'config_set_baseline' : 'config_clear_baseline')}</h2><p>{t('config_baseline_hint')}</p><p>{t('drift_baseline_change_hint')}</p><code>{baseline || t('evidence_no_baseline')}</code><footer className={styles.actions}><button className="btn btn-secondary" disabled={busy} onClick={() => setBaseline(null)}>{t('cancel')}</button><button className="btn btn-primary" disabled={busy} onClick={() => { void saveBaseline(); }}>{t('confirm')}</button></footer></div></Dialog> : null}
     <p className={styles.hint}>{t('config_retention_hint', { days: meta.data?.retentionDays || 90, versions: meta.data?.maxVersions || 100 })}</p>
   </div>;
 }

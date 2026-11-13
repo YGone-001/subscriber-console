@@ -1,3 +1,4 @@
+import { requestUuid } from '../../lib/api/request-id';
 import { getJson } from '../../lib/api/read-client';
 import { postJson, putJson } from '../../lib/api/mutation-client';
 
@@ -23,11 +24,7 @@ export type SourceList = Page<ConfigSource> & { summary: Record<string, number> 
 export type ConfigDiff = { left: Snapshot; right: Snapshot; comparison: string; complete: boolean; reason: string; lines: { kind: 'same' | 'add' | 'remove'; left: number | null; right: number | null; text: string }[] };
 
 export function sourcePath(id: string) { return `/api/config-snapshots/sources/${encodeURIComponent(id)}`; }
-export function captureRequestId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(16)); bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
-  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
+export function captureRequestId() { return requestUuid(); }
 export const readConfig = <T,>(path: string) => getJson<T>(path);
 export function captureConfig(id: string, requestId: string) { return postJson<Observation>(`${sourcePath(id)}/captures`, { requestId }); }
 export function setConfigBaseline(id: string, expectedRevision: number, snapshotId: string) { return putJson<ConfigSource>(`${sourcePath(id)}/baseline`, { expectedRevision, snapshotId }); }

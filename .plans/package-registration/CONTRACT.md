@@ -120,4 +120,6 @@ host/collector、安装实例、component key 和 config key 形成服务端稳�
 - [dpkg-query 文件列表与维护脚本生成文件的边界](https://manpages.debian.org/bookworm/dpkg/dpkg-query.1.en.html)
 - [Debian 配置文件与 conffiles 规则](https://www.debian.org/doc/debian-policy/ch-files.html#configuration-files)
 
-相关：[闭环开发计划](DEVELOPMENT_PLAN.md)、[设计说明](DESIGN_BRIEF.md)。
+相关：[配置漂移架构](../../docs/architecture/configuration-drift.md)、[配置漂移操作说明](../../docs/operations/configuration-drift.md)。
+
+配置漂移闭环的源码实现已交付；本文件仅保留尚未实施的安装平台登记与基线衔接契约。

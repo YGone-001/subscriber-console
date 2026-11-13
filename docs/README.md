@@ -41,6 +41,7 @@ Canonical frontend SPA source     -> frontend/src/
 - [Site / network workbench](architecture/site-network-workbench.md) - explicit management scope, shared operational evidence and governed site maintenance.
 - [Site / network operations](operations/site-network-workbench.md) - site setup, explicit assignments, conflict checks and scoped reports.
 
+- [Configuration drift alerts](architecture/configuration-drift.md) / [操作说明](operations/configuration-drift.md) - ordered baseline evaluation, independent episode lifecycle, explicit notifications and manual investigations.
 - [Configuration observations](architecture/configuration-snapshots.md) - approved local sources, safe projections, immutable observations, baseline comparison and retention.
 - [Operations reports](architecture/operations-reports.md) - windowed alert/measurement evidence, scope completeness and bounded CSV exports.
 

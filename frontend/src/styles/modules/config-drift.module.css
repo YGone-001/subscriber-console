@@ -1,0 +1,33 @@
+/* Configuration drift extends the incumbent operations console. */
+.workspace { display: grid; gap: var(--space-16); min-width: 0; }
+.panel { min-width: 0; border: 1px solid var(--sys-color-border-default); border-radius: var(--ref-radius-panel); background: var(--sys-color-surface-panel); }
+.head, .actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-12); }
+.head { justify-content: space-between; padding: var(--space-16); border-bottom: 1px solid var(--sys-color-border-default); }
+.head h2 { margin: 0; font-size: var(--ref-font-size-heading); color: var(--sys-color-text-primary); }
+.content { display: grid; gap: var(--space-16); padding: var(--space-16); min-width: 0; }
+.note { margin: 0; color: var(--sys-color-text-muted); line-height: 1.65; font-size: var(--ref-font-size-body-compact); max-width: 75ch; }
+.facts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: var(--space-16); margin: 0; }
+.facts div { min-width: 0; }
+.facts dt { font-size: var(--ref-font-size-caption); color: var(--sys-color-text-muted); margin-bottom: var(--space-8); }
+.facts dd { margin: 0; overflow-wrap: anywhere; color: var(--sys-color-text-primary); font-size: var(--ref-font-size-body-compact); }
+.facts small, .table small { display: block; margin-top: var(--space-4); color: var(--sys-color-text-muted); }
+.badge { display: inline-flex; align-items: center; width: fit-content; white-space: nowrap; padding: var(--space-4) var(--space-8); border: 1px solid var(--sys-color-border-default); border-radius: var(--ref-radius-pill); color: var(--sys-color-text-primary); font-size: var(--ref-font-size-caption); }
+.badge[data-state="drifted"], .badge[data-state="active"], .badge[data-state="evaluation_unavailable"] { color: var(--sys-color-status-warning); border-color: currentColor; }
+.badge[data-state="in_sync"] { color: var(--sys-color-status-success); border-color: currentColor; }
+.policyForm, .filters { display: grid; gap: var(--space-16); grid-template-columns: repeat(3,minmax(0,1fr)); align-items: end; }
+.policyForm { border-top: 1px solid var(--sys-color-border-default); padding-top: var(--space-16); }
+.check { display: flex; align-items: center; gap: var(--space-8); min-height: 44px; color: var(--sys-color-text-primary); }
+.check input { width: 18px; height: 18px; accent-color: var(--sys-color-action-primary); }
+.tableWrap { overflow-x: auto; width: 100%; min-width: 0; }
+.table { width: 100%; border-collapse: collapse; font-size: var(--ref-font-size-body-compact); }
+.table th, .table td { text-align: left; padding: var(--space-12) var(--space-16); border-bottom: 1px solid var(--sys-color-border-default); vertical-align: top; max-width: 320px; overflow-wrap: anywhere; }
+.table th { color: var(--sys-color-text-muted); background: var(--sys-color-surface-subtle); }
+.table td { color: var(--sys-color-text-primary); }
+.table caption { padding: var(--space-12) var(--space-16); color: var(--sys-color-text-muted); text-align: left; }
+.table a, .facts a { color: var(--sys-color-action-primary); }
+.table tr:hover td { background: var(--sys-color-surface-hover); }
+.events { list-style: none; padding: 0; margin: 0; }
+.events li { padding: var(--space-12) 0; border-bottom: 1px solid var(--sys-color-border-default); display: grid; gap: var(--space-8); }
+.identity { font-family: var(--font-data); font-size: var(--ref-font-size-caption); overflow-wrap: anywhere; }
+.confirm { display: grid; gap: var(--space-20); padding: var(--space-24); width: min(560px,calc(100vw - 48px)); }
+@media(max-width:760px) { .facts, .filters, .policyForm { grid-template-columns: minmax(0,1fr); } .actions > * { min-height: 44px; } }

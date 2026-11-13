@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bell, Plus, Trash2, X } from 'lucide-react';
 import { Dialog } from '../../components/ui/Dialog';
+import { ErrorState } from '../../components/ui/StatePanel';
+import { OperationFeedback } from '../../components/ui/OperationFeedback';
 import { Field } from '../../components/ui/Field';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
@@ -31,6 +33,7 @@ import type {
 import styles from '../../styles/modules/nf-alerts.module.css';
 
 type Props = {
+  subjectKind?: 'nf_alert'|'config_drift';
   open: boolean;
   onClose: () => void;
   onChanged: () => void;
@@ -40,7 +43,7 @@ type Tab = 'channels' | 'escalations' | 'deliveries';
 
 const SEVERITIES: EscalationSeverity[] = ['critical', 'warning', 'info'];
 
-export function NotificationSettingsDialog({ open, onClose, onChanged }: Props) {
+export function NotificationSettingsDialog({ open, onClose, onChanged,subjectKind='nf_alert' }: Props) {
   const { t } = useI18n();
   const { user } = useAuth();
   const canConfigure = hasPermission(user, 'core.configure');
@@ -50,6 +53,7 @@ export function NotificationSettingsDialog({ open, onClose, onChanged }: Props) 
   const [escalations, setEscalations] = useState<Escalation[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(false);
+  const [readFailures,setReadFailures]=useState<Tab[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -58,20 +62,21 @@ export function NotificationSettingsDialog({ open, onClose, onChanged }: Props) 
     const [channelsRes, escalationsRes, deliveriesRes] = await Promise.allSettled([
       fetchNotificationChannels(),
       fetchNotificationEscalations(),
-      fetchNotificationDeliveries(20),
+      fetchNotificationDeliveries(20,subjectKind),
     ]);
     setChannels(channelsRes.status === 'fulfilled' ? channelsRes.value : []);
     setEscalations(escalationsRes.status === 'fulfilled' ? escalationsRes.value : []);
-    setDeliveries(deliveriesRes.status === 'fulfilled' ? deliveriesRes.value.deliveries : []);
+    setDeliveries(deliveriesRes.status === 'fulfilled' ? deliveriesRes.value.deliveries || [] : []);
+    setReadFailures((['channels','escalations','deliveries'] as Tab[]).filter((_,i)=>[channelsRes,escalationsRes,deliveriesRes][i].status==='rejected'));
     if (
-      channelsRes.status === 'rejected' &&
-      escalationsRes.status === 'rejected' &&
+      channelsRes.status === 'rejected' ||
+      escalationsRes.status === 'rejected' ||
       deliveriesRes.status === 'rejected'
     ) {
       setError(t('nf_notify_load_failed'));
     }
     setLoading(false);
-  }, [t]);
+  }, [t,subjectKind]);
 
   useEffect(() => {
     if (!open) return;
@@ -119,10 +124,11 @@ export function NotificationSettingsDialog({ open, onClose, onChanged }: Props) 
 
         {error ? <p className={styles.probeEditorEmpty}>{error}</p> : null}
 
-        {tab === 'channels' ? (
+        {readFailures.includes(tab)?<ErrorState title={t('nf_notify_load_failed')} message={t('drift_retry')} retryLabel={t('refresh')} onRetry={()=>void load()}/>:tab === 'channels' ? (
           <ChannelSection channels={channels} loading={loading} canConfigure={canConfigure} onChanged={onChanged} onReload={load} />
         ) : tab === 'escalations' ? (
           <EscalationSection
+            initialKind={subjectKind}
             escalations={escalations}
             channels={channels}
             loading={loading}
@@ -315,6 +321,7 @@ function ChannelSection({
 }
 
 function EscalationSection({
+  initialKind,
   escalations,
   channels,
   loading,
@@ -322,6 +329,7 @@ function EscalationSection({
   onChanged,
   onReload,
 }: {
+  initialKind: 'nf_alert'|'config_drift';
   escalations: Escalation[];
   channels: NotificationChannel[];
   loading: boolean;
@@ -331,6 +339,7 @@ function EscalationSection({
 }) {
   const { t } = useI18n();
   const [name, setName] = useState('');
+  const [subject,setSubject]=useState<'nf_alert'|'config_drift'|'both'>(initialKind);const [sourceFilter,setSourceFilter]=useState('');const [saveError,setSaveError]=useState<string|null>(null);
   const [severities, setSeverities] = useState<EscalationSeverity[]>(['critical']);
   const [channelIds, setChannelIds] = useState<string[]>([]);
   const [delay, setDelay] = useState(0);
@@ -346,10 +355,12 @@ function EscalationSection({
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim() || channelIds.length === 0) return;
-    setBusy(true);
+    setBusy(true);setSaveError(null);
     try {
       await createNotificationEscalation({
         name: name.trim(),
+        subjectKinds:subject==='both'?['nf_alert','config_drift']:[subject],
+        sourceIds:subject==='nf_alert'?[]:sourceFilter.split(',').map(v=>v.trim()).filter(Boolean),
         severities,
         channelIds,
         escalateAfterSeconds: delay,
@@ -363,7 +374,7 @@ function EscalationSection({
       onChanged();
       onReload();
     } catch {
-      /* surfaced by page feedback */
+      setSaveError(t('drift_subscription_failed'));
     } finally {
       setBusy(false);
     }
@@ -394,6 +405,8 @@ function EscalationSection({
     <div className={styles.notifySection}>
       {canConfigure ? (
         <form className={styles.notifyForm} onSubmit={submit}>
+          <Field htmlFor="notify-escalation-subject" label={t('drift_subject')} description={t('drift_subscription_hint')}><select id="notify-escalation-subject" className="form-input" value={subject} onChange={e=>setSubject(e.target.value as typeof subject)}>{['nf_alert','config_drift','both'].map(v=><option key={v} value={v}>{t('drift_'+v)}</option>)}</select></Field>
+          {subject!=='nf_alert'?<Field htmlFor="notify-source-filter" label={t('drift_source_filter')} description={t('drift_source_filter_hint')}><input id="notify-source-filter" className="form-input" value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)} maxLength={5000}/></Field>:null}
           <Field htmlFor="notify-escalation-name" label={t('nf_notify_escalation_name')}>
             <input id="notify-escalation-name" className="form-input" value={name} onChange={(event) => setName(event.target.value)} placeholder={t('nf_notify_escalation_name_placeholder')} />
           </Field>
@@ -434,7 +447,9 @@ function EscalationSection({
               onChange={(event) => setDelay(Number(event.target.value) || 0)}
             />
           </Field>
-          <button type="submit" className="btn btn-primary" disabled={busy || loading || channels.length === 0}>
+          {delay>0?<Field htmlFor="notify-escalate-channels" label={t('nf_notify_escalation_channels')}><select id="notify-escalate-channels" className="form-input" multiple value={escalateChannelIds} onChange={e=>setEscalateChannelIds(Array.from(e.target.selectedOptions,v=>v.value))}>{channels.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>:null}
+          {saveError?<OperationFeedback tone="danger" message={saveError}/>:null}
+          <button type="submit" className="btn btn-primary" disabled={busy || loading || !name.trim() || !severities.length || !channelIds.length || (delay>0&&!escalateChannelIds.length)}>
             <Plus size={14} aria-hidden="true" />
             {t('nf_notify_escalation_add')}
           </button>
@@ -450,7 +465,7 @@ function EscalationSection({
               <div className={styles.stack}>
                 <strong>{escalation.name}</strong>
                 <span className={styles.uuid}>
-                  {escalation.severities.join(', ')} {t('nf_notify_to')} {escalation.channelIds.length}
+                  {(escalation.subjectKinds?.length?escalation.subjectKinds:['nf_alert']).map(k=>t('drift_'+k)).join(', ')} / {escalation.severities.join(', ')} {t('nf_notify_to')} {escalation.channelIds.length}
                   {escalation.escalateAfterSeconds > 0
                     ? ` - ${t('nf_notify_escalate_after')} ${escalation.escalateAfterSeconds}s`
                     : ''}
@@ -512,7 +527,7 @@ function DeliverySection({ deliveries, channels }: { deliveries: Delivery[]; cha
           {deliveries.map((delivery) => (
             <tr key={delivery.id} data-notify-delivery={delivery.id}>
               <td><span className={styles.chip}>{delivery.event}</span></td>
-              <td>{delivery.targetName}</td>
+              <td>{delivery.subjectKind==='config_drift'?delivery.sourceName:delivery.targetName}</td>
               <td>{channelNames.get(delivery.channelId) ?? delivery.channelId}</td>
               <td>{t(`nf_notify_status_${delivery.status}`)}</td>
               <td>{delivery.attempts}</td>

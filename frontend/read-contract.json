@@ -357,7 +357,12 @@
       "GET /api/nf-alerts/rules",
       "GET /api/nf-alerts/rules/{ruleId}",
       "GET /api/nf-alerts",
-      "GET /api/operations/summary?sections=alerts"
+      "GET /api/operations/summary?sections=alerts",
+      "GET /api/config-drift/meta",
+      "GET /api/config-drift/alerts",
+      "GET /api/config-drift/alerts/{driftAlertId}",
+      "GET /api/config-drift/alerts/{driftAlertId}/events",
+      "GET /api/config-drift/sources/{sourceId}/policy"
     ]
   },
   {
@@ -455,7 +460,8 @@
       "GET /api/config-snapshots/sources/{sourceId}/observations",
       "GET /api/config-snapshots/sources/{sourceId}/snapshots",
       "GET /api/config-snapshots/sources/{sourceId}/snapshots/{snapshotId}",
-      "GET /api/config-snapshots/sources/{sourceId}/diff"
+      "GET /api/config-snapshots/sources/{sourceId}/diff",
+      "GET /api/config-drift/sources/{sourceId}/policy"
     ]
   },
   {

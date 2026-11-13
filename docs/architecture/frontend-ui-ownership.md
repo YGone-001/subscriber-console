@@ -18,8 +18,8 @@ Status: active policy for the business console surfaces.
    table cells and detail layouts.
 4. **Domain stylesheets** — `styles/ocs.css`, `styles/subscribers.css`,
    `styles/pages.css` and the CSS modules under `styles/modules/`. These are
-   imported by the application shell; components do not import stylesheets
-   directly.
+   owned by their presentation domains. The application shell imports global
+   stylesheets; domain components import their scoped CSS modules.
 
 ## Current OCS ownership
 
@@ -43,9 +43,11 @@ The operations surfaces compose the same primitives as the rest of the console:
 | Operations KPI rows | `MetricStrip` `cards` variant with the shared scope detail |
 | List states / dialogs / feedback | `OperationFeedback`, `StatePanel`, `Dialog`, `Field` |
 
-- Every page-level view switch is the shared `ViewSwitch`; the active value is
-  persisted in the URL by `useOperationsUrlState`. A page never draws its own
-  switch markup or a second set of switch styles.
+- Every page-level view switch is the shared `ViewSwitch`. The established
+  operations pages persist the active value through `useOperationsUrlState`;
+  the configuration and investigation surfaces use their domain URL bindings
+  described below. A page never draws its own switch markup or a second set of
+  switch styles.
 - The topology workspace additionally exposes an evidence-source switch and a
   runtime-scope switch inside its graph bar. Both reuse the same primitive and
   are evidence selectors for the running graph, not a second navigation level.
@@ -89,6 +91,47 @@ pass**; that is a visual-system project, not an OCS-page refactor. Until then,
 `ocs.css` stays the shared business layer and new surfaces may compose its
 existing classes rather than introduce a second table/toolbar vocabulary.
 
+## Configuration drift integration
+
+Configuration drift extends the existing operations console and its tokens.
+It adds no SPA route or separate visual system.
+
+| Surface | Domain owner | Shared presentation |
+|---|---|---|
+| `/nf-alerts?view=config`, including `driftAlertId` detail | `features/config-drift/ConfigDriftWorkspace.tsx`, selected by `NfAlertsPage` | `OperationsPageFrame` and its `PageHeader`, `ViewSwitch`, `MetricStrip`, `Field`, `Dialog`, `CursorPagination`, `StatePanel`, `OperationFeedback` |
+| Drift policy within `/config-snapshots/:sourceId` | `features/config-drift/DriftPolicyPanel.tsx`, hosted by `ConfigSnapshotsPage` | `Field`, `StatePanel`, `OperationFeedback`, `UnsavedChangesGuard`; the source page retains its `PageHeader` |
+| Notification subject and source filters | Existing `features/nf-alerts/NotificationSettingsDialog.tsx` | `Dialog`, `Field`, `OperationFeedback`; NF and configuration subjects use the same channel and escalation UI |
+| Configuration investigation anchor and directory category | Existing `features/investigations/InvestigationsPage.tsx` and `investigation-model.ts` | `OperationsPageFrame`, `Field`, `CursorPagination` and the existing investigation presentations |
+
+The drift workspace binds `view`, its filters and list `cursor` directly with
+React Router `useSearchParams`. Detail identity uses `driftAlertId`; event and
+delivery pagination use independent `eventCursor` and `deliveryCursor` values.
+Submitting filters drops the list cursor. Detail links carry the list URL in
+`returnTo`, which the shared return-to resolver restricts to `/nf-alerts`.
+The existing NF views retain `useOperationsUrlState`.
+
+Investigation links use `anchorKind=config_drift` and `anchorId`, while legacy
+NF links keep `alertId`. The directory keeps `q`, `status`, `anchorKind` and
+`cursor` in the URL. Its filter form is keyed by the URL filter values so reset
+and browser history restore the visible controls as well as the read query.
+Configuration comparisons reuse the source page's `view=diff`, `left` and
+`right` parameters, with the episode's fixed baseline and evidence versions.
+
+`frontend/src/lib/api/use-bounded-read.ts` owns the shared `useBoundedRead`
+SWR fetcher. It uses the existing signal-aware read client, aborts an earlier
+request for the same key, and cancels the outgoing key on change or unmount.
+Previous-key data, focus revalidation and automatic error retries are disabled;
+polling is explicit per caller. `features/investigations/use-investigation-read.ts`
+keeps `useInvestigationRead` as a compatibility re-export of this hook.
+Drift presentations suppress cached scope evidence on failed reads; the policy
+editor preserves its draft and requires an explicit current-revision retry
+after a conflict.
+
+`styles/modules/config-drift.module.css` owns the drift-specific presentation
+and uses the existing token variables. User-facing drift copy belongs to the
+existing bilingual locale layer through `lib/locales/config-drift.ts` and the
+English and Chinese locale exports.
+
 ## Rules for new UI work
 
 - A new page starts from `PageHeader`, `MetricStrip`, the shared pagination and
@@ -97,7 +140,8 @@ existing classes rather than introduce a second table/toolbar vocabulary.
   invariant, lifecycle). Do not create a second generic pagination, sort
   header, dialog, empty state or error state.
 - No component imports a global stylesheet directly; the application shell
-  imports the domain stylesheets and CSS modules.
+  imports global domain stylesheets, while domain components import their
+  owned CSS modules.
 - UI changes keep the shared primitives' `aria-*`, focus and keyboard behavior.
 - Render-level tests pin OCS shared components (`ocs-shared-components.test.tsx`)
   and source guardrails pin the primitive composition and stylesheet ownership

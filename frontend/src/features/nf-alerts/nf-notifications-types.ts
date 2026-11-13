@@ -43,6 +43,8 @@ export type Escalation = {
   enabled: boolean;
   severities: EscalationSeverity[];
   ruleIds?: string[];
+  subjectKinds?: ('nf_alert'|'config_drift')[];
+  sourceIds?: string[];
   channelIds: string[];
   escalateAfterSeconds: number;
   escalateChannelIds?: string[];
@@ -56,6 +58,8 @@ export type CreateEscalationRequest = {
   enabled?: boolean;
   severities: EscalationSeverity[];
   ruleIds?: string[];
+  subjectKinds?: ('nf_alert'|'config_drift')[];
+  sourceIds?: string[];
   channelIds: string[];
   escalateAfterSeconds: number;
   escalateChannelIds?: string[];
@@ -68,6 +72,8 @@ export type UpdateEscalationRequest = {
     enabled: boolean;
     severities: EscalationSeverity[];
     ruleIds: string[];
+  subjectKinds?: ('nf_alert'|'config_drift')[];
+  sourceIds?: string[];
     channelIds: string[];
     escalateAfterSeconds: number;
     escalateChannelIds: string[];
@@ -83,6 +89,7 @@ export type DeliveryStatus =
   | 'dead';
 
 export type Delivery = {
+  subjectKind?:string;subjectId?:string;sourceId?:string;sourceName?:string;resourceId?:string;payloadVersion?:number;
   id: string;
   deliveryKey: string;
   event: string;
