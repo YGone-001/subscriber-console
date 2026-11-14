@@ -1020,6 +1020,30 @@ function handleApi(req, res, url, context) {
       items: [],
       pagination: { limit: 20, offset: 0, total: 0 },
     },
+    // Declared-containment projection: the bounded tree read the inventory
+    // network-element view issues. Empty is honest for the fixture.
+    '/api/operations/containment': {
+      generatedAt: '2026-10-05T12:00:00Z',
+      coverage: 'complete',
+      truncated: false,
+      resources: [],
+      edges: [],
+    },
+    // IMS registration summary the shared operations overview reads.
+    '/api/ims/registrations/summary': {
+      catalogSources: [],
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      configurationState: 'not_configured',
+      completeness: 'complete',
+      scope: 'global',
+      scopeMeaning: 'all',
+      consistency: 'consistent',
+      counts: { publicIdentities: null, activePublicIdentities: null, activeBindings: null },
+      observed: { publicIdentities: 0, activePublicIdentities: 0, activeBindings: 0 },
+      sources: [],
+      items: [],
+      pagination: { limit: 20, total: 0, nextCursor: null, hasMore: false },
+    },
   };
   if (Object.prototype.hasOwnProperty.call(BENIGN_EMPTY, pathname)) {
     return sendJson(res, 200, BENIGN_EMPTY[pathname]);

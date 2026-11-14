@@ -467,17 +467,20 @@ async function main() {
         );
       } else {
         /*
-         * Collect Now is an immediate bounded read-only action, not a modal
-         * workflow. The acceptance asserts the safety disclosure stays on the
-         * page and that the page itself does not overflow after the action.
+         * Collect Now opens a bounded summary confirmation before the
+         * read-only request. The acceptance asserts the summary keeps the
+         * target, destination and safety disclosure visible, and that the
+         * dialog itself does not overflow.
          */
-        await page.waitForTimeout(250);
-        const pageText = await page.locator('body').innerText();
+        const confirmDialog = page.getByRole('alertdialog');
+        await confirmDialog.waitFor({ state: 'visible', timeout: 15000 });
+        const pageText = await confirmDialog.innerText();
         check(
           `collect_dialog_boundary:${testCase.sizeName}-${testCase.theme}`,
-          /read-only|does not restart|no process control|never auto-retr/i.test(pageText),
-          'collection is read-only and never auto-retries',
+          /Confirm collection/i.test(pageText) && /read-only|process observation|metrics/i.test(pageText),
+          'collection shows its target and safety summary before running',
         );
+        await confirmDialog.getByRole('button', { name: /Cancel/i }).click();
         const geometry = await page.evaluate(() => ({
           docScroll: document.documentElement.scrollWidth,
           bodyScroll: document.body.scrollWidth,
@@ -636,7 +639,7 @@ async function main() {
       if (operational.networkView) {
         // Located through the stable view-mode hook so the step is
         // locale-independent and cannot match unrelated control groups.
-        await page.locator('[data-view-mode="network"]').click();
+        await page.locator('[data-inventory-view="network"]').click();
         await settle(page);
       }
 
@@ -649,13 +652,13 @@ async function main() {
       if (operational.networkView) {
         check(
           `operational_network_view_active:${label}`,
-          (await page.locator('[data-view-mode="network"][aria-pressed="true"]').count()) === 1,
+          (await page.locator('[data-inventory-view="network"][aria-pressed="true"]').count()) === 1,
           operational.route,
         );
       } else {
         check(
           `operational_overview_visible:${label}`,
-          await page.locator('#operational-overview-title').isVisible(),
+          await page.locator('#operations-attention-title').isVisible(),
           operational.route,
         );
       }

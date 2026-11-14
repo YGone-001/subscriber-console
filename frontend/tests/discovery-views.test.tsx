@@ -597,18 +597,18 @@ test('KPIs are indifferent to which page is displayed', () => {
     candidates: { seen: 41, missing: 12, stale: 7, linked: 33, unlinked: 27 },
   });
 
-  assert.deepEqual(fullCollection, { sources: 4, seen: 41, missing: 12, linked: 33 });
+  assert.deepEqual(fullCollection, { sources: 4, seen: 41, missing: 12, stale: 7, linked: 33 });
 
   /* The projection takes only the summary section, so a 20-row page cannot
    * influence it. An unavailable section yields explicit nulls. */
   const unavailable = discoveryKpisFromSummary(undefined);
-  assert.deepEqual(unavailable, { sources: null, seen: null, missing: null, linked: null });
+  assert.deepEqual(unavailable, { sources: null, seen: null, missing: null, stale: null, linked: null });
   const partial = discoveryKpisFromSummary({
     completeness: 'unavailable',
     scope: 'full_collection',
     candidates: { seen: 41, missing: 12, stale: 7, linked: 33, unlinked: 27 },
   });
-  assert.deepEqual(partial, { sources: null, seen: null, missing: null, linked: null });
+  assert.deepEqual(partial, { sources: null, seen: null, missing: null, stale: null, linked: null });
 });
 
 test('scan interval validation mirrors the backend bounds', () => {

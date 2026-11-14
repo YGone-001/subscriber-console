@@ -108,6 +108,7 @@ export interface DiscoveryKpis {
   sources: number | null;
   seen: number | null;
   missing: number | null;
+  stale: number | null;
   linked: number | null;
 }
 
@@ -118,13 +119,14 @@ export function discoveryKpisFromSummary(
   section: DiscoverySummarySection | undefined,
 ): DiscoveryKpis {
   if (!section || section.completeness !== 'complete') {
-    return { sources: null, seen: null, missing: null, linked: null };
+    return { sources: null, seen: null, missing: null, stale: null, linked: null };
   }
   const candidates = section.candidates;
   return {
     sources: typeof section.sources === 'number' ? section.sources : null,
     seen: candidates ? candidates.seen : null,
     missing: candidates ? candidates.missing : null,
+    stale: candidates ? candidates.stale : null,
     linked: candidates ? candidates.linked : null,
   };
 }

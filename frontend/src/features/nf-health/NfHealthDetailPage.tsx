@@ -28,6 +28,7 @@ import {
 } from 'recharts';
 import { hasPermission } from '../../lib/permissions';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
+import { Dialog } from '../../components/ui/Dialog';
 import { ErrorState } from '../../components/ui/StatePanel';
 import PageHeader from '../../components/ui/PageHeader';
 import { useAuth } from '../../providers/AuthProvider';
@@ -85,6 +86,7 @@ export function NfHealthDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [busy, setBusy] = useState(false);
+  const [collectOpen, setCollectOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [trendWindow, setTrendWindow] = useState<TrendWindowKey>('1h');
 
@@ -199,7 +201,7 @@ export function NfHealthDetailPage() {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => void handleCollect()}
+                  onClick={() => setCollectOpen(true)}
                   disabled={busy || !target}
                 >
                   <Play size={16} />
@@ -707,6 +709,57 @@ export function NfHealthDetailPage() {
             </dl>
             <p className={styles.semanticNote}>{t('nf_health_semantic_registry')}</p>
           </section>
+
+          <Dialog
+            open={collectOpen}
+            onClose={() => {
+              if (!busy) setCollectOpen(false);
+            }}
+            overlayClassName={`modal-overlay ${styles.modalOverlay}`}
+            className={`modal-content animate-fade-in ${styles.modalContent}`}
+            labelledBy="nf-health-collect-confirm-title"
+            role="alertdialog"
+            closeOnOverlay={!busy}
+          >
+            <div className={styles.modalHeader}>
+              <h2 id="nf-health-collect-confirm-title">{t('nf_health_collect_confirm_title')}</h2>
+            </div>
+            <div className={styles.modalBody}>
+              <p className={styles.modalIntro}>
+                {t('nf_health_collect_confirm_body', {
+                  name: target?.name ?? '-',
+                  endpoint: target?.metricsEndpoint || t('nf_health_collect_no_endpoint'),
+                })}
+              </p>
+              <dl className={styles.collectSummary}>
+                <div>
+                  <dt>{t('nf_health_collect_profile')}</dt>
+                  <dd><code className={styles.chip}>{target?.collectorProfile ?? '-'}</code></dd>
+                </div>
+                <div>
+                  <dt>{t('nf_health_collect_mode')}</dt>
+                  <dd>{target?.collectionMode ?? '-'}</dd>
+                </div>
+              </dl>
+              <p className={styles.semanticNote}>{t('nf_health_collect_safety')}</p>
+              <div className={styles.formActions}>
+                <button type="button" className="btn btn-secondary" onClick={() => setCollectOpen(false)} disabled={busy}>
+                  {t('cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setCollectOpen(false);
+                    void handleCollect();
+                  }}
+                  disabled={busy}
+                >
+                  {t('nf_health_collect_action')}
+                </button>
+              </div>
+            </div>
+          </Dialog>
 
           <NfHealthTargetDialog
             open={editOpen}

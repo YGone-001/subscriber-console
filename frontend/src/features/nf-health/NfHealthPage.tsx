@@ -82,7 +82,7 @@ const PAGE_LIMIT = 20;
 type Feedback = { tone: 'success' | 'danger' | 'warning' | 'info'; message: string } | null;
 
 export function NfHealthPage() {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -102,6 +102,7 @@ export function NfHealthPage() {
   const [matrixError, setMatrixError] = useState<string | null>(null);
   const [summary, setSummary] = useState<HealthSummarySection | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
+  const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [collectingId, setCollectingId] = useState<string | null>(null);
 
@@ -169,6 +170,7 @@ export function NfHealthPage() {
     setSummary(summaryRes.status === 'fulfilled' ? (summaryRes.value.health ?? null) : null);
     setSummaryLoading(false);
     setLoading(false);
+    setLastReadAt(new Date().toISOString());
   }, [filters, view, t]);
 
   // Cursor pager loads refresh exactly one bounded list; the full-collection
@@ -199,6 +201,7 @@ export function NfHealthPage() {
       }
     } finally {
       setLoading(false);
+      setLastReadAt(new Date().toISOString());
     }
   }, [filters, view, t]);
 
@@ -219,6 +222,24 @@ export function NfHealthPage() {
       return;
     }
     void loadAll(url.cursor);
+  }, [canRead, loadAll, url.cursor]);
+
+  /* Duty pages must not silently age. Refresh the first page and the
+   * full-collection KPI strip together, pause while the tab is hidden, and
+   * never disturb a cursor walk: paging stays a deliberate operation. */
+  useEffect(() => {
+    if (!canRead) return undefined;
+    const timer = window.setInterval(() => {
+      if (!document.hidden && !url.cursor) void loadAll();
+    }, 30000);
+    const onVisibility = () => {
+      if (!document.hidden && !url.cursor) void loadAll();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [canRead, loadAll, url.cursor]);
 
   const handleTargetsFirstPage = () => {
@@ -398,6 +419,7 @@ export function NfHealthPage() {
       title={t('nf_health_title')}
       description={t('nf_health_description')}
       icon={<Activity size={23} />}
+      status={lastReadAt ? <span>{t('nf_health_last_read', { time: formatDateTime(lastReadAt) })}</span> : undefined}
       viewSwitch={(
         <ViewSwitch
           options={viewOptions}

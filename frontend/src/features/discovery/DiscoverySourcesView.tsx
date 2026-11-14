@@ -203,6 +203,7 @@ export function DiscoverySourcesView({
                 <th scope="col">{t('discovery_col_enabled')}</th>
                 <th scope="col">{t('discovery_col_interval')}</th>
                 <th scope="col">{t('discovery_col_last_scan')}</th>
+                <th scope="col">{t('discovery_col_next_scan')}</th>
                 <th scope="col">{t('discovery_col_actions')}</th>
               </tr>
             </thead>
@@ -227,6 +228,7 @@ export function DiscoverySourcesView({
                       : t('discovery_interval_manual')}
                   </td>
                   <td>{formatTimestamp(source.lastScanAt)}</td>
+                  <td>{formatTimestamp(source.nextScanAt)}</td>
                   <td>
                     <div className={styles.rowActions}>
                       <button

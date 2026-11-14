@@ -316,6 +316,13 @@ export function DiscoveryPage() {
       tone: kpis.missing === null ? 'muted' : 'primary',
     },
     {
+      key: 'stale',
+      label: t('discovery_kpi_stale'),
+      value: kpis.stale ?? '-',
+      detail: scopeKpiDetail(kpis.stale, t),
+      tone: kpis.stale === null ? 'muted' : 'primary',
+    },
+    {
       key: 'linked',
       label: t('discovery_kpi_linked'),
       value: kpis.linked ?? '-',
@@ -367,11 +374,11 @@ export function DiscoveryPage() {
       ) : null}
 
       {summaryLoading && kpis.sources === null ? (
-        <SkeletonKpiStrip count={4} />
+        <SkeletonKpiStrip count={5} />
       ) : (
         <MetricStrip
           variant="cards"
-          columns={4}
+          columns={5}
           ariaLabel={t('discovery_kpi_label')}
           items={kpiItems}
         />

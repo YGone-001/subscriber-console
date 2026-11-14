@@ -61,24 +61,24 @@ const alertsSection = (
 
 test('discovery KPIs project from a complete section', () => {
   const kpis = discoveryKpisFromSummary(discoverySection());
-  assert.deepEqual(kpis, { sources: 3, seen: 10, missing: 2, linked: 7 });
+  assert.deepEqual(kpis, { sources: 3, seen: 10, missing: 2, stale: 1, linked: 7 });
 });
 
 test('discovery KPIs stay null when the section is missing', () => {
   const kpis = discoveryKpisFromSummary(undefined);
-  assert.deepEqual(kpis, { sources: null, seen: null, missing: null, linked: null });
+  assert.deepEqual(kpis, { sources: null, seen: null, missing: null, stale: null, linked: null });
 });
 
 test('discovery KPIs stay null when the section is unavailable', () => {
   const kpis = discoveryKpisFromSummary(
     discoverySection({ completeness: 'unavailable', error: 'SECTION_UNAVAILABLE' }),
   );
-  assert.deepEqual(kpis, { sources: null, seen: null, missing: null, linked: null });
+  assert.deepEqual(kpis, { sources: null, seen: null, missing: null, stale: null, linked: null });
 });
 
 test('discovery KPIs keep explicit null for absent counts in a complete section', () => {
   const kpis = discoveryKpisFromSummary(discoverySection({ sources: undefined, candidates: undefined }));
-  assert.deepEqual(kpis, { sources: null, seen: null, missing: null, linked: null });
+  assert.deepEqual(kpis, { sources: null, seen: null, missing: null, stale: null, linked: null });
 });
 
 test('health KPIs project freshness and failure from the full population', () => {

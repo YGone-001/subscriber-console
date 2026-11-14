@@ -42,6 +42,7 @@ import {
 import {
   buildUpdateSourceRequest,
   MAX_SCAN_INTERVAL_SECONDS,
+  MIN_SCAN_INTERVAL_SECONDS,
   validateResourceId,
 } from './discovery-validation';
 import type {
@@ -554,7 +555,7 @@ export function DiscoverySourceDetailPage() {
           <Field
             htmlFor="discovery-edit-interval"
             label={t('discovery_field_interval')}
-            description={t('discovery_field_interval_hint')}
+            description={t('discovery_field_interval_hint', { min: MIN_SCAN_INTERVAL_SECONDS, max: MAX_SCAN_INTERVAL_SECONDS })}
           >
             <input
               id="discovery-edit-interval"
@@ -562,7 +563,7 @@ export function DiscoverySourceDetailPage() {
               type="number"
               min={0}
               max={MAX_SCAN_INTERVAL_SECONDS}
-              step={1}
+              step={60}
               value={form.scanIntervalSeconds}
               onChange={(event) => setForm({ ...form, scanIntervalSeconds: Number(event.target.value) })}
               disabled={busy}
