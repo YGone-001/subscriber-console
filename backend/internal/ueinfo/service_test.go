@@ -200,9 +200,33 @@ func TestFilterAndPage(t *testing.T) {
 	if total != 1 || filtered[0].Domain != "5GS" {
 		t.Fatalf("domain filter failed: %+v total=%d", filtered, total)
 	}
-	filtered, total = FilterAndPage(items, Query{State: "unknown", Limit: 50})
+	filtered, total = FilterAndPage(items, Query{MMState: "unknown", CMState: "unknown", Limit: 50})
 	if total != 1 || filtered[0].SUPI != "460020000000003" {
-		t.Fatalf("state filter failed: %+v total=%d", filtered, total)
+		t.Fatalf("dual unknown filter failed: %+v total=%d", filtered, total)
+	}
+
+	/* Registration and connection are independent axes: a UE may be registered
+	 * while its CM state is idle, and one axis must not hide the other. */
+	dual := []UE{
+		{SUPI: "ue-registered-idle", MMState: "registered", CMState: "idle"},
+		{SUPI: "ue-unregistered-idle", MMState: "deregistered", CMState: "idle"},
+		{SUPI: "ue-registered-connected", MMState: "registered", CMState: "connected"},
+	}
+	filtered, total = FilterAndPage(dual, Query{MMState: "registered", Limit: 50})
+	if total != 2 {
+		t.Fatalf("MM registered filter must include registered+idle: %+v total=%d", filtered, total)
+	}
+	filtered, total = FilterAndPage(dual, Query{CMState: "idle", Limit: 50})
+	if total != 2 {
+		t.Fatalf("CM idle filter must include registered+idle: %+v total=%d", filtered, total)
+	}
+	filtered, total = FilterAndPage(dual, Query{MMState: "registered", CMState: "idle", Limit: 50})
+	if total != 1 || filtered[0].SUPI != "ue-registered-idle" {
+		t.Fatalf("dual filters must intersect: %+v total=%d", filtered, total)
+	}
+	filtered, total = FilterAndPage(dual, Query{MMState: "unregistered", Limit: 50})
+	if total != 1 || filtered[0].SUPI != "ue-unregistered-idle" {
+		t.Fatalf("MM unregistered filter failed: %+v total=%d", filtered, total)
 	}
 	filtered, total = FilterAndPage(items, Query{Limit: 1, Offset: 1})
 	if total != 3 || len(filtered) != 1 || filtered[0].SUPI != "460020000000002" {

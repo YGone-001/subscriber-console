@@ -96,11 +96,17 @@ GET /api/ue-info
   summary=1|true     return summary only (items empty)
   q=...              search SUPI, MSISDN or SIP URI (max 64 characters)
   domain=EPS|5GS
-  state=registered|idle|connected|unknown
+  mmState=registered|unregistered|unknown   registration axis (MM/RM)
+  cmState=idle|connected|unknown            connection axis (CM/ECM)
   limit=1..200       default 50
   cursor=<opaque>    canonical page token returned by nextCursor
   offset=0..100000   legacy compatibility only; mutually exclusive with cursor
 ```
+
+`mmState` and `cmState` are independent 3GPP axes, not one exclusive
+vocabulary: a UE may be registered while idle. The summary's `registered`,
+`idle` and `connected` counts are therefore allowed to overlap; none of them is
+a partition of `total`.
 
 `pagination` returns `limit`, `offset`, `total`, `nextCursor` and `hasMore`.
 `offset` remains so older clients keep working, but the SPA always pages with
@@ -121,7 +127,7 @@ seconds per user, and sets `Cache-Control: no-store`.
   refresh control;
 - four KPI cards (total, registered, idle, connected);
 - per-source availability chips;
-- server-side search and domain/state filters carried in the URL, with the page
+- server-side search and independent registration/connection filters carried in the URL, with the page
   cursor also in the URL so reload, back/forward and a shared link restore the
   same page;
 - a cursor-paginated UE table with expandable identity, radio, location, AMBR

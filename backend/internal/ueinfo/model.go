@@ -113,12 +113,14 @@ type Response struct {
 	Pagination  Pagination     `json:"pagination"`
 }
 
-// Query is the validated list request.
+// Query is the validated list request. Registration (MM/RM) and connection
+// (CM/ECM) are independent dimensions and are filtered independently.
 type Query struct {
 	SummaryOnly bool
 	Search      string
 	Domain      string
-	State       string
+	MMState     string
+	CMState     string
 	Limit       int
 	Offset      int
 }

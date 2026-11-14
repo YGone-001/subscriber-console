@@ -97,13 +97,29 @@ func TestGetCursorPagination(t *testing.T) {
 	}
 }
 
+func TestGetAcceptsIndependentStateFilters(t *testing.T) {
+	for _, target := range []string{
+		"/api/ue-info?mmState=registered&cmState=idle",
+		"/api/ue-info?mmState=unregistered",
+		"/api/ue-info?cmState=connected",
+		"/api/ue-info?mmState=unknown&cmState=unknown",
+	} {
+		rec := httptest.NewRecorder()
+		testHandler().Get(rec, principalRequest(http.MethodGet, target, "viewer"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected %s to be accepted, got %d", target, rec.Code)
+		}
+	}
+}
+
 func TestGetRejectsInvalidQueries(t *testing.T) {
 	cases := []string{
 		"/api/ue-info?unknown=1",
 		"/api/ue-info?summary=yes",
 		"/api/ue-info?q=" + strings.Repeat("a", 65),
 		"/api/ue-info?domain=2G",
-		"/api/ue-info?state=active",
+		"/api/ue-info?mmState=active",
+		"/api/ue-info?cmState=active",
 		"/api/ue-info?limit=0",
 		"/api/ue-info?limit=201",
 		"/api/ue-info?offset=-1",

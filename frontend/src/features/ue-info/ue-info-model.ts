@@ -1,19 +1,26 @@
 import type { UEInfo, UEInfoResponse, UEQuery } from './types';
 
 export type UEDomainFilter = '' | 'EPS' | '5GS';
-export type UEStateFilter = '' | 'registered' | 'idle' | 'connected' | 'unknown';
+export type UEMMFilter = '' | 'registered' | 'unregistered' | 'unknown';
+export type UECMFilter = '' | 'idle' | 'connected' | 'unknown';
 
 const UE_DOMAINS: UEDomainFilter[] = ['EPS', '5GS'];
-const UE_STATES: UEStateFilter[] = ['registered', 'idle', 'connected', 'unknown'];
+const UE_MM_STATES: UEMMFilter[] = ['registered', 'unregistered', 'unknown'];
+const UE_CM_STATES: UECMFilter[] = ['idle', 'connected', 'unknown'];
 
 /** Reads a URL domain token; unknown values degrade to "all". */
 export function readUEDomainFilter(value: string | undefined): UEDomainFilter {
   return UE_DOMAINS.includes(value as UEDomainFilter) ? (value as UEDomainFilter) : '';
 }
 
-/** Reads a URL state token; unknown values degrade to "all". */
-export function readUEStateFilter(value: string | undefined): UEStateFilter {
-  return UE_STATES.includes(value as UEStateFilter) ? (value as UEStateFilter) : '';
+/** Reads a registration-management filter; unknown values degrade to "all". */
+export function readUEMMFilter(value: string | undefined): UEMMFilter {
+  return UE_MM_STATES.includes(value as UEMMFilter) ? (value as UEMMFilter) : '';
+}
+
+/** Reads a connection-management filter; unknown values degrade to "all". */
+export function readUECMFilter(value: string | undefined): UECMFilter {
+  return UE_CM_STATES.includes(value as UECMFilter) ? (value as UECMFilter) : '';
 }
 
 export function buildUEInfoPath(query: UEQuery = {}): string {
@@ -21,7 +28,8 @@ export function buildUEInfoPath(query: UEQuery = {}): string {
   if (query.summary) params.set('summary', '1');
   if (query.q) params.set('q', query.q);
   if (query.domain) params.set('domain', query.domain);
-  if (query.state) params.set('state', query.state);
+  if (query.mmState) params.set('mmState', query.mmState);
+  if (query.cmState) params.set('cmState', query.cmState);
   if (typeof query.limit === 'number') params.set('limit', String(query.limit));
   if (query.cursor) params.set('cursor', query.cursor);
   const suffix = params.toString();
@@ -50,11 +58,45 @@ export function formatUETimestamp(timestamp: number | null | undefined): string 
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 }
 
-export function ueStateToken(ue: UEInfo): 'registered' | 'idle' | 'connected' | 'unknown' {
-  if (ue.mmState.toLowerCase() === 'registered') return 'registered';
-  if (ue.cmState.toLowerCase() === 'idle') return 'idle';
-  if (ue.cmState.toLowerCase() === 'connected') return 'connected';
+/**
+ * Registration-management token for tone only. It never collapses the CM
+ * dimension: a registered UE can be idle or connected at the same time.
+ */
+export function ueMMToken(ue: UEInfo): 'registered' | 'unregistered' | 'unknown' {
+  const state = ue.mmState.trim().toLowerCase();
+  if (state === 'registered') return 'registered';
+  if (!state) return 'unknown';
+  return 'unregistered';
+}
+
+/** Connection-management token, independent of the registration dimension. */
+export function ueCMToken(ue: UEInfo): 'idle' | 'connected' | 'unknown' {
+  const state = ue.cmState.trim().toLowerCase();
+  if (state === 'idle') return 'idle';
+  if (state === 'connected') return 'connected';
   return 'unknown';
+}
+
+/** Localizes the known MM/RM values and preserves an unexpected upstream value. */
+export function ueMMStateLabel(state: string, t: (key: string) => string): string {
+  const value = state.trim();
+  if (!value) return t('ue_state_unreported');
+  const lower = value.toLowerCase();
+  if (lower === 'registered') return t('ue_state_registered');
+  if (lower === 'unregistered' || lower === 'deregistered' || lower === 'not_registered') {
+    return t('ue_state_unregistered');
+  }
+  return value;
+}
+
+/** Localizes the known CM/ECM values and preserves an unexpected upstream value. */
+export function ueCMStateLabel(state: string, t: (key: string) => string): string {
+  const value = state.trim();
+  if (!value) return t('ue_state_unreported');
+  const lower = value.toLowerCase();
+  if (lower === 'idle') return t('ue_state_idle');
+  if (lower === 'connected') return t('ue_state_connected');
+  return value;
 }
 
 export function sourceLabelKey(id: string): string {

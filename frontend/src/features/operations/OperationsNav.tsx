@@ -29,7 +29,6 @@ const TABS = [
 export function OperationsNav() {
   const { t } = useI18n();
   const pathname = useLocation().pathname;
-  const ims = pathname === '/ims-registrations';
   const navRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const element = navRef.current;
@@ -51,7 +50,7 @@ export function OperationsNav() {
       {TABS.map(({ to, labelKey, icon: Icon }) => (
         <NavLink
           key={to}
-          to={to === '/ue-info' && ims ? '/ims-registrations' : to}
+          to={to}
           className={({ isActive }) => `${styles.tab} ${isActive ? styles.tabActive : ''}`}
         >
           <Icon size={15} aria-hidden="true" />
@@ -69,7 +68,6 @@ export function OperationsNav() {
  */
 export function OperationsNavCompact() {
   const { t } = useI18n();
-  const ims = useLocation().pathname === '/ims-registrations';
   return (
     <details className={styles.compact} data-operations-nav="compact">
       <summary className={styles.compactSummary}>
@@ -81,7 +79,7 @@ export function OperationsNavCompact() {
         {TABS.map(({ to, labelKey, icon: Icon }) => (
           <NavLink
             key={to}
-            to={to === '/ue-info' && ims ? '/ims-registrations' : to}
+            to={to}
             aria-label={t(labelKey)}
             className={({ isActive }) => `${styles.compactLink} ${isActive ? styles.compactLinkActive : ''}`}
           >

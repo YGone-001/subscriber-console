@@ -10,10 +10,12 @@ import {
   formatBandwidth,
   formatUETimestamp,
   hasUnavailableSource,
+  readUECMFilter,
   readUEDomainFilter,
-  readUEStateFilter,
+  readUEMMFilter,
   sourceLabelKey,
-  ueStateToken,
+  ueCMToken,
+  ueMMToken,
 } from '../src/features/ue-info/ue-info-model';
 import type { UEInfo, UEInfoResponse } from '../src/features/ue-info/types';
 
@@ -33,8 +35,8 @@ test('the UE API path carries only the requested query values', () => {
   assert.equal(buildUEInfoPath(), '/api/ue-info');
   assert.equal(buildUEInfoPath({ summary: true }), '/api/ue-info?summary=1');
   assert.equal(
-    buildUEInfoPath({ q: '46002', domain: '5GS', state: 'connected', limit: 50, cursor: 'MTAw' }),
-    '/api/ue-info?q=46002&domain=5GS&state=connected&limit=50&cursor=MTAw',
+    buildUEInfoPath({ q: '46002', domain: '5GS', mmState: 'registered', cmState: 'connected', limit: 50, cursor: 'MTAw' }),
+    '/api/ue-info?q=46002&domain=5GS&mmState=registered&cmState=connected&limit=50&cursor=MTAw',
   );
 });
 
@@ -43,10 +45,14 @@ test('UE URL filters only accept the canonical vocabulary', () => {
   assert.equal(readUEDomainFilter('5GS'), '5GS');
   assert.equal(readUEDomainFilter('2G'), '');
   assert.equal(readUEDomainFilter(undefined), '');
-  assert.equal(readUEStateFilter('connected'), 'connected');
-  assert.equal(readUEStateFilter('unknown'), 'unknown');
-  assert.equal(readUEStateFilter('active'), '');
-  assert.equal(readUEStateFilter(undefined), '');
+  assert.equal(readUEMMFilter('registered'), 'registered');
+  assert.equal(readUEMMFilter('unregistered'), 'unregistered');
+  assert.equal(readUEMMFilter('active'), '');
+  assert.equal(readUEMMFilter(undefined), '');
+  assert.equal(readUECMFilter('connected'), 'connected');
+  assert.equal(readUECMFilter('unknown'), 'unknown');
+  assert.equal(readUECMFilter('registered'), '');
+  assert.equal(readUECMFilter(undefined), '');
 });
 
 test('bandwidth formatting never fabricates a missing measurement', () => {
@@ -57,11 +63,16 @@ test('bandwidth formatting never fabricates a missing measurement', () => {
   assert.equal(formatBandwidth(2_000_000_000), '2.0 Gbps');
 });
 
-test('UE state tokens follow MM before CM', () => {
-  assert.equal(ueStateToken(ue()), 'registered');
-  assert.equal(ueStateToken(ue({ mmState: '', cmState: 'connected' })), 'connected');
-  assert.equal(ueStateToken(ue({ mmState: '', cmState: 'idle' })), 'idle');
-  assert.equal(ueStateToken(ue({ mmState: '', cmState: '' })), 'unknown');
+test('UE state tokens keep registration and connection independent', () => {
+  assert.equal(ueMMToken(ue()), 'registered');
+  assert.equal(ueCMToken(ue()), 'idle');
+  assert.equal(ueMMToken(ue({ mmState: '', cmState: 'connected' })), 'unknown');
+  assert.equal(ueCMToken(ue({ mmState: '', cmState: 'connected' })), 'connected');
+  assert.equal(ueMMToken(ue({ mmState: 'deregistered' })), 'unregistered');
+  assert.equal(ueCMToken(ue({ mmState: '', cmState: '' })), 'unknown');
+  // A registered UE can be idle at the same time; neither axis may hide the other.
+  assert.equal(ueMMToken(ue({ mmState: 'registered', cmState: 'idle' })), 'registered');
+  assert.equal(ueCMToken(ue({ mmState: 'registered', cmState: 'idle' })), 'idle');
 });
 
 test('source availability and labels are deterministic', () => {

@@ -433,7 +433,10 @@ func FilterAndPage(items []UE, query Query) ([]UE, int) {
 		if query.Domain != "" && !domainMatches(item.Domain, query.Domain) {
 			continue
 		}
-		if query.State != "" && stateOf(item) != query.State {
+		if query.MMState != "" && !matchesMMState(item.MMState, query.MMState) {
+			continue
+		}
+		if query.CMState != "" && !matchesCMState(item.CMState, query.CMState) {
 			continue
 		}
 		filtered = append(filtered, item)
@@ -466,17 +469,39 @@ func canonicalDomain(value string) string {
 	}
 }
 
-func stateOf(item UE) string {
-	if strings.EqualFold(item.MMState, "registered") {
-		return "registered"
+// matchesMMState applies one registration-management dimension. The filter is
+// deliberately separate from CM state: a UE can be registered while its CM
+// state is idle, and collapsing the two axes would manufacture states that do
+// not exist in 3GPP.
+func matchesMMState(value, filter string) bool {
+	state := strings.TrimSpace(value)
+	switch filter {
+	case "registered":
+		return strings.EqualFold(state, "registered")
+	case "unregistered":
+		return state != "" && !strings.EqualFold(state, "registered")
+	case "unknown":
+		return state == ""
+	default:
+		return true
 	}
-	if strings.EqualFold(item.CMState, "idle") {
-		return "idle"
+}
+
+// matchesCMState applies one connection-management dimension. "unknown" means
+// no recognised CM state was reported, including an empty value; an explicit
+// idle or connected value is never folded into unknown.
+func matchesCMState(value, filter string) bool {
+	state := strings.TrimSpace(value)
+	switch filter {
+	case "idle":
+		return strings.EqualFold(state, "idle")
+	case "connected":
+		return strings.EqualFold(state, "connected")
+	case "unknown":
+		return !strings.EqualFold(state, "idle") && !strings.EqualFold(state, "connected")
+	default:
+		return true
 	}
-	if strings.EqualFold(item.CMState, "connected") {
-		return "connected"
-	}
-	return "unknown"
 }
 
 func parseUESActive(body []byte, now time.Time) (*int64, string) {

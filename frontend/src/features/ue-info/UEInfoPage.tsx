@@ -24,12 +24,17 @@ import {
   formatBandwidth,
   formatUETimestamp,
   hasUnavailableSource,
+  readUECMFilter,
   readUEDomainFilter,
-  readUEStateFilter,
+  readUEMMFilter,
   sourceLabelKey,
-  ueStateToken,
+  ueCMStateLabel,
+  ueCMToken,
+  ueMMStateLabel,
+  ueMMToken,
+  type UECMFilter,
   type UEDomainFilter,
-  type UEStateFilter,
+  type UEMMFilter,
 } from './ue-info-model';
 import type { UEInfo, UEInfoResponse, UESource, UESourceState } from './types';
 import styles from '../../styles/modules/ue-info.module.css';
@@ -37,7 +42,7 @@ import styles from '../../styles/modules/ue-info.module.css';
 const PAGE_LIMIT = 50;
 const REFRESH_INTERVAL_MS = 10000;
 
-const UE_URL_KEYS = ['q', 'domain', 'state'] as const;
+const UE_URL_KEYS = ['q', 'domain', 'mmState', 'cmState'] as const;
 
 function sourceTone(state: UESourceState): string {
   switch (state) {
@@ -100,8 +105,8 @@ function DetailBody({ ue }: { ue: UEInfo }) {
         <div><dt>{t('ue_field_sip_uri')}</dt><dd className={styles.mono}>{ue.sipUri || '—'}</dd></div>
         <div><dt>{t('ue_field_domain')}</dt><dd>{ue.domain || '—'}</dd></div>
         <div><dt>{t('ue_field_rat')}</dt><dd>{ue.rat || '—'}</dd></div>
-        <div><dt>{t('ue_field_mm_state')}</dt><dd>{ue.mmState || t('ue_state_unreported')}</dd></div>
-        <div><dt>{t('ue_field_cm_state')}</dt><dd>{ue.cmState || t('ue_state_unreported')}</dd></div>
+        <div><dt>{t('ue_field_mm_state')}</dt><dd>{ueMMStateLabel(ue.mmState, t)}</dd></div>
+        <div><dt>{t('ue_field_cm_state')}</dt><dd>{ueCMStateLabel(ue.cmState, t)}</dd></div>
         <div><dt>{t('ue_field_pdn_count')}</dt><dd>{ue.pdnCount}</dd></div>
       </dl>
 
@@ -156,7 +161,8 @@ export function UEInfoPage() {
   const url = useOperationsUrlState({ keys: UE_URL_KEYS });
   const query = url.filters.q ?? '';
   const domain = readUEDomainFilter(url.filters.domain);
-  const state = readUEStateFilter(url.filters.state);
+  const mmState = readUEMMFilter(url.filters.mmState);
+  const cmState = readUECMFilter(url.filters.cmState);
   const [searchInput, setSearchInput] = useState(query);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -168,12 +174,12 @@ export function UEInfoPage() {
   }, [query]);
 
   useEffect(() => {
-    const key = `${query}|${domain}|${state}`;
+    const key = `${query}|${domain}|${mmState}|${cmState}`;
     if (queryKeyRef.current !== key) {
       queryKeyRef.current = key;
       setCursorHistory([]);
     }
-  }, [query, domain, state]);
+  }, [query, domain, mmState, cmState]);
 
   useEffect(() => {
     if (!url.cursor) setCursorHistory([]);
@@ -183,20 +189,28 @@ export function UEInfoPage() {
     () => buildUEInfoPath({
       q: query || undefined,
       domain,
-      state,
+      mmState,
+      cmState,
       limit: PAGE_LIMIT,
       cursor: url.cursor,
     }),
-    [query, domain, state, url.cursor],
+    [query, domain, mmState, cmState, url.cursor],
   );
   const { data, error, isLoading, isValidating, mutate } = useRead<UEInfoResponse>(path);
 
   useEffect(() => {
     if (!autoRefresh) return undefined;
     const timer = window.setInterval(() => {
-      if (!isValidating) void mutate();
+      if (!document.hidden && !isValidating) void mutate();
     }, REFRESH_INTERVAL_MS);
-    return () => window.clearInterval(timer);
+    const onVisibility = () => {
+      if (!document.hidden && !isValidating) void mutate();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [autoRefresh, isValidating, mutate]);
 
   const summary = data?.summary;
@@ -216,7 +230,7 @@ export function UEInfoPage() {
       icon: <Smartphone size={16} />,
       label: t('ue_kpi_registered'),
       value: summary?.registered === null || summary?.registered === undefined ? '—' : summary.registered,
-      detail: summary?.registered === null ? t('ue_state_unreported') : undefined,
+      detail: summary?.registered === null ? t('ue_state_unreported') : t('ue_kpi_axis_mm'),
       tone: stateSummaryTone(summary?.registered ?? null, 'success'),
     },
     {
@@ -224,7 +238,7 @@ export function UEInfoPage() {
       icon: <Activity size={16} />,
       label: t('ue_kpi_idle'),
       value: summary?.idle === null || summary?.idle === undefined ? '—' : summary.idle,
-      detail: summary?.idle === null ? t('ue_state_unreported') : undefined,
+      detail: summary?.idle === null ? t('ue_state_unreported') : t('ue_kpi_axis_cm'),
       tone: stateSummaryTone(summary?.idle ?? null, 'warning'),
     },
     {
@@ -232,7 +246,7 @@ export function UEInfoPage() {
       icon: <Wifi size={16} />,
       label: t('ue_kpi_connected'),
       value: summary?.connected === null || summary?.connected === undefined ? '—' : summary.connected,
-      detail: summary?.connected === null ? t('ue_state_unreported') : undefined,
+      detail: summary?.connected === null ? t('ue_state_unreported') : t('ue_kpi_axis_cm'),
       tone: stateSummaryTone(summary?.connected ?? null, 'primary'),
     },
   ];
@@ -253,9 +267,14 @@ export function UEInfoPage() {
     url.setFilter('domain', value);
   };
 
-  const changeState = (value: UEStateFilter) => {
+  const changeMMState = (value: UEMMFilter) => {
     setExpanded(null);
-    url.setFilter('state', value);
+    url.setFilter('mmState', value);
+  };
+
+  const changeCMState = (value: UECMFilter) => {
+    setExpanded(null);
+    url.setFilter('cmState', value);
   };
 
   const refresh = () => {
@@ -361,10 +380,18 @@ export function UEInfoPage() {
             </select>
           </label>
           <label className={styles.filter}>
-            <span>{t('ue_filter_state')}</span>
-            <select value={state} onChange={(event) => changeState(event.target.value as UEStateFilter)}>
+            <span>{t('ue_filter_mm_state')}</span>
+            <select value={mmState} onChange={(event) => changeMMState(event.target.value as UEMMFilter)}>
               <option value="">{t('ue_filter_all')}</option>
               <option value="registered">{t('ue_state_registered')}</option>
+              <option value="unregistered">{t('ue_state_unregistered')}</option>
+              <option value="unknown">{t('ue_state_unknown')}</option>
+            </select>
+          </label>
+          <label className={styles.filter}>
+            <span>{t('ue_filter_cm_state')}</span>
+            <select value={cmState} onChange={(event) => changeCMState(event.target.value as UECMFilter)}>
+              <option value="">{t('ue_filter_all')}</option>
               <option value="idle">{t('ue_state_idle')}</option>
               <option value="connected">{t('ue_state_connected')}</option>
               <option value="unknown">{t('ue_state_unknown')}</option>
@@ -398,13 +425,15 @@ export function UEInfoPage() {
                 </thead>
                 <tbody>
                   {data.items.map((ue) => {
-                    const token = ueStateToken(ue);
+                    const mmToken = ueMMToken(ue);
+                    const cmToken = ueCMToken(ue);
                     const isOpen = expanded === ue.supi;
                     return (
                       <UEInfoRow
                         key={ue.supi}
                         ue={ue}
-                        token={token}
+                        mmToken={mmToken}
+                        cmToken={cmToken}
                         isOpen={isOpen}
                         onToggle={() => setExpanded(isOpen ? null : ue.supi)}
                       />
@@ -449,11 +478,23 @@ export function UEInfoPage() {
   );
 }
 
-function UEInfoRow({ ue, token, isOpen, onToggle }: { ue: UEInfo; token: string; isOpen: boolean; onToggle: () => void }) {
+function UEInfoRow({
+  ue,
+  mmToken,
+  cmToken,
+  isOpen,
+  onToggle,
+}: {
+  ue: UEInfo;
+  mmToken: string;
+  cmToken: string;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
   const { t } = useI18n();
   return (
     <>
-      <tr data-state={token}>
+      <tr data-mm-state={mmToken} data-cm-state={cmToken}>
         <th scope="row" className={styles.supiCell} data-column-priority="essential" data-label={t('ue_field_supi')}>
           <span className={styles.mono}>{ue.supi || '—'}</span>
         </th>
@@ -466,11 +507,11 @@ function UEInfoRow({ ue, token, isOpen, onToggle }: { ue: UEInfo; token: string;
         </td>
         <td data-column-priority="essential" data-label={t('ue_field_state')}>
           <span className={styles.stateCell}>
-            <span className={`${styles.badge} ${stateTone(ue.mmState.toLowerCase() === 'registered' ? 'registered' : 'unknown')}`}>
-              {ue.mmState || t('ue_state_unreported')}
+            <span className={`${styles.badge} ${stateTone(mmToken)}`} title={t('ue_field_mm_state')}>
+              {ueMMStateLabel(ue.mmState, t)}
             </span>
-            <span className={`${styles.badge} ${stateTone(ue.cmState.toLowerCase() === 'idle' ? 'idle' : ue.cmState.toLowerCase() === 'connected' ? 'connected' : 'unknown')}`}>
-              {ue.cmState || t('ue_state_unreported')}
+            <span className={`${styles.badge} ${stateTone(cmToken)}`} title={t('ue_field_cm_state')}>
+              {ueCMStateLabel(ue.cmState, t)}
             </span>
           </span>
         </td>

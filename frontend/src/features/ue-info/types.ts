@@ -88,7 +88,10 @@ export type UEQuery = {
   summary?: boolean;
   q?: string;
   domain?: '' | 'EPS' | '5GS';
-  state?: '' | 'registered' | 'idle' | 'connected' | 'unknown';
+  /** Registration-management dimension (MM/RM). */
+  mmState?: '' | 'registered' | 'unregistered' | 'unknown';
+  /** Connection-management dimension (CM/ECM), independent of mmState. */
+  cmState?: '' | 'idle' | 'connected' | 'unknown';
   limit?: number;
   cursor?: string;
 };

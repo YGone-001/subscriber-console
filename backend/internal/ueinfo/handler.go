@@ -37,7 +37,8 @@ func allowedParams() map[string]bool {
 		"summary": true,
 		"q":       true,
 		"domain":  true,
-		"state":   true,
+		"mmState": true,
+		"cmState": true,
 		"limit":   true,
 		"offset":  true,
 		"cursor":  true,
@@ -115,13 +116,24 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		query.Domain = domain
 	}
 
-	if raw := strings.TrimSpace(q.Get("state")); raw != "" {
+	if raw := strings.TrimSpace(q.Get("mmState")); raw != "" {
 		state := strings.ToLower(raw)
 		switch state {
-		case "registered", "idle", "connected", "unknown":
-			query.State = state
+		case "registered", "unregistered", "unknown":
+			query.MMState = state
 		default:
-			response.BadRequest(w, "state must be registered, idle, connected or unknown", "INVALID_STATE_FILTER")
+			response.BadRequest(w, "mmState must be registered, unregistered or unknown", "INVALID_MM_STATE_FILTER")
+			return
+		}
+	}
+
+	if raw := strings.TrimSpace(q.Get("cmState")); raw != "" {
+		state := strings.ToLower(raw)
+		switch state {
+		case "idle", "connected", "unknown":
+			query.CMState = state
+		default:
+			response.BadRequest(w, "cmState must be idle, connected or unknown", "INVALID_CM_STATE_FILTER")
 			return
 		}
 	}
