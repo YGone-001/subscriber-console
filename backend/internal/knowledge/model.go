@@ -72,6 +72,13 @@ type Attachment struct {
 	SHA256       string   `json:"sha256" bson:"sha256"`
 }
 
+// Lifecycle statuses for an entry. Deleted entries are retained for recovery
+// until permanently purged; legacy documents without a status are active.
+const (
+	StatusActive  = "active"
+	StatusDeleted = "deleted"
+)
+
 // Entry is a knowledge base article stored in app_knowledge_entries.
 type Entry struct {
 	ID            string       `json:"id" bson:"_id"`
@@ -83,6 +90,8 @@ type Entry struct {
 	Solution      string       `json:"solution" bson:"solution"`
 	Tags          []string     `json:"tags" bson:"tags"`
 	Attachments   []Attachment `json:"attachments" bson:"attachments"`
+	Status        string       `json:"status" bson:"status"`
+	DeletedAt     string       `json:"deletedAt,omitempty" bson:"deletedAt,omitempty"`
 	Revision      int64        `json:"revision" bson:"revision"`
 	CreatedAt     string       `json:"createdAt" bson:"createdAt"`
 	CreatedBy     string       `json:"createdBy" bson:"createdBy"`
@@ -118,6 +127,7 @@ type EntrySummary struct {
 	// AttachmentCount is a computed list projection (len(Attachments)); it is
 	// not a stored field.
 	AttachmentCount int    `json:"attachmentCount" bson:"-"`
+	Status          string `json:"status" bson:"status"`
 	Revision        int64  `json:"revision" bson:"revision"`
 	CreatedAt       string `json:"createdAt" bson:"createdAt"`
 	CreatedBy       string `json:"createdBy" bson:"createdBy"`
@@ -137,9 +147,11 @@ type CreateEntryRequest struct {
 }
 
 // UpdateEntryRequest is the body of PUT /api/knowledge/entries/{entryId}. The
-// expected revision gates the write against concurrent modification.
+// expected revision gates the write against concurrent modification. Restore
+// flips a soft-deleted entry back to active without requiring content fields.
 type UpdateEntryRequest struct {
 	ExpectedRevision  int64    `json:"expectedRevision"`
+	Restore           bool     `json:"restore,omitempty"`
 	Title             string   `json:"title"`
 	Protocol          string   `json:"protocol,omitempty"`
 	Phenomenon        string   `json:"phenomenon,omitempty"`

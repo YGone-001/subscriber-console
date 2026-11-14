@@ -96,6 +96,33 @@ func TestListSortPaginatesWithBoundCursor(t *testing.T) {
 	}
 }
 
+func TestListStatusFilterSeparatesRecycleBin(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := knowledgeTestRepo(t)
+	defer cleanup()
+
+	seedEntry(t, repo, "00000000-0000-4000-8000-000000000001", "kept", nil)
+	seedEntry(t, repo, "00000000-0000-4000-8000-000000000002", "trashed", nil)
+	if _, err := repo.SoftDelete(context.Background(), "00000000-0000-4000-8000-000000000002", 1); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	active, activeTotal, _, _, err := repo.List(context.Background(), ListFilter{Status: StatusActive, Limit: 10})
+	if err != nil || activeTotal != 1 || len(active) != 1 || active[0].Title != "kept" {
+		t.Fatalf("active list: total=%d len=%d err=%v", activeTotal, len(active), err)
+	}
+	deleted, deletedTotal, _, _, err := repo.List(context.Background(), ListFilter{Status: StatusDeleted, Limit: 10})
+	if err != nil || deletedTotal != 1 || len(deleted) != 1 || deleted[0].Title != "trashed" {
+		t.Fatalf("deleted list: total=%d len=%d err=%v", deletedTotal, len(deleted), err)
+	}
+	_, allTotal, _, _, err := repo.List(context.Background(), ListFilter{Status: "all", Limit: 10})
+	if err != nil || allTotal != 2 {
+		t.Fatalf("all list: total=%d err=%v", allTotal, err)
+	}
+}
+
 func TestListProjectsAttachmentCount(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires MongoDB")

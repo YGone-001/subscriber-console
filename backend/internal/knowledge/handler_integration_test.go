@@ -126,12 +126,61 @@ func TestHandlerDeleteSucceedsWithCorrectRevision(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.Delete(rec, withEntryID(knowledgeRequest(http.MethodDelete, "/api/knowledge/entries/"+created.ID+"?revision=1", "operator", ""), created.ID))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("delete: expected 200, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("soft delete: expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
+	// A soft-deleted entry is retained and readable for recovery.
 	getRec := httptest.NewRecorder()
 	h.Get(getRec, withEntryID(knowledgeRequest(http.MethodGet, "/api/knowledge/entries/"+created.ID, "viewer", ""), created.ID))
-	if getRec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 after delete, got %d", getRec.Code)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected soft-deleted entry to remain readable, got %d", getRec.Code)
+	}
+	var deleted Entry
+	if err := json.Unmarshal(getRec.Body.Bytes(), &deleted); err != nil {
+		t.Fatalf("decode deleted entry: %v", err)
+	}
+	if deleted.Status != StatusDeleted {
+		t.Fatalf("expected status deleted, got %q", deleted.Status)
+	}
+
+	// Permanent purge removes the document.
+	purgeRec := httptest.NewRecorder()
+	h.Delete(purgeRec, withEntryID(knowledgeRequest(http.MethodDelete, "/api/knowledge/entries/"+created.ID+"?revision=2&permanent=1", "operator", ""), created.ID))
+	if purgeRec.Code != http.StatusOK {
+		t.Fatalf("purge: expected 200, got %d: %s", purgeRec.Code, purgeRec.Body.String())
+	}
+
+	goneRec := httptest.NewRecorder()
+	h.Get(goneRec, withEntryID(knowledgeRequest(http.MethodGet, "/api/knowledge/entries/"+created.ID, "viewer", ""), created.ID))
+	if goneRec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 after purge, got %d", goneRec.Code)
+	}
+}
+
+func TestHandlerRestoreSoftDeletedEntry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	h, cleanup := knowledgeTestHandler(t)
+	defer cleanup()
+
+	created := createEntryForTest(t, h)
+	delRec := httptest.NewRecorder()
+	h.Delete(delRec, withEntryID(knowledgeRequest(http.MethodDelete, "/api/knowledge/entries/"+created.ID+"?revision=1", "operator", ""), created.ID))
+	if delRec.Code != http.StatusOK {
+		t.Fatalf("soft delete: expected 200, got %d", delRec.Code)
+	}
+
+	restoreRec := httptest.NewRecorder()
+	h.Update(restoreRec, withEntryID(knowledgeRequest(http.MethodPut, "/api/knowledge/entries/"+created.ID, "operator", `{"restore":true,"expectedRevision":2}`), created.ID))
+	if restoreRec.Code != http.StatusOK {
+		t.Fatalf("restore: expected 200, got %d: %s", restoreRec.Code, restoreRec.Body.String())
+	}
+	var restored Entry
+	if err := json.Unmarshal(restoreRec.Body.Bytes(), &restored); err != nil {
+		t.Fatalf("decode restored entry: %v", err)
+	}
+	if restored.Status != StatusActive || restored.Revision != 3 {
+		t.Fatalf("expected active revision 3, got status=%q revision=%d", restored.Status, restored.Revision)
 	}
 }

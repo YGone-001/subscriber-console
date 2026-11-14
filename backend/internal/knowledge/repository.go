@@ -85,6 +85,7 @@ type ListFilter struct {
 	Cursor   string
 	Sort     string
 	Order    string
+	Status   string
 }
 
 // Repository persists knowledge entries and attachment metadata in xcloud_ops.
@@ -116,6 +117,7 @@ func (r *Repository) Create(ctx context.Context, id string, req *CreateEntryRequ
 		Solution:      req.Solution,
 		Tags:          tags,
 		Attachments:   attachments,
+		Status:        StatusActive,
 		Revision:      1,
 		CreatedAt:     now,
 		CreatedBy:     actor,
@@ -249,6 +251,15 @@ func sortFieldValue(item EntrySummary, field string) string {
 
 func buildListFilter(filter ListFilter) (bson.M, error) {
 	doc := bson.M{}
+	switch filter.Status {
+	case StatusDeleted:
+		doc["status"] = StatusDeleted
+	case "all":
+		// no status restriction
+	default:
+		// Active is the default; legacy documents without a status are active.
+		doc["status"] = bson.M{"$ne": StatusDeleted}
+	}
 	if filter.Protocol != "" {
 		doc["protocol"] = filter.Protocol
 	}
@@ -357,8 +368,9 @@ func (r *Repository) Update(ctx context.Context, id string, req *UpdateEntryRequ
 	return existing, updated, nil
 }
 
-// Delete removes an entry atomically guarded by its revision.
-func (r *Repository) Delete(ctx context.Context, id string, revision int64) (*Entry, error) {
+// SoftDelete marks an entry deleted atomically guarded by its revision. The
+// document and its attachments are retained for recovery until Purge.
+func (r *Repository) SoftDelete(ctx context.Context, id string, revision int64) (*Entry, error) {
 	if !IsValidID(id) {
 		return nil, ErrNotFound
 	}
@@ -369,9 +381,76 @@ func (r *Repository) Delete(ctx context.Context, id string, revision int64) (*En
 	if existing.Revision != revision {
 		return nil, ErrRevisionConflict
 	}
-	result, err := r.entries.DeleteOne(ctx, bson.M{"_id": id, "revision": revision})
+	result, err := r.entries.UpdateOne(ctx,
+		bson.M{"_id": id, "revision": revision, "status": bson.M{"$ne": StatusDeleted}},
+		bson.M{"$set": bson.M{
+			"status":    StatusDeleted,
+			"deletedAt": CurrentTimestamp(),
+			"updatedAt": CurrentTimestamp(),
+			"revision":  revision + 1,
+		}},
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to delete knowledge entry: %w", err)
+		return nil, fmt.Errorf("failed to soft-delete knowledge entry: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		if _, gerr := r.GetByID(ctx, id); gerr != nil {
+			return nil, gerr
+		}
+		return nil, ErrRevisionConflict
+	}
+	return r.GetByID(ctx, id)
+}
+
+// Restore flips a soft-deleted entry back to active, guarded by its revision.
+func (r *Repository) Restore(ctx context.Context, id string, revision int64) (*Entry, error) {
+	if !IsValidID(id) {
+		return nil, ErrNotFound
+	}
+	existing, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if existing.Revision != revision {
+		return nil, ErrRevisionConflict
+	}
+	result, err := r.entries.UpdateOne(ctx,
+		bson.M{"_id": id, "revision": revision, "status": StatusDeleted},
+		bson.M{"$set": bson.M{
+			"status":    StatusActive,
+			"deletedAt": "",
+			"updatedAt": CurrentTimestamp(),
+			"revision":  revision + 1,
+		}},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restore knowledge entry: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		if _, gerr := r.GetByID(ctx, id); gerr != nil {
+			return nil, gerr
+		}
+		return nil, ErrRevisionConflict
+	}
+	return r.GetByID(ctx, id)
+}
+
+// Purge permanently removes a soft-deleted entry, guarded by its revision. The
+// caller releases the entry's attachments afterward.
+func (r *Repository) Purge(ctx context.Context, id string, revision int64) (*Entry, error) {
+	if !IsValidID(id) {
+		return nil, ErrNotFound
+	}
+	existing, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if existing.Revision != revision {
+		return nil, ErrRevisionConflict
+	}
+	result, err := r.entries.DeleteOne(ctx, bson.M{"_id": id, "revision": revision, "status": StatusDeleted})
+	if err != nil {
+		return nil, fmt.Errorf("failed to purge knowledge entry: %w", err)
 	}
 	if result.DeletedCount == 0 {
 		if _, gerr := r.GetByID(ctx, id); gerr != nil {
@@ -401,7 +480,7 @@ func (r *Repository) Stats(ctx context.Context) (*MetaResponse, error) {
 }
 
 func (r *Repository) computeStats(ctx context.Context) (*MetaResponse, error) {
-	total, err := r.entries.CountDocuments(ctx, bson.M{})
+	total, err := r.entries.CountDocuments(ctx, bson.M{"status": bson.M{"$ne": StatusDeleted}})
 	if err != nil {
 		return nil, fmt.Errorf("failed to count knowledge entries: %w", err)
 	}
@@ -431,6 +510,7 @@ func (r *Repository) computeStats(ctx context.Context) (*MetaResponse, error) {
 
 func (r *Repository) topTags(ctx context.Context) ([]TagCount, error) {
 	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"status": bson.M{"$ne": StatusDeleted}}}},
 		{{Key: "$unwind", Value: "$tags"}},
 		{{Key: "$group", Value: bson.M{"_id": "$tags", "count": bson.M{"$sum": 1}}}},
 		{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}, {Key: "_id", Value: 1}}}},
@@ -458,6 +538,7 @@ func (r *Repository) topTags(ctx context.Context) ([]TagCount, error) {
 
 func (r *Repository) protocolCounts(ctx context.Context) ([]ProtocolCount, error) {
 	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"status": bson.M{"$ne": StatusDeleted}}}},
 		{{Key: "$group", Value: bson.M{"_id": "$protocol", "count": bson.M{"$sum": 1}}}},
 		{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}, {Key: "_id", Value: 1}}}},
 		{{Key: "$limit", Value: 20}},

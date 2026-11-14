@@ -69,12 +69,21 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	allowed := map[string]bool{"q": true, "protocol": true, "tag": true, "cursor": true, "limit": true, "sort": true, "order": true}
+	allowed := map[string]bool{"q": true, "protocol": true, "tag": true, "cursor": true, "limit": true, "sort": true, "order": true, "status": true}
 	for param := range q {
 		if !allowed[param] {
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
 		}
+	}
+
+	status := strings.TrimSpace(q.Get("status"))
+	if status == "" {
+		status = StatusActive
+	}
+	if status != StatusActive && status != StatusDeleted && status != "all" {
+		response.BadRequest(w, "status must be active, deleted or all", "INVALID_QUERY_PARAMETER")
+		return
 	}
 
 	limit := 20
@@ -101,6 +110,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		Cursor:   strings.TrimSpace(q.Get("cursor")),
 		Sort:     sortField,
 		Order:    sortOrder,
+		Status:   status,
 	}
 
 	items, total, nextCursor, hasMore, err := h.repo.List(r.Context(), filter)
@@ -195,6 +205,30 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, err.Error(), "INVALID_JSON")
 		return
 	}
+
+	if req.Restore {
+		if req.ExpectedRevision <= 0 {
+			response.BadRequest(w, "expectedRevision is required", "VALIDATION_FAILED")
+			return
+		}
+		restored, err := h.repo.Restore(r.Context(), entryID, req.ExpectedRevision)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				response.Error(w, http.StatusNotFound, "Knowledge entry not found", "KNOWLEDGE_ENTRY_NOT_FOUND")
+				return
+			}
+			if errors.Is(err, ErrRevisionConflict) {
+				response.Error(w, http.StatusConflict, "Concurrent modification detected", "KNOWLEDGE_REVISION_CONFLICT")
+				return
+			}
+			response.InternalError(w)
+			return
+		}
+		h.audit(p, "knowledge.entry.restore", "knowledge_entry", restored.ID, restored.Title, nil, restored, nil)
+		response.JSON(w, http.StatusOK, restored)
+		return
+	}
+
 	protocol, tags, err := ValidateUpdateRequest(&req)
 	if err != nil {
 		response.BadRequest(w, err.Error(), "VALIDATION_FAILED")
@@ -257,23 +291,39 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, err := h.repo.Delete(r.Context(), entryID, revision)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.Error(w, http.StatusNotFound, "Knowledge entry not found", "KNOWLEDGE_ENTRY_NOT_FOUND")
+	permanent := r.URL.Query().Get("permanent") == "1"
+	if permanent {
+		entry, err := h.repo.Purge(r.Context(), entryID, revision)
+		if err != nil {
+			h.mapDeleteError(w, err)
 			return
 		}
-		if errors.Is(err, ErrRevisionConflict) {
-			response.Error(w, http.StatusConflict, "Concurrent modification detected", "KNOWLEDGE_REVISION_CONFLICT")
-			return
-		}
-		response.InternalError(w)
+		h.releaseEntryFiles(r.Context(), entry)
+		h.audit(p, "knowledge.entry.purge", "knowledge_entry", entry.ID, entry.Title, entry, nil, nil)
+		response.JSON(w, http.StatusOK, map[string]any{"deleted": true, "purged": true, "id": entry.ID})
 		return
 	}
 
-	h.releaseEntryFiles(r.Context(), entry)
+	entry, err := h.repo.SoftDelete(r.Context(), entryID, revision)
+	if err != nil {
+		h.mapDeleteError(w, err)
+		return
+	}
 	h.audit(p, "knowledge.entry.delete", "knowledge_entry", entry.ID, entry.Title, entry, nil, nil)
-	response.JSON(w, http.StatusOK, map[string]any{"deleted": true, "id": entry.ID})
+	response.JSON(w, http.StatusOK, map[string]any{"deleted": true, "id": entry.ID, "status": entry.Status})
+}
+
+// mapDeleteError translates soft-delete/purge repository errors to HTTP responses.
+func (h *Handler) mapDeleteError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrNotFound) {
+		response.Error(w, http.StatusNotFound, "Knowledge entry not found", "KNOWLEDGE_ENTRY_NOT_FOUND")
+		return
+	}
+	if errors.Is(err, ErrRevisionConflict) {
+		response.Error(w, http.StatusConflict, "Concurrent modification detected", "KNOWLEDGE_REVISION_CONFLICT")
+		return
+	}
+	response.InternalError(w)
 }
 
 // Upload handles POST /api/knowledge/files (multipart/form-data).
