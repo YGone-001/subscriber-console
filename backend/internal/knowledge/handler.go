@@ -153,6 +153,12 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if versions, verr := h.repo.ListVersions(r.Context(), entryID, MaxVersions); verr == nil {
 		entry.Versions = versions
 	}
+	if refs, rerr := h.repo.ListReferencingInvestigations(r.Context(), entryID, 20); rerr == nil {
+		entry.ReferencedBy = refs
+	}
+	if count, cerr := h.repo.CountReferencingInvestigations(r.Context(), entryID); cerr == nil {
+		entry.ReferenceCount = int(count)
+	}
 	if r.URL.Query().Get("export") == "1" {
 		h.writeExport(w, p, entry)
 		return
@@ -166,6 +172,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // omitted from the backup payload.
 func (h *Handler) writeExport(w http.ResponseWriter, p *auth.Principal, entry *Entry) {
 	entry.Versions = nil
+	entry.ReferencedBy = nil
 	payload := map[string]any{
 		"version":     1,
 		"exported_at": CurrentTimestamp(),

@@ -35,6 +35,7 @@ func knowledgeTestRepo(t *testing.T) (*Repository, func()) {
 	db := client.Database("xcloud_test_knowledge_" + bson.NewObjectID().Hex())
 	repo := NewRepository(db.Collection(CollectionEntries), db.Collection(CollectionFiles))
 	repo.UseVersionStore(db.Collection(CollectionVersions))
+	repo.UseInvestigationStore(db.Collection("app_investigations"))
 
 	cleanup := func() {
 		dropCtx, dropCancel := context.WithTimeout(context.Background(), 5*time.Second)

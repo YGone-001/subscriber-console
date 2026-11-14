@@ -97,6 +97,15 @@ type EntryVersion struct {
 	CreatedBy  string   `json:"createdBy" bson:"createdBy"`
 }
 
+// InvestigationRef is a bounded read-only projection of an investigation that
+// cites this entry. It links knowledge back to the operational records that
+// reference it.
+type InvestigationRef struct {
+	InvestigationID string `json:"investigationId" bson:"_id"`
+	Title           string `json:"title" bson:"title"`
+	AlertID         string `json:"alertId" bson:"alertId"`
+}
+
 // Entry is a knowledge base article stored in app_knowledge_entries.
 type Entry struct {
 	ID            string       `json:"id" bson:"_id"`
@@ -118,6 +127,10 @@ type Entry struct {
 	// Versions is a computed detail projection (bounded history); it is not a
 	// stored field on the entry document.
 	Versions []EntryVersion `json:"versions,omitempty" bson:"-"`
+	// ReferencedBy and ReferenceCount are computed detail projections of the
+	// investigations citing this entry; they are not stored fields.
+	ReferencedBy   []InvestigationRef `json:"referencedBy,omitempty" bson:"-"`
+	ReferenceCount int                `json:"referenceCount" bson:"-"`
 }
 
 // FileMeta is the attachment metadata record stored in app_knowledge_files.

@@ -93,9 +93,10 @@ type ListFilter struct {
 
 // Repository persists knowledge entries and attachment metadata in xcloud_ops.
 type Repository struct {
-	entries  *mongo.Collection
-	files    *mongo.Collection
-	versions *mongo.Collection
+	entries        *mongo.Collection
+	files          *mongo.Collection
+	versions       *mongo.Collection
+	investigations *mongo.Collection
 
 	metaMu       sync.Mutex
 	metaCache    *MetaResponse
@@ -112,6 +113,13 @@ func NewRepository(entries, files *mongo.Collection) *Repository {
 // no history.
 func (r *Repository) UseVersionStore(versions *mongo.Collection) {
 	r.versions = versions
+}
+
+// UseInvestigationStore wires the read-only investigations collection used to
+// project which operational records cite an entry. When unset, the detail
+// endpoint reports no references.
+func (r *Repository) UseInvestigationStore(investigations *mongo.Collection) {
+	r.investigations = investigations
 }
 
 // Create inserts a new entry with revision 1. The caller owns the identity so
@@ -461,6 +469,44 @@ func (r *Repository) GetVersion(ctx context.Context, entryID, versionID string) 
 		return nil, fmt.Errorf("failed to find knowledge version: %w", err)
 	}
 	return &version, nil
+}
+
+// ListReferencingInvestigations returns a bounded projection of investigations
+// whose knowledgeIds cite the entry, newest first. It is a read-only cross-domain
+// lookup; an unset store yields an empty result.
+func (r *Repository) ListReferencingInvestigations(ctx context.Context, entryID string, limit int) ([]InvestigationRef, error) {
+	if r.investigations == nil {
+		return []InvestigationRef{}, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "updatedAt", Value: -1}}).
+		SetLimit(int64(limit)).
+		SetProjection(bson.M{"_id": 1, "title": 1, "alertId": 1})
+	cursor, err := r.investigations.Find(ctx, bson.M{"knowledgeIds": entryID}, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list referencing investigations: %w", err)
+	}
+	defer cursor.Close(ctx)
+	out := []InvestigationRef{}
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, fmt.Errorf("failed to decode referencing investigations: %w", err)
+	}
+	return out, nil
+}
+
+// CountReferencingInvestigations counts investigations citing the entry.
+func (r *Repository) CountReferencingInvestigations(ctx context.Context, entryID string) (int64, error) {
+	if r.investigations == nil {
+		return 0, nil
+	}
+	total, err := r.investigations.CountDocuments(ctx, bson.M{"knowledgeIds": entryID})
+	if err != nil {
+		return 0, fmt.Errorf("failed to count referencing investigations: %w", err)
+	}
+	return total, nil
 }
 
 // SoftDelete marks an entry deleted atomically guarded by its revision. The

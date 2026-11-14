@@ -1,10 +1,14 @@
 package knowledge
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func knowledgeTestHandler(t *testing.T) (*Handler, func()) {
@@ -256,5 +260,44 @@ func TestHandlerExportEntry(t *testing.T) {
 	}
 	if payload.EntryID != created.ID || payload.Entry.Title != "round trip" {
 		t.Fatalf("unexpected export payload: %+v", payload)
+	}
+}
+
+func TestHandlerReferencedByInvestigations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := knowledgeTestRepo(t)
+	defer cleanup()
+	store, err := NewFileStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatalf("file store: %v", err)
+	}
+	h := NewHandler(repo, store, noopLimiter{}, nil)
+	h.UseActorRepository(fakeActorRepo{})
+
+	created := createEntryForTest(t, h)
+	_, err = repo.investigations.InsertOne(context.Background(), bson.M{
+		"_id":          "inv-1",
+		"title":        "Investigation A",
+		"alertId":      "alert-1",
+		"knowledgeIds": []string{created.ID},
+		"updatedAt":    time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("seed investigation: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.Get(rec, withEntryID(knowledgeRequest(http.MethodGet, "/api/knowledge/entries/"+created.ID, "viewer", ""), created.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: expected 200, got %d", rec.Code)
+	}
+	var detail Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+	if detail.ReferenceCount != 1 || len(detail.ReferencedBy) != 1 || detail.ReferencedBy[0].InvestigationID != "inv-1" {
+		t.Fatalf("expected one referencing investigation, got count=%d refs=%+v", detail.ReferenceCount, detail.ReferencedBy)
 	}
 }

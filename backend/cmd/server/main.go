@@ -539,6 +539,7 @@ func main() {
 		mc.Ops.Collection("app_knowledge_files"),
 	)
 	knowledgeRepo.UseVersionStore(mc.Ops.Collection(knowledge.CollectionVersions))
+	knowledgeRepo.UseInvestigationStore(mc.Ops.Collection("app_investigations"))
 	knowledgeHandler := knowledge.NewHandler(knowledgeRepo, knowledgeStore, limiter, auditWriter)
 	knowledgeHandler.UseActorRepository(userRepo)
 	knowledgeJanitor := knowledge.NewJanitor(knowledgeRepo, knowledgeStore, logger)
