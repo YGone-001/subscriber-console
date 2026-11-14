@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (205 exact METHOD+PATH registrations)
+Read + write APIs (210 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 205
+Go registration set                  = 210
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -554,8 +554,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 205 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，205 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 210 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，210 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -585,7 +585,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (205 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (210 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -635,93 +635,164 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **205 条** METHOD+PATH 精确注册（GET 108 / POST 67 / PUT 16 / DELETE 10 / PATCH 4）：
+路由权威为源码派生的 Go 注册集合，共 **210 条** METHOD+PATH 精确注册（GET 109 / POST 71 / PUT 16 / DELETE 10 / PATCH 4）：
 
 ```text
-GET    /api/config-drift/meta
-GET    /api/config-drift/sources/{sourceId}/policy
-PUT    /api/config-drift/sources/{sourceId}/policy
-GET    /api/config-drift/alerts
-GET    /api/config-drift/alerts/{driftAlertId}
-POST   /api/config-drift/alerts/{driftAlertId}/acknowledge
-GET    /api/config-drift/alerts/{driftAlertId}/events
 GET    /api/agents
-GET    /api/config-snapshots/meta
-GET    /api/config-snapshots/sources
-GET    /api/config-snapshots/sources/{sourceId}
-POST   /api/config-snapshots/sources/{sourceId}/captures
-GET    /api/config-snapshots/sources/{sourceId}/observations
-GET    /api/config-snapshots/sources/{sourceId}/snapshots
-GET    /api/config-snapshots/sources/{sourceId}/snapshots/{snapshotId}
-GET    /api/config-snapshots/sources/{sourceId}/diff
-PUT    /api/config-snapshots/sources/{sourceId}/baseline
-GET    /api/ops-reports/summary
-GET    /api/ops-reports/alerts
-GET    /api/ops-reports/metrics
-GET    /api/ops-reports/export
 GET    /api/agents/{agentId}
-POST   /api/agents
-PUT    /api/agents/{agentId}
-POST   /api/agents/{agentId}/credentials
-POST   /api/agent-sessions/{agentId}
-POST   /api/agent-reports/{agentId}
+GET    /api/alerts
 GET    /api/analytics/metrics
 GET    /api/analytics/sparkline
-GET    /api/ratings
-GET    /api/ratings/{id}
-GET    /api/profiles
-GET    /api/profiles/meta
-GET    /api/profiles/{name}
-GET    /api/profiles/{name}/stats
-GET    /api/profiles/{name}/versions
-GET    /api/profiles/{name}/export
-GET    /api/ocs/balances
-GET    /api/ocs/balances/{imsi}
-GET    /api/ocs/balances/{imsi}/adjustments
-GET    /api/ocs/sessions
-GET    /api/ocs/usage
-GET    /api/ocs/reservations
-GET    /api/ocs/subscribers
-GET    /api/ocs/subscribers/{imsi}
-GET    /api/tariff-plans
-GET    /api/tariff-plans/{planId}
-GET    /api/tariff-plans/{planId}/export
-GET    /api/tariff-plans/{planId}/operations
-GET    /api/tariff-plans/{planId}/rules
-GET    /api/tariff-plans/{planId}/subscribers
-GET    /api/tariff-plans/{planId}/migrate
-GET    /api/subscribers
-GET    /api/subscribers/{imsi}
-GET    /api/search
 GET    /api/auth/me
 GET    /api/auth/permissions
 GET    /api/auth/users
 GET    /api/auth/users/{username}
-GET    /api/users
-GET    /api/users/{username}
-GET    /api/alerts
-GET    /api/notifications/stream
-GET    /api/system/health
-GET    /api/system/mongo/health
-GET    /api/system/retention/ocs
-GET    /api/system/audit/status
+GET    /api/config-drift/alerts
+GET    /api/config-drift/alerts/{driftAlertId}
+GET    /api/config-drift/alerts/{driftAlertId}/events
+GET    /api/config-drift/meta
+GET    /api/config-drift/sources/{sourceId}/policy
+GET    /api/config-snapshots/meta
+GET    /api/config-snapshots/sources
+GET    /api/config-snapshots/sources/{sourceId}
+GET    /api/config-snapshots/sources/{sourceId}/diff
+GET    /api/config-snapshots/sources/{sourceId}/observations
+GET    /api/config-snapshots/sources/{sourceId}/snapshots
+GET    /api/config-snapshots/sources/{sourceId}/snapshots/{snapshotId}
+GET    /api/discovery/candidates
+GET    /api/discovery/candidates/{candidateId}
+GET    /api/discovery/meta
+GET    /api/discovery/runs
+GET    /api/discovery/runs/{runId}
+GET    /api/discovery/sources
+GET    /api/discovery/sources/{sourceId}
+GET    /api/ims/registrations
+GET    /api/ims/registrations/summary
 GET    /api/inventory/meta
 GET    /api/inventory/resources
 GET    /api/inventory/resources/{resourceId}
-GET    /api/topology/meta
-GET    /api/topology/live
+GET    /api/investigations
+GET    /api/investigations/context
+GET    /api/investigations/{investigationId}
+GET    /api/knowledge/entries
+GET    /api/knowledge/entries/{entryId}
+GET    /api/knowledge/files/{fileId}
+GET    /api/knowledge/meta
+GET    /api/nf-alerts
+GET    /api/nf-alerts/meta
+GET    /api/nf-alerts/rules
+GET    /api/nf-alerts/rules/{ruleId}
+GET    /api/nf-health/interfaces
+GET    /api/nf-health/meta
+GET    /api/nf-health/runs
+GET    /api/nf-health/runs/{runId}
+GET    /api/nf-health/samples
+GET    /api/nf-health/targets
+GET    /api/nf-health/targets/{targetId}
+GET    /api/nf-health/targets/{targetId}/history
+GET    /api/nf-logs/sources
+GET    /api/nf-logs/stream
+GET    /api/nf-notifications/channels
+GET    /api/nf-notifications/deliveries
+GET    /api/nf-notifications/escalations
+GET    /api/notifications/stream
+GET    /api/ocs/balances
+GET    /api/ocs/balances/{imsi}
+GET    /api/ocs/balances/{imsi}/adjustments
+GET    /api/ocs/reservations
+GET    /api/ocs/sessions
+GET    /api/ocs/subscribers
+GET    /api/ocs/subscribers/{imsi}
+GET    /api/ocs/usage
+GET    /api/operations/containment
+GET    /api/operations/groups
+GET    /api/operations/groups/members
+GET    /api/operations/groups/summary
+GET    /api/operations/resources
+GET    /api/operations/summary
+GET    /api/ops-reports/alerts
+GET    /api/ops-reports/export
+GET    /api/ops-reports/metrics
+GET    /api/ops-reports/summary
+GET    /api/profiles
+GET    /api/profiles/meta
+GET    /api/profiles/{name}
+GET    /api/profiles/{name}/export
+GET    /api/profiles/{name}/stats
+GET    /api/profiles/{name}/versions
+GET    /api/ratings
+GET    /api/ratings/{id}
+GET    /api/runtime/meta
+GET    /api/runtime/observations
+GET    /api/runtime/stream
+GET    /api/search
+GET    /api/subscribers
+GET    /api/subscribers/{imsi}
+GET    /api/system/audit/status
+GET    /api/system/health
+GET    /api/system/mongo/health
+GET    /api/system/retention/ocs
+GET    /api/tariff-plans
+GET    /api/tariff-plans/{planId}
+GET    /api/tariff-plans/{planId}/export
+GET    /api/tariff-plans/{planId}/migrate
+GET    /api/tariff-plans/{planId}/operations
+GET    /api/tariff-plans/{planId}/rules
+GET    /api/tariff-plans/{planId}/subscribers
 GET    /api/topology/edges
 GET    /api/topology/edges/{edgeId}
+GET    /api/topology/live
+GET    /api/topology/meta
 GET    /api/topology/resources/{resourceId}/neighbors
-GET    /api/discovery/meta
-GET    /api/discovery/sources
-GET    /api/discovery/sources/{sourceId}
-GET    /api/discovery/runs
-GET    /api/discovery/runs/{runId}
-GET    /api/discovery/candidates
-GET    /api/discovery/candidates/{candidateId}
+GET    /api/ue-info
+GET    /api/users
+GET    /api/users/{username}
+POST   /api/agent-reports/{agentId}
+POST   /api/agent-sessions/{agentId}
+POST   /api/agents
+POST   /api/agents/{agentId}/credentials
+POST   /api/alerts/acknowledge
+POST   /api/alerts/workflow
+POST   /api/analytics/init
 POST   /api/auth/login
 POST   /api/auth/logout
+POST   /api/config-drift/alerts/{driftAlertId}/acknowledge
+POST   /api/config-snapshots/sources/{sourceId}/captures
+POST   /api/discovery/candidates/{candidateId}/link
+POST   /api/discovery/candidates/{candidateId}/unlink
+POST   /api/discovery/sources
+POST   /api/discovery/sources/{sourceId}/scan
+POST   /api/inventory/resources
+POST   /api/inventory/resources/{resourceId}/retire
+POST   /api/investigations
+POST   /api/knowledge/entries
+POST   /api/knowledge/files
+POST   /api/nf-alerts/bulk/acknowledge
+POST   /api/nf-alerts/bulk/assign
+POST   /api/nf-alerts/rules
+POST   /api/nf-alerts/{alertId}/acknowledge
+POST   /api/nf-alerts/{alertId}/assign
+POST   /api/nf-alerts/{alertId}/recover
+POST   /api/nf-alerts/{alertId}/resolve
+POST   /api/nf-health/targets
+POST   /api/nf-health/targets/{targetId}/collect
+POST   /api/nf-notifications/channels
+POST   /api/nf-notifications/channels/{channelId}/test
+POST   /api/nf-notifications/deliveries/{deliveryId}/retry
+POST   /api/nf-notifications/escalations
+POST   /api/ocs/balances/{imsi}/adjust
+POST   /api/ocs/balances/{imsi}/reset
+POST   /api/ocs/subscribers
+POST   /api/ocs/subscribers/{imsi}/resume
+POST   /api/ocs/subscribers/{imsi}/suspend
+POST   /api/profiles
+POST   /api/profiles/{name}/clone
+POST   /api/profiles/{name}/drift-precheck
+POST   /api/profiles/{name}/versions/{versionId}/restore
+POST   /api/ratings
+POST   /api/runtime/bootstrap/apply
+POST   /api/runtime/bootstrap/preview
+POST   /api/runtime/scan
 POST   /api/subscribers
 POST   /api/subscribers/batch
 POST   /api/subscribers/batch-update
@@ -731,114 +802,58 @@ POST   /api/subscribers/import
 POST   /api/subscribers/policy
 POST   /api/subscribers/{imsi}/profile
 POST   /api/subscribers/{imsi}/traffic-adjustments
-POST   /api/profiles
-POST   /api/profiles/{name}/clone
-POST   /api/profiles/{name}/drift-precheck
-POST   /api/profiles/{name}/versions/{versionId}/restore
-POST   /api/ratings
-POST   /api/ocs/subscribers
-POST   /api/ocs/subscribers/{imsi}/suspend
-POST   /api/ocs/subscribers/{imsi}/resume
-POST   /api/ocs/balances/{imsi}/adjust
-POST   /api/ocs/balances/{imsi}/reset
+POST   /api/system/audit/batch-heal
+POST   /api/system/audit/heal
+POST   /api/system/audit/scan
+POST   /api/system/retention/ocs/purge
 POST   /api/tariff-plans
 POST   /api/tariff-plans/import
 POST   /api/tariff-plans/{planId}/clone
-POST   /api/tariff-plans/{planId}/enable
 POST   /api/tariff-plans/{planId}/disable
+POST   /api/tariff-plans/{planId}/enable
 POST   /api/tariff-plans/{planId}/migrate
 POST   /api/tariff-plans/{planId}/rules
+POST   /api/topology/edges
+POST   /api/topology/edges/{edgeId}/retire
 POST   /api/users
 POST   /api/users/{username}/disable
 POST   /api/users/{username}/password-reset
-POST   /api/alerts/acknowledge
-POST   /api/alerts/workflow
-POST   /api/analytics/init
-POST   /api/system/audit/scan
-POST   /api/system/audit/heal
-POST   /api/system/audit/batch-heal
-POST   /api/system/retention/ocs/purge
-POST   /api/inventory/resources
-POST   /api/inventory/resources/{resourceId}/retire
-POST   /api/topology/edges
-POST   /api/topology/edges/{edgeId}/retire
-POST   /api/discovery/sources
-POST   /api/discovery/sources/{sourceId}/scan
-POST   /api/discovery/candidates/{candidateId}/link
-POST   /api/discovery/candidates/{candidateId}/unlink
-PUT    /api/subscribers/{imsi}
+PUT    /api/agents/{agentId}
+PUT    /api/config-drift/sources/{sourceId}/policy
+PUT    /api/config-snapshots/sources/{sourceId}/baseline
+PUT    /api/discovery/sources/{sourceId}
+PUT    /api/inventory/resources/{resourceId}
+PUT    /api/knowledge/entries/{entryId}
+PUT    /api/nf-alerts/rules/{ruleId}
+PUT    /api/nf-health/targets/{targetId}
+PUT    /api/nf-notifications/channels/{channelId}
+PUT    /api/nf-notifications/escalations/{escalationId}
 PUT    /api/profiles/{name}
 PUT    /api/ratings/{id}
+PUT    /api/subscribers/{imsi}
 PUT    /api/tariff-plans/{planId}
 PUT    /api/tariff-plans/{planId}/rules/{ruleId}
-PUT    /api/inventory/resources/{resourceId}
 PUT    /api/topology/edges/{edgeId}
-PUT    /api/discovery/sources/{sourceId}
-PATCH  /api/users/{username}
+PATCH  /api/investigations/{investigationId}
 PATCH  /api/ocs/subscribers/{imsi}
 PATCH  /api/tariff-plans/{planId}/rules/{ruleId}
-DELETE /api/subscribers/{imsi}
+PATCH  /api/users/{username}
+DELETE /api/knowledge/entries/{entryId}
+DELETE /api/nf-alerts/rules/{ruleId}
+DELETE /api/nf-notifications/channels/{channelId}
+DELETE /api/nf-notifications/escalations/{escalationId}
+DELETE /api/ocs/subscribers/{imsi}
 DELETE /api/profiles/{name}
 DELETE /api/ratings/{id}
-DELETE /api/ocs/subscribers/{imsi}
+DELETE /api/subscribers/{imsi}
 DELETE /api/tariff-plans/{planId}
 DELETE /api/tariff-plans/{planId}/rules/{ruleId}
-GET    /api/nf-health/meta
-GET    /api/nf-health/targets
-GET    /api/nf-health/targets/{targetId}
-GET    /api/nf-health/targets/{targetId}/history
-GET    /api/nf-health/samples
-GET    /api/nf-health/interfaces
-GET    /api/nf-health/runs
-GET    /api/nf-health/runs/{runId}
-POST   /api/nf-health/targets
-PUT    /api/nf-health/targets/{targetId}
-POST   /api/nf-health/targets/{targetId}/collect
-GET    /api/runtime/meta
-GET    /api/runtime/observations
-GET    /api/runtime/stream
-POST   /api/runtime/scan
-POST   /api/runtime/bootstrap/preview
-POST   /api/runtime/bootstrap/apply
-GET    /api/nf-alerts/meta
-GET    /api/nf-alerts
-GET    /api/nf-alerts/rules
-GET    /api/nf-alerts/rules/{ruleId}
-POST   /api/nf-alerts/rules
-PUT    /api/nf-alerts/rules/{ruleId}
-DELETE /api/nf-alerts/rules/{ruleId}
-POST   /api/nf-alerts/{alertId}/acknowledge
-POST   /api/nf-alerts/{alertId}/assign
-POST   /api/nf-alerts/{alertId}/recover
-POST   /api/nf-alerts/{alertId}/resolve
-GET    /api/operations/summary
-GET    /api/operations/resources
-GET    /api/ue-info
-GET    /api/nf-logs/sources
-GET    /api/nf-logs/stream
-GET    /api/nf-notifications/channels
-POST   /api/nf-notifications/channels
-PUT    /api/nf-notifications/channels/{channelId}
-DELETE /api/nf-notifications/channels/{channelId}
-GET    /api/nf-notifications/escalations
-POST   /api/nf-notifications/escalations
-PUT    /api/nf-notifications/escalations/{escalationId}
-DELETE /api/nf-notifications/escalations/{escalationId}
-GET    /api/nf-notifications/deliveries
-GET    /api/knowledge/meta
-GET    /api/knowledge/entries
-GET    /api/knowledge/entries/{entryId}
-POST   /api/knowledge/entries
-PUT    /api/knowledge/entries/{entryId}
-DELETE /api/knowledge/entries/{entryId}
-GET    /api/knowledge/files/{fileId}
-POST   /api/knowledge/files
 ```
 
 状态：
 
 ```text
-Go production API registrations = 205 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 210 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0

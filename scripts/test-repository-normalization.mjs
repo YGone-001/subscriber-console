@@ -119,6 +119,8 @@ const EXPECTED_NF_ALERT_ROUTES = new Set([
   'POST /api/nf-alerts/{alertId}/assign',
   'POST /api/nf-alerts/{alertId}/recover',
   'POST /api/nf-alerts/{alertId}/resolve',
+  'POST /api/nf-alerts/bulk/acknowledge',
+  'POST /api/nf-alerts/bulk/assign',
 ]);
 // The operations projection adds exactly two read registrations:
 //   - summary: full-collection per-section statistics;
@@ -130,6 +132,7 @@ const EXPECTED_OPERATIONS_ROUTES = new Set([
   'GET /api/operations/groups',
   'GET /api/operations/groups/summary',
   'GET /api/operations/groups/members',
+  'GET /api/operations/containment',
 ]);
 // The template surface gained four registrations after normalization: the
 // authoritative meta vocabulary, the governed clone, the semantic drift probe and
@@ -178,6 +181,8 @@ const EXPECTED_NF_NOTIFICATIONS_ROUTES = new Set([
   'PUT /api/nf-notifications/escalations/{escalationId}',
   'DELETE /api/nf-notifications/escalations/{escalationId}',
   'GET /api/nf-notifications/deliveries',
+  'POST /api/nf-notifications/channels/{channelId}/test',
+  'POST /api/nf-notifications/deliveries/{deliveryId}/retry',
 ]);
 // OCS management-plane reads added after normalization: the exact contract
 // lookup and the balance adjustment trail. Both stay inside the frozen
