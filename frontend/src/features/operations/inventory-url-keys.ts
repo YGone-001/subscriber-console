@@ -15,6 +15,7 @@ export const INVENTORY_URL_KEYS = [
   'monitoring',
   'node',
   'density',
+  'population',
 ] as const;
 
 export type InventoryUrlKey = (typeof INVENTORY_URL_KEYS)[number];

@@ -417,7 +417,7 @@ func main() {
 	// authoritative monitoring association for exactly those resources. Read
 	// only; it owns no write and performs no remote network action.
 	operationsResourceHandler := operationsview.NewResourceHandler(
-		operationsview.NewResourceService(inventoryRepo, nfHealthRepo, nfHealthBindings, nil),
+		operationsview.NewResourceService(inventoryRepo, nfHealthRepo, nfHealthBindings, nil, topologyRepo),
 		limiter,
 		auditWriter,
 	)
@@ -844,7 +844,11 @@ func main() {
 	mux.Handle("GET /api/ops-reports/metrics", authMiddleware(http.HandlerFunc(opsReportHandler.Handle)))
 	mux.Handle("GET /api/ops-reports/export", authMiddleware(http.HandlerFunc(opsReportHandler.Handle)))
 
+	containmentHandler := operationsview.NewContainmentHandler(
+		operationsview.NewContainmentService(inventoryRepo, topologyRepo, nil), limiter, auditWriter)
+
 	// Operations summary (single read, per-section full-collection statistics)
+	mux.Handle("GET /api/operations/containment", authMiddleware(http.HandlerFunc(containmentHandler.Get)))
 	mux.Handle("GET /api/operations/summary", authMiddleware(http.HandlerFunc(operationsSummaryHandler.Summary)))
 	mux.Handle("GET /api/operations/groups", authMiddleware(http.HandlerFunc(groupHandler.Handle)))
 	mux.Handle("GET /api/operations/groups/summary", authMiddleware(http.HandlerFunc(groupHandler.Handle)))

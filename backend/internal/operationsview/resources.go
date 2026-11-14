@@ -2,6 +2,7 @@ package operationsview
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"subscriber/internal/inventory"
@@ -18,7 +19,16 @@ const (
 	// largest legitimate caller (the reference architecture asks for every role
 	// token of its skeleton) while still refusing an unbounded query.
 	ResourceMaxRoles = 64
+	// ResourceMaxKinds bounds the multi-kind population filter. The canonical
+	// inventory vocabulary has 20 kinds, so the whole vocabulary is allowed.
+	ResourceMaxKinds = 20
+	// ResourceMaxSubtreeIDs bounds the descendant set used by subtreeRoot.
+	ResourceMaxSubtreeIDs = 5000
 )
+
+// ErrContainmentUnavailable means the server could not resolve the declared
+// containment subtree. Returning an unfiltered page would be a false answer.
+var ErrContainmentUnavailable = errors.New("containment subtree unavailable")
 
 // Association states for one Inventory resource.
 //
@@ -144,6 +154,11 @@ type ResourceInventory interface {
 	List(ctx context.Context, filter inventory.ListFilter) ([]inventory.Resource, *string, bool, error)
 }
 
+// ResourceContainment resolves the declared subtree for one Inventory root.
+type ResourceContainment interface {
+	Descendants(ctx context.Context, root string, max int) ([]string, bool, error)
+}
+
 // ResourceHealth is the NF Health read authority consumed by the projection.
 type ResourceHealth interface {
 	ListTargets(ctx context.Context, filter nfhealth.TargetListFilter) ([]nfhealth.HealthTarget, *string, bool, error)
@@ -157,31 +172,38 @@ type RuntimeBindings interface {
 
 // ResourceQuery is the validated, bounded query for one page.
 type ResourceQuery struct {
-	Query      string
-	Domain     string
-	Kind       string
-	Monitoring string
-	Roles      []string
-	Cursor     string
-	Limit      int
+	Query       string
+	Domain      string
+	Kind        string
+	Kinds       []string
+	SubtreeRoot string
+	Monitoring  string
+	Roles       []string
+	Cursor      string
+	Limit       int
 }
 
 // ResourceService projects one page of Inventory resources with their
 // authoritative monitoring association. It owns no writes and calls no remote
 // network action.
 type ResourceService struct {
-	inventory ResourceInventory
-	health    ResourceHealth
-	bindings  RuntimeBindings
-	now       func() time.Time
+	inventory   ResourceInventory
+	health      ResourceHealth
+	bindings    RuntimeBindings
+	containment ResourceContainment
+	now         func() time.Time
 }
 
 // NewResourceService constructs the resource projection service.
-func NewResourceService(inv ResourceInventory, health ResourceHealth, bindings RuntimeBindings, now func() time.Time) *ResourceService {
+func NewResourceService(inv ResourceInventory, health ResourceHealth, bindings RuntimeBindings, now func() time.Time, containment ...ResourceContainment) *ResourceService {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	return &ResourceService{inventory: inv, health: health, bindings: bindings, now: now}
+	var resolver ResourceContainment
+	if len(containment) > 0 {
+		resolver = containment[0]
+	}
+	return &ResourceService{inventory: inv, health: health, bindings: bindings, containment: resolver, now: now}
 }
 
 // Build resolves one bounded page. The Inventory page is read first; the health
@@ -196,14 +218,34 @@ func (s *ResourceService) Build(ctx context.Context, q ResourceQuery) (Resources
 		limit = ResourceMaxLimit
 	}
 
-	items, nextCursor, hasMore, err := s.inventory.List(ctx, inventory.ListFilter{
+	var subtreeIDs []string
+	subtreeSet := q.SubtreeRoot != ""
+	subtreeTruncated := false
+	if subtreeSet {
+		if s.containment == nil {
+			return ResourcesResponse{}, ErrContainmentUnavailable
+		}
+		ids, truncated, cerr := s.containment.Descendants(ctx, q.SubtreeRoot, ResourceMaxSubtreeIDs)
+		if cerr != nil {
+			return ResourcesResponse{}, ErrContainmentUnavailable
+		}
+		subtreeIDs = ids
+		subtreeTruncated = truncated
+	}
+
+	filter := inventory.ListFilter{
 		Kind:   q.Kind,
+		Kinds:  q.Kinds,
 		Domain: q.Domain,
 		Roles:  q.Roles,
 		Query:  q.Query,
 		Limit:  limit,
 		Cursor: q.Cursor,
-	})
+	}
+	if subtreeSet {
+		filter.ResourceIDs = subtreeIDs
+	}
+	items, nextCursor, hasMore, err := s.inventory.List(ctx, filter)
 	if err != nil {
 		return ResourcesResponse{}, err
 	}
@@ -224,7 +266,7 @@ func (s *ResourceService) Build(ctx context.Context, q ResourceQuery) (Resources
 	}
 	// A bounded page is not the population: the inventory dimension is partial
 	// whenever more rows exist behind the cursor.
-	if hasMore {
+	if hasMore || subtreeTruncated {
 		resp.Completeness.Inventory = CompletenessPartial
 	}
 

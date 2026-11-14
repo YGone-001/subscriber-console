@@ -80,7 +80,16 @@ no network access, so it is unit-testable and cannot invent data:
 - `applyResolvedNFTypes(items, targets)` — applies the server-derived NF type.
 - `summarizeOperational(items, hasMore, sourcesComplete)` — the published counts.
 - `groupByDomain(items, ...)` — canonical domain grouping.
-- `buildResourceTree(items, edges)` — hierarchy or labelled virtual grouping.
+- `buildResourceTree(items, edges, topology, pageLimited)` — hierarchy, a
+  labelled virtual grouping, or an explicit page-scoped grouping when the
+  inventory read is cursor-limited.
+
+The network-element view reads its hierarchy from
+`GET /api/operations/containment`, which composes up to 2000 structural
+Inventory nodes with up to 5000 active `contains` edges. Selecting a real node
+adds `subtreeRoot` to the resource projection; the server resolves the
+descendant set and filters the whole population, not just the loaded page. A
+reached bound is reported as partial and never as absence of containment.
 - `cpuView`, `memoryView`, `resourceMetric` — measurement-semantics accessors.
 
 ## 5. Health and lifecycle separation
@@ -139,6 +148,11 @@ appear in the hierarchy.
 separately; the combined `registered` value is a count of managed NF records, not
 a count of running instances. Instance presence is never inferred from process
 names.
+
+The network-element overview defaults to the operational population: NF
+instances plus standalone network elements. Logical NFs and all Inventory
+resources are explicit population options; interfaces, IP addresses and services
+are never counted as network elements.
 
 **Unresolved versus unmonitored.** A resource may only be reported as unmonitored
 when an authoritative association lookup for that resource completed and returned

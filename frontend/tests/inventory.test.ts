@@ -8,6 +8,10 @@ import {
   buildUpdateResourceRequest,
 } from '../src/features/inventory/inventory-builders';
 import {
+  inventoryPopulationKinds,
+  readInventoryPopulation,
+} from '../src/features/inventory/inventory-view';
+import {
   findSensitiveAttributeKey,
   validateAttributes,
   validateLabelKey,
@@ -16,6 +20,16 @@ import {
   validateMachineName,
   validateManagementEndpoints,
 } from '../src/features/inventory/inventory-validation';
+
+test('inventory population keeps instances and logical NFs separate', () => {
+  assert.equal(readInventoryPopulation(undefined), 'operational');
+  assert.equal(readInventoryPopulation('logical'), 'logical');
+  assert.equal(readInventoryPopulation('all'), 'all');
+  assert.equal(readInventoryPopulation('hosts'), 'operational');
+  assert.deepEqual(inventoryPopulationKinds('operational'), ['network_function_instance', 'network_element']);
+  assert.deepEqual(inventoryPopulationKinds('logical'), ['network_function']);
+  assert.deepEqual(inventoryPopulationKinds('all'), []);
+});
 
 test('inventory validation: machine name rules', () => {
   assert.equal(validateMachineName('host-01'), null);

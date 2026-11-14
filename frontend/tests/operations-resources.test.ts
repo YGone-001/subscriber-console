@@ -22,6 +22,7 @@ import {
   type OperationsResourcesResponse,
 } from '../src/features/operations/operations-resources';
 import { unmanagedComponents } from '../src/features/inventory/NetworkElementView';
+import { toContainmentResources } from '../src/features/operations/use-containment';
 import type { RuntimeComponent } from '../src/features/runtime/runtime-types';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
@@ -67,6 +68,18 @@ function response(resources: OperationsResourceDto[], overrides: Partial<Operati
   };
 }
 
+test('containment resources map to the same presentation model', () => {
+  const mapped = toContainmentResources([
+    { resourceId: 'r-1', name: 'amf-1', domain: '5gc', kind: 'network_function_instance', role: 'amf', lifecycleState: 'active' },
+    { resourceId: 'r-2', name: 'smf', domain: '5gc', kind: 'network_function', lifecycleState: 'active' },
+  ]);
+  assert.equal(mapped[0].isInstance, true);
+  assert.equal(mapped[0].isNetworkFunction, true);
+  assert.equal(mapped[0].typeLabel, 'amf');
+  assert.equal(mapped[1].isInstance, false);
+  assert.equal(mapped[1].isNetworkFunction, true);
+});
+
 /* ------------------------------------------------------------- request -- */
 
 test('the projection request is bounded and only carries declared filters', () => {
@@ -88,6 +101,23 @@ test('the projection request is bounded and only carries declared filters', () =
   assert.ok(filtered.includes('kind=network_function'));
   assert.ok(filtered.includes('monitoring=monitored'));
   assert.ok(filtered.includes('roles=smf%2Cpcf'), 'roles are sent as one bounded list');
+
+  const population = operationsResourcesPath({
+    kinds: ['network_function_instance', 'network_element'],
+  });
+  assert.ok(population.includes('kinds=network_function_instance%2Cnetwork_element'));
+
+  const explicitKind = operationsResourcesPath({
+    kind: 'host',
+    kinds: ['network_function_instance', 'network_element'],
+  });
+  assert.ok(explicitKind.includes('kind=host'));
+  assert.ok(!explicitKind.includes('kinds='), 'kind and kinds must never be sent together');
+
+  const subtree = operationsResourcesPath({
+    subtreeRoot: 'aaaaaaaa-0001-4001-8001-000000000001',
+  });
+  assert.ok(subtree.includes('subtreeRoot=aaaaaaaa-0001-4001-8001-000000000001'));
   assert.ok(filtered.includes('cursor=abc'));
 });
 
@@ -241,8 +271,8 @@ test('the network-element view no longer assembles the join in the browser', () 
 
 test('the card wall and the table are mutually exclusive', () => {
   const source = read('../src/features/inventory/NetworkElementView.tsx');
-  assert.match(source, /presentation === 'cards' \? \(/, 'cards must be a separate branch');
-  const cardsIndex = source.indexOf("presentation === 'cards' ? (");
+  assert.match(source, /presentation === 'cards'/, 'cards must be a separate branch');
+  const cardsIndex = source.indexOf("presentation === 'cards'");
   const tableIndex = source.indexOf('<table className={styles.neTable}>');
   assert.ok(tableIndex > cardsIndex, 'the table must live in the non-cards branch');
   assert.ok(!source.includes('<NetworkElementCards items={visibleItems} />\n            </div>'), 'cards are never stacked under the table');

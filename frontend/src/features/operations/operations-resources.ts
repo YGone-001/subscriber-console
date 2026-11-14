@@ -88,6 +88,10 @@ export type OperationsResourceQuery = {
   q?: string;
   domain?: string;
   kind?: string;
+  /** Additive multi-kind population filter; mutually exclusive with kind. */
+  kinds?: string[];
+  /** Server-resolved declared containment subtree root. */
+  subtreeRoot?: string;
   monitoring?: string;
   roles?: string[];
   cursor?: string;
@@ -102,6 +106,8 @@ export function operationsResourcesPath(query: OperationsResourceQuery = {}): st
   if (query.q) params.set('q', query.q);
   if (query.domain) params.set('domain', query.domain);
   if (query.kind) params.set('kind', query.kind);
+  else if (query.kinds?.length) params.set('kinds', query.kinds.join(','));
+  if (query.subtreeRoot) params.set('subtreeRoot', query.subtreeRoot);
   if (query.monitoring) params.set('monitoring', query.monitoring);
   if (query.roles?.length) params.set('roles', query.roles.join(','));
   if (query.cursor) params.set('cursor', query.cursor);

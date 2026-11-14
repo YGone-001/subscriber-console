@@ -129,6 +129,15 @@ func TestResourcesHandlerRequiresCoreReadAndRejectsInvalidQuery(t *testing.T) {
 	if recorder := requestResources(handler, "/api/operations/resources?roles=smf,,amf", "viewer"); recorder.Code != http.StatusBadRequest {
 		t.Fatalf("malformed roles status = %d, want %d", recorder.Code, http.StatusBadRequest)
 	}
+	if recorder := requestResources(handler, "/api/operations/resources?kinds=host,,network_element", "viewer"); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("malformed kinds status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	if recorder := requestResources(handler, "/api/operations/resources?kinds=not_a_kind", "viewer"); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("unknown kind status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	if recorder := requestResources(handler, "/api/operations/resources?kind=host&kinds=host", "viewer"); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("kind+kinds status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
 	if inventoryReader.calls != 0 {
 		t.Fatalf("invalid requests reached inventory reader %d times, want 0", inventoryReader.calls)
 	}
@@ -152,6 +161,23 @@ func TestResourcesHandlerServesBoundedProjectionToViewer(t *testing.T) {
 	}
 	if inventoryReader.lastFilter.Limit != 1 {
 		t.Fatalf("inventory limit = %d, want 1", inventoryReader.lastFilter.Limit)
+	}
+}
+
+func TestResourcesHandlerForwardsBoundedKindPopulation(t *testing.T) {
+	inventoryReader := &fakeInventory{}
+	handler := NewResourceHandler(newService(inventoryReader, &fakeHealth{}, nil), stubLimiter{}, nil)
+
+	recorder := requestResources(handler, "/api/operations/resources?kinds=network_function_instance,network_element,network_function_instance", "viewer")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("kind population status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if inventoryReader.lastFilter.Kind != "" {
+		t.Fatalf("single kind must stay empty when kinds is used: %q", inventoryReader.lastFilter.Kind)
+	}
+	want := []string{"network_function_instance", "network_element"}
+	if got := inventoryReader.lastFilter.Kinds; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("kinds = %#v, want %#v", got, want)
 	}
 }
 

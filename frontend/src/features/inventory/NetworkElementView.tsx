@@ -43,7 +43,7 @@ import {
   type TreeNode,
   type TreeMode,
 } from '../operations/operational-model';
-import { useBoundedEdges } from '../operations/use-bounded-edges';
+import { toContainmentResources, useContainment } from '../operations/use-containment';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { INVENTORY_URL_KEYS } from '../operations/inventory-url-keys';
@@ -56,6 +56,11 @@ import {
 } from '../operations/operations-resources';
 import type { OperationsSummaryResponse } from '../operations/operations-summary';
 import { NetworkElementCards } from './NetworkElementCards';
+import {
+  inventoryPopulationKinds,
+  readInventoryPopulation,
+  type InventoryPopulation,
+} from './inventory-view';
 import { ResourceDetailDrawer } from './ResourceDetailDrawer';
 import type { RuntimeComponent, RuntimeObservations } from '../runtime/runtime-types';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
@@ -110,15 +115,6 @@ function completenessLabel(value: DimensionCompleteness, t: (key: string) => str
 
 function treeModeLabel(mode: TreeMode, t: (key: string) => string): string {
   return t(`ops_tree_mode_${mode}`);
-}
-
-function findNode(nodes: TreeNode[], id: string): TreeNode | null {
-  for (const node of nodes) {
-    if (node.id === id) return node;
-    const child = findNode(node.children, id);
-    if (child) return child;
-  }
-  return null;
 }
 
 /** Unmanaged processes: verified, running, and with no Inventory resource. */
@@ -207,6 +203,7 @@ export default function NetworkElementView({ presentation = 'table' }: { present
   const domain = url.filters.domain ?? '';
   const kind = url.filters.kind ?? '';
   const monitoring = (url.filters.monitoring ?? '') as MonitoringFilter;
+  const population = readInventoryPopulation(url.filters.population);
   const selectedNodeId = url.filters.node ?? '';
 
   const [searchInput, setSearchInput] = useState(searchQuery);
@@ -218,21 +215,32 @@ export default function NetworkElementView({ presentation = 'table' }: { present
     setSearchInput(searchQuery);
   }, [searchQuery]);
 
+  /* A real Inventory node becomes a server-side subtree filter. Virtual
+   * domain groups are handled by the domain filter instead. */
+  const subtreeRoot = selectedNodeId
+    && !selectedNodeId.startsWith('virtual:')
+    && !selectedNodeId.startsWith(UNMANAGED_GROUP_ID)
+    && !selectedNodeId.startsWith('unmanaged:')
+    ? selectedNodeId
+    : undefined;
+
   const query = useMemo(
     () => operationsResourcesPath({
       q: searchQuery || undefined,
       domain: domain || undefined,
       kind: kind || undefined,
+      kinds: kind ? undefined : inventoryPopulationKinds(population),
+      subtreeRoot,
       monitoring: monitoring || undefined,
       cursor: url.cursor,
       limit: OPERATIONS_RESOURCE_LIMIT,
     }),
-    [searchQuery, domain, kind, monitoring, url.cursor],
+    [searchQuery, domain, kind, population, subtreeRoot, monitoring, url.cursor],
   );
 
   const resourcesRead = useRead<OperationsResourcesResponse>(query);
   const summaryRead = useRead<OperationsSummaryResponse>('/api/operations/summary?sections=inventory,health');
-  const containment = useBoundedEdges({ relationshipType: 'contains' });
+  const treeRead = useContainment();
   const runtimeRead = useRead<RuntimeObservations>('/api/runtime/observations');
   const runtimeStream = useRuntimeStream();
   const runtimeData = resolveRuntimeObservations(runtimeStream, runtimeRead.data);
@@ -241,8 +249,8 @@ export default function NetworkElementView({ presentation = 'table' }: { present
     void resourcesRead.mutate();
     void summaryRead.mutate();
     void runtimeRead.mutate();
-    containment.refresh();
-  }, [resourcesRead, summaryRead, runtimeRead, containment]);
+    void treeRead.mutate();
+  }, [resourcesRead, summaryRead, runtimeRead, treeRead]);
 
   // UX-1: the page frame owns the only visible refresh entry.
   useRegisterOperationsRefresh('inventory:network', refresh);
@@ -257,14 +265,26 @@ export default function NetworkElementView({ presentation = 'table' }: { present
   const items = useMemo(() => adaptOperationsResources(resourcesRead.data), [resourcesRead.data]);
 
   const serverCompleteness = resourcesRead.data?.completeness;
+  const treeCoverage: DimensionCompleteness = treeRead.data?.coverage
+    ?? (treeRead.error ? 'unavailable' : 'partial');
   const completeness: CompletenessReport = useMemo(
-    () => adaptCompleteness(serverCompleteness, containment.coverage, Boolean(resourcesRead.error)),
-    [serverCompleteness, containment.coverage, resourcesRead.error],
+    () => adaptCompleteness(serverCompleteness, treeCoverage, Boolean(resourcesRead.error)),
+    [serverCompleteness, treeCoverage, resourcesRead.error],
   );
 
+  /* The tree describes the population, not one cursor page. Until the
+   * containment projection arrives (or if it fails), fall back to explicit
+   * page-scoped domain groups instead of claiming that containment is absent. */
+  const treeResources = useMemo(
+    () => toContainmentResources(treeRead.data?.resources),
+    [treeRead.data],
+  );
+  const treeReady = Boolean(treeRead.data) && !treeRead.error;
   const tree = useMemo(
-    () => buildResourceTree(items, containment.edges, containment.coverage),
-    [items, containment.edges, containment.coverage],
+    () => (treeReady
+      ? buildResourceTree(treeResources, treeRead.data?.edges ?? [], treeCoverage, false)
+      : buildResourceTree(items, [], 'unavailable', true)),
+    [treeReady, treeResources, treeRead.data, treeCoverage, items],
   );
 
   const unmanaged = useMemo(
@@ -294,26 +314,19 @@ export default function NetworkElementView({ presentation = 'table' }: { present
     return [...tree.nodes, group];
   }, [tree.nodes, unmanaged, t]);
 
-  const selectedNode = useMemo(
-    () => (selectedNodeId ? findNode(treeNodes, selectedNodeId) : null),
-    [treeNodes, selectedNodeId],
-  );
-
   const unmanagedSelection = selectedNodeId.startsWith(UNMANAGED_GROUP_ID) || selectedNodeId.startsWith('unmanaged:');
   const unmanagedComponentId = selectedNodeId.startsWith('unmanaged:')
     ? selectedNodeId.slice('unmanaged:'.length)
     : null;
 
-  const selectedResourceIds = useMemo(
-    () => (selectedNode && !unmanagedSelection ? treeResourceIds(selectedNode) : null),
-    [selectedNode, unmanagedSelection],
-  );
-
   const visibleItems = useMemo(() => {
-    if (!selectedResourceIds) return items;
-    const allowed = new Set(selectedResourceIds);
-    return items.filter((item) => allowed.has(item.resourceId));
-  }, [items, selectedResourceIds]);
+    /* Selecting the unmanaged group is a mode, not a filter over inventory
+     * rows: it must never leave the full inventory table underneath it.
+     * Declared tree selection is filtered by subtreeRoot on the server, so the
+     * table must not re-filter the already bounded page. */
+    if (unmanagedSelection) return [];
+    return items;
+  }, [items, unmanagedSelection]);
 
   const visibleUnmanaged = useMemo(() => {
     if (!unmanagedComponentId) return unmanaged;
@@ -341,10 +354,14 @@ export default function NetworkElementView({ presentation = 'table' }: { present
   }, [searchQuery, domain, kind, monitoring, selectedNodeId, setFilterNode]);
 
   const selectNode = (node: TreeNode) => {
+    if (node.kind === 'domain_group') {
+      url.setFilters({ node: null, domain: node.domain });
+      return;
+    }
     url.setFilter('node', node.id === selectedNodeId ? '' : node.id);
   };
 
-  const setNetworkFilter = (key: 'q' | 'domain' | 'kind' | 'monitoring', value: string) => {
+  const setNetworkFilter = (key: 'q' | 'domain' | 'kind' | 'monitoring' | 'population', value: string) => {
     // Keep the filter, tree selection and cursor transition atomic. A previous
     // tree node is scoped to the old filter set and must not survive in history.
     url.setFilters({ [key]: value, node: null });
@@ -390,16 +407,19 @@ export default function NetworkElementView({ presentation = 'table' }: { present
   const inventorySection = summaryRead.data?.inventory;
   const healthSection = summaryRead.data?.health;
   const inventoryCounts = inventorySection?.completeness === 'complete' ? inventorySection.counts : undefined;
-  const totalResources = inventoryCounts ? inventoryCounts.total : null;
-  const networkFunctions = inventoryCounts
-    ? (inventoryCounts.byKind?.network_function ?? 0) + (inventoryCounts.byKind?.network_function_instance ?? 0)
-    : null;
+  const instances = inventoryCounts ? (inventoryCounts.byKind?.network_function_instance ?? 0) : null;
+  const networkElements = inventoryCounts ? (inventoryCounts.byKind?.network_element ?? 0) : null;
+  const logicalNetworkFunctions = inventoryCounts ? (inventoryCounts.byKind?.network_function ?? 0) : null;
   const configuredTargets = healthSection?.completeness === 'complete' ? (healthSection.targets?.configured ?? null) : null;
   const failedTargets = healthSection?.completeness === 'complete' ? (healthSection.targets?.failed ?? null) : null;
 
+  /* Logical NFs and instances are different levels: one logical NF can own
+   * several instances. They are shown as separate cards and are never summed
+   * into a single "network element" total. */
   const kpiItems = [
-    { key: 'resources', label: t('ops_kpi_resources'), value: totalResources },
-    { key: 'network-functions', label: t('ops_kpi_network_functions'), value: networkFunctions },
+    { key: 'instances', label: t('ops_kpi_instances'), value: instances },
+    { key: 'network-elements', label: t('ops_kpi_network_elements'), value: networkElements },
+    { key: 'logical-nfs', label: t('ops_kpi_logical_nfs'), value: logicalNetworkFunctions },
     { key: 'monitored', label: t('ops_kpi_monitored'), value: configuredTargets },
     { key: 'failed', label: t('ops_kpi_failed'), value: failedTargets },
   ].map((item) => ({
@@ -413,7 +433,7 @@ export default function NetworkElementView({ presentation = 'table' }: { present
     <div className={styles.neView}>
       <MetricStrip
         variant="cards"
-        columns={4}
+        columns={5}
         ariaLabel={t('ops_overview_title')}
         items={kpiItems}
       />
@@ -443,6 +463,20 @@ export default function NetworkElementView({ presentation = 'table' }: { present
             {OPERATIONAL_DOMAINS.map((value) => (
               <option key={value} value={value}>{t(`ops_domain_${value}`)}</option>
             ))}
+          </select>
+        </label>
+
+        <label className={styles.neFilter}>
+          <span>{t('ops_filter_population')}</span>
+          <select
+            value={population}
+            onChange={(event) => setNetworkFilter('population', event.target.value as InventoryPopulation)}
+            disabled={Boolean(kind)}
+            title={kind ? t('ops_population_overridden') : undefined}
+          >
+            <option value="operational">{t('ops_population_operational')}</option>
+            <option value="logical">{t('ops_population_logical')}</option>
+            <option value="all">{t('ops_population_all')}</option>
           </select>
         </label>
 
@@ -522,7 +556,7 @@ export default function NetworkElementView({ presentation = 'table' }: { present
             <LoadingRows rows={6} />
           ) : failed ? (
             <EmptyState icon={<Server size={40} />} title={t('ops_error_title')} description={t('ops_error_body')} />
-          ) : presentation === 'cards' ? (
+          ) : presentation === 'cards' && !unmanagedSelection ? (
             visibleItems.length === 0 && !unmanagedSelection ? (
               <EmptyState icon={<Server size={40} />} title={t('ops_empty_title')} description={t('ops_empty_body')} />
             ) : (
@@ -627,8 +661,7 @@ export default function NetworkElementView({ presentation = 'table' }: { present
 
           <p className={styles.footnote}>{t('ops_table_note')}</p>
 
-          {presentation === 'table' ? (
-            <div className={styles.pager}>
+          <div className={styles.pager}>
               <button type="button" onClick={goFirstPage} disabled={!url.cursor}>
                 {t('ops_pager_first')}
               </button>
@@ -646,7 +679,6 @@ export default function NetworkElementView({ presentation = 'table' }: { present
                 {t('ops_next_page')}
               </button>
             </div>
-          ) : null}
         </div>
       </div>
 

@@ -33,7 +33,15 @@ type CursorData struct {
 
 // ListFilter contains query parameters for listing resources.
 type ListFilter struct {
-	Kind           string
+	Kind string
+	// Kinds is an additive, bounded multi-kind filter. It exists for
+	// operational populations such as "NF instances + network elements"; an
+	// empty slice keeps the single-kind and unfiltered behaviour unchanged.
+	Kinds []string
+	// ResourceIDs restricts the query to an explicit set. A non-nil empty
+	// slice matches nothing; nil keeps the filter off. Used by the server-side
+	// containment subtree projection.
+	ResourceIDs    []string
 	Domain         string
 	LifecycleState string
 	Query          string
@@ -173,6 +181,11 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]Resource, *
 	filterDoc := bson.M{}
 	if filter.Kind != "" {
 		filterDoc["kind"] = filter.Kind
+	} else if len(filter.Kinds) > 0 {
+		filterDoc["kind"] = bson.M{"$in": filter.Kinds}
+	}
+	if filter.ResourceIDs != nil {
+		filterDoc["_id"] = bson.M{"$in": filter.ResourceIDs}
 	}
 	if filter.Domain != "" {
 		filterDoc["domain"] = filter.Domain

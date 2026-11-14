@@ -86,6 +86,14 @@ func ValidateKind(kind string) error {
 	return fmt.Errorf("invalid resource kind %q; must be one of allowed canonical kinds", kind)
 }
 
+// ValidateResourceID checks the canonical UUID shape used by Inventory rows.
+func ValidateResourceID(id string) error {
+	if !uuidRegex.MatchString(id) {
+		return fmt.Errorf("invalid resource id %q", id)
+	}
+	return nil
+}
+
 // ValidateDomain checks if domain is one of the 10 canonical domains.
 func ValidateDomain(domain string) error {
 	for _, d := range CanonicalDomains {

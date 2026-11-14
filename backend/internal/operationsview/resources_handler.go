@@ -17,6 +17,7 @@ import (
 const (
 	ErrCodeInvalidMonitoring = "INVALID_MONITORING_FILTER"
 	ErrCodeInvalidRoles      = "INVALID_ROLES"
+	ErrCodeInvalidKinds      = "INVALID_KINDS_FILTER"
 )
 
 // resourceAllowedParams is the complete accepted query vocabulary. Anything
@@ -24,13 +25,15 @@ const (
 // applied filter.
 func resourceAllowedParams() map[string]bool {
 	return map[string]bool{
-		"q":          true,
-		"domain":     true,
-		"kind":       true,
-		"monitoring": true,
-		"roles":      true,
-		"cursor":     true,
-		"limit":      true,
+		"q":           true,
+		"domain":      true,
+		"kind":        true,
+		"kinds":       true,
+		"subtreeRoot": true,
+		"monitoring":  true,
+		"roles":       true,
+		"cursor":      true,
+		"limit":       true,
 	}
 }
 
@@ -43,6 +46,36 @@ func validMonitoringFilters() map[string]bool {
 		MonitoringUnknown:     true,
 		MonitoringStale:       true,
 	}
+}
+
+// parseKinds validates, de-duplicates and bounds the multi-kind population
+// filter. The filter is a set, so duplicate values are folded rather than
+// rejected; malformed, empty or over-limit input is rejected.
+func parseKinds(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	seen := make(map[string]bool)
+	kinds := make([]string, 0, ResourceMaxKinds)
+	for _, part := range strings.Split(raw, ",") {
+		kind := strings.TrimSpace(part)
+		if kind == "" {
+			return nil, errors.New("kinds must not contain an empty value")
+		}
+		if err := inventory.ValidateKind(kind); err != nil {
+			return nil, err
+		}
+		if seen[kind] {
+			continue
+		}
+		seen[kind] = true
+		kinds = append(kinds, kind)
+	}
+	if len(kinds) > ResourceMaxKinds {
+		return nil, errors.New("too many kinds requested")
+	}
+	return kinds, nil
 }
 
 // parseRoles validates, de-duplicates and bounds the canonical role filter.
@@ -148,6 +181,24 @@ func (h *ResourceHandler) Resources(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	subtreeRoot := strings.TrimSpace(q.Get("subtreeRoot"))
+	if subtreeRoot != "" {
+		if err := inventory.ValidateResourceID(subtreeRoot); err != nil {
+			response.BadRequest(w, err.Error(), "INVALID_SUBTREE_ROOT")
+			return
+		}
+	}
+
+	kinds, err := parseKinds(q.Get("kinds"))
+	if err != nil {
+		response.BadRequest(w, err.Error(), ErrCodeInvalidKinds)
+		return
+	}
+	if kind != "" && len(kinds) > 0 {
+		response.BadRequest(w, "kind and kinds are mutually exclusive", ErrCodeInvalidKinds)
+		return
+	}
+
 	domain := q.Get("domain")
 	if domain != "" {
 		if err := inventory.ValidateDomain(domain); err != nil {
@@ -179,15 +230,21 @@ func (h *ResourceHandler) Resources(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := h.service.Build(r.Context(), ResourceQuery{
-		Query:      strings.TrimSpace(q.Get("q")),
-		Domain:     domain,
-		Kind:       kind,
-		Monitoring: monitoring,
-		Roles:      roles,
-		Cursor:     strings.TrimSpace(q.Get("cursor")),
-		Limit:      limit,
+		Query:       strings.TrimSpace(q.Get("q")),
+		Domain:      domain,
+		Kind:        kind,
+		Kinds:       kinds,
+		SubtreeRoot: subtreeRoot,
+		Monitoring:  monitoring,
+		Roles:       roles,
+		Cursor:      strings.TrimSpace(q.Get("cursor")),
+		Limit:       limit,
 	})
 	if err != nil {
+		if errors.Is(err, ErrContainmentUnavailable) {
+			response.Error(w, http.StatusServiceUnavailable, "declared containment is unavailable", "CONTAINMENT_UNAVAILABLE")
+			return
+		}
 		response.BadRequest(w, err.Error(), "INVALID_CURSOR")
 		return
 	}

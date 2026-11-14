@@ -535,9 +535,11 @@ export type TopologyCoverage = 'complete' | 'partial' | 'unavailable';
  */
 export type TreeMode =
   | 'declared'
+  | 'declared_partial'
   | 'virtual_no_containment'
   | 'virtual_partial'
-  | 'virtual_unavailable';
+  | 'virtual_unavailable'
+  | 'virtual_page_scope';
 
 export type TreeNode = {
   id: string;
@@ -568,7 +570,14 @@ export function buildResourceTree(
   items: OperationalResource[],
   edges: unknown,
   topology: TopologyCoverage = 'complete',
+  pageLimited = false,
 ): { nodes: TreeNode[]; mode: TreeMode } {
+  /* A page of a cursor stream is not the population. Never infer a missing
+   * containment relationship from it: group the loaded page by domain and say
+   * so explicitly. */
+  if (pageLimited) {
+    return { nodes: virtualDomainNodes(items), mode: 'virtual_page_scope' };
+  }
   const byId = new Map(items.map((item) => [item.resourceId, item]));
   const childrenOf = new Map<string, string[]>();
   let containsCount = 0;
@@ -639,7 +648,7 @@ export function buildResourceTree(
     const node = build(item.resourceId, new Set());
     if (node) nodes.push(node);
   }
-  return { nodes, mode: 'declared' };
+  return { nodes, mode: topology === 'complete' ? 'declared' : 'declared_partial' };
 }
 
 function virtualDomainNodes(items: OperationalResource[]): TreeNode[] {

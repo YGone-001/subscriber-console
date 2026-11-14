@@ -324,6 +324,30 @@ test('operations: no containment falls back to a labelled virtual domain groupin
   assert.deepEqual(tree.nodes.map((node) => node.id).sort(), ['virtual:5gc', 'virtual:ims']);
 });
 
+test('operations: a cursor page never claims a complete containment model', () => {
+  const resources = [
+    resource('host-0002', { kind: 'host', name: 'host-2' }),
+    resource('nfi-0003', { kind: 'network_function_instance', name: 'amf-3' }),
+  ];
+  const tree = buildResourceTree(operationalItems(resources), [
+    { relationshipType: 'contains', fromResourceId: 'host-0002', toResourceId: 'nfi-0003', lifecycleState: 'active' },
+  ], 'complete', true);
+  assert.equal(tree.mode, 'virtual_page_scope');
+  assert.ok(tree.nodes.every((node) => node.virtual));
+  assert.deepEqual(tree.nodes.map((node) => node.id), ['virtual:5gc']);
+});
+
+test('operations: a bounded edge read is labelled partial even when edges exist', () => {
+  const resources = [
+    resource('host-0002', { kind: 'host', name: 'host-2' }),
+    resource('nfi-0003', { kind: 'network_function_instance', name: 'amf-3' }),
+  ];
+  const tree = buildResourceTree(operationalItems(resources), [
+    { relationshipType: 'contains', fromResourceId: 'host-0002', toResourceId: 'nfi-0003', lifecycleState: 'active' },
+  ], 'partial');
+  assert.equal(tree.mode, 'declared_partial');
+});
+
 test('operations: retired edges and retired resources are ignored for containment', () => {
   const resources = [
     resource('host-0002', { kind: 'host', name: 'host-2' }),
@@ -446,5 +470,5 @@ test('operations: topology coverage selects the correct hierarchy mode', () => {
     [{ relationshipType: 'contains', fromResourceId: 'parent-0001', toResourceId: 'child-0001', lifecycleState: 'active' }],
     'partial',
   );
-  assert.equal(declared.mode, 'declared');
+  assert.equal(declared.mode, 'declared_partial', 'a bounded edge read stays declared but is labelled partial');
 });

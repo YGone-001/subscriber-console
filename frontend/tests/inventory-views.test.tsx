@@ -60,8 +60,10 @@ test('the default inventory route is the network-element overview', () => {
   const markup = renderInventory('/inventory');
   assert.ok(markup.includes('data-density="table"'), 'the density switch must expose the table');
   assert.ok(markup.includes('aria-pressed="true"'), 'the active density must be pressed');
-  assert.ok(markup.includes('Resources'), 'the KPI strip must render from the summary projection');
-  assert.ok(markup.includes('Network functions'), 'the network-function KPI must be explicit');
+  assert.ok(markup.includes('NF instances'), 'the instance KPI must render from the summary projection');
+  assert.ok(markup.includes('Network elements'), 'the standalone NE KPI must be explicit');
+  assert.ok(markup.includes('Logical NFs'), 'logical NFs must be a separate level, never summed with instances');
+  assert.ok(markup.includes('Running instances'), 'the default population must be the operational one');
 });
 
 test('density is a presentation of the same projection', () => {
