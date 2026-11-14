@@ -548,6 +548,14 @@ export type TreeNode = {
   domain: DomainKey;
   resourceId: string | null;
   children: TreeNode[];
+  /**
+   * Number of direct declared contains children. The server reports this
+   * exactly, so the tree can offer an expand affordance before the children
+   * themselves are loaded.
+   */
+  childCount: number;
+  /** True once this node's children have been loaded. */
+  childrenLoaded: boolean;
   /** True when this node exists only because of the presentation grouping. */
   virtual: boolean;
 };
@@ -632,6 +640,8 @@ export function buildResourceTree(
       domain: resource.domain,
       resourceId: resource.resourceId,
       children,
+      childCount: children.length,
+      childrenLoaded: true,
       virtual: false,
     };
   };
@@ -668,6 +678,8 @@ function virtualDomainNodes(items: OperationalResource[]): TreeNode[] {
     domain: group.domain,
     resourceId: null,
     virtual: true,
+    childCount: group.resources.length,
+    childrenLoaded: true,
     children: group.resources.map((resource) => ({
       id: resource.resourceId,
       label: resource.name,
@@ -675,6 +687,8 @@ function virtualDomainNodes(items: OperationalResource[]): TreeNode[] {
       domain: resource.domain,
       resourceId: resource.resourceId,
       children: [],
+      childCount: 0,
+      childrenLoaded: true,
       virtual: false,
     })),
   }));

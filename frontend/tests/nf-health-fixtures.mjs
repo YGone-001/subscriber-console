@@ -1026,6 +1026,8 @@ function handleApi(req, res, url, context) {
       generatedAt: '2026-10-05T12:00:00Z',
       coverage: 'complete',
       truncated: false,
+      unlinkedCount: 0,
+      unlinkedResources: [],
       resources: [],
       edges: [],
     },

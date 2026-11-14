@@ -36,14 +36,13 @@ import {
   memoryView,
   OPERATIONAL_DOMAINS,
   operationalStateToken,
-  treeResourceIds,
   type CompletenessReport,
   type DimensionCompleteness,
   type DomainKey,
   type TreeNode,
   type TreeMode,
 } from '../operations/operational-model';
-import { toContainmentResources, useContainment } from '../operations/use-containment';
+import { useContainmentTree } from '../operations/use-containment';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { INVENTORY_URL_KEYS } from '../operations/inventory-url-keys';
@@ -132,21 +131,35 @@ function TreeBranch({
   selectedId,
   completeness,
   onSelect,
+  childrenOf,
+  loadChildren,
 }: {
   node: TreeNode;
   depth: number;
   selectedId: string;
   completeness: DimensionCompleteness;
   onSelect: (node: TreeNode) => void;
+  childrenOf: (resourceId: string) => TreeNode[];
+  loadChildren: (resourceId: string) => void;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(depth < 2);
-  const hasChildren = node.children.length > 0;
+  /* A node may declare children that are not loaded yet. The expand affordance
+   * follows the server-reported child count, not the loaded list. */
+  const loadedChildren = node.resourceId ? childrenOf(node.resourceId) : node.children;
+  const hasChildren = node.childCount > 0;
   const selected = selectedId === node.id;
   // "N loaded · partial": a bounded page count is never presented as a total.
-  const loaded = node.children.length > 0
-    ? node.children.reduce((sum, child) => sum + Math.max(treeResourceIds(child).length, 1), 0)
-    : Math.max(treeResourceIds(node).length, 1);
+  const loaded = node.childCount;
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    /* Expanding a node loads its children the first time it is opened. */
+    if (next && hasChildren && node.resourceId && !node.childrenLoaded) {
+      loadChildren(node.resourceId);
+    }
+  };
 
   return (
     <li className={styles.treeItem}>
@@ -157,7 +170,7 @@ function TreeBranch({
             className={styles.treeToggle}
             aria-expanded={open}
             aria-label={`${open ? 'collapse' : 'expand'} ${node.label}`}
-            onClick={() => setOpen((value) => !value)}
+            onClick={toggle}
           >
             {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </button>
@@ -178,18 +191,24 @@ function TreeBranch({
         </button>
       </div>
       {hasChildren && open ? (
-        <ul className={styles.treeList}>
-          {node.children.map((child) => (
-            <TreeBranch
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              selectedId={selectedId}
-              completeness={completeness}
-              onSelect={onSelect}
-            />
-          ))}
-        </ul>
+        loadedChildren.length > 0 ? (
+          <ul className={styles.treeList}>
+            {loadedChildren.map((child) => (
+              <TreeBranch
+                key={child.id}
+                node={child}
+                depth={depth + 1}
+                selectedId={selectedId}
+                completeness={completeness}
+                onSelect={onSelect}
+                childrenOf={childrenOf}
+                loadChildren={loadChildren}
+              />
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.treeCount}>{t('ops_tree_loading_children')}</p>
+        )
       ) : null}
     </li>
   );
@@ -240,7 +259,7 @@ export default function NetworkElementView({ presentation = 'table' }: { present
 
   const resourcesRead = useRead<OperationsResourcesResponse>(query);
   const summaryRead = useRead<OperationsSummaryResponse>('/api/operations/summary?sections=inventory,health');
-  const treeRead = useContainment();
+  const containmentTree = useContainmentTree();
   const runtimeRead = useRead<RuntimeObservations>('/api/runtime/observations');
   const runtimeStream = useRuntimeStream();
   const runtimeData = resolveRuntimeObservations(runtimeStream, runtimeRead.data);
@@ -249,8 +268,8 @@ export default function NetworkElementView({ presentation = 'table' }: { present
     void resourcesRead.mutate();
     void summaryRead.mutate();
     void runtimeRead.mutate();
-    void treeRead.mutate();
-  }, [resourcesRead, summaryRead, runtimeRead, treeRead]);
+    void containmentTree.refresh();
+  }, [resourcesRead, summaryRead, runtimeRead, containmentTree]);
 
   // UX-1: the page frame owns the only visible refresh entry.
   useRegisterOperationsRefresh('inventory:network', refresh);
@@ -265,8 +284,7 @@ export default function NetworkElementView({ presentation = 'table' }: { present
   const items = useMemo(() => adaptOperationsResources(resourcesRead.data), [resourcesRead.data]);
 
   const serverCompleteness = resourcesRead.data?.completeness;
-  const treeCoverage: DimensionCompleteness = treeRead.data?.coverage
-    ?? (treeRead.error ? 'unavailable' : 'partial');
+  const treeCoverage: DimensionCompleteness = containmentTree.coverage;
   const completeness: CompletenessReport = useMemo(
     () => adaptCompleteness(serverCompleteness, treeCoverage, Boolean(resourcesRead.error)),
     [serverCompleteness, treeCoverage, resourcesRead.error],
@@ -275,16 +293,12 @@ export default function NetworkElementView({ presentation = 'table' }: { present
   /* The tree describes the population, not one cursor page. Until the
    * containment projection arrives (or if it fails), fall back to explicit
    * page-scoped domain groups instead of claiming that containment is absent. */
-  const treeResources = useMemo(
-    () => toContainmentResources(treeRead.data?.resources),
-    [treeRead.data],
-  );
-  const treeReady = Boolean(treeRead.data) && !treeRead.error;
+  const treeReady = !containmentTree.error;
   const tree = useMemo(
     () => (treeReady
-      ? buildResourceTree(treeResources, treeRead.data?.edges ?? [], treeCoverage, false)
-      : buildResourceTree(items, [], 'unavailable', true)),
-    [treeReady, treeResources, treeRead.data, treeCoverage, items],
+      ? { nodes: containmentTree.nodes, mode: 'declared' as const }
+      : { nodes: buildResourceTree(items, [], 'unavailable', true).nodes, mode: 'virtual_page_scope' as const }),
+    [treeReady, containmentTree.nodes, items],
   );
 
   const unmanaged = useMemo(
@@ -301,6 +315,8 @@ export default function NetworkElementView({ presentation = 'table' }: { present
       domain: 'unknown' as DomainKey,
       resourceId: null,
       virtual: true,
+      childCount: unmanaged.length,
+      childrenLoaded: true,
       children: unmanaged.map((component) => ({
         id: `unmanaged:${component.componentId}`,
         label: component.displayName,
@@ -309,6 +325,8 @@ export default function NetworkElementView({ presentation = 'table' }: { present
         resourceId: null,
         virtual: true,
         children: [],
+        childCount: 0,
+        childrenLoaded: true,
       })),
     };
     return [...tree.nodes, group];
@@ -540,6 +558,8 @@ export default function NetworkElementView({ presentation = 'table' }: { present
                   selectedId={selectedNodeId}
                   completeness={completeness.overall}
                   onSelect={selectNode}
+                  childrenOf={containmentTree.childrenOf}
+                  loadChildren={containmentTree.loadChildren}
                 />
               ))}
             </ul>

@@ -90,6 +90,20 @@ Inventory nodes with up to 5000 active `contains` edges. Selecting a real node
 adds `subtreeRoot` to the resource projection; the server resolves the
 descendant set and filters the whole population, not just the loaded page. A
 reached bound is reported as partial and never as absence of containment.
+
+The tree is read one level at a time. Without `parentId` the response carries
+the root-level nodes; with `parentId` it carries that node's direct children.
+Every node reports its exact `childCount`, so the tree can offer an expand
+affordance before the next level is fetched. A large hierarchy therefore costs
+one small request plus one request per expanded node, instead of the whole
+graph up front.
+
+The same response carries the exact `unlinkedCount` — the number of non-retired
+NF instances and standalone network elements that no active relationship
+references — together with a bounded `unlinkedResources` sample of the same
+population. Count and list always describe the same set, and the count is never
+inferred from a cursor page. The subtree resolution used by `subtreeRoot` is
+cached for a short TTL and invalidated by any edge write.
 - `cpuView`, `memoryView`, `resourceMetric` — measurement-semantics accessors.
 
 ## 5. Health and lifecycle separation

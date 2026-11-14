@@ -22,7 +22,7 @@ import {
   type OperationsResourcesResponse,
 } from '../src/features/operations/operations-resources';
 import { unmanagedComponents } from '../src/features/inventory/NetworkElementView';
-import { toContainmentResources } from '../src/features/operations/use-containment';
+import { toContainmentNodes, toContainmentResources } from '../src/features/operations/use-containment';
 import type { RuntimeComponent } from '../src/features/runtime/runtime-types';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
@@ -70,14 +70,25 @@ function response(resources: OperationsResourceDto[], overrides: Partial<Operati
 
 test('containment resources map to the same presentation model', () => {
   const mapped = toContainmentResources([
-    { resourceId: 'r-1', name: 'amf-1', domain: '5gc', kind: 'network_function_instance', role: 'amf', lifecycleState: 'active' },
-    { resourceId: 'r-2', name: 'smf', domain: '5gc', kind: 'network_function', lifecycleState: 'active' },
+    { resourceId: 'r-1', name: 'amf-1', domain: '5gc', kind: 'network_function_instance', role: 'amf', lifecycleState: 'active', childCount: 0 },
+    { resourceId: 'r-2', name: 'smf', domain: '5gc', kind: 'network_function', lifecycleState: 'active', childCount: 0 },
   ]);
   assert.equal(mapped[0].isInstance, true);
   assert.equal(mapped[0].isNetworkFunction, true);
   assert.equal(mapped[0].typeLabel, 'amf');
   assert.equal(mapped[1].isInstance, false);
   assert.equal(mapped[1].isNetworkFunction, true);
+});
+
+test('a containment level becomes tree nodes with an exact child count', () => {
+  const nodes = toContainmentNodes([
+    { resourceId: 'r-1', name: 'site-a', domain: '5gc', kind: 'site', lifecycleState: 'active', childCount: 3 },
+  ]);
+  assert.equal(nodes.length, 1);
+  assert.equal(nodes[0].id, 'r-1');
+  assert.equal(nodes[0].childCount, 3, 'the server-reported child count drives the expand affordance');
+  assert.equal(nodes[0].childrenLoaded, false, 'children are not loaded before expansion');
+  assert.equal(nodes[0].children.length, 0);
 });
 
 /* ------------------------------------------------------------- request -- */

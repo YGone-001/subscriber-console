@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"subscriber/internal/audit"
 
@@ -167,11 +168,18 @@ type NeighborFilter struct {
 type Repository struct {
 	edges     *mongo.Collection
 	inventory InventoryResolver
+
+	// descendantsMu guards the short-TTL subtree cache. The cache is keyed by
+	// root resource id and expires after descendantsCacheTTL; a write to any
+	// active contains edge invalidates the whole map because the cache is
+	// small and correctness matters more than hit rate.
+	descendantsMu    sync.RWMutex
+	descendantsCache map[string]descendantsCacheEntry
 }
 
 // NewRepository creates a new topology repository.
 func NewRepository(edges *mongo.Collection, inventory InventoryResolver) *Repository {
-	return &Repository{edges: edges, inventory: inventory}
+	return &Repository{edges: edges, inventory: inventory, descendantsCache: make(map[string]descendantsCacheEntry)}
 }
 
 // NewMongoRepository creates a topology repository bound to the inventory
@@ -272,7 +280,7 @@ func (r *Repository) Create(ctx context.Context, req *CreateEdgeRequest, actor s
 		}
 		return nil, fmt.Errorf("failed to insert topology edge: %w", err)
 	}
-
+	r.invalidateDescendantsCache()
 	return edge, nil
 }
 
@@ -444,6 +452,7 @@ func (r *Repository) Update(ctx context.Context, edgeID string, req *UpdateEdgeR
 	if err != nil {
 		return nil, nil, err
 	}
+	r.invalidateDescendantsCache()
 	return existing, updated, nil
 }
 
@@ -498,6 +507,7 @@ func (r *Repository) Retire(ctx context.Context, edgeID string, req *RetireEdgeR
 	if err != nil {
 		return nil, nil, err
 	}
+	r.invalidateDescendantsCache()
 	return existing, retired, nil
 }
 
