@@ -17,6 +17,7 @@ export type EntryQuery = {
   limit?: number;
   sort?: string;
   order?: string;
+  status?: string;
 };
 
 /** Whether an SWR key identifies a knowledge entry list query. */
@@ -39,6 +40,7 @@ export function buildEntriesPath(query: EntryQuery = {}): string {
   if (typeof query.limit === 'number') params.set('limit', String(query.limit));
   if (query.sort) params.set('sort', query.sort);
   if (query.order) params.set('order', query.order);
+  if (query.status) params.set('status', query.status);
   const suffix = params.toString();
   return suffix ? `/api/knowledge/entries?${suffix}` : '/api/knowledge/entries';
 }
@@ -63,8 +65,13 @@ export function updateEntry(id: string, input: KnowledgeEntryUpdate): Promise<Kn
   return putJson<KnowledgeEntry>(`/api/knowledge/entries/${id}`, input);
 }
 
-export function deleteEntry(id: string, revision: number): Promise<{ deleted: boolean; id: string }> {
-  return deleteJson<{ deleted: boolean; id: string }>(`/api/knowledge/entries/${id}?revision=${revision}`);
+export function deleteEntry(id: string, revision: number, permanent = false): Promise<{ deleted: boolean; id: string }> {
+  const suffix = permanent ? '&permanent=1' : '';
+  return deleteJson<{ deleted: boolean; id: string }>(`/api/knowledge/entries/${id}?revision=${revision}${suffix}`);
+}
+
+export function restoreEntry(id: string, revision: number): Promise<KnowledgeEntry> {
+  return putJson<KnowledgeEntry>(`/api/knowledge/entries/${id}`, { restore: true, expectedRevision: revision });
 }
 
 export function uploadKnowledgeFile(file: File): Promise<KnowledgeUploadResponse> {

@@ -40,11 +40,11 @@ Eight Go registrations (five reads, three mutations):
 | Method + Path | Purpose | Permission |
 |---|---|---|
 | `GET /api/knowledge/meta` | protocol enum, top tags, protocol distribution, total, limits | `core.read` |
-| `GET /api/knowledge/entries` | list/search (`q`, `protocol`, `tag`, `cursor`, `limit`, `sort`, `order`) | `core.read` |
+| `GET /api/knowledge/entries` | list/search (`q`, `protocol`, `tag`, `cursor`, `limit`, `sort`, `order`, `status`) | `core.read` |
 | `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body | `core.read` |
 | `POST /api/knowledge/entries` | create entry | `core.configure` |
-| `PUT /api/knowledge/entries/{entryId}` | update entry (revision CAS) | `core.configure` |
-| `DELETE /api/knowledge/entries/{entryId}?revision=` | delete entry (revision CAS) | `core.configure` |
+| `PUT /api/knowledge/entries/{entryId}` | update entry (revision CAS); `restore:true` revives a soft-deleted entry | `core.configure` |
+| `DELETE /api/knowledge/entries/{entryId}?revision=` | soft-delete entry (revision CAS); `&permanent=1` purges a deleted entry | `core.configure` |
 | `POST /api/knowledge/files` | multipart attachment upload | `core.configure` |
 | `GET /api/knowledge/files/{fileId}` | download; images inline, others attachment; `?download=1` forces download | `core.read` |
 
@@ -110,6 +110,19 @@ fresh from the filtered set.
 6. Trashed bytes are physically purged after `KNOWLEDGE_TRASH_RETENTION_DAYS`
    (default 30, `0` disables cleanup). Trash time is stamped on deletion, so the
    recovery window measures from deletion rather than upload.
+
+## Entry lifecycle
+
+Entries carry a `status` (`active` or `deleted`); legacy documents without a
+status are treated as active. `DELETE` is a soft-delete: it sets
+`status=deleted` and `deletedAt` under revision CAS and retains the document and
+its attachments for recovery. The list defaults to `status=active`;
+`status=deleted` is the recycle bin and `status=all` spans both. A deleted entry
+remains readable via the detail endpoint. `PUT` with `restore:true` (and the
+current revision) flips it back to active. `DELETE?permanent=1` purges a deleted
+entry permanently, releasing its attachments to trash; an active entry must be
+soft-deleted first. Meta aggregates (total, top tags, protocol distribution)
+count active entries only.
 
 ## Frontend
 

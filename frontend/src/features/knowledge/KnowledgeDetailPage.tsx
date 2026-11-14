@@ -11,7 +11,7 @@ import { hasPermission } from '../../lib/permissions';
 import { copyText } from '../../lib/clipboard';
 import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
 import { MarkdownContent } from './components/MarkdownContent';
-import { attachmentUrl, deleteEntry, isKnowledgeListKey } from './knowledge-api';
+import { attachmentUrl, deleteEntry, isKnowledgeListKey, restoreEntry } from './knowledge-api';
 import { knowledgeErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize, isImage } from './knowledge-format';
 import type { Attachment, KnowledgeEntry } from './types';
@@ -29,6 +29,8 @@ export function KnowledgeDetailPage() {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [deleting, setDeleting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(
     Boolean((location.state as { knowledgeSaved?: boolean } | null)?.knowledgeSaved),
@@ -79,12 +81,12 @@ export function KnowledgeDetailPage() {
     if (savedNotice) navigate(location.pathname, { replace: true, state: null });
   }, [savedNotice, navigate, location.pathname]);
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (permanent: boolean) => {
     if (!data) return;
     setDeleting(true);
     setActionError(null);
     try {
-      await deleteEntry(data.id, data.revision);
+      await deleteEntry(data.id, data.revision, permanent);
       // Revalidate the cached list before returning so the deleted row cannot
       // reappear from SWR's dedupe window.
       try {
@@ -92,11 +94,31 @@ export function KnowledgeDetailPage() {
       } catch {
         /* The list still revalidates when it mounts. */
       }
-      navigate('/knowledge');
+      navigate(permanent ? '/knowledge?status=deleted' : '/knowledge');
     } catch (err) {
       setDeleting(false);
       setDeleteOpen(false);
+      setPurgeOpen(false);
       setActionError(knowledgeErrorMessage(err, t, 'kb_delete_failed'));
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (!data) return;
+    setRestoring(true);
+    setActionError(null);
+    try {
+      await restoreEntry(data.id, data.revision);
+      try {
+        await mutate(isKnowledgeListKey, undefined, { revalidate: true });
+        await mutate(`/api/knowledge/entries/${data.id}`, undefined, { revalidate: true });
+      } catch {
+        /* Reads still revalidate when they mount. */
+      }
+      setRestoring(false);
+    } catch (err) {
+      setRestoring(false);
+      setActionError(knowledgeErrorMessage(err, t, 'kb_restore_failed'));
     }
   };
 
@@ -127,7 +149,17 @@ export function KnowledgeDetailPage() {
         actions={
           <div className={styles.headerActions}>
             <Link to={listReturnTo} className={styles.backButton}><ArrowLeft size={15} /> {t('kb_back')}</Link>
-            {canConfigure && (
+            {canConfigure && data.status === 'deleted' && (
+              <>
+                <button type="button" className={styles.secondaryButton} onClick={() => void confirmRestore()} disabled={restoring}>
+                  <Edit size={15} /> {restoring ? t('saving') : t('kb_restore')}
+                </button>
+                <button type="button" className={styles.dangerButton} onClick={() => setPurgeOpen(true)}>
+                  <Trash2 size={15} /> {t('kb_permanent_delete')}
+                </button>
+              </>
+            )}
+            {canConfigure && data.status !== 'deleted' && (
               <>
                 <Link to={withReturnTo(`/knowledge/${data.id}/edit`, listReturnTo)} className={styles.secondaryButton}><Edit size={15} /> {t('edit')}</Link>
                 <button type="button" className={styles.dangerButton} onClick={() => setDeleteOpen(true)}>
@@ -144,6 +176,9 @@ export function KnowledgeDetailPage() {
       )}
       {actionError && (
         <OperationNotice tone="danger" message={actionError} onClose={() => setActionError(null)} />
+      )}
+      {data.status === 'deleted' && (
+        <OperationNotice tone="warning" message={t('kb_deleted_banner')} />
       )}
 
       <div className={styles.detailMeta}>
@@ -243,8 +278,22 @@ export function KnowledgeDetailPage() {
           confirmLabel={t('delete')}
           cancelLabel={t('cancel')}
           isWorking={deleting}
-          onConfirm={confirmDelete}
+          onConfirm={() => void confirmDelete(false)}
           onCancel={() => { if (!deleting) setDeleteOpen(false); }}
+        />
+      )}
+
+      {purgeOpen && (
+        <ConfirmActionPanel
+          presentation="modal"
+          tone="danger"
+          title={t('kb_permanent_delete')}
+          message={t('kb_permanent_delete_confirm')}
+          confirmLabel={t('kb_permanent_delete')}
+          cancelLabel={t('cancel')}
+          isWorking={deleting}
+          onConfirm={() => void confirmDelete(true)}
+          onCancel={() => { if (!deleting) setPurgeOpen(false); }}
         />
       )}
     </div>

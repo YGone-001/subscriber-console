@@ -23,6 +23,7 @@ test('the entries path carries sort and order when requested', () => {
     buildEntriesPath({ q: 'sip', sort: 'createdAt', order: 'desc', limit: 20 }),
     '/api/knowledge/entries?q=sip&limit=20&sort=createdAt&order=desc',
   );
+  assert.equal(buildEntriesPath({ status: 'deleted' }), '/api/knowledge/entries?status=deleted');
 });
 
 test('file size formatting keeps zero distinct from missing', () => {

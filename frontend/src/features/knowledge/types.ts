@@ -19,6 +19,8 @@ export type KnowledgeEntry = {
   solution: string;
   tags: string[];
   attachments: Attachment[];
+  status: string;
+  deletedAt?: string;
   revision: number;
   createdAt: string;
   createdBy: string;
@@ -34,6 +36,7 @@ export type KnowledgeSummary = {
   tags: string[];
   attachments: Attachment[];
   attachmentCount: number;
+  status: string;
   revision: number;
   createdAt: string;
   createdBy: string;

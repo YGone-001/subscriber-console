@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, BookOpen, ChevronRight, Paperclip, Plus, Search, Tag, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, ChevronRight, Paperclip, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
@@ -54,6 +54,7 @@ export function KnowledgePage() {
   const cursor = searchParams.get('cursor') ?? '';
   const sort = searchParams.get('sort') || DEFAULT_SORT;
   const order = searchParams.get('order') || defaultOrder(sort);
+  const status = searchParams.get('status') === 'deleted' ? 'deleted' : 'active';
 
   const [searchInput, setSearchInput] = useState(q);
   const [tagInput, setTagInput] = useState(tag);
@@ -61,7 +62,7 @@ export function KnowledgePage() {
 
   // The cursor history is keyed by the active filter/sort signature so a refresh
   // restores the back-stack for the current view instead of losing it.
-  const historyKey = `kb-history:${q}|${protocol}|${tag}|${sort}|${order}`;
+  const historyKey = `kb-history:${q}|${protocol}|${tag}|${sort}|${order}|${status}`;
   const [cursorHistory, setCursorHistory] = useState<string[]>(() => readHistory(historyKey));
 
   useEffect(() => {
@@ -89,8 +90,9 @@ export function KnowledgePage() {
       limit: PAGE_LIMIT,
       sort,
       order,
+      status: status === 'deleted' ? 'deleted' : undefined,
     }),
-    [q, protocol, tag, cursor, sort, order],
+    [q, protocol, tag, cursor, sort, order, status],
   );
   const { data, error, isLoading } = useRead<{ entries: KnowledgeSummary[]; total: number; page: { nextCursor: string | null; hasMore: boolean } }>(listPath);
 
@@ -228,6 +230,15 @@ export function KnowledgePage() {
             onClick={() => setParam({ order: order === 'asc' ? 'desc' : 'asc' })}
           >
             {order === 'asc' ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
+          </button>
+          <button
+            type="button"
+            className={`${styles.orderToggle} ${status === 'deleted' ? styles.tagChipActive : ''}`}
+            title={status === 'deleted' ? t('kb_active_entries') : t('kb_recycle_bin')}
+            aria-pressed={status === 'deleted'}
+            onClick={() => setParam({ status: status === 'deleted' ? '' : 'deleted' })}
+          >
+            <Trash2 size={15} />
           </button>
         </div>
 
