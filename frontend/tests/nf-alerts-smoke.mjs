@@ -140,6 +140,7 @@ const NOTIFY_ESCALATIONS = [
 
 const NOTIFY_DELIVERIES = [
   { id: 'd-1', deliveryKey: 'alert-critical-active:opened:ch-1', event: 'opened', alertId: 'alert-critical-active', ruleId: 'rule-1', ruleName: 'AMF process unhealthy', targetId: 'target-amf', targetName: 'amf-01', severity: 'critical', triggerCount: 1, occurredAt: TS.first, channelId: 'ch-1', status: 'sent', attempts: 1, createdAt: TS.first, completedAt: TS.first },
+  { id: 'd-2', deliveryKey: 'alert-critical-active:opened:ch-2', event: 'opened', alertId: 'alert-critical-active', ruleId: 'rule-1', ruleName: 'AMF process unhealthy', targetId: 'target-amf', targetName: 'amf-01', severity: 'critical', triggerCount: 1, occurredAt: TS.last, channelId: 'ch-2', status: 'failed', attempts: 3, lastError: 'connection refused', nextAttemptAt: TS.last, createdAt: TS.last },
 ];
 
 const META = {
@@ -365,6 +366,9 @@ function handleApi(req, res, url, context) {
   if (pathname === '/api/nf-notifications/deliveries' && req.method === 'GET') {
     return sendJson(res, 200, { deliveries: NOTIFY_DELIVERIES, page: { limit: 20, nextCursor: null, hasMore: false } });
   }
+  if (pathname === '/api/nf-notifications/deliveries/d-2/retry' && req.method === 'POST') {
+    return sendJson(res, 200, { ...NOTIFY_DELIVERIES[1], status: 'pending', attempts: 0, lastError: '', nextAttemptAt: TS.last });
+  }
 
   context.unexpected.push(`${req.method} ${pathname}`);
   return sendJson(res, 404, { error: 'unexpected fixture request', code: 'FIXTURE_UNEXPECTED' });
@@ -499,6 +503,17 @@ async function main() {
       await page.locator('[data-notify-deliveries="true"]').waitFor({ state: 'visible', timeout: 20000 });
       const deliveryText = await page.getByRole('dialog').first().innerText();
       check('notify_delivery_health_visible', /sent/i.test(deliveryText), 'delivery rows render');
+      const failedRow = page.locator('[data-notify-delivery="d-2"]');
+      check('notify_delivery_failure_visible', /failed/i.test(await failedRow.innerText()), 'failed delivery is visible');
+      await failedRow.getByRole('button', { name: 'Retry' }).click();
+      const retryDialog = page.getByRole('alertdialog');
+      await retryDialog.waitFor({ state: 'visible', timeout: 10000 });
+      await retryDialog.getByRole('button', { name: 'Retry' }).click();
+      await page.waitForFunction(() => {
+        const row = document.querySelector('[data-notify-delivery="d-2"]');
+        return row?.textContent?.toLowerCase().includes('pending');
+      }, undefined, { timeout: 10000 });
+      check('notify_delivery_retry_requeues', true, 'retry moves the row to pending');
     });
     await notifyServer.close();
     servers.length = 0;

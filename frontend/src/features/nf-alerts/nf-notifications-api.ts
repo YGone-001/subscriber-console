@@ -3,6 +3,8 @@ import { deleteJson, postJson, putJson } from '../../lib/api/mutation-client';
 import type {
   CreateChannelRequest,
   CreateEscalationRequest,
+  Delivery,
+  DeliveryStatus,
   DeliveriesResponse,
   Escalation,
   NotificationChannel,
@@ -50,8 +52,29 @@ export async function deleteNotificationEscalation(escalationId: string): Promis
   return deleteJson<{ status: string }>(`/api/nf-notifications/escalations/${encodeURIComponent(escalationId)}`);
 }
 
-export async function fetchNotificationDeliveries(limit = 20,subjectKind: 'nf_alert'|'config_drift' = 'nf_alert'): Promise<DeliveriesResponse> {
-  return getJson<DeliveriesResponse>(
-    `/api/nf-notifications/deliveries?limit=${encodeURIComponent(String(limit))}&subjectKind=${subjectKind}`,
-  );
+export type DeliveryQuery = {
+  limit?: number;
+  status?: DeliveryStatus | '';
+  cursor?: string;
+  alertId?: string;
+  subjectKind?: 'nf_alert' | 'config_drift';
+};
+
+/** Builds the ledger path; every value is encoded and empty filters are omitted. */
+export function notificationDeliveriesPath(query: DeliveryQuery = {}): string {
+  const params = new URLSearchParams();
+  params.set('limit', String(query.limit ?? 50));
+  if (query.status) params.set('status', query.status);
+  if (query.cursor) params.set('cursor', query.cursor);
+  if (query.alertId) params.set('alertId', query.alertId);
+  params.set('subjectKind', query.subjectKind ?? 'nf_alert');
+  return `/api/nf-notifications/deliveries?${params.toString()}`;
+}
+
+export async function fetchNotificationDeliveries(query: DeliveryQuery = {}): Promise<DeliveriesResponse> {
+  return getJson<DeliveriesResponse>(notificationDeliveriesPath(query));
+}
+
+export async function retryNotificationDelivery(deliveryId: string): Promise<Delivery> {
+  return postJson<Delivery>(`/api/nf-notifications/deliveries/${encodeURIComponent(deliveryId)}/retry`, {});
 }

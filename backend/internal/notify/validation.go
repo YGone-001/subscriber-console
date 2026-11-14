@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"subscriber/internal/nfalert"
@@ -116,7 +117,26 @@ func AsMapValidationError(err error) (string, string) {
 
 // Revision conflict and not-found sentinels shared with the handler.
 var (
-	errRevisionConflict = fmt.Errorf("revision conflict")
-	errNotFound         = fmt.Errorf("not found")
-	errDuplicate        = fmt.Errorf("duplicate name")
+	errRevisionConflict     = fmt.Errorf("revision conflict")
+	errNotFound             = fmt.Errorf("not found")
+	errDuplicate            = fmt.Errorf("duplicate name")
+	errDeliveryNotRetryable = fmt.Errorf("delivery is not retryable")
 )
+
+// Delivery identifiers are server-generated: NF alert deliveries use a UUID
+// and configuration-drift deliveries use a 32-character hex digest. The
+// pattern accepts exactly those two shapes so a path value can never be
+// forwarded as an arbitrary database key.
+var deliveryIDPattern = regexp.MustCompile(`^([0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`)
+
+// ValidateDeliveryID rejects anything that is not a server-issued delivery id.
+func ValidateDeliveryID(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return invalid("NOTIFY_INVALID_DELIVERY_ID", "deliveryId is required")
+	}
+	if len(id) > 64 || !deliveryIDPattern.MatchString(id) {
+		return invalid("NOTIFY_INVALID_DELIVERY_ID", "deliveryId is malformed")
+	}
+	return nil
+}

@@ -657,3 +657,48 @@
   height: 1rem;
   cursor: pointer;
 }
+
+.deliverySection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.deliveryFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.deliveryFilter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+}
+
+.deliveryFilter select {
+  min-width: 10rem;
+}
+
+.deliveryCount {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+}
+
+.deliveryError {
+  display: inline-block;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.deliveryMore {
+  display: flex;
+  justify-content: center;
+}

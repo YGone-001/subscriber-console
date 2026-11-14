@@ -1,12 +1,14 @@
 package notify
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
@@ -32,14 +34,21 @@ type AuditWriter interface {
 // middleware on the request path.
 type Handler struct {
 	repo        *Repository
+	retrier     DeliveryRetrier
 	limiter     RateLimiter
 	auditWriter AuditWriter
 	actors      governance.ActorRepository
 }
 
+// DeliveryRetrier requeues a terminal delivery. It is an interface so the
+// retry endpoint can be tested without a live Mongo collection.
+type DeliveryRetrier interface {
+	RetryDelivery(ctx context.Context, id string, now time.Time) (*Delivery, error)
+}
+
 // NewHandler constructs the notification HTTP handler.
 func NewHandler(repo *Repository, limiter RateLimiter, auditWriter AuditWriter) *Handler {
-	return &Handler{repo: repo, limiter: limiter, auditWriter: auditWriter}
+	return &Handler{repo: repo, retrier: repo, limiter: limiter, auditWriter: auditWriter}
 }
 
 func (h *Handler) UseActorRepository(a governance.ActorRepository) { h.actors = a }
@@ -149,6 +158,10 @@ func (h *Handler) requireConfigure(w http.ResponseWriter, r *http.Request, metho
 }
 
 func writeValidation(w http.ResponseWriter, err error) {
+	if errors.Is(err, errDeliveryNotRetryable) {
+		response.Error(w, http.StatusConflict, "delivery is not in a retryable state", "NOTIFY_DELIVERY_NOT_RETRYABLE")
+		return
+	}
 	if errors.Is(err, errRevisionConflict) {
 		response.Error(w, http.StatusConflict, "Revision conflict", "NOTIFY_REVISION_CONFLICT")
 		return
@@ -253,6 +266,35 @@ func (h *Handler) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	h.auditWrite(p, "DELETE", "/api/nf-notifications/channels/{channelId}", id, "deleted")
 	response.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// RetryDelivery handles POST /api/nf-notifications/deliveries/{deliveryId}/retry.
+// It only requeues a terminal failure; a successful or in-flight delivery is
+// never disturbed, and the response carries the resulting ledger record.
+func (h *Handler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
+	p := h.requireConfigure(w, r, "POST", "/api/nf-notifications/deliveries/{deliveryId}/retry")
+	if p == nil {
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("deliveryId"))
+	if err := ValidateDeliveryID(id); err != nil {
+		writeValidation(w, err)
+		return
+	}
+	if h.limiter != nil && !h.limiter.Enforce(w, r, "nf-notify:delivery-retry:"+p.Username, 30, 60) {
+		return
+	}
+	if h.retrier == nil {
+		response.Error(w, http.StatusServiceUnavailable, "delivery retry is unavailable", "NOTIFY_RETRY_UNAVAILABLE")
+		return
+	}
+	delivery, err := h.retrier.RetryDelivery(r.Context(), id, time.Now().UTC())
+	if err != nil {
+		writeValidation(w, err)
+		return
+	}
+	h.auditWrite(p, "POST", "/api/nf-notifications/deliveries/{deliveryId}/retry", id, "retried")
+	response.JSON(w, http.StatusOK, delivery)
 }
 
 /* -------------------------------------------------------------- escalations -- */

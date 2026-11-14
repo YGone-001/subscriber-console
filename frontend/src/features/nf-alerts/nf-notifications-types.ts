@@ -105,6 +105,7 @@ export type Delivery = {
   status: DeliveryStatus;
   attempts: number;
   lastError?: string;
+  nextAttemptAt?: string;
   createdAt: string;
   completedAt?: string;
 };

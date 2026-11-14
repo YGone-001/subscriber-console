@@ -355,6 +355,49 @@ func (r *Repository) ListDeliveries(ctx context.Context, filter DeliveryListFilt
 	return docs, next, hasMore, nil
 }
 
+// GetDelivery returns one delivery ledger record.
+func (r *Repository) GetDelivery(ctx context.Context, id string) (*Delivery, error) {
+	var doc Delivery
+	if err := r.deliveries.FindOne(ctx, bson.M{"_id": id}).Decode(&doc); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errNotFound
+		}
+		return nil, err
+	}
+	return &doc, nil
+}
+
+// RetryDelivery requeues a failed or dead delivery. Only terminal failure
+// states are retryable: a sent, skipped, pending or in-flight delivery is
+// never disturbed. The attempt budget is reset so a manual retry is a real
+// new chance rather than one immediate dead-letter.
+func (r *Repository) RetryDelivery(ctx context.Context, id string, now time.Time) (*Delivery, error) {
+	now = now.UTC()
+	res, err := r.deliveries.UpdateOne(ctx,
+		bson.M{"_id": id, "status": bson.M{"$in": bson.A{DeliveryFailed, DeliveryDead}}},
+		bson.M{
+			"$set": bson.M{
+				"status":        DeliveryPending,
+				"attempts":      0,
+				"nextAttemptAt": now,
+				"notBefore":     now,
+				"sendingUntil":  time.Time{},
+			},
+			"$unset": bson.M{"completedAt": ""},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if res.MatchedCount == 0 {
+		if _, err := r.GetDelivery(ctx, id); err != nil {
+			return nil, err
+		}
+		return nil, errDeliveryNotRetryable
+	}
+	return r.GetDelivery(ctx, id)
+}
+
 /* ------------------------------------------------------------------- enqueue -- */
 
 // NotifyAlert implements nfalert.AlertEventSink. It resolves the matching

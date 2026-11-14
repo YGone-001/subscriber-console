@@ -779,6 +779,7 @@ func main() {
 	mux.Handle("POST /api/nf-notifications/escalations", authMiddleware(http.HandlerFunc(notifyHandler.CreateEscalation)))
 	mux.Handle("PUT /api/nf-notifications/escalations/{escalationId}", authMiddleware(http.HandlerFunc(notifyHandler.UpdateEscalation)))
 	mux.Handle("DELETE /api/nf-notifications/escalations/{escalationId}", authMiddleware(http.HandlerFunc(notifyHandler.DeleteEscalation)))
+	mux.Handle("POST /api/nf-notifications/deliveries/{deliveryId}/retry", authMiddleware(http.HandlerFunc(notifyHandler.RetryDelivery)))
 	mux.Handle("GET /api/nf-notifications/deliveries", authMiddleware(http.HandlerFunc(notifyHandler.ListDeliveries)))
 
 	// NF alerts (four reads, five governed mutations)

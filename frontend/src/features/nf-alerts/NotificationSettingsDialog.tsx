@@ -7,7 +7,7 @@
  * secret blank to keep the stored value.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, Plus, Trash2, X } from 'lucide-react';
+import { Bell, Plus, RefreshCw, RotateCw, Trash2, X } from 'lucide-react';
 import { Dialog } from '../../components/ui/Dialog';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { OperationFeedback } from '../../components/ui/OperationFeedback';
@@ -23,9 +23,13 @@ import {
   fetchNotificationChannels,
   fetchNotificationDeliveries,
   fetchNotificationEscalations,
+  retryNotificationDelivery,
 } from './nf-notifications-api';
+import { MutationApiError } from '../../lib/api/mutation-client';
 import type {
   Delivery,
+  DeliveryStatus,
+  DeliveriesResponse,
   Escalation,
   EscalationSeverity,
   NotificationChannel,
@@ -51,7 +55,6 @@ export function NotificationSettingsDialog({ open, onClose, onChanged,subjectKin
   const [tab, setTab] = useState<Tab>('channels');
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
   const [escalations, setEscalations] = useState<Escalation[]>([]);
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(false);
   const [readFailures,setReadFailures]=useState<Tab[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -59,24 +62,18 @@ export function NotificationSettingsDialog({ open, onClose, onChanged,subjectKin
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [channelsRes, escalationsRes, deliveriesRes] = await Promise.allSettled([
+    const [channelsRes, escalationsRes] = await Promise.allSettled([
       fetchNotificationChannels(),
       fetchNotificationEscalations(),
-      fetchNotificationDeliveries(20,subjectKind),
     ]);
     setChannels(channelsRes.status === 'fulfilled' ? channelsRes.value : []);
     setEscalations(escalationsRes.status === 'fulfilled' ? escalationsRes.value : []);
-    setDeliveries(deliveriesRes.status === 'fulfilled' ? deliveriesRes.value.deliveries || [] : []);
-    setReadFailures((['channels','escalations','deliveries'] as Tab[]).filter((_,i)=>[channelsRes,escalationsRes,deliveriesRes][i].status==='rejected'));
-    if (
-      channelsRes.status === 'rejected' ||
-      escalationsRes.status === 'rejected' ||
-      deliveriesRes.status === 'rejected'
-    ) {
+    setReadFailures((['channels','escalations'] as Tab[]).filter((_,i)=>[channelsRes,escalationsRes][i].status==='rejected'));
+    if (channelsRes.status === 'rejected' || escalationsRes.status === 'rejected') {
       setError(t('nf_notify_load_failed'));
     }
     setLoading(false);
-  }, [t,subjectKind]);
+  }, [t]);
 
   useEffect(() => {
     if (!open) return;
@@ -137,7 +134,7 @@ export function NotificationSettingsDialog({ open, onClose, onChanged,subjectKin
             onReload={load}
           />
         ) : (
-          <DeliverySection deliveries={deliveries} channels={channels} />
+          <DeliverySection channels={channels} subjectKind={subjectKind} canConfigure={canConfigure} />
         )}
       </div>
     </Dialog>
@@ -498,44 +495,258 @@ function EscalationSection({
   );
 }
 
-function DeliverySection({ deliveries, channels }: { deliveries: Delivery[]; channels: NotificationChannel[] }) {
-  const { t } = useI18n();
+const DELIVERY_STATUSES: DeliveryStatus[] = ['pending', 'sending', 'sent', 'skipped', 'failed', 'dead'];
+
+function DeliverySection({
+  channels,
+  subjectKind,
+  canConfigure,
+}: {
+  channels: NotificationChannel[];
+  subjectKind: 'nf_alert' | 'config_drift';
+  canConfigure: boolean;
+}) {
+  const { t, formatDateTime } = useI18n();
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [status, setStatus] = useState<DeliveryStatus | ''>('');
+  const [page, setPage] = useState<DeliveriesResponse['page'] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ tone: 'success' | 'danger'; message: string } | null>(null);
+  const [pendingRetry, setPendingRetry] = useState<Delivery | null>(null);
+  const [retrying, setRetrying] = useState(false);
+
   const channelNames = useMemo(() => {
     const map = new Map<string, string>();
     for (const channel of channels) map.set(channel.id, channel.name);
     return map;
   }, [channels]);
 
-  if (deliveries.length === 0) {
-    return <p className={styles.probeEditorEmpty}>{t('nf_notify_deliveries_empty')}</p>;
-  }
+  const load = useCallback(async (mode: 'replace' | 'append', cursor?: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetchNotificationDeliveries({
+        limit: 50,
+        status,
+        cursor,
+        subjectKind,
+      });
+      const items = res.deliveries ?? [];
+      setDeliveries((current) => (mode === 'append' ? [...current, ...items] : items));
+      setPage(res.page ?? null);
+    } catch {
+      setError(t('nf_notify_deliveries_load_failed'));
+    } finally {
+      setLoading(false);
+    }
+  }, [status, subjectKind, t]);
+
+  useEffect(() => {
+    void load('replace');
+  }, [load]);
+
+  const confirmRetry = async () => {
+    if (!pendingRetry) return;
+    setRetrying(true);
+    setFeedback(null);
+    try {
+      const next = await retryNotificationDelivery(pendingRetry.id);
+      setDeliveries((current) => current.map((delivery) => (delivery.id === next.id ? next : delivery)));
+      setFeedback({ tone: 'success', message: t('nf_notify_delivery_retry_ok') });
+    } catch (err) {
+      const code = err instanceof MutationApiError ? err.code : undefined;
+      setFeedback({
+        tone: 'danger',
+        message: code === 'NOTIFY_DELIVERY_NOT_RETRYABLE'
+          ? t('nf_notify_delivery_not_retryable')
+          : t('nf_notify_delivery_retry_failed'),
+      });
+      void load('replace');
+    } finally {
+      setRetrying(false);
+      setPendingRetry(null);
+    }
+  };
+
+  const targetOf = (delivery: Delivery) => {
+    if (delivery.subjectKind === 'config_drift') {
+      return delivery.sourceName || delivery.subjectId || '—';
+    }
+    return delivery.targetName || delivery.targetId || '—';
+  };
+
   return (
-    <div className={styles.tableScroll}>
-      <table className={styles.table} data-notify-deliveries="true">
-        <caption className="sr-only">{t('nf_notify_deliveries_caption')}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{t('nf_notify_col_event')}</th>
-            <th scope="col">{t('nf_notify_col_target')}</th>
-            <th scope="col">{t('nf_notify_col_channel')}</th>
-            <th scope="col">{t('nf_notify_col_status')}</th>
-            <th scope="col">{t('nf_notify_col_attempts')}</th>
-            <th scope="col">{t('nf_notify_col_time')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {deliveries.map((delivery) => (
-            <tr key={delivery.id} data-notify-delivery={delivery.id}>
-              <td><span className={styles.chip}>{delivery.event}</span></td>
-              <td>{delivery.subjectKind==='config_drift'?delivery.sourceName:delivery.targetName}</td>
-              <td>{channelNames.get(delivery.channelId) ?? delivery.channelId}</td>
-              <td>{t(`nf_notify_status_${delivery.status}`)}</td>
-              <td>{delivery.attempts}</td>
-              <td>{delivery.occurredAt}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className={styles.deliverySection}>
+      <div className={styles.deliveryFilters}>
+        <label className={styles.deliveryFilter}>
+          <span>{t('nf_notify_deliveries_filter_status')}</span>
+          <select
+            className="form-input"
+            value={status}
+            onChange={(event) => setStatus(event.target.value as DeliveryStatus | '')}
+          >
+            <option value="">{t('nf_notify_deliveries_all_statuses')}</option>
+            {DELIVERY_STATUSES.map((option) => (
+              <option key={option} value={option}>
+                {t('nf_notify_status_' + option)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => void load('replace')}
+          disabled={loading}
+        >
+          <RefreshCw size={14} aria-hidden="true" />
+          {t('nf_notify_deliveries_refresh')}
+        </button>
+        <span className={styles.deliveryCount}>{t('nf_notify_deliveries_count', { count: deliveries.length })}</span>
+      </div>
+
+      {feedback ? <OperationFeedback tone={feedback.tone} message={feedback.message} /> : null}
+
+      {error ? (
+        <ErrorState
+          title={t('nf_notify_deliveries_load_failed')}
+          message={t('nf_notify_deliveries_load_failed')}
+          retryLabel={t('refresh')}
+          onRetry={() => void load('replace')}
+        />
+      ) : null}
+
+      {!error && deliveries.length === 0 && !loading ? (
+        <p className={styles.probeEditorEmpty}>
+          {status ? t('nf_notify_deliveries_empty_filtered') : t('nf_notify_deliveries_empty')}
+        </p>
+      ) : null}
+
+      {!error && loading && deliveries.length === 0 ? (
+        <p className={styles.probeEditorEmpty}>{t('loading')}</p>
+      ) : null}
+
+      {deliveries.length > 0 ? (
+        <div className={styles.tableScroll}>
+          <table className={styles.table} data-notify-deliveries="true">
+            <caption className="sr-only">{t('nf_notify_deliveries_caption')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t('nf_notify_col_event')}</th>
+                <th scope="col">{t('nf_notify_col_target')}</th>
+                <th scope="col">{t('nf_notify_col_channel')}</th>
+                <th scope="col">{t('nf_notify_col_status')}</th>
+                <th scope="col">{t('nf_notify_col_attempts')}</th>
+                <th scope="col">{t('nf_notify_col_error')}</th>
+                <th scope="col">{t('nf_notify_col_next_attempt')}</th>
+                <th scope="col">{t('nf_notify_col_time')}</th>
+                {canConfigure ? <th scope="col">{t('nf_notify_col_action')}</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {deliveries.map((delivery) => (
+                <tr key={delivery.id} data-notify-delivery={delivery.id} data-delivery-status={delivery.status}>
+                  <td><span className={styles.chip}>{delivery.event}</span></td>
+                  <td>{targetOf(delivery)}</td>
+                  <td>{channelNames.get(delivery.channelId) ?? delivery.channelId}</td>
+                  <td><span className={styles.chip}>{t('nf_notify_status_' + delivery.status)}</span></td>
+                  <td>{delivery.attempts}</td>
+                  <td>
+                    {delivery.lastError ? (
+                      <span className={styles.deliveryError} title={delivery.lastError}>{delivery.lastError}</span>
+                    ) : '—'}
+                  </td>
+                  <td>{delivery.status === 'failed' && delivery.nextAttemptAt ? formatDateTime(delivery.nextAttemptAt) : '—'}</td>
+                  <td>{formatDateTime(delivery.occurredAt)}</td>
+                  {canConfigure ? (
+                    <td>
+                      {delivery.status === 'failed' || delivery.status === 'dead' ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => setPendingRetry(delivery)}
+                          disabled={retrying}
+                        >
+                          {t('nf_notify_delivery_retry')}
+                        </button>
+                      ) : '—'}
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {page?.hasMore && page.nextCursor ? (
+        <div className={styles.deliveryMore}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => void load('append', page.nextCursor ?? undefined)}
+            disabled={loading}
+          >
+            {loading ? t('loading') : t('nf_notify_load_more')}
+          </button>
+        </div>
+      ) : null}
+
+      <RetryConfirmDialog
+        delivery={pendingRetry}
+        busy={retrying}
+        target={pendingRetry ? targetOf(pendingRetry) : ''}
+        onConfirm={() => void confirmRetry()}
+        onCancel={() => setPendingRetry(null)}
+      />
     </div>
+  );
+}
+
+function RetryConfirmDialog({
+  delivery,
+  busy,
+  target,
+  onConfirm,
+  onCancel,
+}: {
+  delivery: Delivery | null;
+  busy: boolean;
+  target: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Dialog
+      open={delivery !== null}
+      onClose={() => {
+        if (!busy) onCancel();
+      }}
+      overlayClassName="modal-overlay"
+      className="modal-content animate-fade-in"
+      labelledBy="nf-notify-retry-title"
+      role="alertdialog"
+      closeOnOverlay={!busy}
+    >
+      <div className={styles.notifyDialog}>
+        <header className={styles.drawerHead}>
+          <h2 id="nf-notify-retry-title" className={styles.drawerTitle}>
+            <RotateCw size={18} aria-hidden="true" />
+            {t('nf_notify_delivery_retry_title')}
+          </h2>
+        </header>
+        <p className={styles.probeEditorEmpty}>{t('nf_notify_delivery_retry_body', { target })}</p>
+        <div className={styles.formActions}>
+          <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
+            {t('cancel')}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={busy}>
+            {busy ? t('loading') : t('nf_notify_delivery_retry')}
+          </button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
