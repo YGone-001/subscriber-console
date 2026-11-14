@@ -539,7 +539,9 @@ func main() {
 		mc.Ops.Collection("app_knowledge_files"),
 	)
 	knowledgeHandler := knowledge.NewHandler(knowledgeRepo, knowledgeStore, limiter, auditWriter)
+	knowledgeHandler.UseActorRepository(userRepo)
 	knowledgeJanitor := knowledge.NewJanitor(knowledgeRepo, knowledgeStore, logger)
+	knowledgeJanitor.SetTrashRetention(time.Duration(cfg.KnowledgeTrashRetentionDays) * 24 * time.Hour)
 	knowledgeJanitor.Start(ctx)
 	defer knowledgeJanitor.Stop()
 

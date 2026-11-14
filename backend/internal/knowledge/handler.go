@@ -13,6 +13,7 @@ import (
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/governance"
 	"subscriber/internal/response"
 )
 
@@ -32,11 +33,18 @@ type Handler struct {
 	store       *FileStore
 	limiter     RateLimiter
 	auditWriter AuditWriter
+	actorRepo   governance.ActorRepository
 }
 
 // NewHandler creates a knowledge base HTTP handler.
 func NewHandler(repo *Repository, store *FileStore, limiter RateLimiter, auditWriter AuditWriter) *Handler {
 	return &Handler{repo: repo, store: store, limiter: limiter, auditWriter: auditWriter}
+}
+
+// UseActorRepository wires the account store used to revalidate the actor on
+// every write. It is additive so the constructor signature stays stable.
+func (h *Handler) UseActorRepository(repo governance.ActorRepository) {
+	h.actorRepo = repo
 }
 
 // Meta handles GET /api/knowledge/meta.
@@ -129,7 +137,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Create handles POST /api/knowledge/entries.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	p := h.requireConfigure(w, r, "POST", "/api/knowledge/entries")
+	p := h.requireConfigure(w, r, "create", 20, "POST", "/api/knowledge/entries")
 	if p == nil {
 		return
 	}
@@ -164,7 +172,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /api/knowledge/entries/{entryId}.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	p := h.requireConfigure(w, r, "PUT", "/api/knowledge/entries/{entryId}")
+	p := h.requireConfigure(w, r, "update", 30, "PUT", "/api/knowledge/entries/{entryId}")
 	if p == nil {
 		return
 	}
@@ -226,7 +234,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete handles DELETE /api/knowledge/entries/{entryId}?revision=.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	p := h.requireConfigure(w, r, "DELETE", "/api/knowledge/entries/{entryId}")
+	p := h.requireConfigure(w, r, "delete", 20, "DELETE", "/api/knowledge/entries/{entryId}")
 	if p == nil {
 		return
 	}
@@ -262,7 +270,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // Upload handles POST /api/knowledge/files (multipart/form-data).
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
-	p := h.requireConfigure(w, r, "POST", "/api/knowledge/files")
+	p := h.requireConfigure(w, r, "upload", 20, "POST", "/api/knowledge/files")
 	if p == nil {
 		return
 	}
@@ -388,7 +396,7 @@ func (h *Handler) requireRead(w http.ResponseWriter, r *http.Request, key string
 	return p
 }
 
-func (h *Handler) requireConfigure(w http.ResponseWriter, r *http.Request, method, path string) *auth.Principal {
+func (h *Handler) requireConfigure(w http.ResponseWriter, r *http.Request, action string, limit int, method, path string) *auth.Principal {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
@@ -397,6 +405,13 @@ func (h *Handler) requireConfigure(w http.ResponseWriter, r *http.Request, metho
 	if !auth.HasPermission(p, "core.configure") {
 		h.recordDenial(p, method, path)
 		response.Forbidden(w, "Forbidden")
+		return nil
+	}
+	if h.limiter != nil && !h.limiter.Enforce(w, r, "knowledge:"+action+":"+p.Username, limit, 60) {
+		return nil
+	}
+	if _, httpErr := governance.RevalidateFreshActor(r.Context(), h.actorRepo, p); httpErr != nil {
+		response.Error(w, httpErr.Status, httpErr.Message, httpErr.Code)
 		return nil
 	}
 	return p

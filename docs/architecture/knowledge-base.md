@@ -57,9 +57,15 @@ created.
 
 ## Security model
 
-- Writes require a revalidated actor (`core.configure`); reads require
-  `core.read`. The viewer role sees a read-only surface and is rejected 403 on
-  every mutation.
+- Writes require `core.configure` plus a fresh-actor revalidation
+  (`governance.RevalidateFreshActor`) against `app_users` on every mutation; a
+  disabled, locked, re-roled or session-revoked account is refused even with a
+  valid token, and an unavailable account store fails closed (503). Reads
+  require `core.read`. The viewer role sees a read-only surface and is rejected
+  403 on every mutation.
+- Writes are rate-limited per user (MongoDB fixed window): create 20/60s, update
+  30/60s, delete 20/60s, upload 20/60s; reads 120/60s. Exceeding a budget returns
+  429 with `Retry-After`.
 - Create/update use strict JSON decoding with unknown-field rejection and a
   512 KiB body cap. Update and delete carry a revision and fail with
   `KNOWLEDGE_REVISION_CONFLICT` on mismatch.
@@ -90,6 +96,9 @@ created.
 4. Delete trashes and releases every bound file.
 5. A background janitor (hourly, bounded) reclaims unbound uploads older than
    24 hours and orphan files whose entry no longer exists.
+6. Trashed bytes are physically purged after `KNOWLEDGE_TRASH_RETENTION_DAYS`
+   (default 30, `0` disables cleanup). Trash time is stamped on deletion, so the
+   recovery window measures from deletion rather than upload.
 
 ## Frontend
 

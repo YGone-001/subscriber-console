@@ -53,6 +53,9 @@ type Config struct {
 	// Knowledge base attachment storage (local filesystem, never client-visible)
 	KnowledgeUploadDir string // attachment bytes root
 	KnowledgeTrashDir  string // soft-delete recovery root
+	// KnowledgeTrashRetentionDays bounds how long trashed attachment bytes are
+	// kept before physical purge. Zero disables trash cleanup.
+	KnowledgeTrashRetentionDays int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -64,6 +67,15 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("OCS_TERMINATED_RETENTION_DAYS must be zero or positive")
 		}
 		retentionDays = parsed
+	}
+
+	trashRetentionDays := 30
+	if value := os.Getenv("KNOWLEDGE_TRASH_RETENTION_DAYS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			return nil, fmt.Errorf("KNOWLEDGE_TRASH_RETENTION_DAYS must be zero or positive")
+		}
+		trashRetentionDays = parsed
 	}
 
 	cfg := &Config{
@@ -99,6 +111,8 @@ func Load() (*Config, error) {
 
 		KnowledgeUploadDir: envOrDefault("KNOWLEDGE_UPLOAD_DIR", "/srv/internal-resource-server/uploads"),
 		KnowledgeTrashDir:  envOrDefault("KNOWLEDGE_TRASH_DIR", "/srv/internal-resource-server/.trash"),
+
+		KnowledgeTrashRetentionDays: trashRetentionDays,
 
 		OCSTerminatedRetentionDays: retentionDays,
 	}

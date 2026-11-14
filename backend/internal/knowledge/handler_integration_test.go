@@ -15,7 +15,9 @@ func knowledgeTestHandler(t *testing.T) (*Handler, func()) {
 		cleanup()
 		t.Fatalf("file store: %v", err)
 	}
-	return NewHandler(repo, store, nil, nil), cleanup
+	h := NewHandler(repo, store, noopLimiter{}, nil)
+	h.UseActorRepository(fakeActorRepo{})
+	return h, cleanup
 }
 
 func createEntryForTest(t *testing.T, h *Handler) Entry {

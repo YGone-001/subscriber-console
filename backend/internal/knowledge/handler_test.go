@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,13 +9,34 @@ import (
 	"testing"
 
 	"subscriber/internal/auth"
+	"subscriber/internal/user"
 )
+
+// noopLimiter allows every request so tests exercise the governance path rather
+// than rate limiting.
+type noopLimiter struct{}
+
+func (noopLimiter) Enforce(http.ResponseWriter, *http.Request, string, int, int) bool { return true }
+
+// fakeActorRepo returns an active identity whose role mirrors the username, so a
+// principal built with Username == role passes fresh-actor revalidation.
+type fakeActorRepo struct{}
+
+func (fakeActorRepo) FindByUsernameIdentity(_ context.Context, username string) (*user.UserIdentity, error) {
+	return &user.UserIdentity{
+		SafeUser: user.SafeUser{Username: username, Role: username, Status: "active"},
+		MongoID:  "usr_" + username,
+	}, nil
+}
 
 // newTestHandler builds a handler with no persistence. The auth and validation
 // paths exercised here reject before touching the repository or file store, so
-// nil dependencies are safe.
+// nil repo/store are safe; a permissive limiter and fake actor repo let writes
+// reach validation.
 func newTestHandler() *Handler {
-	return NewHandler(nil, nil, nil, nil)
+	h := NewHandler(nil, nil, noopLimiter{}, nil)
+	h.UseActorRepository(fakeActorRepo{})
+	return h
 }
 
 func knowledgeRequest(method, target, role, body string) *http.Request {
@@ -27,7 +49,7 @@ func knowledgeRequest(method, target, role, body string) *http.Request {
 	}
 	if role != "" {
 		req = req.WithContext(auth.ContextWithPrincipal(req.Context(), &auth.Principal{
-			Username:       "tester",
+			Username:       role,
 			Role:           role,
 			NormalizedRole: role,
 		}))

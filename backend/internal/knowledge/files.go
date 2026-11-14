@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // FileStore owns the on-disk attachment bytes. Files are stored under the
@@ -179,7 +180,8 @@ func (fs *FileStore) Open(id string) (*os.File, error) {
 }
 
 // Trash moves a stored attachment into the trash directory. It is best-effort:
-// a failed move is reported but never blocks the business response.
+// a failed move is reported but never blocks the business response. The trash
+// time is stamped onto the file so retention measures from deletion, not upload.
 func (fs *FileStore) Trash(id string) error {
 	if !IsValidID(id) {
 		return nil
@@ -192,5 +194,36 @@ func (fs *FileStore) Trash(id string) error {
 		}
 		return err
 	}
+	now := time.Now()
+	_ = os.Chtimes(dst, now, now)
 	return nil
+}
+
+// PurgeTrashBefore physically removes trashed files whose trash time is older
+// than cutoff, bounded by limit, and returns the number removed. It is the
+// recovery-window expiry counterpart to Trash.
+func (fs *FileStore) PurgeTrashBefore(cutoff time.Time, limit int) (int, error) {
+	entries, err := os.ReadDir(fs.trashDir)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read knowledge trash directory: %w", err)
+	}
+	removed := 0
+	for _, entry := range entries {
+		if removed >= limit {
+			break
+		}
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			if err := os.Remove(filepath.Join(fs.trashDir, entry.Name())); err == nil {
+				removed++
+			}
+		}
+	}
+	return removed, nil
 }

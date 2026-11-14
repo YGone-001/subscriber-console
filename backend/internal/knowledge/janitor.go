@@ -24,12 +24,13 @@ const (
 // Both operations are best-effort and bounded, so a transient failure degrades
 // to a log line instead of blocking the console.
 type Janitor struct {
-	repo     *Repository
-	store    *FileStore
-	logger   *slog.Logger
-	interval time.Duration
-	stop     chan struct{}
-	wg       sync.WaitGroup
+	repo           *Repository
+	store          *FileStore
+	logger         *slog.Logger
+	interval       time.Duration
+	trashRetention time.Duration
+	stop           chan struct{}
+	wg             sync.WaitGroup
 }
 
 // NewJanitor creates a knowledge attachment janitor.
@@ -44,6 +45,12 @@ func NewJanitor(repo *Repository, store *FileStore, logger *slog.Logger) *Janito
 		interval: JanitorInterval,
 		stop:     make(chan struct{}),
 	}
+}
+
+// SetTrashRetention bounds how long trashed bytes survive before physical purge.
+// Zero (the default) disables trash cleanup, preserving the recovery path.
+func (j *Janitor) SetTrashRetention(d time.Duration) {
+	j.trashRetention = d
 }
 
 // Start launches the janitor goroutine. It is idempotent.
@@ -80,6 +87,22 @@ func (j *Janitor) Stop() {
 func (j *Janitor) runOnce(ctx context.Context) {
 	j.reclaimUnbound(ctx)
 	j.reclaimOrphans(ctx)
+	j.reclaimTrash()
+}
+
+func (j *Janitor) reclaimTrash() {
+	if j.trashRetention <= 0 {
+		return
+	}
+	cutoff := time.Now().Add(-j.trashRetention)
+	removed, err := j.store.PurgeTrashBefore(cutoff, JanitorBatchSize)
+	if err != nil {
+		j.logger.Warn("knowledge janitor: trash purge failed", "error", err)
+		return
+	}
+	if removed > 0 {
+		j.logger.Info("knowledge janitor: purged expired trash", "count", removed)
+	}
 }
 
 func (j *Janitor) reclaimUnbound(ctx context.Context) {
