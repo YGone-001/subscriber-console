@@ -153,7 +153,31 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if versions, verr := h.repo.ListVersions(r.Context(), entryID, MaxVersions); verr == nil {
 		entry.Versions = versions
 	}
+	if r.URL.Query().Get("export") == "1" {
+		h.writeExport(w, p, entry)
+		return
+	}
 	response.JSON(w, http.StatusOK, entry)
+}
+
+// writeExport streams a single entry as a JSON download. The contract pins the
+// bare application/json media type and a no-store cache policy, mirroring the
+// profile and tariff exports. Versions are history, not content, so they are
+// omitted from the backup payload.
+func (h *Handler) writeExport(w http.ResponseWriter, p *auth.Principal, entry *Entry) {
+	entry.Versions = nil
+	payload := map[string]any{
+		"version":     1,
+		"exported_at": CurrentTimestamp(),
+		"exported_by": p.Username,
+		"entry_id":    entry.ID,
+		"entry":       entry,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="knowledge-`+entry.ID+`.json"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 // Create handles POST /api/knowledge/entries.

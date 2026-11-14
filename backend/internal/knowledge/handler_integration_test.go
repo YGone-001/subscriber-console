@@ -227,3 +227,34 @@ func TestHandlerVersionHistoryAndRestore(t *testing.T) {
 		t.Fatalf("expected restored original title at revision 3, got title=%q revision=%d", reverted.Title, reverted.Revision)
 	}
 }
+
+func TestHandlerExportEntry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	h, cleanup := knowledgeTestHandler(t)
+	defer cleanup()
+
+	created := createEntryForTest(t, h)
+	rec := httptest.NewRecorder()
+	h.Get(rec, withEntryID(knowledgeRequest(http.MethodGet, "/api/knowledge/entries/"+created.ID+"?export=1", "viewer", ""), created.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("expected application/json, got %q", ct)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); cd != `attachment; filename="knowledge-`+created.ID+`.json"` {
+		t.Fatalf("unexpected Content-Disposition: %q", cd)
+	}
+	var payload struct {
+		EntryID string `json:"entry_id"`
+		Entry   Entry  `json:"entry"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode export: %v", err)
+	}
+	if payload.EntryID != created.ID || payload.Entry.Title != "round trip" {
+		t.Fatalf("unexpected export payload: %+v", payload)
+	}
+}
