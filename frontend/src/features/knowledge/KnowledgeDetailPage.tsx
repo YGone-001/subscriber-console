@@ -11,7 +11,7 @@ import { hasPermission } from '../../lib/permissions';
 import { copyText } from '../../lib/clipboard';
 import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
 import { MarkdownContent } from './components/MarkdownContent';
-import { attachmentUrl, deleteEntry, isKnowledgeListKey, restoreEntry } from './knowledge-api';
+import { attachmentUrl, deleteEntry, isKnowledgeListKey, restoreEntry, restoreVersion } from './knowledge-api';
 import { knowledgeErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize, isImage } from './knowledge-format';
 import type { Attachment, KnowledgeEntry } from './types';
@@ -31,6 +31,7 @@ export function KnowledgeDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [purgeOpen, setPurgeOpen] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [restoringVersion, setRestoringVersion] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(
     Boolean((location.state as { knowledgeSaved?: boolean } | null)?.knowledgeSaved),
@@ -118,6 +119,25 @@ export function KnowledgeDetailPage() {
       setRestoring(false);
     } catch (err) {
       setRestoring(false);
+      setActionError(knowledgeErrorMessage(err, t, 'kb_restore_failed'));
+    }
+  };
+
+  const confirmRestoreVersion = async (versionId: string) => {
+    if (!data) return;
+    setRestoringVersion(versionId);
+    setActionError(null);
+    try {
+      await restoreVersion(data.id, versionId, data.revision);
+      try {
+        await mutate(isKnowledgeListKey, undefined, { revalidate: true });
+        await mutate(`/api/knowledge/entries/${data.id}`, undefined, { revalidate: true });
+      } catch {
+        /* Reads still revalidate when they mount. */
+      }
+      setRestoringVersion(null);
+    } catch (err) {
+      setRestoringVersion(null);
       setActionError(knowledgeErrorMessage(err, t, 'kb_restore_failed'));
     }
   };
@@ -250,6 +270,35 @@ export function KnowledgeDetailPage() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {data.status !== 'deleted' && (
+        <section className={styles.card}>
+          <h2 className={styles.cardTitle}><FileText size={15} /> {t('kb_versions')}</h2>
+          {!data.versions || data.versions.length === 0 ? (
+            <p className={styles.cardBody}>{t('kb_no_versions')}</p>
+          ) : (
+            <ul className={styles.attachList}>
+              {data.versions.map((version) => (
+                <li key={version.versionId} className={styles.attachItem}>
+                  <span className={styles.attachName}>
+                    {t('kb_version_at', { revision: version.revision, time: formatDateTime(version.createdAt), by: version.createdBy || '—' })}
+                  </span>
+                  {canConfigure && (
+                    <button
+                      type="button"
+                      className={styles.copyButton}
+                      disabled={restoringVersion !== null}
+                      onClick={() => void confirmRestoreVersion(version.versionId)}
+                    >
+                      {restoringVersion === version.versionId ? t('saving') : t('kb_restore_version')}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 

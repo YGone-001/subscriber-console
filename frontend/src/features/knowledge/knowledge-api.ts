@@ -74,6 +74,10 @@ export function restoreEntry(id: string, revision: number): Promise<KnowledgeEnt
   return putJson<KnowledgeEntry>(`/api/knowledge/entries/${id}`, { restore: true, expectedRevision: revision });
 }
 
+export function restoreVersion(id: string, versionId: string, revision: number): Promise<KnowledgeEntry> {
+  return putJson<KnowledgeEntry>(`/api/knowledge/entries/${id}`, { restoreVersionId: versionId, expectedRevision: revision });
+}
+
 export function uploadKnowledgeFile(file: File): Promise<KnowledgeUploadResponse> {
   const formData = new FormData();
   formData.append('file', file);

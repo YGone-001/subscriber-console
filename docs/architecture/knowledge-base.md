@@ -17,8 +17,9 @@ All metadata lives in `xcloud_ops`:
 
 | Collection | Purpose |
 |---|---|
-| `app_knowledge_entries` | Article: title, protocol, phenomenon, rootCause, Markdown solution, tags, attachments, revision, timestamps, actor |
+| `app_knowledge_entries` | Article: title, protocol, phenomenon, rootCause, Markdown solution, tags, attachments, status, revision, timestamps, actor |
 | `app_knowledge_files` | Attachment metadata: original name, content type, kind, size, sha256, owning entry, timestamps, actor |
+| `app_knowledge_entry_versions` | Bounded content snapshots (max 20 per entry) taken before each content update; exposed read-only on the detail endpoint and restorable via `PUT` |
 
 Attachment bytes live on the local filesystem under `KNOWLEDGE_UPLOAD_DIR`
 (default `/srv/internal-resource-server/uploads`). Deleting an attachment moves
@@ -29,8 +30,9 @@ one entry; cross-entry reuse requires a fresh upload.
 Indexes (see `scripts/init-mongo-indexes.mjs`):
 
 ```text
-app_knowledge_entries: {updatedAt:-1,_id:1}, {protocol:1,updatedAt:-1}, {tags:1}
-app_knowledge_files:   {entryId:1,createdAt:1}, {createdAt:1}
+app_knowledge_entries:        {updatedAt:-1,_id:1}, {protocol:1,updatedAt:-1}, {tags:1}
+app_knowledge_files:          {entryId:1,createdAt:1}, {createdAt:1}
+app_knowledge_entry_versions: {entryId:1,revision:-1}
 ```
 
 ## API surface
@@ -43,7 +45,7 @@ Eight Go registrations (five reads, three mutations):
 | `GET /api/knowledge/entries` | list/search (`q`, `protocol`, `tag`, `cursor`, `limit`, `sort`, `order`, `status`) | `core.read` |
 | `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body | `core.read` |
 | `POST /api/knowledge/entries` | create entry | `core.configure` |
-| `PUT /api/knowledge/entries/{entryId}` | update entry (revision CAS); `restore:true` revives a soft-deleted entry | `core.configure` |
+| `PUT /api/knowledge/entries/{entryId}` | update entry (revision CAS); `restore:true` revives a soft-deleted entry; `restoreVersionId` reverts content to a snapshot | `core.configure` |
 | `DELETE /api/knowledge/entries/{entryId}?revision=` | soft-delete entry (revision CAS); `&permanent=1` purges a deleted entry | `core.configure` |
 | `POST /api/knowledge/files` | multipart attachment upload | `core.configure` |
 | `GET /api/knowledge/files/{fileId}` | download; images inline, others attachment; `?download=1` forces download | `core.read` |

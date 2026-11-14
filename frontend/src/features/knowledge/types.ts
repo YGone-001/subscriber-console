@@ -1,5 +1,19 @@
 export type FileKind = 'image' | 'pdf' | 'text' | 'pcap';
 
+export type EntryVersion = {
+  versionId: string;
+  entryId: string;
+  revision: number;
+  title: string;
+  protocol: string;
+  phenomenon: string;
+  rootCause: string;
+  solution: string;
+  tags: string[];
+  createdAt: string;
+  createdBy: string;
+};
+
 export type Attachment = {
   fileId: string;
   originalName: string;
@@ -26,6 +40,7 @@ export type KnowledgeEntry = {
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
+  versions?: EntryVersion[];
 };
 
 export type KnowledgeSummary = {
