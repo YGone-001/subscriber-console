@@ -87,3 +87,7 @@ export function uploadKnowledgeFile(file: File): Promise<KnowledgeUploadResponse
 export function attachmentUrl(fileId: string): string {
   return `/api/knowledge/files/${fileId}`;
 }
+
+export function entryExportUrl(entryId: string): string {
+  return `/api/knowledge/entries/${entryId}?export=1`;
+}

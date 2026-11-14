@@ -11,7 +11,7 @@ import { hasPermission } from '../../lib/permissions';
 import { copyText } from '../../lib/clipboard';
 import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
 import { MarkdownContent } from './components/MarkdownContent';
-import { attachmentUrl, deleteEntry, isKnowledgeListKey, restoreEntry, restoreVersion } from './knowledge-api';
+import { attachmentUrl, deleteEntry, entryExportUrl, isKnowledgeListKey, restoreEntry, restoreVersion } from './knowledge-api';
 import { knowledgeErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize, isImage } from './knowledge-format';
 import type { Attachment, KnowledgeEntry } from './types';
@@ -169,6 +169,9 @@ export function KnowledgeDetailPage() {
         actions={
           <div className={styles.headerActions}>
             <Link to={listReturnTo} className={styles.backButton}><ArrowLeft size={15} /> {t('kb_back')}</Link>
+            <a href={entryExportUrl(data.id)} className={styles.secondaryButton} download>
+              <Download size={15} /> {t('kb_export')}
+            </a>
             {canConfigure && data.status === 'deleted' && (
               <>
                 <button type="button" className={styles.secondaryButton} onClick={() => void confirmRestore()} disabled={restoring}>

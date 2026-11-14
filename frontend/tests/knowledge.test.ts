@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildEntriesPath, isKnowledgeEntryKey, isKnowledgeListKey } from '../src/features/knowledge/knowledge-api';
+import { buildEntriesPath, isKnowledgeEntryKey, isKnowledgeListKey, entryExportUrl } from '../src/features/knowledge/knowledge-api';
 import { applyTool, insertImage } from '../src/features/knowledge/components/MarkdownEditor';
 import { mergeTags, splitTagInput } from '../src/features/knowledge/knowledge-tags';
 import { knowledgeErrorMessage } from '../src/features/knowledge/knowledge-errors';
@@ -144,4 +144,11 @@ test('solution image ids are extracted from inline Markdown images', () => {
   assert.deepEqual(extractSolutionImageIds(`before ![x](/api/knowledge/files/${id}) after`), [id]);
   assert.deepEqual(extractSolutionImageIds('no images here'), []);
   assert.deepEqual(extractSolutionImageIds('![x](https://example.com/a.png)'), []);
+});
+
+test('the entry export url targets the detail export query', () => {
+  assert.equal(
+    entryExportUrl('00000000-0000-4000-8000-000000000000'),
+    '/api/knowledge/entries/00000000-0000-4000-8000-000000000000?export=1',
+  );
 });

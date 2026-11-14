@@ -43,7 +43,7 @@ Eight Go registrations (five reads, three mutations):
 |---|---|---|
 | `GET /api/knowledge/meta` | protocol enum, top tags, protocol distribution, total, limits | `core.read` |
 | `GET /api/knowledge/entries` | list/search (`q`, `protocol`, `tag`, `cursor`, `limit`, `sort`, `order`, `status`) | `core.read` |
-| `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body | `core.read` |
+| `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body; `?export=1` downloads a JSON backup | `core.read` |
 | `POST /api/knowledge/entries` | create entry | `core.configure` |
 | `PUT /api/knowledge/entries/{entryId}` | update entry (revision CAS); `restore:true` revives a soft-deleted entry; `restoreVersionId` reverts content to a snapshot | `core.configure` |
 | `DELETE /api/knowledge/entries/{entryId}?revision=` | soft-delete entry (revision CAS); `&permanent=1` purges a deleted entry | `core.configure` |
