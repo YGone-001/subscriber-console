@@ -126,6 +126,12 @@ entry permanently, releasing its attachments to trash; an active entry must be
 soft-deleted first. Meta aggregates (total, top tags, protocol distribution)
 count active entries only.
 
+The detail endpoint also projects a bounded read-only `referencedBy` list and
+`referenceCount` of investigations whose `knowledgeIds` cite the entry, linking
+knowledge back to the operational records that reference it (the forward
+investigation-to-knowledge link already exists in the investigation editor). This
+is a cross-domain read-only projection; it never writes investigations.
+
 ## Frontend
 
 Four SPA routes in the platform group: `/knowledge`, `/knowledge/new`,

@@ -14,6 +14,12 @@ export type EntryVersion = {
   createdBy: string;
 };
 
+export type InvestigationRef = {
+  investigationId: string;
+  title: string;
+  alertId: string;
+};
+
 export type Attachment = {
   fileId: string;
   originalName: string;
@@ -41,6 +47,8 @@ export type KnowledgeEntry = {
   updatedAt: string;
   updatedBy: string;
   versions?: EntryVersion[];
+  referencedBy?: InvestigationRef[];
+  referenceCount?: number;
 };
 
 export type KnowledgeSummary = {

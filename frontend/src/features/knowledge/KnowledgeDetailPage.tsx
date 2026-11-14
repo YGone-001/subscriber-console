@@ -305,6 +305,22 @@ export function KnowledgeDetailPage() {
         </section>
       )}
 
+      {data.referencedBy && data.referencedBy.length > 0 && (
+        <section className={styles.card}>
+          <h2 className={styles.cardTitle}><Activity size={15} /> {t('kb_referenced_by')}</h2>
+          <p className={styles.cardBody}>{t('kb_reference_count', { count: data.referenceCount ?? data.referencedBy.length })}</p>
+          <ul className={styles.attachList}>
+            {data.referencedBy.map((ref) => (
+              <li key={ref.investigationId} className={styles.attachItem}>
+                <Link to={`/investigations/${ref.investigationId}`} className={styles.attachName}>
+                  {ref.title || ref.investigationId}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {preview && (
         <section className={styles.card}>
           <div className={styles.cardHead}>
