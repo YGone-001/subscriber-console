@@ -38,6 +38,7 @@ import {
   type HealthSummarySection,
 } from '../operations/operations-summary';
 import { SkeletonKpiStrip } from '../../components/ui/LoadingSkeleton';
+import { healthKpiFilter, type HealthKpiKey } from './nf-health-kpi';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { useRead } from '../../lib/api/use-read';
@@ -53,6 +54,8 @@ import {
 } from './nf-health-api';
 import {
   DEFAULT_HEALTH_SORT,
+  HEALTH_COLLECTION_OUTCOMES,
+  HEALTH_FRESHNESS_STATES,
   HEALTH_LAYER_FILTERS,
   HEALTH_OVERALL_STATES,
   HEALTH_SORTS,
@@ -381,6 +384,17 @@ export function NfHealthPage() {
     [t],
   );
 
+  // KPI cards are filter entries: each one narrows the queue to exactly the
+  // population it counts, so an operator never has to translate a number into
+  // a hand-built filter.
+  const applyKpiFilter = useCallback(
+    (key: HealthKpiKey) => {
+      const patch = healthKpiFilter(key);
+      url.setFilters({ freshness: patch.freshness, collection: patch.collection });
+    },
+    [url],
+  );
+
   const kpiItems = useMemo<MetricStripItem[]>(() => [
     {
       key: 'configured',
@@ -388,6 +402,8 @@ export function NfHealthPage() {
       value: kpis.configured ?? '-',
       detail: scopeKpiDetail(kpis.configured, t),
       tone: kpis.configured === null ? 'muted' : 'primary',
+      onClick: () => applyKpiFilter('configured'),
+      ariaLabel: t('nf_health_kpi_filter_configured'),
     },
     {
       key: 'fresh',
@@ -395,22 +411,46 @@ export function NfHealthPage() {
       value: kpis.fresh ?? '-',
       detail: scopeKpiDetail(kpis.fresh, t),
       tone: kpis.fresh === null ? 'muted' : 'primary',
-    },
-    {
-      key: 'failed',
-      label: t('nf_health_kpi_degraded'),
-      value: kpis.failed ?? '-',
-      detail: scopeKpiDetail(kpis.failed, t),
-      tone: kpis.failed === null ? 'muted' : 'primary',
+      onClick: () => applyKpiFilter('fresh'),
+      ariaLabel: t('nf_health_kpi_filter_fresh'),
     },
     {
       key: 'stale',
       label: t('nf_health_kpi_stale'),
-      value: kpis.staleUnknown ?? '-',
-      detail: scopeKpiDetail(kpis.staleUnknown, t),
-      tone: kpis.staleUnknown === null ? 'muted' : 'primary',
+      value: kpis.stale ?? '-',
+      detail: scopeKpiDetail(kpis.stale, t),
+      tone: kpis.stale === null ? 'muted' : 'primary',
+      onClick: () => applyKpiFilter('stale'),
+      ariaLabel: t('nf_health_kpi_filter_stale'),
     },
-  ], [kpis, t]);
+    {
+      key: 'unknown',
+      label: t('nf_health_kpi_unknown'),
+      value: kpis.unknown ?? '-',
+      detail: scopeKpiDetail(kpis.unknown, t),
+      tone: kpis.unknown === null ? 'muted' : 'primary',
+      onClick: () => applyKpiFilter('unknown'),
+      ariaLabel: t('nf_health_kpi_filter_unknown'),
+    },
+    {
+      key: 'not-monitored',
+      label: t('nf_health_kpi_not_monitored'),
+      value: kpis.notMonitored ?? '-',
+      detail: scopeKpiDetail(kpis.notMonitored, t),
+      tone: kpis.notMonitored === null ? 'muted' : 'primary',
+      onClick: () => applyKpiFilter('notMonitored'),
+      ariaLabel: t('nf_health_kpi_filter_not_monitored'),
+    },
+    {
+      key: 'failed',
+      label: t('nf_health_kpi_failed'),
+      value: kpis.failed ?? '-',
+      detail: scopeKpiDetail(kpis.failed, t),
+      tone: kpis.failed === null ? 'muted' : 'warning',
+      onClick: () => applyKpiFilter('failed'),
+      ariaLabel: t('nf_health_kpi_filter_failed'),
+    },
+  ], [kpis, t, applyKpiFilter]);
 
   const filtersActive = hasHealthFilters(filters);
 
@@ -448,11 +488,11 @@ export function NfHealthPage() {
       ) : null}
 
       {loading && summaryLoading && targets.length === 0 ? (
-        <SkeletonKpiStrip count={4} />
+        <SkeletonKpiStrip count={6} />
       ) : (
         <MetricStrip
           variant="cards"
-          columns={4}
+          columns={6}
           ariaLabel={t('nf_health_kpi_label')}
           items={kpiItems}
         />
@@ -520,6 +560,32 @@ export function NfHealthPage() {
               {HEALTH_LAYER_FILTERS.map((layer) => (
                 <option key={layer} value={layer}>
                   {t(`nf_health_layer_${layer}_measured_filter`)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              aria-label={t('nf_health_filter_freshness')}
+              value={filters.freshness}
+              onChange={(event) => url.setFilter('freshness', event.target.value)}
+            >
+              <option value="">{t('nf_health_filter_all_freshness')}</option>
+              {HEALTH_FRESHNESS_STATES.map((state) => (
+                <option key={state} value={state}>
+                  {t(`nf_health_freshness_${state}`)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              aria-label={t('nf_health_filter_collection')}
+              value={filters.collection}
+              onChange={(event) => url.setFilter('collection', event.target.value)}
+            >
+              <option value="">{t('nf_health_filter_all_collection')}</option>
+              {HEALTH_COLLECTION_OUTCOMES.map((outcome) => (
+                <option key={outcome} value={outcome}>
+                  {t(`nf_health_collection_${outcome}`)}
                 </option>
               ))}
             </select>

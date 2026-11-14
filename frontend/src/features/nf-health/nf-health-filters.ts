@@ -32,7 +32,30 @@ export const HEALTH_OVERALL_STATES = [
 /* Layer coverage filter: requiring a layer means "this layer was measured". */
 export const HEALTH_LAYER_FILTERS = ['l1', 'l2', 'l3'] as const;
 
-export const HEALTH_URL_KEYS = ['q', 'enabled', 'domain', 'state', 'layers', 'sort'] as const;
+/* Measurement freshness states published by the backend. Freshness is the age
+ * of the accepted measurement against the target's own policy window; it is
+ * independent of the collection outcome. */
+export const HEALTH_FRESHNESS_STATES = [
+  'fresh',
+  'stale',
+  'unknown',
+  'not_monitored',
+] as const;
+
+/* Latest collection attempt outcome. A failed attempt never advances the
+ * accepted measurement, so a target can be fresh and failed at the same time. */
+export const HEALTH_COLLECTION_OUTCOMES = ['failed', 'succeeded'] as const;
+
+export const HEALTH_URL_KEYS = [
+  'q',
+  'enabled',
+  'domain',
+  'state',
+  'layers',
+  'freshness',
+  'collection',
+  'sort',
+] as const;
 
 export type HealthFilterSource = Record<string, string | undefined>;
 
@@ -42,12 +65,36 @@ export type HealthFilters = {
   domain: string;
   overall: string;
   layer: string;
+  /** Comma-separated freshness states; empty means no freshness narrowing. */
+  freshness: string;
+  /** Latest collection attempt outcome; empty means no outcome narrowing. */
+  collection: string;
   sort: HealthSort;
 };
 
 function pick<T extends readonly string[]>(options: T, value: string | undefined): T[number] | '' {
   const trimmed = (value ?? '').trim();
   return (options as readonly string[]).includes(trimmed) ? (trimmed as T[number]) : '';
+}
+
+/**
+ * Reads a comma-separated filter value, keeping only canonical tokens and
+ * preserving request order. An unknown token is dropped rather than forwarded,
+ * so a hand-edited URL degrades to the unfiltered queue instead of a 400.
+ */
+function pickList<T extends readonly string[]>(options: T, value: string | undefined): string {
+  const raw = (value ?? '').trim();
+  if (!raw) return '';
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const part of raw.split(',')) {
+    const token = part.trim().toLowerCase();
+    if (!token || seen.has(token)) continue;
+    if (!(options as readonly string[]).includes(token)) continue;
+    seen.add(token);
+    kept.push(token);
+  }
+  return kept.join(',');
 }
 
 /**
@@ -75,6 +122,8 @@ export function readHealthFilters(source: HealthFilterSource): HealthFilters {
     domain: (source.domain ?? '').trim(),
     overall,
     layer: pick(HEALTH_LAYER_FILTERS, source.layers),
+    freshness: pickList(HEALTH_FRESHNESS_STATES, source.freshness),
+    collection: pick(HEALTH_COLLECTION_OUTCOMES, source.collection),
     sort: sort as HealthSort,
   };
 }
@@ -101,6 +150,8 @@ export function healthTargetQuery(
     domain: filters.domain || undefined,
     state: filters.overall || undefined,
     layers: filters.layer || undefined,
+    freshness: filters.freshness || undefined,
+    collection: filters.collection || undefined,
     sort: filters.sort,
     cursor,
     limit,
@@ -121,6 +172,8 @@ export function healthInterfaceQuery(
   return {
     q: filters.q || undefined,
     domain: filters.domain || undefined,
+    freshness: filters.freshness || undefined,
+    collection: filters.collection || undefined,
     sort: filters.sort,
     cursor,
     limit,
@@ -129,5 +182,13 @@ export function healthInterfaceQuery(
 
 /** True when at least one narrowing filter is active. */
 export function hasHealthFilters(filters: HealthFilters): boolean {
-  return Boolean(filters.q || filters.enabled || filters.domain || filters.overall || filters.layer);
+  return Boolean(
+    filters.q
+    || filters.enabled
+    || filters.domain
+    || filters.overall
+    || filters.layer
+    || filters.freshness
+    || filters.collection,
+  );
 }

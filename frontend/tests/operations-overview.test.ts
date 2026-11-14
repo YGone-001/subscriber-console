@@ -79,7 +79,10 @@ test('posture projects platform-wide health and alert counts', () => {
   assert.equal(posture.monitored.unhealthy, 1);
   assert.equal(posture.monitored.stale, 0);
   assert.equal(posture.fresh.fresh, 8);
-  assert.equal(posture.fresh.staleUnknown, 1);
+  // Stale and unknown come from the freshness distribution (1 + 1), not from
+  // subtracting the failed count: a failed attempt never advances the
+  // accepted measurement, so the two dimensions overlap.
+  assert.equal(posture.fresh.staleUnknown, 2);
   assert.equal(posture.alerts.active, 3);
   assert.equal(posture.alerts.acknowledged, 1);
   assert.equal(posture.alerts.open, 4, 'open alerts are active + acknowledged, matching the severity queue');

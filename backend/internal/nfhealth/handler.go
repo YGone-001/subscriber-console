@@ -228,6 +228,7 @@ type MetaResponse struct {
 	RunStatuses              []string           `json:"runStatuses"`
 	LayerStates              []string           `json:"layerStates"`
 	FreshnessStates          []string           `json:"freshnessStates"`
+	CollectionOutcomes       []string           `json:"collectionOutcomes"`
 	EvidenceKinds            []string           `json:"evidenceKinds"`
 	ProcessOutcomes          []string           `json:"processOutcomes"`
 	InterfaceOutcomes        []string           `json:"interfaceOutcomes"`
@@ -271,6 +272,7 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		RunStatuses:              CanonicalRunStatuses,
 		LayerStates:              CanonicalLayerStates,
 		FreshnessStates:          CanonicalFreshnessStates,
+		CollectionOutcomes:       CanonicalCollectionOutcomes,
 		EvidenceKinds:            CanonicalEvidenceKinds,
 		ProcessOutcomes:          CanonicalProcessOutcomes,
 		InterfaceOutcomes:        CanonicalInterfaceOutcomes,
@@ -331,7 +333,7 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	for param := range q {
 		switch param {
-		case "q", "limit", "cursor", "enabled", "resourceIds", "domain", "state", "layers", "sort":
+		case "q", "limit", "cursor", "enabled", "resourceIds", "domain", "state", "layers", "sort", "freshness", "collection":
 		default:
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
@@ -364,6 +366,16 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		writeValidation(w, layerErr)
 		return
 	}
+	freshness, freshnessErr := parseFreshnessFilter(q.Get("freshness"))
+	if freshnessErr != nil {
+		writeValidation(w, freshnessErr)
+		return
+	}
+	collection, collectionErr := parseCollectionFilter(q.Get("collection"))
+	if collectionErr != nil {
+		writeValidation(w, collectionErr)
+		return
+	}
 	sortOrder := strings.TrimSpace(q.Get("sort"))
 	if sortOrder == "" {
 		sortOrder = TargetSortUpdated
@@ -389,9 +401,10 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		// ordering parameter could hide a target and turn a confirmed
 		// association into an apparent absence.
 		if q.Get("cursor") != "" || strings.TrimSpace(q.Get("q")) != "" || enabled != "" ||
-			domain != "" || overall != "" || len(layers) > 0 || q.Get("sort") != "" {
+			domain != "" || overall != "" || len(layers) > 0 || q.Get("sort") != "" ||
+			len(freshness) > 0 || collection != "" {
 			response.BadRequest(w,
-				"resourceIds cannot be combined with cursor, q, enabled, domain, state, layers or sort",
+				"resourceIds cannot be combined with cursor, q, enabled, domain, state, layers, sort, freshness or collection",
 				"UNSUPPORTED_QUERY_COMBINATION")
 			return
 		}
@@ -403,23 +416,30 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// One instant for the whole request: the freshness filter and the row
+	// projection must be evaluated against the same clock, or a target could
+	// be filtered by one freshness state and displayed as another.
+	now := time.Now().UTC()
+
 	items, next, hasMore, err := h.repo.ListTargets(r.Context(), TargetListFilter{
-		Query:       strings.TrimSpace(q.Get("q")),
-		Enabled:     enabled,
-		Domain:      domain,
-		Overall:     overall,
-		Layers:      layers,
-		Sort:        sortOrder,
-		Limit:       limit,
-		Cursor:      strings.TrimSpace(q.Get("cursor")),
+		Query:      strings.TrimSpace(q.Get("q")),
+		Enabled:    enabled,
+		Domain:     domain,
+		Overall:    overall,
+		Layers:     layers,
+		Freshness:  freshness,
+		Collection: collection,
+		Sort:       sortOrder,
+		Limit:      limit,
+		Cursor:     strings.TrimSpace(q.Get("cursor")),
 		ResourceIDs: resourceIDs,
+		Now:         now,
 	})
 	if err != nil {
 		response.BadRequest(w, err.Error(), "INVALID_CURSOR")
 		return
 	}
 	summaries := make([]HealthTargetSummary, 0, len(items))
-	now := time.Now().UTC()
 
 	// Bounded batch projection: one aggregation per collection for the whole
 	// page, never one request (or one query) per target. When the projection
@@ -493,7 +513,7 @@ func (h *Handler) InterfaceMatrix(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	for param := range q {
 		switch param {
-		case "q", "limit", "cursor", "domain", "sort":
+		case "q", "limit", "cursor", "domain", "sort", "freshness", "collection":
 		default:
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
@@ -518,19 +538,36 @@ func (h *Handler) InterfaceMatrix(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	freshness, freshnessErr := parseFreshnessFilter(q.Get("freshness"))
+	if freshnessErr != nil {
+		writeValidation(w, freshnessErr)
+		return
+	}
+	collection, collectionErr := parseCollectionFilter(q.Get("collection"))
+	if collectionErr != nil {
+		writeValidation(w, collectionErr)
+		return
+	}
+
+	// One instant for the whole request: the freshness filter and the row
+	// projection must be evaluated against the same clock.
+	now := time.Now().UTC()
+
 	items, next, hasMore, err := h.repo.ListTargets(r.Context(), TargetListFilter{
-		Query:  strings.TrimSpace(q.Get("q")),
-		Domain: domain,
-		Sort:   sortOrder,
-		Limit:  limit,
-		Cursor: strings.TrimSpace(q.Get("cursor")),
+		Query:      strings.TrimSpace(q.Get("q")),
+		Domain:     domain,
+		Freshness:  freshness,
+		Collection: collection,
+		Sort:       sortOrder,
+		Limit:      limit,
+		Cursor:     strings.TrimSpace(q.Get("cursor")),
+		Now:        now,
 	})
 	if err != nil {
 		response.BadRequest(w, err.Error(), "INVALID_CURSOR")
 		return
 	}
 
-	now := time.Now().UTC()
 	rows := make([]InterfaceMatrixRow, 0, len(items))
 	for i := range items {
 		rows = append(rows, BuildInterfaceMatrixRow(&items[i], now))
@@ -553,6 +590,70 @@ func isCanonicalOverallState(state string) bool {
 	default:
 		return false
 	}
+}
+
+// parseFreshnessFilter validates the measurement-freshness filter.
+//
+// Contract:
+//   - comma-separated canonical freshness tokens (fresh, stale, unknown,
+//     not_monitored);
+//   - at least one and at most one token per canonical state, deduplicated
+//     while preserving request order;
+//   - an unknown token is rejected instead of being silently dropped, so a
+//     stale link never turns into a silently different queue.
+func parseFreshnessFilter(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	if len(parts) > len(CanonicalFreshnessStates) {
+		return nil, validationError("INVALID_FRESHNESS_FILTER", "freshness accepts at most one token per canonical freshness state")
+	}
+	seen := make(map[string]struct{}, len(parts))
+	freshness := make([]string, 0, len(parts))
+	for _, part := range parts {
+		state := strings.ToLower(strings.TrimSpace(part))
+		if state == "" {
+			return nil, validationError("INVALID_FRESHNESS_FILTER", "freshness must not contain an empty value")
+		}
+		if !isCanonicalFreshnessState(state) {
+			return nil, validationError("INVALID_FRESHNESS_FILTER", "freshness must contain fresh, stale, unknown or not_monitored")
+		}
+		if _, ok := seen[state]; ok {
+			continue
+		}
+		seen[state] = struct{}{}
+		freshness = append(freshness, state)
+	}
+	return freshness, nil
+}
+
+// parseCollectionFilter validates the latest-collection-outcome filter.
+func parseCollectionFilter(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	outcome := strings.ToLower(raw)
+	switch outcome {
+	case CollectionFailed, CollectionSucceeded:
+		return outcome, nil
+	default:
+		return "", validationError("INVALID_COLLECTION_FILTER", "collection must be failed or succeeded")
+	}
+}
+
+// isCanonicalFreshnessState reports whether a token is one this platform
+// publishes. A non-canonical token is rejected instead of returning an empty
+// page that would look like "nothing matches".
+func isCanonicalFreshnessState(state string) bool {
+	for _, canonical := range CanonicalFreshnessStates {
+		if state == canonical {
+			return true
+		}
+	}
+	return false
 }
 
 // parseLayerFilter validates the layer coverage filter.

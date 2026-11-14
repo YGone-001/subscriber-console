@@ -731,10 +731,18 @@ function handleNfHealth(req, res, url, context) {
     const limit = Number(url.searchParams.get('limit') ?? 20) || 20;
     const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
     const enabled = url.searchParams.get('enabled');
+    const freshness = (url.searchParams.get('freshness') ?? '').trim();
+    const collection = (url.searchParams.get('collection') ?? '').trim();
     let items = TARGETS.map(summarize);
     if (q) items = items.filter((item) => item.name.toLowerCase().includes(q));
     if (enabled === 'true') items = items.filter((item) => item.enabled);
     if (enabled === 'false') items = items.filter((item) => !item.enabled);
+    if (freshness) {
+      const wanted = new Set(freshness.split(',').map((token) => token.trim()).filter(Boolean));
+      items = items.filter((item) => wanted.has(item.freshness?.state ?? 'unknown'));
+    }
+    if (collection === 'failed') items = items.filter((item) => Boolean(item.lastError));
+    if (collection === 'succeeded') items = items.filter((item) => !item.lastError);
     return sendJson(res, 200, { targets: items.slice(0, limit), page: page(limit) });
   }
 

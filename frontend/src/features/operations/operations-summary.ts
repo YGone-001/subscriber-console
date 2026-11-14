@@ -134,29 +134,45 @@ export function discoveryKpisFromSummary(
 export interface HealthKpis {
   configured: number | null;
   fresh: number | null;
+  stale: number | null;
+  unknown: number | null;
+  notMonitored: number | null;
+  /** Targets whose latest collection attempt recorded an error. */
   failed: number | null;
-  staleUnknown: number | null;
 }
 
-// healthKpisFromSummary keeps the page KPI semantics (configured / fresh /
-// failed / stale-or-unknown) but sourced from the full target population.
-// staleUnknown covers freshness states other than fresh for targets that have
-// not failed their latest collection attempt.
+// healthKpisFromSummary keeps the page KPI semantics sourced from the full
+// target population.
+//
+// The freshness buckets are read directly from the server distribution rather
+// than derived by subtraction: the four freshness states are mutually exclusive
+// and sum to the configured population, while "failed" is an independent
+// dimension — a failed attempt never advances the accepted measurement, so a
+// target can be fresh and failed at the same time. Subtracting "failed" from
+// "configured" would therefore both mis-state the stale/unknown count and
+// double-count the failed targets.
 export function healthKpisFromSummary(
   section: HealthSummarySection | undefined,
 ): HealthKpis {
   if (!section || section.completeness !== 'complete' || !section.targets) {
-    return { configured: null, fresh: null, failed: null, staleUnknown: null };
+    return {
+      configured: null,
+      fresh: null,
+      stale: null,
+      unknown: null,
+      notMonitored: null,
+      failed: null,
+    };
   }
   const targets = section.targets;
-  const fresh = targets.freshnessByState?.fresh ?? 0;
-  const failed = targets.failed ?? 0;
-  const staleUnknown = Math.max(targets.configured - fresh - failed, 0);
+  const byState = targets.freshnessByState ?? {};
   return {
     configured: targets.configured,
-    fresh,
-    failed,
-    staleUnknown,
+    fresh: byState.fresh ?? 0,
+    stale: byState.stale ?? 0,
+    unknown: byState.unknown ?? 0,
+    notMonitored: byState.not_monitored ?? 0,
+    failed: targets.failed ?? 0,
   };
 }
 

@@ -238,6 +238,54 @@ async function main() {
       }
     }
 
+    /* The KPI cards are filter entries: clicking one must narrow the queue to
+     * exactly the population the card counts. The freshness and collection
+     * dimensions are independent, so a freshness card clears the collection
+     * filter and vice versa. */
+    {
+      const { context, page } = await newSession(browser, {
+        ...VIEWPORTS.desktop,
+        theme: 'light',
+        locale: 'en',
+        session: 'operator',
+      });
+      await page.goto(`${origin}${listRoute}`, { waitUntil: 'domcontentloaded' });
+      await settle(page, 'Add Monitoring Target');
+
+      const freshCard = page.getByRole('button', { name: 'Show only fresh observations' });
+      await freshCard.waitFor({ state: 'visible', timeout: 15000 });
+      await freshCard.click();
+      await page.waitForURL(/freshness=fresh/, { timeout: 15000 });
+      check(
+        'kpi_card_filters_by_freshness',
+        new URL(page.url()).searchParams.get('freshness') === 'fresh',
+        'the freshness KPI card publishes its own filter',
+      );
+      check(
+        'kpi_card_clears_the_other_dimension',
+        !new URL(page.url()).searchParams.has('collection'),
+        'a freshness card must not keep a collection filter',
+      );
+
+      await page.goto(`${origin}${listRoute}?collection=failed`, { waitUntil: 'domcontentloaded' });
+      await settle(page, 'Add Monitoring Target');
+      const failedCard = page.getByRole('button', { name: 'Show only targets whose last collection failed' });
+      await failedCard.waitFor({ state: 'visible', timeout: 15000 });
+      await failedCard.click();
+      await page.waitForURL(/collection=failed/, { timeout: 15000 });
+      check(
+        'kpi_card_filters_by_collection',
+        new URL(page.url()).searchParams.get('collection') === 'failed',
+        'the failed-collection KPI card publishes its own filter',
+      );
+      check(
+        'kpi_collection_card_clears_freshness',
+        !new URL(page.url()).searchParams.has('freshness'),
+        'the collection card must not keep a freshness filter',
+      );
+      await context.close();
+    }
+
     /* Cards and the audit table are exclusive: asking for the table must
      * replace the queue rather than append a second representation. */
     {

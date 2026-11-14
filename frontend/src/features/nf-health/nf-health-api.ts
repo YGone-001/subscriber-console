@@ -42,6 +42,8 @@ export async function fetchNfHealthTargets(
       domain: params.domain,
       state: params.state,
       layers: params.layers,
+      freshness: params.freshness,
+      collection: params.collection,
       sort: params.sort,
       cursor: params.cursor,
       limit: params.limit,
@@ -71,6 +73,8 @@ export async function fetchNfHealthInterfaces(
     withQuery('/api/nf-health/interfaces', {
       q: params.q,
       domain: params.domain,
+      freshness: params.freshness,
+      collection: params.collection,
       sort: params.sort,
       cursor: params.cursor,
       limit: params.limit,

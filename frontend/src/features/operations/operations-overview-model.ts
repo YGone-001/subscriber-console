@@ -56,7 +56,14 @@ export function buildOperationsPosture(
   const enabled = health ? health.enabled : null;
   const fresh = health ? (health.freshnessByState?.fresh ?? 0) : null;
   const failed = health ? health.failed : null;
-  const staleUnknown = health ? Math.max(health.enabled - (health.freshnessByState?.fresh ?? 0) - health.failed, 0) : null;
+  // Stale and unknown are read from the server's own freshness distribution
+  // rather than derived by subtraction: the freshness states are mutually
+  // exclusive, while "failed" is an independent dimension — a failed attempt
+  // never advances the accepted measurement, so a target can be fresh and
+  // failed at the same time.
+  const staleUnknown = health
+    ? (health.freshnessByState?.stale ?? 0) + (health.freshnessByState?.unknown ?? 0)
+    : null;
 
   const active = alerts ? (alerts.alertsByState?.active ?? 0) : null;
   const acknowledged = alerts ? (alerts.alertsByState?.acknowledged ?? 0) : null;

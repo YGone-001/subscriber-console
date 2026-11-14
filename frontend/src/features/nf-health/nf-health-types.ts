@@ -245,6 +245,10 @@ export interface InterfaceMatrixResponse {
 export interface NfHealthInterfaceQueryParams {
   q?: string;
   domain?: string;
+  /* Comma-separated measurement freshness states (fresh, stale, unknown, not_monitored). */
+  freshness?: string;
+  /* Latest collection attempt outcome: "failed" or "succeeded". */
+  collection?: string;
   sort?: string;
   cursor?: string;
   limit?: number;
@@ -315,6 +319,10 @@ export interface NfHealthTargetQueryParams {
   state?: string;
   /* Comma-separated layer coverage requirement (l1, l2, l3). */
   layers?: string;
+  /* Comma-separated measurement freshness states (fresh, stale, unknown, not_monitored). */
+  freshness?: string;
+  /* Latest collection attempt outcome: "failed" or "succeeded". */
+  collection?: string;
   /* "risk" orders the duty queue, "updated" keeps recency order. */
   sort?: string;
   cursor?: string;

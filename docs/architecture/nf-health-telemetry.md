@@ -698,6 +698,30 @@ PUT    /api/nf-health/targets/{targetId}
 POST   /api/nf-health/targets/{targetId}/collect
 ```
 
+### 9.1 Target list filters
+
+`GET /api/nf-health/targets` accepts two orthogonal dimensions beyond the
+stored-field predicates (`q`, `enabled`, `domain`, `state`, `layers`):
+
+- `freshness` — a comma-separated subset of `fresh`, `stale`, `unknown`,
+  `not_monitored`. Freshness is the age of the accepted measurement against the
+  target's own policy window, so it is a clock-dependent derivation rather than
+  a stored field. The server resolves the matching target identifiers with the
+  same projection and the same `EvaluateFreshness` the summary and the row
+  projection use, so a filtered list and the freshness KPI can never disagree.
+- `collection` — `failed` or `succeeded`: the outcome of the latest completed
+  collection attempt, read from the stored `lastError`.
+
+The two dimensions are independent: a failed attempt never advances the
+accepted measurement, so a target can be fresh and failed at the same time.
+`resourceIds` remains an association lookup and therefore rejects both
+filters, because narrowing it could hide a target and fake an absence.
+
+The KPI strip on `/nf-health` publishes both dimensions as clickable filters.
+Every freshness bucket is read from the server's own distribution rather than
+derived by subtraction, so the four freshness states stay mutually exclusive
+and sum to the configured population.
+
 ```text
 /nf-health
 /nf-health/:targetId

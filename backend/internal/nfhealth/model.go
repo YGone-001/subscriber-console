@@ -1,5 +1,7 @@
 package nfhealth
 
+import "time"
+
 // SchemaVersion defines the authoritative schema version for health documents.
 const SchemaVersion = 1
 
@@ -203,6 +205,19 @@ const (
 // Canonical freshness vocabulary exposed by GET /api/nf-health/meta.
 var CanonicalFreshnessStates = []string{FreshnessFresh, FreshnessStale, FreshnessUnknown, FreshnessNotMonitored}
 
+// Collection outcome vocabulary for the target list filter. It reports the
+// result of the latest completed collection attempt, independently of the
+// measurement freshness: a target can be fresh while its latest attempt
+// failed, because a failed attempt never advances the accepted measurement.
+const (
+	CollectionFailed    = "failed"
+	CollectionSucceeded = "succeeded"
+)
+
+// CanonicalCollectionOutcomes is the collection-outcome vocabulary exposed by
+// GET /api/nf-health/meta.
+var CanonicalCollectionOutcomes = []string{CollectionFailed, CollectionSucceeded}
+
 // LayerEvidence records one health layer with explicit provenance.
 type LayerEvidence struct {
 	State        string `json:"state" bson:"state"`
@@ -397,6 +412,16 @@ type TargetListFilter struct {
 	Overall string
 	// Layers requires every listed layer (l1, l2, l3) to be measured.
 	Layers []string
+	// Freshness filters by the live freshness state of the target: fresh,
+	// stale, unknown or not_monitored. The state is derived from the accepted
+	// measurement age against the target's own policy window, so it is
+	// resolved by the server rather than read from a stored field.
+	Freshness []string
+	// Collection filters by the outcome of the latest collection attempt:
+	// "failed" (the attempt recorded an error) or "succeeded" (the latest
+	// attempt succeeded). It is an independent dimension from freshness: a
+	// target can be fresh while its latest attempt failed.
+	Collection string
 	// Sort selects the ordering: "" / "updated" recency, "risk" duty queue.
 	Sort   string
 	Limit  int
@@ -406,6 +431,10 @@ type TargetListFilter struct {
 	// identifiers are returned, without pagination. The caller (the handler) is
 	// responsible for validating, deduplicating and bounding the list.
 	ResourceIDs []string
+	// Now is the instant the freshness projection is evaluated against. Zero
+	// means the current instant. The caller passes the same instant it uses
+	// for the row projection so a filter and its rows never disagree.
+	Now time.Time
 }
 
 // MaxTargetResourceFilterIDs bounds the resourceIds association lookup. One page

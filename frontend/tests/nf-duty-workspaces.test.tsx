@@ -111,6 +111,8 @@ test('a shared health link restores every filter and the order', () => {
     domain: '5gc',
     state: 'degraded',
     layers: 'l2',
+    freshness: 'fresh,stale',
+    collection: 'failed',
     sort: 'updated',
   });
   assert.deepEqual(filters, {
@@ -119,6 +121,8 @@ test('a shared health link restores every filter and the order', () => {
     domain: '5gc',
     overall: 'degraded',
     layer: 'l2',
+    freshness: 'fresh,stale',
+    collection: 'failed',
     sort: 'updated',
   });
   assert.equal(hasHealthFilters(filters), true);
@@ -130,10 +134,32 @@ test('a shared health link restores every filter and the order', () => {
     domain: '5gc',
     state: 'degraded',
     layers: 'l2',
+    freshness: 'fresh,stale',
+    collection: 'failed',
     sort: 'updated',
     cursor: 'cur-2',
     limit: 20,
   });
+});
+
+test('the health freshness and collection filters are read independently', () => {
+  // Freshness is the measurement age and collection is the latest attempt
+  // outcome: they are independent dimensions, so one never implies the other.
+  const filters = readHealthFilters({ freshness: 'fresh', collection: 'failed' });
+  assert.equal(filters.freshness, 'fresh');
+  assert.equal(filters.collection, 'failed');
+  assert.equal(hasHealthFilters(filters), true);
+
+  const withoutFilters = readHealthFilters({});
+  assert.equal(withoutFilters.freshness, '');
+  assert.equal(withoutFilters.collection, '');
+  assert.equal(hasHealthFilters(withoutFilters), false);
+});
+
+test('an unknown freshness or collection token is dropped rather than forwarded', () => {
+  const filters = readHealthFilters({ freshness: 'fresh,healthy', collection: 'pending' });
+  assert.equal(filters.freshness, 'fresh');
+  assert.equal(filters.collection, '');
 });
 
 test('the default health request asks the server for the risk order', () => {
@@ -164,7 +190,16 @@ test('the legacy collection filter still works and bad values are dropped', () =
 });
 
 test('the health URL vocabulary is the one the page reads', () => {
-  assert.deepEqual([...HEALTH_URL_KEYS], ['q', 'enabled', 'domain', 'state', 'layers', 'sort']);
+  assert.deepEqual([...HEALTH_URL_KEYS], [
+    'q',
+    'enabled',
+    'domain',
+    'state',
+    'layers',
+    'freshness',
+    'collection',
+    'sort',
+  ]);
 });
 
 /* -------------------------------------------- health interface matrix -- */
@@ -183,11 +218,15 @@ test('the matrix query keeps the duty filters and drops list-only ones', () => {
     domain: '5gc',
     state: 'unhealthy',
     layers: 'l2',
+    freshness: 'fresh',
+    collection: 'failed',
     sort: 'risk',
   });
   assert.deepEqual(healthInterfaceQuery(filters, 'cursor-1', 20), {
     q: 'amf',
     domain: '5gc',
+    freshness: 'fresh',
+    collection: 'failed',
     sort: 'risk',
     cursor: 'cursor-1',
     limit: 20,

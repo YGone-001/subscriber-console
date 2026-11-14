@@ -107,13 +107,73 @@ func (r *Repository) GetTarget(ctx context.Context, targetID string) (*HealthTar
 	return &doc, nil
 }
 
+// MaxFreshnessFilterTargets bounds the identifier set a freshness filter may
+// resolve. The freshness state is derived from the current clock and each
+// target's own policy window, so it cannot be answered by a stored-field
+// predicate. The target collection is operator-authored configuration rather
+// than time-series data, so the resolved set stays bounded by the number of
+// configured targets.
+const MaxFreshnessFilterTargets = 20000
+
+// FreshnessTargetIDs resolves the identifiers of the targets whose live
+// freshness state matches one of the requested states.
+//
+// Freshness depends on the current clock and on each target's own staleness
+// policy, so no stored field can answer it. The server resolves the matching
+// identifiers with the same projection and the same EvaluateFreshness the
+// summary and the row projection use, so a filtered list and the freshness
+// KPI can never disagree.
+func (r *Repository) FreshnessTargetIDs(ctx context.Context, states []string, now time.Time) ([]string, error) {
+	if len(states) == 0 {
+		return []string{}, nil
+	}
+	wanted := make(map[string]bool, len(states))
+	for _, state := range states {
+		wanted[state] = true
+	}
+	opts := options.Find().SetProjection(freshnessProjectionFields)
+	cursor, err := r.targets.Find(ctx, bson.M{}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	var targets []HealthTarget
+	if err := cursor.All(ctx, &targets); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(targets))
+	for i := range targets {
+		if wanted[EvaluateFreshness(&targets[i], now).State] {
+			ids = append(ids, targets[i].TargetID)
+			if len(ids) > MaxFreshnessFilterTargets {
+				return nil, errors.New("freshness filter matches more targets than the bounded limit")
+			}
+		}
+	}
+	return ids, nil
+}
+
 // ListTargets returns a keyset-paginated target listing.
 func (r *Repository) ListTargets(ctx context.Context, filter TargetListFilter) ([]HealthTarget, *string, bool, error) {
 	limit := filter.Limit
 	if limit <= 0 {
 		limit = DefaultPageLimit
 	}
+	now := filter.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 	q := targetQuery(filter)
+
+	// A freshness filter is resolved to identifiers first, because freshness is
+	// a clock-dependent derivation rather than a stored field.
+	if len(filter.Freshness) > 0 {
+		ids, err := r.FreshnessTargetIDs(ctx, filter.Freshness, now)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		q = andQuery(q, bson.M{"_id": bson.M{"$in": ids}})
+	}
 
 	if filter.Sort == TargetSortRisk {
 		return r.listTargetsByRisk(ctx, q, filter.Cursor, limit)
@@ -146,6 +206,16 @@ func (r *Repository) ListTargets(ctx context.Context, filter TargetListFilter) (
 		ProjectIdentityState(&items[i])
 	}
 	return paginateTargets(items, limit)
+}
+
+// andQuery combines an existing query with one more predicate. The existing
+// query is never rewritten, so a caller can narrow a base query without
+// changing its meaning.
+func andQuery(base bson.M, extra bson.M) bson.M {
+	if len(base) == 0 {
+		return extra
+	}
+	return bson.M{"$and": []bson.M{base, extra}}
 }
 
 // targetQuery compiles the stored-field predicates of a target list read.
@@ -190,6 +260,19 @@ func targetQuery(filter TargetListFilter) bson.M {
 	}
 	for _, layer := range filter.Layers {
 		conditions = append(conditions, bson.M{"lastProjection." + layer + "Measured": true})
+	}
+	// The collection outcome is an independent dimension from freshness: the
+	// latest attempt may have failed while the previous measurement is still
+	// inside its freshness window. lastError is set on failure and cleared on
+	// the next success, so it states the outcome of the latest attempt.
+	switch filter.Collection {
+	case CollectionFailed:
+		conditions = append(conditions, bson.M{"lastError": bson.M{"$ne": ""}})
+	case CollectionSucceeded:
+		conditions = append(conditions, bson.M{"$or": []bson.M{
+			{"lastError": bson.M{"$exists": false}},
+			{"lastError": ""},
+		}})
 	}
 	switch len(conditions) {
 	case 0:

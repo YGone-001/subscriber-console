@@ -83,34 +83,64 @@ test('discovery KPIs keep explicit null for absent counts in a complete section'
 
 test('health KPIs project freshness and failure from the full population', () => {
   const kpis = healthKpisFromSummary(healthSection());
-  // configured 12, fresh 7, failed 2 -> stale-or-unknown remainder 3.
-  assert.deepEqual(kpis, { configured: 12, fresh: 7, failed: 2, staleUnknown: 3 });
+  // The freshness states are mutually exclusive, so each bucket is read from
+  // the server distribution rather than derived by subtraction. "failed" is an
+  // independent dimension: a failed attempt never advances the measurement, so
+  // a target can be fresh and failed at the same time.
+  assert.deepEqual(kpis, {
+    configured: 12,
+    fresh: 7,
+    stale: 2,
+    unknown: 3,
+    notMonitored: 0,
+    failed: 2,
+  });
 });
 
 test('health KPIs stay null when the section is unavailable', () => {
   const kpis = healthKpisFromSummary(healthSection({ completeness: 'unavailable' }));
-  assert.deepEqual(kpis, { configured: null, fresh: null, failed: null, staleUnknown: null });
+  assert.deepEqual(kpis, {
+    configured: null,
+    fresh: null,
+    stale: null,
+    unknown: null,
+    notMonitored: null,
+    failed: null,
+  });
 });
 
 test('health KPIs stay null when the section carries no target counts', () => {
   const kpis = healthKpisFromSummary(healthSection({ targets: undefined }));
-  assert.deepEqual(kpis, { configured: null, fresh: null, failed: null, staleUnknown: null });
+  assert.deepEqual(kpis, {
+    configured: null,
+    fresh: null,
+    stale: null,
+    unknown: null,
+    notMonitored: null,
+    failed: null,
+  });
 });
 
-test('health stale-or-unknown never goes negative when counts disagree', () => {
+test('health freshness buckets never borrow from the failed dimension', () => {
+  // A target whose last attempt failed keeps its previous measurement, so it
+  // can be fresh and failed at once. The stale/unknown counts must therefore
+  // come from the freshness distribution and not from a subtraction.
   const kpis = healthKpisFromSummary(
     healthSection({
       targets: {
         configured: 5,
         enabled: 5,
         failed: 4,
-        freshnessByState: { fresh: 4 },
+        freshnessByState: { fresh: 4, stale: 1 },
         overallByState: {},
         layersByState: {},
       },
     }),
   );
-  assert.equal(kpis.staleUnknown, 0);
+  assert.equal(kpis.stale, 1);
+  assert.equal(kpis.unknown, 0);
+  assert.equal(kpis.fresh, 4);
+  assert.equal(kpis.failed, 4);
 });
 
 test('alerts KPIs project queue totals from the full population', () => {
