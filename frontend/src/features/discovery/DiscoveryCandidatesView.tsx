@@ -14,7 +14,9 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Boxes } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { useI18n } from '../../providers/I18nProvider';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
@@ -70,6 +72,11 @@ export function DiscoveryCandidatesView({
   reloadToken,
 }: Props) {
   const { t } = useI18n();
+  /* List context is read from the browser only; an SSR/test render simply
+   * carries no returnTo rather than failing on a missing window. */
+  const listLocation = typeof window === 'undefined'
+    ? ''
+    : currentListLocation(window.location.pathname, window.location.search);
 
   const [observationStates, setObservationStates] = useState<string[]>(['seen', 'missing', 'stale']);
   const [candidates, setCandidates] = useState<NfObservation[]>([]);
@@ -296,9 +303,13 @@ export function DiscoveryCandidatesView({
                   </td>
                   <td>
                     {candidate.linkedResourceId ? (
-                      <span className={styles.linkedId} title={candidate.linkedResourceId}>
+                      <Link
+                        className={styles.linkedId}
+                        title={candidate.linkedResourceId}
+                        to={withReturnTo(`/inventory/${encodeURIComponent(candidate.linkedResourceId)}`, listLocation)}
+                      >
                         {shortId(candidate.linkedResourceId)}
-                      </span>
+                      </Link>
                     ) : (
                       <span className={styles.badgeMuted}>{t('discovery_unlinked')}</span>
                     )}

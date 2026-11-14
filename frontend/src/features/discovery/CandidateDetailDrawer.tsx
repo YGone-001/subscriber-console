@@ -18,7 +18,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Link2, Link2Off, ShieldCheck, X } from 'lucide-react';
-import { Field } from '../../components/ui/Field';
+import { TopologyResourcePicker } from '../topology/components/TopologyResourcePicker';
+import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { useDialogFocus } from '../../components/ui/useDialogFocus';
 import { useI18n } from '../../providers/I18nProvider';
 import type { RuntimeComponent } from '../runtime/runtime-types';
@@ -54,6 +55,9 @@ export function CandidateDetailDrawer({
   const { t } = useI18n();
   const dialogRef = useDialogFocus({ open: true, onClose });
   const [linkResourceId, setLinkResourceId] = useState('');
+  const listLocation = typeof window === 'undefined'
+    ? ''
+    : currentListLocation(window.location.pathname, window.location.search);
 
   // Server-recognized components carrying the same canonical NF type. The match
   // is a search hint; identity conclusions belong to the preview service.
@@ -257,7 +261,16 @@ export function CandidateDetailDrawer({
             {candidate.linkedResourceId ? (
               <>
                 <p className={styles.viewNote}>
-                  <code className={styles.uuid}>{candidate.linkedResourceId}</code>
+                  <Link
+                    className={styles.uuid}
+                    title={candidate.linkedResourceId}
+                    to={withReturnTo(
+                      `/inventory/${encodeURIComponent(candidate.linkedResourceId)}`,
+                      listLocation,
+                    )}
+                  >
+                    {candidate.linkedResourceId}
+                  </Link>
                 </p>
                 <div className={styles.entryList}>
                   <button
@@ -273,21 +286,15 @@ export function CandidateDetailDrawer({
               </>
             ) : (
               <>
-                <Field
-                  htmlFor="candidate-link-resource"
+                <TopologyResourcePicker
+                  id="candidate-link-resource"
                   label={t('discovery_link_resource')}
-                  description={t('discovery_link_resource_hint')}
-                  error={linkError ?? undefined}
-                >
-                  <input
-                    id="candidate-link-resource"
-                    className="form-input"
-                    value={linkResourceId}
-                    onChange={(event) => setLinkResourceId(event.target.value)}
-                    disabled={busy}
-                    placeholder="00000000-0000-4000-8000-000000000000"
-                  />
-                </Field>
+                  value={linkResourceId}
+                  onChange={(resource) => setLinkResourceId(resource?.resourceId ?? '')}
+                  disabled={busy || !canConfigure}
+                />
+                {linkError ? <p className={styles.formError} role="alert">{linkError}</p> : null}
+                <p className={styles.viewNote}>{t('discovery_link_resource_hint')}</p>
                 <div className={styles.entryList}>
                   <button
                     type="button"

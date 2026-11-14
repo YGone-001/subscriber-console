@@ -9,6 +9,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
 import { useI18n } from '../../providers/I18nProvider';
@@ -314,6 +315,12 @@ export function NfHealthTargetDialog({
               >
                 {t('nf_health_field_resource_load_more')}
               </button>
+            ) : null}
+            {!resourcesLoading && resources.length === 0 ? (
+              <p className={styles.modalIntro}>
+                {t('nf_health_field_resource_missing')}{' '}
+                <Link to="/inventory/create">{t('nf_health_field_resource_create')}</Link>
+              </p>
             ) : null}
           </Field>
         ) : (

@@ -11,6 +11,8 @@ import { Field } from '../../components/ui/Field';
 import { useI18n } from '../../providers/I18nProvider';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import { createNfAlertRule, updateNfAlertRule } from './nf-alerts-api';
+import { fetchNfHealthTargets } from '../nf-health/nf-health-api';
+import { TopologyResourcePicker } from '../topology/components/TopologyResourcePicker';
 import type {
   AlertRule,
   AlertSeverity,
@@ -20,6 +22,7 @@ import type {
   RuleCondition,
   StateConditionValue,
 } from './nf-alerts-types';
+import type { HealthTargetSummary } from '../nf-health/nf-health-types';
 import styles from '../../styles/modules/nf-alerts.module.css';
 
 type Props = {
@@ -40,6 +43,12 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
   const [enabled, setEnabled] = useState(true);
   const [targetId, setTargetId] = useState('');
   const [resourceId, setResourceId] = useState('');
+  const [scopeMode, setScopeMode] = useState<'all' | 'target' | 'resource'>('all');
+  const [targetQuery, setTargetQuery] = useState('');
+  const [targetResults, setTargetResults] = useState<HealthTargetSummary[]>([]);
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [targetFailed, setTargetFailed] = useState(false);
+  const [targetLabel, setTargetLabel] = useState('');
   const [conditionType, setConditionType] = useState<ConditionType>('state');
   const [scope, setScope] = useState<ConditionScope>('overall');
   const [state, setState] = useState<StateConditionValue>('unhealthy');
@@ -57,6 +66,11 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
       setEnabled(rule.enabled);
       setTargetId(rule.targetId ?? '');
       setResourceId(rule.resourceId ?? '');
+      setScopeMode(rule.targetId ? 'target' : rule.resourceId ? 'resource' : 'all');
+      setTargetLabel('');
+      setTargetQuery('');
+      setTargetResults([]);
+      setTargetFailed(false);
       setConditionType(rule.conditionType);
       setScope(rule.condition?.scope ?? 'overall');
       setState(rule.condition?.state ?? 'unhealthy');
@@ -68,6 +82,11 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
       setEnabled(true);
       setTargetId('');
       setResourceId('');
+      setScopeMode('all');
+      setTargetLabel('');
+      setTargetQuery('');
+      setTargetResults([]);
+      setTargetFailed(false);
       setConditionType('state');
       setScope('overall');
       setState('unhealthy');
@@ -75,6 +94,39 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
       setCooldownSeconds(meta?.defaultCooldownSeconds ?? 300);
     }
   }, [open, rule, meta]);
+
+  useEffect(() => {
+    if (scopeMode !== 'target') return undefined;
+    const needle = targetQuery.trim();
+    if (!needle) {
+      setTargetResults([]);
+      setTargetFailed(false);
+      setTargetLoading(false);
+      return undefined;
+    }
+    let active = true;
+    const handle = window.setTimeout(() => {
+      setTargetLoading(true);
+      fetchNfHealthTargets({ q: needle, limit: 8, sort: 'updated' })
+        .then((res) => {
+          if (!active) return;
+          setTargetResults(res.targets ?? []);
+          setTargetFailed(false);
+        })
+        .catch(() => {
+          if (!active) return;
+          setTargetResults([]);
+          setTargetFailed(true);
+        })
+        .finally(() => {
+          if (active) setTargetLoading(false);
+        });
+    }, 220);
+    return () => {
+      active = false;
+      window.clearTimeout(handle);
+    };
+  }, [scopeMode, targetQuery]);
 
   const minCooldown = meta?.minCooldownSeconds ?? 60;
   const maxCooldown = meta?.maxCooldownSeconds ?? 86400;
@@ -91,6 +143,16 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
     const trimmedResource = resourceId.trim();
     if (trimmedTarget && trimmedResource) {
       const message = t('nf_alerts_err_scope_exclusive');
+      setFormError(message);
+      return;
+    }
+    if (!isEdit && scopeMode === 'target' && !trimmedTarget) {
+      const message = t('nf_alerts_err_scope_required');
+      setFormError(message);
+      return;
+    }
+    if (!isEdit && scopeMode === 'resource' && !trimmedResource) {
+      const message = t('nf_alerts_err_scope_required');
       setFormError(message);
       return;
     }
@@ -180,39 +242,121 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
         </Field>
 
         {isEdit ? (
-          <p className={styles.modalIntro}>{t('nf_alerts_scope_immutable')}</p>
+          <div className={styles.scopeSummary}>
+            <p className={styles.modalIntro}>{t('nf_alerts_scope_immutable')}</p>
+            <p className={styles.scopeSummaryValue}>
+              {rule?.targetId
+                ? t('nf_alerts_scope_current_target', { id: rule.targetId })
+                : rule?.resourceId
+                  ? t('nf_alerts_scope_current_resource', { id: rule.resourceId })
+                  : t('nf_alerts_scope_current_all')}
+            </p>
+          </div>
         ) : (
-          <div className={styles.formRow}>
+          <>
             <Field
-              htmlFor="nf-alerts-target"
-              label={t('nf_alerts_field_target_id')}
-              description={t('nf_alerts_field_target_hint')}
+              htmlFor="nf-alerts-scope-mode"
+              label={t('nf_alerts_field_scope_mode')}
+              description={t('nf_alerts_field_scope_mode_hint')}
             >
-              <input
-                id="nf-alerts-target"
+              <select
+                id="nf-alerts-scope-mode"
                 className="form-input"
-                value={targetId}
-                onChange={(event) => setTargetId(event.target.value)}
+                value={scopeMode}
+                onChange={(event) => {
+                  const next = event.target.value as 'all' | 'target' | 'resource';
+                  setScopeMode(next);
+                  if (next !== 'target') {
+                    setTargetId('');
+                    setTargetLabel('');
+                    setTargetQuery('');
+                    setTargetResults([]);
+                  }
+                  if (next !== 'resource') setResourceId('');
+                }}
                 disabled={submitting}
-                placeholder={t('nf_alerts_field_target_placeholder')}
-              />
+              >
+                <option value="all">{t('nf_alerts_scope_mode_all')}</option>
+                <option value="target">{t('nf_alerts_scope_mode_target')}</option>
+                <option value="resource">{t('nf_alerts_scope_mode_resource')}</option>
+              </select>
             </Field>
 
-            <Field
-              htmlFor="nf-alerts-resource"
-              label={t('nf_alerts_field_resource_id')}
-              description={t('nf_alerts_field_resource_hint')}
-            >
-              <input
+            {scopeMode === 'target' ? (
+              <Field
+                htmlFor="nf-alerts-target-search"
+                label={t('nf_alerts_scope_target_search')}
+                description={t('nf_alerts_scope_target_hint')}
+              >
+                {targetId ? (
+                  <div className={styles.selectedScope}>
+                    <span>{targetLabel || targetId}</span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => {
+                        setTargetId('');
+                        setTargetLabel('');
+                      }}
+                      disabled={submitting}
+                    >
+                      {t('nf_alerts_scope_clear')}
+                    </button>
+                  </div>
+                ) : null}
+                <input
+                  id="nf-alerts-target-search"
+                  type="search"
+                  className="form-input"
+                  value={targetQuery}
+                  onChange={(event) => setTargetQuery(event.target.value)}
+                  placeholder={t('nf_alerts_scope_target_placeholder')}
+                  disabled={submitting}
+                  autoComplete="off"
+                />
+                <div role="listbox" aria-label={t('nf_alerts_scope_target_search')} className={styles.scopeResults}>
+                  {targetLoading ? <p className={styles.modalIntro}>{t('loading')}</p> : null}
+                  {!targetLoading && targetFailed ? (
+                    <p className={styles.formError}>{t('nf_alerts_scope_target_failed')}</p>
+                  ) : null}
+                  {!targetLoading && !targetFailed && targetQuery.trim() && targetResults.length === 0 ? (
+                    <p className={styles.modalIntro}>{t('nf_alerts_scope_target_empty')}</p>
+                  ) : null}
+                  {targetResults.map((target) => (
+                    <button
+                      key={target.targetId}
+                      type="button"
+                      role="option"
+                      aria-selected={target.targetId === targetId}
+                      className={styles.scopeOption}
+                      disabled={submitting}
+                      onClick={() => {
+                        setTargetId(target.targetId);
+                        setTargetLabel(target.name);
+                        setTargetQuery('');
+                        setTargetResults([]);
+                      }}
+                    >
+                      <span>{target.name}</span>
+                      <small>
+                        {[target.domain, target.nfType, target.targetId.slice(0, 8)].filter(Boolean).join(' · ')}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            ) : null}
+
+            {scopeMode === 'resource' ? (
+              <TopologyResourcePicker
                 id="nf-alerts-resource"
-                className="form-input"
+                label={t('nf_alerts_field_resource_id')}
                 value={resourceId}
-                onChange={(event) => setResourceId(event.target.value)}
+                onChange={(next) => setResourceId(next?.resourceId ?? '')}
                 disabled={submitting}
-                placeholder={t('nf_alerts_field_resource_placeholder')}
               />
-            </Field>
-          </div>
+            ) : null}
+          </>
         )}
 
         <div className={styles.formRow}>

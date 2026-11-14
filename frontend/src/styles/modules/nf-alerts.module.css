@@ -702,3 +702,64 @@
   display: flex;
   justify-content: center;
 }
+
+.scopeSummaryValue {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-data);
+  font-size: var(--ref-font-size-label);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.selectedScope {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-hover);
+  font-size: var(--ref-font-size-label);
+}
+
+.scopeResults {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  margin-top: 0.4rem;
+}
+
+.scopeOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.scopeOption:hover,
+.scopeOption[aria-selected="true"] {
+  background: var(--surface-hover);
+}
+
+.scopeOption small {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-caption);
+  overflow-wrap: anywhere;
+}
+
+.scopeSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
