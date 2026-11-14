@@ -30,3 +30,14 @@ export function isImage(kind: FileKind): boolean {
 export function isKnowledgeImageUrl(src: string): boolean {
   return /^\/api\/knowledge\/files\/[0-9a-fA-F-]{36}$/.test(src);
 }
+
+/** Extracts the attachment file ids referenced by inline Markdown images. */
+export function extractSolutionImageIds(solution: string): string[] {
+  const ids: string[] = [];
+  const pattern = /!\[[^\]]*\]\(\/api\/knowledge\/files\/([0-9a-fA-F-]{36})\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(solution)) !== null) {
+    ids.push(match[1].toLowerCase());
+  }
+  return ids;
+}

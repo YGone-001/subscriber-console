@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Bold, Code, Heading1, Heading2, Image as ImageIcon, Italic, Link, List, Quote, Eye, Pencil } from 'lucide-react';
+import type { KeyboardEvent, ReactNode } from 'react';
+import { Bold, Code, Heading1, Heading2, Image as ImageIcon, Italic, Link, List, Minus, Quote, Table, Eye, Pencil } from 'lucide-react';
 import { useI18n } from '../../../providers/I18nProvider';
 import { MarkdownContent } from './MarkdownContent';
 import styles from '../../../styles/modules/knowledge.module.css';
@@ -40,6 +40,24 @@ export function applyTool(
       return { text, selectionStart: labelStart, selectionEnd: labelEnd };
     }
     return { text, selectionStart: urlStart, selectionEnd: urlStart + url.length };
+  }
+  if (tool.key === 'codeBlock') {
+    const fence = '```';
+    const text = `${value.slice(0, start)}\n${fence}\n${selected}\n${fence}\n${value.slice(end)}`;
+    const cursor = start + 1 + fence.length + 1 + selected.length;
+    return { text, selectionStart: cursor, selectionEnd: cursor };
+  }
+  if (tool.key === 'hr') {
+    const insert = '\n---\n';
+    const text = value.slice(0, start) + insert + value.slice(end);
+    const cursor = start + insert.length;
+    return { text, selectionStart: cursor, selectionEnd: cursor };
+  }
+  if (tool.key === 'table') {
+    const insert = '\n| Column | Column |\n| --- | --- |\n| Cell | Cell |\n';
+    const text = value.slice(0, start) + insert + value.slice(end);
+    const cursor = start + insert.length;
+    return { text, selectionStart: cursor, selectionEnd: cursor };
   }
   if (tool.prefix) {
     const lineStart = value.lastIndexOf('\n', start - 1) + 1;
@@ -99,6 +117,9 @@ export function MarkdownEditor({ value, onChange, onUploadImage }: MarkdownEdito
     { key: 'list', icon: <List size={15} />, title: t('kb_tool_list'), prefix: '- ' },
     { key: 'quote', icon: <Quote size={15} />, title: t('kb_tool_quote'), prefix: '> ' },
     { key: 'link', icon: <Link size={15} />, title: t('kb_tool_link') },
+    { key: 'codeBlock', icon: <Code size={15} />, title: t('kb_tool_code_block') },
+    { key: 'table', icon: <Table size={15} />, title: t('kb_tool_table') },
+    { key: 'hr', icon: <Minus size={15} />, title: t('kb_tool_hr') },
   ];
 
   const runTool = (tool: Tool) => {
@@ -110,6 +131,18 @@ export function MarkdownEditor({ value, onChange, onUploadImage }: MarkdownEdito
       ta.focus();
       ta.setSelectionRange(result.selectionStart, result.selectionEnd);
     }, 0);
+  };
+
+  const handleShortcut = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    const key = event.key.toLowerCase();
+    const shortcutKey = key === 'b' ? 'bold' : key === 'i' ? 'italic' : key === 'k' ? 'link' : null;
+    if (!shortcutKey) return;
+    const tool = tools.find((item) => item.key === shortcutKey);
+    if (tool) {
+      event.preventDefault();
+      runTool(tool);
+    }
   };
 
   const uploadImage = async (file: File) => {
@@ -194,6 +227,7 @@ export function MarkdownEditor({ value, onChange, onUploadImage }: MarkdownEdito
           className={styles.editorTextarea}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onKeyDown={handleShortcut}
           placeholder={t('kb_solution_placeholder')}
           aria-label={t('kb_field_solution')}
         />

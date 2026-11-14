@@ -76,7 +76,10 @@ fresh from the filtered set.
   429 with `Retry-After`.
 - Create/update use strict JSON decoding with unknown-field rejection and a
   512 KiB body cap. Update and delete carry a revision and fail with
-  `KNOWLEDGE_REVISION_CONFLICT` on mismatch.
+  `KNOWLEDGE_REVISION_CONFLICT` on mismatch. A solution that references an
+  inline attachment image absent from the claimed attachment set is rejected, so
+  inline images and attachments stay consistent and cannot break after janitor
+  cleanup.
 - Attachments are double-validated by declared extension and detected magic
   bytes. Allowed classes: PNG/JPEG/GIF/WebP, PDF, TXT/LOG, PCAP/PCAPNG. SVG,
   HTML, JavaScript and executables are rejected. Per-file cap 8 MiB, per-entry
@@ -112,8 +115,11 @@ fresh from the filtered set.
 
 Four SPA routes in the platform group: `/knowledge`, `/knowledge/new`,
 `/knowledge/:entryId`, `/knowledge/:entryId/edit`. The list page exposes
-submit-triggered search (Enter or the search button), protocol and top-tag
-filters and cursor paging; the detail page renders phenomenon/root-cause plus
-the Markdown resolution with attachments and image preview; the editor offers a
-Markdown toolbar with preview, attachment upload and revision-conflict handling. `viewer` hides all mutation entry points,
-and the backend remains the authorization authority.
+submit-triggered search (Enter or the search button) with match highlighting,
+protocol and free-text tag filters, sort/order controls and cursor paging whose
+back-stack survives refresh; the detail page renders the phenomenon as text and
+the root cause and resolution as Markdown, with attachment image/PDF/text
+preview; the editor offers a Markdown toolbar (including code block, table and
+horizontal rule, plus Ctrl+B/I/K shortcuts), preview, attachment upload,
+new-entry draft autosave and revision-conflict handling. `viewer` hides all
+mutation entry points, and the backend remains the authorization authority.

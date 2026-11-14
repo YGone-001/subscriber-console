@@ -4,7 +4,7 @@ import { buildEntriesPath, isKnowledgeEntryKey, isKnowledgeListKey } from '../sr
 import { applyTool, insertImage } from '../src/features/knowledge/components/MarkdownEditor';
 import { mergeTags, splitTagInput } from '../src/features/knowledge/knowledge-tags';
 import { knowledgeErrorMessage } from '../src/features/knowledge/knowledge-errors';
-import { fileKindLabel, formatFileSize, isImage, isKnowledgeImageUrl } from '../src/features/knowledge/knowledge-format';
+import { fileKindLabel, formatFileSize, isImage, isKnowledgeImageUrl, extractSolutionImageIds } from '../src/features/knowledge/knowledge-format';
 import { MutationApiError } from '../src/lib/api/mutation-client';
 
 test('the knowledge entries path carries only requested query values', () => {
@@ -127,4 +127,20 @@ test('inline Markdown images are restricted to knowledge attachments', () => {
   assert.equal(isKnowledgeImageUrl('/api/knowledge/files/not-a-uuid'), false);
   assert.equal(isKnowledgeImageUrl('https://example.com/x.png'), false);
   assert.equal(isKnowledgeImageUrl('/api/other/files/x'), false);
+});
+
+test('the Markdown block tools insert fenced code, rules and tables', () => {
+  const code = applyTool('abc', 3, 3, { key: 'codeBlock' });
+  assert.ok(code.text.includes('```'));
+  const hr = applyTool('abc', 3, 3, { key: 'hr' });
+  assert.ok(hr.text.includes('\n---\n'));
+  const table = applyTool('', 0, 0, { key: 'table' });
+  assert.ok(table.text.includes('| --- | --- |'));
+});
+
+test('solution image ids are extracted from inline Markdown images', () => {
+  const id = '00000000-0000-4000-8000-000000000000';
+  assert.deepEqual(extractSolutionImageIds(`before ![x](/api/knowledge/files/${id}) after`), [id]);
+  assert.deepEqual(extractSolutionImageIds('no images here'), []);
+  assert.deepEqual(extractSolutionImageIds('![x](https://example.com/a.png)'), []);
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
 import { ArrowLeft, FileText, Paperclip, Save, X } from 'lucide-react';
@@ -11,7 +11,7 @@ import { TagInput } from './components/TagInput';
 import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
 import { attachmentUrl, createEntry, fetchEntry, fetchKnowledgeMeta, isKnowledgeEntryKey, updateEntry, uploadKnowledgeFile } from './knowledge-api';
 import { knowledgeErrorMessage } from './knowledge-errors';
-import { fileKindLabel, formatFileSize } from './knowledge-format';
+import { extractSolutionImageIds, fileKindLabel, formatFileSize } from './knowledge-format';
 import type { Attachment, KnowledgeMeta } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
 
@@ -70,6 +70,42 @@ export function KnowledgeEditorPage() {
     setDirty(true);
   };
 
+  // Draft autosave protects long new entries from accidental loss. Edit mode is
+  // excluded: the server document is authoritative there and revision CAS guards
+  // concurrent changes.
+  const draftKey = `kb-draft:${entryId ?? 'new'}`;
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (isEdit || restoredRef.current) return;
+    restoredRef.current = true;
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as Partial<{ title: string; protocol: string; tags: string[]; phenomenon: string; rootCause: string; solution: string }>;
+      if (typeof draft.title === 'string') setTitle(draft.title);
+      if (typeof draft.protocol === 'string') setProtocol(draft.protocol);
+      if (Array.isArray(draft.tags)) setTags(draft.tags);
+      if (typeof draft.phenomenon === 'string') setPhenomenon(draft.phenomenon);
+      if (typeof draft.rootCause === 'string') setRootCause(draft.rootCause);
+      if (typeof draft.solution === 'string') setSolution(draft.solution);
+      setDirty(true);
+    } catch {
+      /* A corrupt draft is ignored; the editor starts empty. */
+    }
+  }, [isEdit, draftKey]);
+
+  useEffect(() => {
+    if (isEdit) return;
+    const handle = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(draftKey, JSON.stringify({ title, protocol, tags, phenomenon, rootCause, solution }));
+      } catch {
+        /* localStorage may be unavailable; autosave is best-effort. */
+      }
+    }, 800);
+    return () => window.clearTimeout(handle);
+  }, [isEdit, draftKey, title, protocol, tags, phenomenon, rootCause, solution]);
+
   const unsavedChanges = useUnsavedChangesGuard(dirty, () => setDirty(false));
 
   const protocols = useMemo(() => (meta?.protocols?.length ? meta.protocols : ['General']), [meta]);
@@ -123,12 +159,22 @@ export function KnowledgeEditorPage() {
   };
 
   const removeAttachment = (index: number) => {
+    const removed = attachments[index];
+    if (removed && extractSolutionImageIds(solution).includes(removed.fileId.toLowerCase())) {
+      setError(t('kb_image_still_referenced'));
+    }
     setAttachments((prev) => prev.filter((_, i) => i !== index));
     setDirty(true);
   };
 
   const handleSave = async () => {
     if (!title.trim()) return;
+    const claimed = new Set(attachments.map((a) => a.fileId.toLowerCase()));
+    const orphan = extractSolutionImageIds(solution).find((id) => !claimed.has(id));
+    if (orphan) {
+      setError(t('kb_image_not_attached'));
+      return;
+    }
     setSaving(true);
     setError(null);
     const payload = {
@@ -145,6 +191,11 @@ export function KnowledgeEditorPage() {
         ? await updateEntry(entryId, { ...payload, expectedRevision: revision })
         : await createEntry(payload);
       setDirty(false);
+      try {
+        window.localStorage.removeItem(draftKey);
+      } catch {
+        /* Draft cleanup is best-effort. */
+      }
       // Invalidate cached list and detail reads so a new or changed entry is
       // visible when the destination mounts inside SWR's dedupe window.
       try {

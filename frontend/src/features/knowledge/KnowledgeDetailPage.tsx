@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
-import { Activity, ArrowLeft, Copy, Download, Edit, FileText, Trash2, TriangleAlert } from 'lucide-react';
+import { Activity, ArrowLeft, Copy, Download, Edit, Eye, FileText, Trash2, TriangleAlert, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import { ConfirmActionPanel, EmptyState, OperationNotice } from '../../components/ui/OperationFeedback';
 import { useRead } from '../../lib/api/use-read';
@@ -14,7 +14,7 @@ import { MarkdownContent } from './components/MarkdownContent';
 import { attachmentUrl, deleteEntry, isKnowledgeListKey } from './knowledge-api';
 import { knowledgeErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize, isImage } from './knowledge-format';
-import type { KnowledgeEntry } from './types';
+import type { Attachment, KnowledgeEntry } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
 
 export function KnowledgeDetailPage() {
@@ -34,12 +34,46 @@ export function KnowledgeDetailPage() {
     Boolean((location.state as { knowledgeSaved?: boolean } | null)?.knowledgeSaved),
   );
   const copyTimer = useRef<number | null>(null);
+  const [preview, setPreview] = useState<{ name: string; kind: string; url: string; text: string | null } | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
 
   const { data, error, isLoading } = useRead<KnowledgeEntry>(entryId ? `/api/knowledge/entries/${entryId}` : null);
 
   useEffect(() => () => {
     if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+    if (previewUrlRef.current !== null) URL.revokeObjectURL(previewUrlRef.current);
   }, []);
+
+  const releasePreviewUrl = () => {
+    if (previewUrlRef.current !== null) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+  };
+
+  const openPreview = async (file: Attachment) => {
+    releasePreviewUrl();
+    setPreview(null);
+    setActionError(null);
+    try {
+      const res = await fetch(attachmentUrl(file.fileId));
+      if (!res.ok) throw new Error('preview fetch failed');
+      if (file.kind === 'text') {
+        setPreview({ name: file.originalName, kind: file.kind, url: '', text: await res.text() });
+      } else {
+        const url = URL.createObjectURL(await res.blob());
+        previewUrlRef.current = url;
+        setPreview({ name: file.originalName, kind: file.kind, url, text: null });
+      }
+    } catch {
+      setActionError(t('kb_error_body'));
+    }
+  };
+
+  const closePreview = () => {
+    releasePreviewUrl();
+    setPreview(null);
+  };
 
   useEffect(() => {
     if (savedNotice) navigate(location.pathname, { replace: true, state: null });
@@ -135,7 +169,11 @@ export function KnowledgeDetailPage() {
         </section>
         <section className={styles.card} data-tone="warning">
           <h2 className={styles.cardTitle}><Activity size={15} /> {t('kb_root_cause')}</h2>
-          <p className={styles.cardBody}>{data.rootCause || t('kb_no_root_cause')}</p>
+          {data.rootCause ? (
+            <MarkdownContent content={data.rootCause} />
+          ) : (
+            <p className={styles.cardBody}>{t('kb_no_root_cause')}</p>
+          )}
         </section>
       </div>
 
@@ -166,12 +204,33 @@ export function KnowledgeDetailPage() {
                   <span className={styles.attachmentName} title={file.originalName}>{file.originalName}</span>
                   <span className={styles.attachmentSize}>{formatFileSize(file.size)}</span>
                 </div>
+                {(file.kind === 'pdf' || file.kind === 'text') && (
+                  <button type="button" className={styles.attachmentDownload} onClick={() => void openPreview(file)} aria-label={t('kb_preview')}>
+                    <Eye size={15} />
+                  </button>
+                )}
                 <a href={`${attachmentUrl(file.fileId)}?download=1`} className={styles.attachmentDownload} aria-label={t('kb_download')}>
                   <Download size={15} />
                 </a>
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {preview && (
+        <section className={styles.card}>
+          <div className={styles.cardHead}>
+            <h2 className={styles.cardTitle}><FileText size={15} /> {preview.name}</h2>
+            <button type="button" className={styles.copyButton} onClick={closePreview}>
+              <X size={14} /> {t('cancel')}
+            </button>
+          </div>
+          {preview.kind === 'text' ? (
+            <pre className={styles.textPreview}>{preview.text}</pre>
+          ) : (
+            <iframe src={preview.url} title={preview.name} className={styles.pdfPreview} />
+          )}
         </section>
       )}
 
