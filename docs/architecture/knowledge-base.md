@@ -52,7 +52,8 @@ List pagination is keyset-cursor ordered by `updatedAt` descending then `_id`
 ascending. The list projection omits the Markdown body; the detail endpoint is
 the only source of full content. The search needle is trimmed, bounded to 64
 characters and `regexp.QuoteMeta`-escaped before a case-insensitive match against
-title, phenomenon, rootCause, tags and protocol. No text index is created.
+title, phenomenon, rootCause, solution, tags and protocol. No text index is
+created.
 
 ## Security model
 
@@ -65,7 +66,9 @@ title, phenomenon, rootCause, tags and protocol. No text index is created.
 - Attachments are double-validated by declared extension and detected magic
   bytes. Allowed classes: PNG/JPEG/GIF/WebP, PDF, TXT/LOG, PCAP/PCAPNG. SVG,
   HTML, JavaScript and executables are rejected. Per-file cap 8 MiB, per-entry
-  cap 10 explicit attachments.
+  cap 10 explicit attachments. Inline Markdown images are attachments and count
+  against the same per-entry cap; the meta `maxInlineImages` field equals
+  `maxAttachments`.
 - Attachment bytes are stored under a canonical UUID filename; client-supplied
   names are never used in paths, so path traversal is impossible. Download
   responses set `X-Content-Type-Options: nosniff`, an explicit content type,
@@ -92,8 +95,8 @@ title, phenomenon, rootCause, tags and protocol. No text index is created.
 
 Four SPA routes in the platform group: `/knowledge`, `/knowledge/new`,
 `/knowledge/:entryId`, `/knowledge/:entryId/edit`. The list page exposes
-debounced search, protocol and top-tag filters and cursor paging; the detail
-page renders phenomenon/root-cause plus the Markdown resolution with attachments
-and image preview; the editor offers a Markdown toolbar with preview, attachment
-upload and revision-conflict handling. `viewer` hides all mutation entry points,
+submit-triggered search (Enter or the search button), protocol and top-tag
+filters and cursor paging; the detail page renders phenomenon/root-cause plus
+the Markdown resolution with attachments and image preview; the editor offers a
+Markdown toolbar with preview, attachment upload and revision-conflict handling. `viewer` hides all mutation entry points,
 and the backend remains the authorization authority.

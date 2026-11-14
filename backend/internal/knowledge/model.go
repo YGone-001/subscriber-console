@@ -41,7 +41,6 @@ const (
 	MaxTags             = 20
 	MaxTagLength        = 32
 	MaxAttachments      = 10
-	MaxInlineImages     = 20
 	MaxJSONBodyBytes    = 512 * 1024
 	MaxFileBytes        = 8 * 1024 * 1024
 
@@ -160,16 +159,18 @@ type ProtocolCount struct {
 
 // MetaResponse is the payload of GET /api/knowledge/meta.
 type MetaResponse struct {
-	SchemaVersion   int             `json:"schemaVersion"`
-	Protocols       []string        `json:"protocols"`
-	TopTags         []TagCount      `json:"topTags"`
-	ProtocolCounts  []ProtocolCount `json:"protocolCounts"`
-	Total           int64           `json:"total"`
-	MaxFileBytes    int64           `json:"maxFileBytes"`
-	MaxAttachments  int             `json:"maxAttachments"`
-	MaxInlineImages int             `json:"maxInlineImages"`
-	MaxTags         int             `json:"maxTags"`
-	MaxTagLength    int             `json:"maxTagLength"`
+	SchemaVersion  int             `json:"schemaVersion"`
+	Protocols      []string        `json:"protocols"`
+	TopTags        []TagCount      `json:"topTags"`
+	ProtocolCounts []ProtocolCount `json:"protocolCounts"`
+	Total          int64           `json:"total"`
+	MaxFileBytes   int64           `json:"maxFileBytes"`
+	MaxAttachments int             `json:"maxAttachments"`
+	// MaxInlineImages equals MaxAttachments: inline Markdown images are
+	// attachments and share the same per-entry budget.
+	MaxInlineImages int `json:"maxInlineImages"`
+	MaxTags         int `json:"maxTags"`
+	MaxTagLength    int `json:"maxTagLength"`
 }
 
 // PageInfo mirrors the cursor-pagination shape used across the console.

@@ -45,6 +45,19 @@ func TestValidateCreateRequest(t *testing.T) {
 		}
 	})
 
+	t.Run("dedupes tags case-insensitively preserving first-seen casing", func(t *testing.T) {
+		_, tags, err := ValidateCreateRequest(&CreateEntryRequest{
+			Title: "hello",
+			Tags:  []string{"SIP", "sip", "Diameter", "diameter"},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(tags) != 2 || tags[0] != "SIP" || tags[1] != "Diameter" {
+			t.Fatalf("unexpected tags: %v", tags)
+		}
+	})
+
 	t.Run("rejects too many tags", func(t *testing.T) {
 		tags := make([]string, MaxTags+1)
 		for i := range tags {

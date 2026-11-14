@@ -312,7 +312,7 @@ func (r *Repository) Stats(ctx context.Context) (*MetaResponse, error) {
 		Total:           total,
 		MaxFileBytes:    MaxFileBytes,
 		MaxAttachments:  MaxAttachments,
-		MaxInlineImages: MaxInlineImages,
+		MaxInlineImages: MaxAttachments,
 		MaxTags:         MaxTags,
 		MaxTagLength:    MaxTagLength,
 	}, nil

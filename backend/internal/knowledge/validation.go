@@ -14,7 +14,9 @@ func IsValidID(s string) bool {
 }
 
 // normalizeTags trims, de-duplicates and bounds a tag list. Empty tags are
-// dropped and the result is nil when no tag survives.
+// dropped and the result is nil when no tag survives. De-duplication is
+// case-insensitive (matching the frontend tag input) while the first-seen
+// casing is preserved for display.
 func normalizeTags(tags []string) ([]string, error) {
 	if len(tags) == 0 {
 		return nil, nil
@@ -32,10 +34,11 @@ func normalizeTags(tags []string) ([]string, error) {
 		if len(tag) > MaxTagLength {
 			return nil, fmt.Errorf("tag %q exceeds %d characters", tag, MaxTagLength)
 		}
-		if _, ok := seen[tag]; ok {
+		key := strings.ToLower(tag)
+		if _, ok := seen[key]; ok {
 			continue
 		}
-		seen[tag] = struct{}{}
+		seen[key] = struct{}{}
 		out = append(out, tag)
 	}
 	return out, nil
