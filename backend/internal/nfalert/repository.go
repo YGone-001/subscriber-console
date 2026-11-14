@@ -383,6 +383,15 @@ func (r *Repository) ListAlerts(ctx context.Context, filter AlertListFilter) ([]
 			return nil, nil, false, validationError("NF_ALERT_INVALID_SEVERITY_FILTER", "severity must be critical, warning or info")
 		}
 	}
+	if filter.AssignedTo != "" {
+		if filter.AssignedTo == "unassigned" {
+			// $in with null matches both a missing field and an explicit null;
+			// an empty string covers older documents that stored one.
+			query["assignedTo"] = bson.M{"$in": bson.A{"", nil}}
+		} else {
+			query["assignedTo"] = filter.AssignedTo
+		}
+	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		regex := "^" + escapeRegex(q)
 		query["$or"] = bson.A{

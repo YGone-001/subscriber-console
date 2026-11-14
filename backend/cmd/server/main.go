@@ -804,6 +804,8 @@ func main() {
 	mux.Handle("GET /api/nf-alerts/rules/{ruleId}", authMiddleware(http.HandlerFunc(nfAlertHandler.GetRule)))
 	mux.Handle("PUT /api/nf-alerts/rules/{ruleId}", authMiddleware(http.HandlerFunc(nfAlertHandler.UpdateRule)))
 	mux.Handle("DELETE /api/nf-alerts/rules/{ruleId}", authMiddleware(http.HandlerFunc(nfAlertHandler.DeleteRule)))
+	mux.Handle("POST /api/nf-alerts/bulk/acknowledge", authMiddleware(http.HandlerFunc(nfAlertHandler.BulkAcknowledge)))
+	mux.Handle("POST /api/nf-alerts/bulk/assign", authMiddleware(http.HandlerFunc(nfAlertHandler.BulkAssign)))
 	mux.Handle("POST /api/nf-alerts/{alertId}/acknowledge", authMiddleware(http.HandlerFunc(nfAlertHandler.AcknowledgeAlert)))
 	mux.Handle("POST /api/nf-alerts/{alertId}/assign", authMiddleware(http.HandlerFunc(nfAlertHandler.AssignAlert)))
 	mux.Handle("POST /api/nf-alerts/{alertId}/recover", authMiddleware(http.HandlerFunc(nfAlertHandler.RecoverAlert)))

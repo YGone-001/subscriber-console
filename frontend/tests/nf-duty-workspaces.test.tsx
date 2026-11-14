@@ -266,22 +266,43 @@ test('each alert view asks for its own population and order', () => {
 
   assert.deepEqual(alertListQuery('open', filters, undefined, 20), {
     scope: 'open',
+    state: undefined,
     sort: 'risk',
     severity: 'critical',
+    assignedTo: undefined,
     cursor: undefined,
     limit: 20,
   });
   assert.deepEqual(alertListQuery('history', filters, 'cur-1', 20), {
     scope: 'history',
+    state: undefined,
     sort: 'updated',
     severity: 'critical',
+    assignedTo: undefined,
     cursor: 'cur-1',
     limit: 20,
   });
   assert.deepEqual(alertListQuery('rules', filters, undefined, 20), {
     scope: undefined,
+    state: undefined,
     sort: 'updated',
     severity: undefined,
+    assignedTo: undefined,
+    cursor: undefined,
+    limit: 20,
+  });
+});
+
+test('state and assignee filters narrow the open duty queue', () => {
+  const filters = readAlertFilters({ state: 'assigned', assignedTo: 'unassigned' });
+  assert.equal(filters.state, 'assigned');
+  assert.equal(filters.assignedTo, 'unassigned');
+  assert.deepEqual(alertListQuery('open', filters, undefined, 20), {
+    scope: undefined,
+    state: 'assigned',
+    sort: 'risk',
+    severity: undefined,
+    assignedTo: 'unassigned',
     cursor: undefined,
     limit: 20,
   });

@@ -19,12 +19,13 @@
  * blank the queue.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ConfigDriftWorkspace } from '../config-drift/ConfigDriftWorkspace';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Bell, BellRing, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { investigationEntry } from '../investigations/investigation-model';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
+import { Dialog } from '../../components/ui/Dialog';
+import { Field } from '../../components/ui/Field';
 import { ErrorState } from '../../components/ui/StatePanel';
 import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
 import { ViewSwitch, type ViewSwitchOption } from '../../components/ui/ViewSwitch';
@@ -42,6 +43,8 @@ import { useI18n } from '../../providers/I18nProvider';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import {
   acknowledgeNfAlert,
+  bulkAcknowledgeNfAlerts,
+  bulkAssignNfAlerts,
   assignNfAlert,
   deleteNfAlertRule,
   recoverNfAlert,
@@ -78,12 +81,19 @@ const PAGE_LIMIT = 20;
 
 type Feedback = { tone: 'success' | 'danger' | 'warning' | 'info'; message: string } | null;
 
-export function NfAlertsPage(){const [params]=useSearchParams();return params.get("view")==="config"?<ConfigDriftWorkspace/>:<NfHealthAlertsPage/>;}
+export function NfAlertsPage(){
+  const [params] = useSearchParams();
+  if (params.get('view') === 'config') {
+    const next = new URLSearchParams(params);
+    next.set('view', 'drift');
+    return <Navigate to={`/config-snapshots?${next.toString()}`} replace />;
+  }
+  return <NfHealthAlertsPage />;
+}
 
 function NfHealthAlertsPage() {
-  const navigate=useNavigate();
   const location = useLocation();
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
 
   const canRead = hasPermission(user, 'core.read');
@@ -119,6 +129,13 @@ function NfHealthAlertsPage() {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [lastAlertsReadAt, setLastAlertsReadAt] = useState<string | null>(null);
+  const [selectedAlertIds, setSelectedAlertIds] = useState<string[]>([]);
+  const [bulkMode, setBulkMode] = useState<'acknowledge' | 'assign' | null>(null);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkAssignee, setBulkAssignee] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!url.filters.alertId || !canRead) return;
@@ -157,6 +174,7 @@ function NfHealthAlertsPage() {
       const res = await fetchNfAlerts(alertListQuery(view, filters, cursor, PAGE_LIMIT));
       setAlerts(res.alerts ?? []);
       setAlertsPage(res.page ?? null);
+      setLastAlertsReadAt(new Date().toISOString());
     } catch (err) {
       setAlerts([]);
       setAlertsPage(null);
@@ -211,12 +229,34 @@ function NfHealthAlertsPage() {
   useEffect(() => {
     setAlertsHistory([]);
     setRulesHistory([]);
-  }, [view, filters.severity, filters.q, filters.enabled]);
+  }, [view, filters.severity, filters.state, filters.assignedTo, filters.q, filters.enabled]);
+
+  useEffect(() => {
+    setSelectedAlertIds([]);
+  }, [view, url.cursor, filters.severity, filters.state, filters.assignedTo, filters.q]);
 
   useEffect(() => {
     if (!canRead) return;
     void loadSummary();
   }, [canRead, loadSummary]);
+
+  useEffect(() => {
+    if (!canRead || view === 'rules') return undefined;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) {
+        void loadAlerts(url.cursor);
+        void loadSummary();
+      }
+    }, 20000);
+    const onVisibility = () => {
+      if (!document.hidden) void loadAlerts(url.cursor);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [canRead, view, url.cursor, loadAlerts, loadSummary]);
 
   useEffect(() => {
     if (!canRead) return;
@@ -341,14 +381,58 @@ function NfHealthAlertsPage() {
     }
   };
 
+  const toggleAlert = (alertId: string) => {
+    setSelectedAlertIds((current) => (
+      current.includes(alertId)
+        ? current.filter((id) => id !== alertId)
+        : [...current, alertId].slice(0, 50)
+    ));
+  };
+
+  const toggleAllAlerts = () => {
+    const pageIds = alerts.map((alert) => alert.alertId);
+    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedAlertIds.includes(id));
+    setSelectedAlertIds(allSelected ? [] : pageIds.slice(0, 50));
+  };
+
+  const openBulk = (mode: 'acknowledge' | 'assign') => {
+    setBulkMode(mode);
+    setBulkReason('');
+    setBulkAssignee('');
+    setBulkError(null);
+  };
+
+  const submitBulk = async () => {
+    if (!bulkMode || selectedAlertIds.length === 0) return;
+    setBulkBusy(true);
+    setBulkError(null);
+    try {
+      const result = bulkMode === 'acknowledge'
+        ? await bulkAcknowledgeNfAlerts(selectedAlertIds, bulkReason.trim())
+        : await bulkAssignNfAlerts(selectedAlertIds, bulkAssignee.trim(), bulkReason.trim());
+      setBulkMode(null);
+      setSelectedAlertIds([]);
+      setFeedback({
+        tone: result.failed > 0 ? 'warning' : 'success',
+        message: t('nf_alerts_bulk_result', { succeeded: result.succeeded, failed: result.failed }),
+      });
+      await loadAlerts(url.cursor);
+      void loadSummary();
+    } catch (err) {
+      setBulkError(describeMutationError(err, t));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   // KPIs come from the full-collection summary section, never from the current
   // page arrays.
   const kpis = useMemo(() => alertsKpisFromSummary(summary ?? undefined), [summary]);
 
-  const viewOptions = useMemo<ViewSwitchOption<AlertView|'config'>[]>(
-    () => [...ALERT_VIEWS,'config' as const].map((option) => ({
+  const viewOptions = useMemo<ViewSwitchOption<AlertView>[]>(
+    () => ALERT_VIEWS.map((option) => ({
       value: option,
-      label: option === 'config' ? t('drift_view') : option === 'open'
+      label: option === 'open'
         ? t('nf_alerts_view_open')
         : option === 'history'
           ? t('nf_alerts_view_history')
@@ -433,11 +517,14 @@ function NfHealthAlertsPage() {
       title={t('nf_alerts_title')}
       description={t('nf_alerts_description')}
       icon={<BellRing size={23} />}
+      status={lastAlertsReadAt ? (
+        <span>{t('nf_alerts_last_read', { time: formatDateTime(lastAlertsReadAt) })}</span>
+      ) : undefined}
       viewSwitch={(
         <ViewSwitch
           options={viewOptions}
           value={view}
-          onChange={(option) => option==='config'?navigate('/nf-alerts?view=config'):url.setView(option)}
+          onChange={(option) => url.setView(option)}
           ariaLabel={t('nf_alerts_view_label')}
         />
       )}
@@ -688,6 +775,20 @@ function NfHealthAlertsPage() {
           </div>
           <div className={styles.toolbar}>
             <div className={styles.filterGroup}>
+              {view === 'open' ? (
+                <select
+                  className="form-input"
+                  aria-label={t('nf_alerts_filter_state')}
+                  value={filters.state}
+                  onChange={(event) => url.setFilter('state', event.target.value)}
+                >
+                  <option value="">{t('nf_alerts_filter_all_states')}</option>
+                  <option value="active">{t('nf_alerts_state_active')}</option>
+                  <option value="acknowledged">{t('nf_alerts_state_acknowledged')}</option>
+                  <option value="assigned">{t('nf_alerts_state_assigned')}</option>
+                  <option value="recovering">{t('nf_alerts_state_recovering')}</option>
+                </select>
+              ) : null}
               <select
                 className="form-input"
                 aria-label={t('nf_alerts_filter_severity')}
@@ -701,11 +802,21 @@ function NfHealthAlertsPage() {
                   </option>
                 ))}
               </select>
+              <select
+                className="form-input"
+                aria-label={t('nf_alerts_filter_assignee')}
+                value={filters.assignedTo}
+                onChange={(event) => url.setFilter('assignedTo', event.target.value)}
+              >
+                <option value="">{t('nf_alerts_filter_all_assignees')}</option>
+                <option value="unassigned">{t('nf_alerts_filter_unassigned')}</option>
+                {user?.username ? <option value={user.username}>{t('nf_alerts_filter_mine')}</option> : null}
+              </select>
               <button
                 type="button"
                 className="btn btn-ghost"
-                onClick={() => url.setFilters({ severity: null })}
-                disabled={alertsLoading || !filters.severity}
+                onClick={() => url.setFilters({ severity: null, state: null, assignedTo: null })}
+                disabled={alertsLoading || (!filters.severity && !filters.state && !filters.assignedTo)}
               >
                 <X size={14} aria-hidden="true" />
                 {t('nf_alerts_clear_filters')}
@@ -713,12 +824,24 @@ function NfHealthAlertsPage() {
             </div>
           </div>
 
+          {view === 'open' && canConfigure && selectedAlertIds.length > 0 ? (
+            <div className={styles.bulkBar} role="group" aria-label={t('nf_alerts_bulk_group')}>
+              <span>{t('nf_alerts_bulk_selected', { count: selectedAlertIds.length })}</span>
+              <button type="button" className="btn btn-secondary" onClick={() => openBulk('acknowledge')}>
+                {t('nf_alerts_acknowledge_action')}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => openBulk('assign')}>
+                {t('nf_alerts_assign_action')}
+              </button>
+            </div>
+          ) : null}
+
           {alertsError ? (
             <div className={styles.errorWrap}>
               <ErrorState title={t('error')} message={alertsError} retryLabel={t('nf_alerts_retry')} onRetry={() => void loadAlerts(url.cursor)} />
             </div>
           ) : alertsLoading && alerts.length === 0 ? (
-            <LoadingRows columns={7} rows={4} />
+            <LoadingRows columns={view === 'open' ? 9 : 8} rows={4} />
           ) : alerts.length === 0 ? (
             <div className={styles.stateWrap}>
               <EmptyState
@@ -735,10 +858,21 @@ function NfHealthAlertsPage() {
                 </caption>
                 <thead>
                   <tr>
+                    {view === 'open' ? (
+                      <th scope="col" className={styles.selectCol}>
+                        <input
+                          type="checkbox"
+                          aria-label={t('nf_alerts_bulk_select_all')}
+                          checked={alerts.length > 0 && alerts.every((alert) => selectedAlertIds.includes(alert.alertId))}
+                          onChange={toggleAllAlerts}
+                        />
+                      </th>
+                    ) : null}
                     <th scope="col">{t('nf_alerts_col_rule')}</th>
                     <th scope="col">{t('nf_alerts_col_target')}</th>
                     <th scope="col">{t('nf_alerts_col_severity')}</th>
                     <th scope="col">{t('nf_alerts_col_state')}</th>
+                    <th scope="col">{t('nf_alerts_col_assignee')}</th>
                     <th scope="col">{t('nf_alerts_col_triggers')}</th>
                     <th scope="col">{t('nf_alerts_col_last_triggered')}</th>
                     <th scope="col">{t('nf_alerts_col_actions')}</th>
@@ -747,6 +881,16 @@ function NfHealthAlertsPage() {
                 <tbody>
                   {alerts.map((alert) => (
                     <tr key={alert.alertId} data-nf-alert-row={alert.alertId}>
+                      {view === 'open' ? (
+                        <td className={styles.selectCol}>
+                          <input
+                            type="checkbox"
+                            aria-label={t('nf_alerts_bulk_select_row', { name: alert.ruleName })}
+                            checked={selectedAlertIds.includes(alert.alertId)}
+                            onChange={() => toggleAlert(alert.alertId)}
+                          />
+                        </td>
+                      ) : null}
                       <td>
                         <div className={styles.stack}>
                           <button
@@ -775,11 +919,22 @@ function NfHealthAlertsPage() {
                       </td>
                       <td>{severityBadge(alert.severity, t)}</td>
                       <td>{alertStateBadge(alert.state, t)}</td>
+                      <td>{alert.assignedTo || <span className={styles.dim}>{t('nf_alerts_unassigned')}</span>}</td>
                       <td>{alert.triggerCount}</td>
                       <td>{formatTimestamp(alert.lastTriggeredAt)}</td>
                       <td>
                         <div className={styles.rowActions}>
                           <Link className="btn btn-ghost" to={investigationEntry(alert.alertId, `/nf-alerts${location.search}`)}>{t('inv_entry')}</Link>
+                          {canConfigure && alert.state === 'active' ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              onClick={() => void handleAcknowledge(alert)}
+                              disabled={busyId === alert.alertId}
+                            >
+                              {t('nf_alerts_acknowledge_action')}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="btn btn-ghost"
@@ -866,6 +1021,61 @@ function NfHealthAlertsPage() {
         onClose={() => setNotifyOpen(false)}
         onChanged={() => void loadSummary()}
       />
+
+      <Dialog
+        open={bulkMode !== null}
+        onClose={() => { if (!bulkBusy) setBulkMode(null); }}
+        overlayClassName="modal-overlay"
+        className="modal-content animate-fade-in"
+        labelledBy="nf-alerts-bulk-title"
+      >
+        <div className={styles.modalHeader}>
+          <h2 id="nf-alerts-bulk-title">
+            {bulkMode === 'assign' ? t('nf_alerts_bulk_assign_title') : t('nf_alerts_bulk_ack_title')}
+          </h2>
+        </div>
+        <div className={styles.modalBody}>
+          <p className={styles.modalIntro}>{t('nf_alerts_bulk_count', { count: selectedAlertIds.length })}</p>
+          {bulkMode === 'assign' ? (
+            <Field htmlFor="nf-alerts-bulk-assignee" label={t('nf_alerts_assign_action')}>
+              <input
+                id="nf-alerts-bulk-assignee"
+                className="form-input"
+                value={bulkAssignee}
+                onChange={(event) => setBulkAssignee(event.target.value)}
+                placeholder={t('nf_alerts_assign_placeholder')}
+                disabled={bulkBusy}
+                maxLength={120}
+              />
+            </Field>
+          ) : null}
+          <Field htmlFor="nf-alerts-bulk-reason" label={t('nf_alerts_bulk_reason')} description={t('nf_alerts_bulk_reason_hint')}>
+            <textarea
+              id="nf-alerts-bulk-reason"
+              className="form-input"
+              value={bulkReason}
+              onChange={(event) => setBulkReason(event.target.value)}
+              disabled={bulkBusy}
+              maxLength={500}
+              rows={3}
+            />
+          </Field>
+          {bulkError ? <p className={styles.formError} role="alert">{bulkError}</p> : null}
+          <div className={styles.formActions}>
+            <button type="button" className="btn btn-secondary" onClick={() => setBulkMode(null)} disabled={bulkBusy}>
+              {t('cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void submitBulk()}
+              disabled={bulkBusy || bulkReason.trim().length < 3 || (bulkMode === 'assign' && bulkAssignee.trim().length === 0)}
+            >
+              {bulkBusy ? t('loading') : t('confirm')}
+            </button>
+          </div>
+        </div>
+      </Dialog>
     </OperationsPageFrame>
   );
 }
@@ -899,6 +1109,8 @@ function severityBadge(severity: AlertSeverity, t: (key: string) => string): Rea
 function alertStateBadge(state: AlertState, t: (key: string) => string): React.ReactElement {
   if (state === 'active') return <span className={styles.badgeUnhealthy}>{t('nf_alerts_state_active')}</span>;
   if (state === 'acknowledged') return <span className={styles.badgeAcknowledged}>{t('nf_alerts_state_acknowledged')}</span>;
+  if (state === 'assigned') return <span className={styles.badgeInfo}>{t('nf_alerts_state_assigned')}</span>;
+  if (state === 'recovering') return <span className={styles.badgeWarning}>{t('nf_alerts_state_recovering')}</span>;
   return <span className={styles.badgeEnabled}>{t('nf_alerts_state_resolved')}</span>;
 }
 

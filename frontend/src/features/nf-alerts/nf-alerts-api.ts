@@ -4,6 +4,7 @@ import type {
   Alert,
   AlertListQueryParams,
   AlertRule,
+  BulkAlertResponse,
   CreateRuleRequest,
   DeleteRuleResponse,
   ListAlertsResponse,
@@ -67,6 +68,7 @@ export async function fetchNfAlerts(
       state: params.state,
       scope: params.scope,
       severity: params.severity,
+      assignedTo: params.assignedTo,
       sort: params.sort,
       q: params.q,
       cursor: params.cursor,
@@ -87,6 +89,21 @@ export async function acknowledgeNfAlert(alertId: string): Promise<Alert> {
 
 export async function assignNfAlert(alertId: string, assignedTo: string): Promise<Alert> {
   return postJson<Alert>(`/api/nf-alerts/${encodeURIComponent(alertId)}/assign`, { assignedTo });
+}
+
+export async function bulkAcknowledgeNfAlerts(
+  alertIds: string[],
+  reason: string,
+): Promise<BulkAlertResponse> {
+  return postJson<BulkAlertResponse>('/api/nf-alerts/bulk/acknowledge', { alertIds, reason });
+}
+
+export async function bulkAssignNfAlerts(
+  alertIds: string[],
+  assignedTo: string,
+  reason: string,
+): Promise<BulkAlertResponse> {
+  return postJson<BulkAlertResponse>('/api/nf-alerts/bulk/assign', { alertIds, assignedTo, reason });
 }
 
 export async function recoverNfAlert(alertId: string): Promise<Alert> {

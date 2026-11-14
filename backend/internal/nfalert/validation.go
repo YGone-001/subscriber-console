@@ -4,7 +4,27 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"unicode"
 )
+
+// ValidateAlertAssigneeFilter accepts the empty filter, the reserved
+// "unassigned" token, or an exact owner name bounded to the same 120 characters
+// the assign endpoint accepts.
+func ValidateAlertAssigneeFilter(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "unassigned" {
+		return nil
+	}
+	if len([]rune(value)) > 120 {
+		return validationError("NF_ALERT_INVALID_ASSIGNEE_FILTER", "assignedTo must be at most 120 characters")
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return validationError("NF_ALERT_INVALID_ASSIGNEE_FILTER", "assignedTo contains a control character")
+		}
+	}
+	return nil
+}
 
 var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 

@@ -14,7 +14,7 @@ export const ALERT_VIEWS = ['open', 'history', 'rules'] as const;
 export type AlertView = (typeof ALERT_VIEWS)[number];
 export const DEFAULT_ALERT_VIEW: AlertView = 'open';
 
-export const ALERT_URL_KEYS = ['severity', 'q', 'enabled', 'alertId'] as const;
+export const ALERT_URL_KEYS = ['severity', 'state', 'assignedTo', 'q', 'enabled', 'alertId'] as const;
 
 export const ALERT_SEVERITIES = ['critical', 'warning', 'info'] as const;
 export type AlertSeverityFilter = (typeof ALERT_SEVERITIES)[number] | '';
@@ -23,6 +23,8 @@ export type AlertFilterSource = Record<string, string | undefined>;
 
 export type AlertFilters = {
   severity: AlertSeverityFilter;
+  state: string;
+  assignedTo: string;
   q: string;
   enabled: string;
 };
@@ -41,6 +43,8 @@ export function alertView(value: string | undefined): AlertView {
 export function readAlertFilters(source: AlertFilterSource): AlertFilters {
   return {
     severity: pick(ALERT_SEVERITIES, source.severity) as AlertSeverityFilter,
+    state: pick(['active', 'acknowledged', 'assigned', 'recovering'], source.state),
+    assignedTo: (source.assignedTo ?? '').trim(),
     q: (source.q ?? '').trim(),
     enabled: pick(['true', 'false'], source.enabled),
   };
@@ -70,10 +74,15 @@ export function alertListQuery(
   cursor: string | undefined,
   limit: number,
 ): AlertListQueryParams {
+  const stateFilter = view === 'open' && filters.state ? filters.state : undefined;
   return {
-    scope: alertScope(view),
+    /* The backend rejects scope+state. An explicit lifecycle filter is more
+     * specific than the open scope, so it wins when present. */
+    scope: stateFilter ? undefined : alertScope(view),
+    state: stateFilter,
     sort: alertSort(view),
     severity: view === 'rules' ? undefined : filters.severity || undefined,
+    assignedTo: view === 'rules' ? undefined : filters.assignedTo || undefined,
     cursor,
     limit,
   };

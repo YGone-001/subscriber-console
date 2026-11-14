@@ -113,6 +113,19 @@ export interface ListRulesResponse {
   page: PageInfo;
 }
 
+export interface BulkAlertResult {
+  alertId: string;
+  ok: boolean;
+  state?: AlertState;
+  error?: string;
+}
+
+export interface BulkAlertResponse {
+  results: BulkAlertResult[];
+  succeeded: number;
+  failed: number;
+}
+
 export interface ListAlertsResponse {
   alerts: Alert[];
   page: PageInfo;
@@ -162,9 +175,11 @@ export interface RuleListQueryParams {
 
 export interface AlertListQueryParams {
   state?: string;
-  /* "open" selects active + acknowledged, "history" selects resolved. */
+  /* "open" selects all unresolved states, "history" selects resolved. */
   scope?: string;
   severity?: string;
+  /* Exact owner, or "unassigned" for alerts without an owner. */
+  assignedTo?: string;
   /* "risk" orders the duty queue, "updated" keeps recency order. */
   sort?: string;
   q?: string;

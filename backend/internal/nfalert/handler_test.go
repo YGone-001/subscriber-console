@@ -197,6 +197,8 @@ func doRouted(h *Handler, method, target, role string, body any) *httptest.Respo
 	mux.HandleFunc("GET /api/nf-alerts/rules/{ruleId}", withPrincipal(role, h.GetRule))
 	mux.HandleFunc("PUT /api/nf-alerts/rules/{ruleId}", withPrincipal(role, h.UpdateRule))
 	mux.HandleFunc("DELETE /api/nf-alerts/rules/{ruleId}", withPrincipal(role, h.DeleteRule))
+	mux.HandleFunc("POST /api/nf-alerts/bulk/acknowledge", withPrincipal(role, h.BulkAcknowledge))
+	mux.HandleFunc("POST /api/nf-alerts/bulk/assign", withPrincipal(role, h.BulkAssign))
 	mux.HandleFunc("POST /api/nf-alerts/{alertId}/acknowledge", withPrincipal(role, h.AcknowledgeAlert))
 	mux.HandleFunc("POST /api/nf-alerts/{alertId}/assign", withPrincipal(role, h.AssignAlert))
 	mux.HandleFunc("POST /api/nf-alerts/{alertId}/recover", withPrincipal(role, h.RecoverAlert))
@@ -389,6 +391,67 @@ func TestListAlertsRejectsBadStateFilter(t *testing.T) {
 	}
 	if code := errorCode(t, rec); code != "NF_ALERT_INVALID_STATE_FILTER" {
 		t.Fatalf("expected NF_ALERT_INVALID_STATE_FILTER, got %q", code)
+	}
+}
+
+func TestBulkAlertActionsAreBoundedAndPerItem(t *testing.T) {
+	repo := newStubRepo()
+	activeID := "0192f0c0-a000-7000-8000-0000000000a1"
+	resolvedID := "0192f0c0-a000-7000-8000-0000000000a2"
+	repo.alerts[activeID] = &Alert{AlertID: activeID, State: AlertStateActive, Severity: SeverityCritical}
+	repo.alerts[resolvedID] = &Alert{AlertID: resolvedID, State: AlertStateResolved, Severity: SeverityInfo}
+	h := newTestServer(repo)
+
+	rec := doRouted(h, "POST", "/api/nf-alerts/bulk/acknowledge", "operator", map[string]any{
+		"alertIds": []string{activeID, resolvedID, activeID},
+		"reason":   "shift handover",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bulk acknowledge status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var result BulkAlertResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode bulk response: %v", err)
+	}
+	if result.Succeeded != 1 || result.Failed != 1 || len(result.Results) != 2 {
+		t.Fatalf("unexpected bulk result: %+v", result)
+	}
+	if result.Results[0].State != AlertStateAcknowledged || result.Results[1].OK {
+		t.Fatalf("per-item outcomes must be explicit: %+v", result.Results)
+	}
+
+	rec = doRouted(h, "POST", "/api/nf-alerts/bulk/assign", "operator", map[string]any{
+		"alertIds":   []string{activeID},
+		"assignedTo": "noc-shift-b",
+		"reason":     "shift handover",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bulk assign status = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRouted(h, "POST", "/api/nf-alerts/bulk/acknowledge", "operator", map[string]any{
+		"alertIds": []string{activeID},
+		"reason":   "x",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("short reason status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestListAlertsAssigneeFilter(t *testing.T) {
+	h := newTestServer(newStubRepo())
+	for _, target := range []string{"/api/nf-alerts?assignedTo=unassigned", "/api/nf-alerts?assignedTo=noc-shift-a"} {
+		rec := doRouted(h, "GET", target, "viewer", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected %s to be accepted, got %d", target, rec.Code)
+		}
+	}
+	rec := doRouted(h, "GET", "/api/nf-alerts?assignedTo="+strings.Repeat("a", 121), "viewer", nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("over-long assignee must be rejected, got %d", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "NF_ALERT_INVALID_ASSIGNEE_FILTER" {
+		t.Fatalf("expected NF_ALERT_INVALID_ASSIGNEE_FILTER, got %q", code)
 	}
 }
 

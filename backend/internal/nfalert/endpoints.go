@@ -1,6 +1,7 @@
 package nfalert
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -266,7 +267,7 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	for param := range q {
 		switch param {
-		case "state", "scope", "severity", "sort", "q", "limit", "cursor", "alertId":
+		case "state", "scope", "severity", "assignedTo", "sort", "q", "limit", "cursor", "alertId":
 		default:
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
@@ -297,12 +298,17 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	state := strings.TrimSpace(q.Get("state"))
 	scope := strings.TrimSpace(q.Get("scope"))
 	severity := strings.TrimSpace(q.Get("severity"))
+	assignedTo := strings.TrimSpace(q.Get("assignedTo"))
 	sortOrder := strings.TrimSpace(q.Get("sort"))
 	if err := ValidateAlertStateFilter(state); err != nil {
 		writeValidation(w, err)
 		return
 	}
 	if err := ValidateAlertSeverityFilter(severity); err != nil {
+		writeValidation(w, err)
+		return
+	}
+	if err := ValidateAlertAssigneeFilter(assignedTo); err != nil {
 		writeValidation(w, err)
 		return
 	}
@@ -336,13 +342,14 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	alerts, next, hasMore, err := h.repo.ListAlerts(r.Context(), AlertListFilter{
-		State:    state,
-		Scope:    scope,
-		Severity: severity,
-		Sort:     sortOrder,
-		Query:    strings.TrimSpace(q.Get("q")),
-		Limit:    limit,
-		Cursor:   strings.TrimSpace(q.Get("cursor")),
+		State:      state,
+		Scope:      scope,
+		Severity:   severity,
+		AssignedTo: assignedTo,
+		Sort:       sortOrder,
+		Query:      strings.TrimSpace(q.Get("q")),
+		Limit:      limit,
+		Cursor:     strings.TrimSpace(q.Get("cursor")),
 	})
 	if err != nil {
 		writeValidation(w, err)
@@ -385,6 +392,151 @@ func (h *Handler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
 		"state":  alert.State,
 	})
 	response.JSON(w, http.StatusOK, alert)
+}
+
+// BulkAlertRequest is the bounded body for bulk acknowledge/assign. The
+// reason is required so a bulk action cannot silently drop its audit context.
+type BulkAlertRequest struct {
+	AlertIDs   []string `json:"alertIds"`
+	AssignedTo string   `json:"assignedTo,omitempty"`
+	Reason     string   `json:"reason"`
+}
+
+// BulkAlertResult reports the outcome for one requested alert id.
+type BulkAlertResult struct {
+	AlertID string `json:"alertId"`
+	OK      bool   `json:"ok"`
+	State   string `json:"state,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// BulkAlertResponse is the per-item outcome of a bulk action.
+type BulkAlertResponse struct {
+	Results   []BulkAlertResult `json:"results"`
+	Succeeded int               `json:"succeeded"`
+	Failed    int               `json:"failed"`
+}
+
+const (
+	bulkMaxAlerts = 50
+	bulkMinReason = 3
+	bulkMaxReason = 500
+)
+
+func normalizeBulkAlertIDs(raw []string) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, validationError("NF_ALERT_INVALID_BULK_REQUEST", "alertIds must contain at least one alert id")
+	}
+	if len(raw) > bulkMaxAlerts {
+		return nil, validationError("NF_ALERT_INVALID_BULK_REQUEST", "alertIds accepts at most 50 identifiers")
+	}
+	seen := make(map[string]bool, len(raw))
+	ids := make([]string, 0, len(raw))
+	for _, value := range raw {
+		id := strings.TrimSpace(value)
+		if err := ValidateUUID(id); err != nil {
+			return nil, err
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func bulkErrorCode(err error) string {
+	if errors.Is(err, ErrAlertResolved) {
+		return "NF_ALERT_INSTANCE_RESOLVED"
+	}
+	if errors.Is(err, ErrAlertNotFound) {
+		return "NF_ALERT_INSTANCE_NOT_FOUND"
+	}
+	if errors.Is(err, ErrAlertTransition) {
+		return "NF_ALERT_INVALID_TRANSITION"
+	}
+	var validation *ErrValidation
+	if errors.As(err, &validation) {
+		return validation.Code
+	}
+	return "NF_ALERT_INTERNAL"
+}
+
+func (h *Handler) BulkAcknowledge(w http.ResponseWriter, r *http.Request) {
+	h.bulkAlertAction(w, r, false)
+}
+
+func (h *Handler) BulkAssign(w http.ResponseWriter, r *http.Request) {
+	h.bulkAlertAction(w, r, true)
+}
+
+func (h *Handler) bulkAlertAction(w http.ResponseWriter, r *http.Request, assign bool) {
+	p := h.requireConfigure(w, r, "POST", "/api/nf-alerts/bulk")
+	if p == nil {
+		return
+	}
+	action := "acknowledge"
+	auditAction := "nf_alert.bulk.acknowledged"
+	if assign {
+		action = "assign"
+		auditAction = "nf_alert.bulk.assigned"
+	}
+	if h.limiter != nil && !h.limiter.Enforce(w, r, "nf-alerts:bulk:"+action+":"+p.Username, 20, 60) {
+		return
+	}
+	var req BulkAlertRequest
+	if err := decodeStrictJSON(r.Body, maxBodyBytes, &req); err != nil {
+		response.BadRequest(w, err.Error(), "INVALID_REQUEST_BODY")
+		return
+	}
+	ids, err := normalizeBulkAlertIDs(req.AlertIDs)
+	if err != nil {
+		writeValidation(w, err)
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if len([]rune(reason)) < bulkMinReason || len([]rune(reason)) > bulkMaxReason {
+		response.BadRequest(w, "reason must be between 3 and 500 characters", "NF_ALERT_INVALID_BULK_REASON")
+		return
+	}
+	if assign {
+		req.AssignedTo = strings.TrimSpace(req.AssignedTo)
+		if req.AssignedTo == "" || len([]rune(req.AssignedTo)) > 120 {
+			response.BadRequest(w, "assignedTo must be a non-empty value of at most 120 characters", "NF_ALERT_INVALID_ASSIGNEE")
+			return
+		}
+	}
+
+	results := make([]BulkAlertResult, 0, len(ids))
+	succeeded := 0
+	for _, id := range ids {
+		var alert *Alert
+		var actErr error
+		if assign {
+			alert, actErr = h.repo.AssignAlert(r.Context(), id, req.AssignedTo)
+		} else {
+			alert, actErr = h.repo.AcknowledgeAlert(r.Context(), id, p.Username)
+		}
+		if actErr != nil {
+			results = append(results, BulkAlertResult{AlertID: id, OK: false, Error: bulkErrorCode(actErr)})
+			continue
+		}
+		succeeded++
+		results = append(results, BulkAlertResult{AlertID: id, OK: true, State: alert.State})
+	}
+	h.auditWrite(p, auditAction, "nf_alert_bulk", "bulk", map[string]any{
+		"alertIds":   ids,
+		"reason":     reason,
+		"assignedTo": req.AssignedTo,
+		"count":      len(ids),
+		"succeeded":  succeeded,
+	})
+	response.JSON(w, http.StatusOK, BulkAlertResponse{
+		Results:   results,
+		Succeeded: succeeded,
+		Failed:    len(ids) - succeeded,
+	})
 }
 
 // AssignAlert handles POST /api/nf-alerts/{alertId}/assign.

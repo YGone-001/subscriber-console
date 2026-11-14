@@ -185,7 +185,10 @@ type AlertListFilter struct {
 	State    string // "", active, acknowledged, assigned, recovering, resolved
 	Scope    string // "", open, history
 	Severity string
-	Query    string
+	// AssignedTo selects an owner. "unassigned" is a reserved value for alerts
+	// with no owner; any other value is an exact username match.
+	AssignedTo string
+	Query      string
 	// Sort selects the ordering: "" / "updated" recency, "risk" duty queue.
 	Sort   string
 	Limit  int

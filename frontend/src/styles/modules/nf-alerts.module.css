@@ -633,3 +633,27 @@
   min-height: var(--control-height);
 }
 
+
+.bulkBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+}
+
+.selectCol {
+  width: 2.25rem;
+  text-align: center;
+}
+
+.selectCol input {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
