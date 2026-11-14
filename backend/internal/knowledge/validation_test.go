@@ -197,6 +197,35 @@ func TestClassifyByExtension(t *testing.T) {
 	}
 }
 
+func TestValidateSolutionImages(t *testing.T) {
+	const imageID = "00000000-0000-4000-8000-000000000000"
+	solution := "before ![shot](/api/knowledge/files/" + imageID + ") after"
+
+	t.Run("accepts image present in attachment set", func(t *testing.T) {
+		if err := validateSolutionImages(solution, []string{imageID}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("matches attachment id case-insensitively", func(t *testing.T) {
+		if err := validateSolutionImages(solution, []string{"00000000-0000-4000-8000-000000000000"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects orphan image reference", func(t *testing.T) {
+		if err := validateSolutionImages(solution, []string{}); err == nil {
+			t.Fatalf("expected orphan image error")
+		}
+	})
+
+	t.Run("ignores solutions without attachment images", func(t *testing.T) {
+		if err := validateSolutionImages("plain text and ![x](https://example.com/a.png)", nil); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestBuildListFilterEscapesRegex(t *testing.T) {
 	filter, err := buildListFilter(ListFilter{Query: ".*"})
 	if err != nil {

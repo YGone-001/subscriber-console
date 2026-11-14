@@ -101,6 +101,31 @@ func validateAttachmentFileIDs(ids []string) error {
 	return nil
 }
 
+// solutionImageRef matches inline Markdown images that point at a knowledge
+// attachment. Such images must be claimed by the entry, otherwise the janitor
+// reclaims the bytes and the rendered image breaks.
+var solutionImageRef = regexp.MustCompile(`!\[[^\]]*\]\(/api/knowledge/files/([0-9a-fA-F-]{36})\)`)
+
+// validateSolutionImages rejects a solution that references an attachment image
+// absent from the claimed attachment set, keeping inline images and attachments
+// consistent at write time.
+func validateSolutionImages(solution string, attachmentFileIDs []string) error {
+	matches := solutionImageRef.FindAllStringSubmatch(solution, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	claimed := make(map[string]bool, len(attachmentFileIDs))
+	for _, id := range attachmentFileIDs {
+		claimed[strings.ToLower(id)] = true
+	}
+	for _, m := range matches {
+		if !claimed[strings.ToLower(m[1])] {
+			return fmt.Errorf("solution references image %q that is not in the attachment set", m[1])
+		}
+	}
+	return nil
+}
+
 // ValidateCreateRequest validates a create payload and returns a normalized
 // protocol and tag set.
 func ValidateCreateRequest(req *CreateEntryRequest) (string, []string, error) {
@@ -117,6 +142,9 @@ func ValidateCreateRequest(req *CreateEntryRequest) (string, []string, error) {
 		return "", nil, err
 	}
 	if err := validateAttachmentFileIDs(req.AttachmentFileIDs); err != nil {
+		return "", nil, err
+	}
+	if err := validateSolutionImages(req.Solution, req.AttachmentFileIDs); err != nil {
 		return "", nil, err
 	}
 	return protocol, tags, nil
@@ -141,6 +169,9 @@ func ValidateUpdateRequest(req *UpdateEntryRequest) (string, []string, error) {
 		return "", nil, err
 	}
 	if err := validateAttachmentFileIDs(req.AttachmentFileIDs); err != nil {
+		return "", nil, err
+	}
+	if err := validateSolutionImages(req.Solution, req.AttachmentFileIDs); err != nil {
 		return "", nil, err
 	}
 	return protocol, tags, nil
