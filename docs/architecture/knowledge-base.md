@@ -144,3 +144,25 @@ preview; the editor offers a Markdown toolbar (including code block, table and
 horizontal rule, plus Ctrl+B/I/K shortcuts), preview, attachment upload,
 new-entry draft autosave and revision-conflict handling. `viewer` hides all
 mutation entry points, and the backend remains the authorization authority.
+
+## Performance and scale triggers
+
+These are recorded `PERFORMANCE_FINDING` trigger lines (AGENTS.md §8.3), not
+current defects. No premature optimization or read-path index is added before a
+trigger is reached; business index changes go through `npm run mongo:indexes`.
+
+- **Search ranking / text index**: list search is a `regexp.QuoteMeta`-escaped
+  `$or` regex across six fields with no text index, ordered by the active sort
+  rather than relevance. Trigger: more than ~5000 active entries, or list p95
+  above ~200ms. Action then: evaluate a text index and relevance ranking.
+- **Meta aggregates**: already served from a 30s in-process cache; the list
+  `total` is computed fresh. No further action unless aggregation latency grows.
+- **Attachment deduplication**: SHA256 is computed but not used to deduplicate;
+  identical uploads store separate copies. Trigger: attachment storage growth
+  warrants content-addressed dedup. Action then: reference-counted dedup.
+- **Streaming upload**: uploads read up to 8 MiB into memory before writing.
+  Trigger: concurrent-upload memory pressure observed in production. Action then:
+  stream to disk.
+- **View count**: a per-entry view counter (write-on-read) is intentionally not
+  implemented; `referenceCount` from citing investigations is the current usage
+  signal. Revisit only if operational analytics require view tracking.
