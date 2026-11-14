@@ -22,6 +22,7 @@ import { TopologyCanvasControls, TopologyCanvasSearch } from './components/Topol
 import { Link } from 'react-router-dom';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { useBoundedEdges } from '../operations/use-bounded-edges';
+import { useRead } from '../../lib/api/use-read';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { useLiveTopologyViewState } from './live-topology-url';
 import {
@@ -151,6 +152,20 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
     [layout.nodes],
   );
   const health = useTopologyHealth(nodeIds);
+  /* Bounded inventory read for the unlinked tray. The declared canvas only
+   * contains resources referenced by active edges; a resource with no edge
+   * would otherwise disappear without any trace. The tray states its bounded
+   * scope instead of claiming a platform total. */
+  const inventory = useRead<{
+    resources?: Array<{ resourceId: string; name: string; displayName?: string; domain?: string; lifecycleState?: string }>;
+    page?: { hasMore?: boolean };
+  }>('/api/operations/resources?kinds=network_function_instance,network_element&limit=200');
+  const unlinkedResources = useMemo(() => {
+    const visible = new Set(layout.nodes.map((node) => node.resourceId));
+    return (inventory.data?.resources ?? [])
+      .filter((resource) => resource.resourceId && resource.lifecycleState !== 'retired' && !visible.has(resource.resourceId))
+      .slice(0, 50);
+  }, [inventory.data, layout.nodes]);
   /* The diff against configured evidence is produced by the live projection; the
    * declared canvas only displays it and never writes the ledger. */
   const reconciliation = useTopologyReconciliation();
@@ -735,6 +750,24 @@ export function ActualTopologyView({ onShowRuntime }: { onShowRuntime?: () => vo
             {t('topology_context_lost_dismiss')}
           </button>
         </div>
+      ) : null}
+      {unlinkedResources.length > 0 ? (
+        <details className={styles.liveUnresolved} data-unlinked-tray="true">
+          <summary>{t('topology_unlinked_resources', { count: unlinkedResources.length })}</summary>
+          <p className={styles.liveMuted}>{t('topology_unlinked_note')}</p>
+          <table className={styles.liveEquivalentTable}>
+            <caption className="sr-only">{t('topology_unlinked_resources', { count: unlinkedResources.length })}</caption>
+            <thead><tr><th scope="col">{t('topology_list_name')}</th><th scope="col">{t('topology_inspector_type')}</th></tr></thead>
+            <tbody>
+              {unlinkedResources.map((resource) => (
+                <tr key={resource.resourceId}>
+                  <td><Link to={`/inventory/${encodeURIComponent(resource.resourceId)}`} className={styles.linkBtn}>{resource.displayName || resource.name || resource.resourceId}</Link></td>
+                  <td>{resource.domain || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
       ) : null}
       {health.loading || health.byResource.size > 0 || health.coverage !== 'complete' ? (
         <div className={styles.actualHealthLegend} role="group" aria-label={t('topology_health_label')}>

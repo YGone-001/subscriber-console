@@ -31,24 +31,24 @@ const state = (
 
 /* --------------------------------------------------------------- resolve -- */
 
-test('an empty query resolves to the runtime graph, the only populated default', () => {
-  assert.deepEqual(resolveTopologyViewState(''), state('graph', 'runtime', 'config'));
+test('an empty query resolves to the declared graph default', () => {
+  assert.deepEqual(resolveTopologyViewState(''), state('graph', 'declared', 'config'));
 });
 
 test('an explicit legacy view keeps its original destination', () => {
   assert.deepEqual(resolveTopologyViewState('?view=actual'), state('graph', 'declared', 'config'));
-  assert.deepEqual(resolveTopologyViewState('?view=graph'), state('graph', 'runtime', 'config'));
-  assert.deepEqual(resolveTopologyViewState('?view=architecture'), state('architecture', 'runtime', 'config'));
-  assert.deepEqual(resolveTopologyViewState('?view=relationships'), state('ledger', 'runtime', 'config'));
+  assert.deepEqual(resolveTopologyViewState('?view=graph'), state('graph', 'declared', 'config'));
+  assert.deepEqual(resolveTopologyViewState('?view=architecture'), state('architecture', 'declared', 'config'));
+  assert.deepEqual(resolveTopologyViewState('?view=relationships'), state('ledger', 'declared', 'config'));
   assert.deepEqual(resolveTopologyViewState('?view=runtime'), state('graph', 'runtime', 'hierarchy'));
-  assert.deepEqual(resolveTopologyViewState('?view=ledger'), state('ledger', 'runtime', 'config'));
+  assert.deepEqual(resolveTopologyViewState('?view=ledger'), state('ledger', 'declared', 'config'));
 });
 
 test('a legacy reference source is an architecture link, not a third evidence layer', () => {
-  assert.deepEqual(resolveTopologyViewState('?source=reference'), state('architecture', 'runtime', 'config'));
+  assert.deepEqual(resolveTopologyViewState('?source=reference'), state('architecture', 'declared', 'config'));
   assert.deepEqual(
     resolveTopologyViewState('?view=architecture&source=runtime'),
-    state('architecture', 'runtime', 'config'),
+    state('architecture', 'declared', 'config'),
   );
 });
 
@@ -75,8 +75,8 @@ test('a runtime scope only applies to the runtime source', () => {
 });
 
 test('unknown values fall back to the populated graph default', () => {
-  assert.deepEqual(resolveTopologyViewState('?view=bogus&source=bogus&scope=bogus'), state('graph', 'runtime', 'config'));
-  assert.deepEqual(resolveTopologyViewState('?view=%00&source=%00'), state('graph', 'runtime', 'config'));
+  assert.deepEqual(resolveTopologyViewState('?view=bogus&source=bogus&scope=bogus'), state('graph', 'declared', 'config'));
+  assert.deepEqual(resolveTopologyViewState('?view=%00&source=%00'), state('graph', 'declared', 'config'));
 });
 
 /* ------------------------------------------------------------ canonical -- */

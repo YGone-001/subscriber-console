@@ -1980,17 +1980,17 @@ test('the relationship presentation covers exactly the nine canonical types', ()
 
 /* ------------------------------------------------------------------ pages -- */
 
-test('the topology page defaults to the runtime graph and still renders', () => {
+test('the topology page defaults to the declared graph and still renders', () => {
   const markup = renderPage(createElement(TopologyPage));
   assert.ok(markup.includes('Topology'), 'the page title must render');
   assert.ok(markup.includes('data-topology-view="graph"'), 'the graph mode must render');
   assert.ok(markup.includes('data-topology-view="ledger"'), 'the mode switch must render');
   assert.ok(markup.includes('data-topology-view="architecture"'), 'the architecture mode must render');
-  assert.ok(markup.includes('data-topology-source-bar="runtime"'), 'the runtime layer must be selected');
-  assert.ok(markup.includes('data-runtime-scope="config"'), 'the configured runtime projection must be rendered');
-  // The relationship ledger and declared canvas are explicit, non-default views.
+  assert.ok(markup.includes('data-topology-source-bar="declared"'), 'the declared layer must be selected');
+  // The relationship ledger, runtime canvas and runtime scope are explicit,
+  // non-default surfaces.
   assert.ok(!markup.includes('topology-filter-from'), 'the ledger must not render behind the graph');
-  assert.ok(!markup.includes('id="actual-topology-title"'), 'the declared canvas must not render behind the graph');
+  assert.ok(!markup.includes('data-runtime-scope="config"'), 'the runtime scope must not render behind the declared graph');
   assert.ok(!markup.includes('data-testid="runtime-discovery"'), 'the runtime surface must not render behind the canvas');
 });
 

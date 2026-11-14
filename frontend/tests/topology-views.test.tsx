@@ -58,16 +58,15 @@ function renderTopology(path: string): string {
 
 /* --------------------------------------------------------------- views -- */
 
-test('the topology page defaults to the runtime graph because it is the populated layer', () => {
+test('the topology page defaults to the declared graph', () => {
   const markup = renderTopology('/topology');
   assert.ok(markup.includes('data-topology-view="graph"'), 'the graph mode must be present in the switch');
   assert.ok(markup.includes('data-topology-view="ledger"'), 'the ledger mode must be present in the switch');
   assert.ok(markup.includes('data-topology-view="architecture"'), 'the architecture mode must be present in the switch');
-  assert.ok(markup.includes('data-topology-source-bar="runtime"'), 'the runtime layer must be selected by default');
-  assert.ok(markup.includes('data-topology-source="runtime"'), 'the layer switch must render');
+  assert.ok(markup.includes('data-topology-source-bar="declared"'), 'the declared layer must be selected by default');
+  assert.ok(markup.includes('data-topology-source="declared"'), 'the layer switch must render');
   assert.ok(markup.includes('aria-pressed="true"'), 'the default mode must be pressed');
-  assert.ok(markup.includes('data-runtime-scope="config"'), 'the configured runtime projection must render by default');
-  assert.ok(!markup.includes('id="actual-topology-title"'), 'the declared canvas must not render by default');
+  assert.ok(!markup.includes('data-runtime-scope="config"'), 'the runtime scope must not render behind the declared graph');
   assert.ok(!markup.includes('id="architecture-title"'), 'the reference canvas must not render by default');
 });
 
@@ -136,7 +135,7 @@ test('each graph evidence layer states its evidence and offers expandable data n
 
 test('an unknown view falls back to the populated graph instead of an empty page', () => {
   const markup = renderTopology('/topology?view=unknown&source=unknown');
-  assert.ok(markup.includes('data-topology-source-bar="runtime"'));
+  assert.ok(markup.includes('data-topology-source-bar="declared"'));
   assert.ok(!markup.includes('id="architecture-title"'));
 });
 

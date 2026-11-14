@@ -83,7 +83,10 @@ export type TopologyViewState = {
 
 export const DEFAULT_TOPOLOGY_VIEW_STATE: TopologyViewState = {
   primary: 'graph',
-  source: 'runtime',
+  /* Declared relationships are the managed object of this module. Runtime
+   * configuration is an evidence layer behind an explicit switch, not the
+   * default claim. */
+  source: 'declared',
   runtimeScope: 'config',
 };
 
@@ -109,7 +112,7 @@ export function resolveTopologyViewState(search: string | URLSearchParams): Topo
   const requestedScope = sanitizeOperationsValue(params.get(TOPOLOGY_SCOPE_PARAM));
 
   let primary: TopologyPrimaryView = 'graph';
-  let source: TopologyGraphSource = 'runtime';
+  let source: TopologyGraphSource = 'declared';
   let runtimeScope: TopologyRuntimeScope = 'config';
 
   switch (view) {
