@@ -4,7 +4,6 @@ import { useSWRConfig } from 'swr';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { BellRing } from 'lucide-react';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
-import { ViewSwitch } from '../../components/ui/ViewSwitch';
 import MetricStrip from '../../components/ui/MetricStrip';
 import { Field } from '../../components/ui/Field';
 import { Dialog } from '../../components/ui/Dialog';
@@ -35,7 +34,7 @@ function DriftDirectory(){
  <Field htmlFor="drift-site" label={t('drift_site')}><input id="drift-site" name="siteResourceId" className="form-input" defaultValue={params.get('siteResourceId')||''} maxLength={36}/></Field>
  <Field htmlFor="drift-network" label={t('drift_network')}><input id="drift-network" name="networkKey" className="form-input" defaultValue={params.get('networkKey')||''} maxLength={64}/></Field>
  <details><summary>{t('drift_more_scope')}</summary>{['hostResourceId','operatorName','plmn'].map(k=><Field key={k} htmlFor={'drift-scope-'+k} label={t('drift_'+k)}><input id={'drift-scope-'+k} name={k} className="form-input" defaultValue={params.get(k)||''} maxLength={k==='operatorName'?128:36}/></Field>)}</details>
- <div className={styles.actions}><button className="btn btn-primary" type="submit">{t('search')}</button><button className="btn btn-secondary" type="button" onClick={()=>setParams({view:'config'})}>{t('drift_clear')}</button></div></form><p className={styles.note}>{t('drift_scope_note')}</p></div>
+ <div className={styles.actions}><button className="btn btn-primary" type="submit">{t('search')}</button><button className="btn btn-secondary" type="button" onClick={()=>setParams({view:'drift'})}>{t('drift_clear')}</button></div></form><p className={styles.note}>{t('drift_scope_note')}</p></div>
  {read.isLoading?<LoadingState label={t('loading')}/>:read.error?<ErrorState title={t('drift_read_failed')} message={t('drift_retry')} retryLabel={t('refresh')} onRetry={()=>void read.mutate()}/>:data&&!data.items.length?<EmptyState title={t('drift_empty')} description={t('drift_empty_hint')}/>:data?<div className={styles.tableWrap}><table className={styles.table}><caption>{t('drift_list_caption')}</caption><thead><tr><th>{t('config_source')}</th><th>{t('drift_state')}</th><th>{t('drift_severity')}</th><th>{t('drift_opened_at')}</th><th>{t('drift_last_verified')}</th></tr></thead><tbody>{data.items.map(a=><tr key={a.driftAlertId}><td><Link to={driftLink(a.driftAlertId,location.pathname+location.search)}>{a.sourceName}</Link><small>{a.resourceId}</small></td><td><DriftStatus value={a.state}/>{a.endReason?<small>{t('drift_'+a.endReason)}</small>:null}</td><td>{t('nf_alerts_severity_'+a.severity)}</td><td>{formatDateTime(a.openedAt,EVIDENCE_TIME_FORMAT)}</td><td>{formatDateTime(a.latest.at,EVIDENCE_TIME_FORMAT)}<small>{t('drift_observations',{count:a.triggerCount})}</small></td></tr>)}</tbody></table></div>:null}
  {data?.completeness==='partial'?<OperationFeedback tone="warning" message={t('drift_partial')}/>:null}
  {data?<CursorPagination summary={t('drift_page',{count:data.items.length})} previousLabel={t('evidence_first_page')} nextLabel={t('next')} hasPrevious={params.has('cursor')} hasNext={data.hasMore} onPrevious={()=>page('')} onNext={()=>page(data.nextCursor||'')}/>:null}
@@ -49,7 +48,7 @@ function DriftDetail({id}:{id:string}){
  const [confirm,setConfirm]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState<string|null>(null);
  const ack=async()=>{if(!a||busy)return;setBusy(true);setError(null);try{await acknowledgeDrift(a);setConfirm(false);await Promise.allSettled([read.mutate(),events.mutate()]);}catch{setError(t('drift_ack_failed'));await read.mutate();}finally{setBusy(false);}};
  const setCursor=(key:string,value:string)=>{const next=new URLSearchParams(params);if(value)next.set(key,value);else next.delete(key);setParams(next);};
- const back=resolveReturnTo(location.search,'/nf-alerts?view=config',['/nf-alerts']);
+ const back=resolveReturnTo(location.search,'/config-snapshots?view=drift',['/config-snapshots','/nf-alerts']);
  return <div className={styles.workspace}><div className={styles.actions}><Link className="btn btn-secondary" to={back}>{t('back')}</Link>{a?<><Link className="btn btn-secondary" to={'/config-snapshots/'+a.sourceId}>{t('drift_source_detail')}</Link><Link className="btn btn-primary" to={configInvestigationEntry(id,location.pathname+location.search)}>{t('drift_investigate')}</Link>{a.state==='active'&&hasPermission(user,'core.configure')?<button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>setConfirm(true)}>{t('drift_acknowledge')}</button>:null}</>:null}</div>
  {error?<OperationFeedback tone="danger" message={error}/>:null}
  {read.isLoading?<LoadingState label={t('loading')}/>:read.error?<ErrorState title={t('drift_read_failed')} message={t('drift_retry')} retryLabel={t('refresh')} onRetry={()=>void read.mutate()}/>:a?<>
@@ -66,9 +65,23 @@ function DriftDetail({id}:{id:string}){
  <Dialog open={confirm} onClose={()=>{if(!busy)setConfirm(false);}} ariaLabel={t('drift_acknowledge')} overlayClassName="modal-overlay" className="modal-content"><div className={styles.confirm}><h2>{t('drift_acknowledge')}</h2><p>{t('drift_ack_hint')}</p>{error?<OperationFeedback tone="danger" message={error}/>:null}<div className={styles.actions}><button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>setConfirm(false)}>{t('cancel')}</button><button type="button" className="btn btn-primary" disabled={busy} onClick={()=>void ack()}>{t('confirm')}</button></div></div></Dialog>
  </div>;
 }
-export function ConfigDriftWorkspace(){
- const {t}=useI18n();const {user}=useAuth();const {mutate}=useSWRConfig();const [params,setParams]=useSearchParams();const [notify,setNotify]=useState(false);const id=params.get('driftAlertId');const meta=useBoundedRead<{workerRunning:boolean;lastError:string}>('/api/config-drift/meta',5000);
- return <OperationsPageFrame title={t('nf_alerts_title')} description={t('drift_description')} icon={<BellRing size={23}/>} viewSwitch={<ViewSwitch value="config" ariaLabel={t('nf_alerts_view_label')} options={['open','history','rules','config'].map(value=>({value,label:t(value==='config'?'drift_view':'nf_alerts_view_'+value)}))} onChange={value=>setParams({view:value})}/>} onRefresh={async()=>{await mutate(key=>typeof key==='string'&&(key.startsWith('/api/config-drift/')||key.startsWith('/api/nf-notifications/deliveries')));}} actions={hasPermission(user,'core.configure')?<button className="btn btn-secondary" type="button" onClick={()=>setNotify(true)}>{t('nf_notify_title')}</button>:undefined}>
- {meta.error||(meta.data&&(!meta.data.workerRunning||meta.data.lastError))?<OperationFeedback tone="warning" message={t('drift_worker_stopped')}/>:null}{id?<DriftDetail key={id} id={id}/>:<DriftDirectory/>}<NotificationSettingsDialog open={notify} onClose={()=>setNotify(false)} onChanged={()=>{}} subjectKind="config_drift"/>
+export function ConfigDriftWorkspace({ embedded = false }: { embedded?: boolean } = {}) {
+ const {t}=useI18n();
+ const {user}=useAuth();
+ const {mutate}=useSWRConfig();
+ const [params]=useSearchParams();
+ const [notify,setNotify]=useState(false);
+ const id=params.get('driftAlertId');
+ const meta=useBoundedRead<{workerRunning:boolean;lastError:string}>('/api/config-drift/meta',5000);
+ const refresh=async()=>{await mutate(key=>typeof key==='string'&&(key.startsWith('/api/config-drift/')||key.startsWith('/api/nf-notifications/deliveries')));};
+ const content=<>
+  {meta.error||(meta.data&&(!meta.data.workerRunning||meta.data.lastError))?<OperationFeedback tone="warning" message={t('drift_worker_stopped')}/>:null}
+  {id?<DriftDetail key={id} id={id}/>:<DriftDirectory/>}
+  {embedded&&hasPermission(user,'core.configure')?<div className={styles.actions}><button className="btn btn-secondary" type="button" onClick={()=>setNotify(true)}>{t('nf_notify_title')}</button></div>:null}
+  <NotificationSettingsDialog open={notify} onClose={()=>setNotify(false)} onChanged={()=>{}} subjectKind="config_drift"/>
+ </>;
+ if (embedded) return content;
+ return <OperationsPageFrame title={t('drift_view')} description={t('drift_description')} icon={<BellRing size={23}/>} onRefresh={refresh} actions={hasPermission(user,'core.configure')?<button className="btn btn-secondary" type="button" onClick={()=>setNotify(true)}>{t('nf_notify_title')}</button>:undefined}>
+  {content}
  </OperationsPageFrame>;
 }

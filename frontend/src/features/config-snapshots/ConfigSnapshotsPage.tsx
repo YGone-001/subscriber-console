@@ -14,6 +14,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { captureConfig, captureRequestId, readConfig, setConfigBaseline, sourceListPath, sourcePath, type ConfigDiff, type ConfigMeta, type ConfigSource, type Observation, type Page, type Snapshot, type SourceList } from './config-api';
 import { DriftPolicyPanel } from '../config-drift/DriftPolicyPanel';
+import { ConfigDriftWorkspace } from '../config-drift/ConfigDriftWorkspace';
 import styles from '../../styles/modules/operations-evidence.module.css';
 
 export function ConfigStatus({ value }: { value: string }) {
@@ -41,7 +42,7 @@ export function ConfigSnapshotsPage() {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ error: boolean; text: string } | null>(null);
   const [baseline, setBaseline] = useState<string | null>(null);
-  const requestedView = params.get('view') || 'versions'; const view = ['versions', 'observations', 'diff'].includes(requestedView) ? requestedView : 'versions';
+  const requestedView = params.get('view') || 'versions'; const view = ['versions', 'observations', 'diff', 'drift'].includes(requestedView) ? requestedView : 'versions';
   const canConfigure = hasPermission(user, 'core.configure');
   const base = sourceId ? sourcePath(sourceId) : '';
   const list = useSWR<SourceList>(sourceId ? null : sourceListPath(params), readConfig);
@@ -76,6 +77,17 @@ export function ConfigSnapshotsPage() {
   const back = resolveReturnTo(location.search, '/config-snapshots', ['/config-snapshots']);
   const errorPanel = (text: string) => <ErrorState title={t('evidence_unavailable')} message={text} retryLabel={t('refresh')} onRetry={() => { void refresh(); }} />;
   const versionChoices = [...new Set([...(history.data?.items.map((item) => item.snapshotId) || []), current?.baselineId, current?.latestSnapshot?.snapshotId, left, right].filter((id): id is string => Boolean(id)))];
+
+  if (view === 'drift') {
+    return <div className={styles.page}>
+      <PageHeader title={sourceId ? current?.name || t('config_title') : t('config_title')} subtitle={t('drift_description')} icon={<FileDiff size={22} />} actions={<>
+        {sourceId ? <Link className="btn btn-secondary" to={back}><ArrowLeft size={16} />{t('back')}</Link> : null}
+        <button className="btn btn-secondary" onClick={() => { void refresh(); }}><RefreshCw size={16} />{t('refresh')}</button>
+      </>} />
+      <ViewSwitch ariaLabel={t('config_views')} value={view} options={['versions', 'observations', 'diff', 'drift'].map((value) => ({ value, label: t(`config_view_${value}`) }))} onChange={(value) => update({ view: value, snapshot: '' })} />
+      <ConfigDriftWorkspace embedded />
+    </div>;
+  }
 
   return <div className={styles.page}>
     <PageHeader title={sourceId ? current?.name || t('config_title') : t('config_title')} subtitle={t('config_description')} icon={<FileDiff size={22} />} actions={<>
@@ -115,7 +127,7 @@ export function ConfigSnapshotsPage() {
         <p className={styles.hintBlock}>{t('config_no_runtime_claim')}</p>
       </section>
       <DriftPolicyPanel key={sourceId} sourceId={sourceId} canConfigure={canConfigure}/>
-      <ViewSwitch ariaLabel={t('config_views')} value={view} options={['versions', 'observations', 'diff'].map((value) => ({ value, label: t(`config_view_${value}`) }))} onChange={(value) => update({ view: value, snapshot: '' })} />
+      <ViewSwitch ariaLabel={t('config_views')} value={view} options={['versions', 'observations', 'diff', 'drift'].map((value) => ({ value, label: t(`config_view_${value}`) }))} onChange={(value) => update({ view: value, snapshot: '' })} />
       {view === 'diff' ? <section className={styles.panel}>
         <div className={styles.toolbar}>{(['left', 'right'] as const).map((side) => <label key={side}>{t(`config_${side}`)}<select value={side === 'left' ? left : right} onChange={(event) => update({ [side]: event.target.value })}><option value="">{t('config_select_version')}</option>{versionChoices.map((id) => <option key={id} value={id}>{id.slice(0, 12)}{id === current.baselineId ? ` / ${t('config_baseline')}` : ''}</option>)}</select></label>)}</div>
         {!left || !right ? <EmptyState title={t('config_select_two')} /> : diff.isLoading ? <LoadingState label={t('loading')} /> : diff.error ? errorPanel(t('config_diff_failed')) : diff.data ? <div className={styles.content}><ConfigStatus value={diff.data.comparison} />{!diff.data.complete ? <p className={styles.notice}>{t(`evidence_${diff.data.reason}`)}</p> : <div className={styles.diff} tabIndex={0} aria-label={t('config_view_diff')}>{diff.data.lines.map((line, i) => <div key={i} data-kind={line.kind}><span className={styles.leftNumber}>{line.left ?? ''}</span><span className={styles.rightNumber}>{line.right ?? ''}</span><code className={styles.leftText}>{line.kind === 'add' ? '' : `${line.kind === 'remove' ? '-' : ' '}${line.text}`}</code><code className={styles.rightText}>{line.kind === 'remove' ? '' : `${line.kind === 'add' ? '+' : ' '}${line.text}`}</code><code className={styles.unifiedText}>{line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' '}{line.text}</code></div>)}</div>}</div> : null}
