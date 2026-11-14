@@ -15,6 +15,8 @@ export type EntryQuery = {
   tag?: string;
   cursor?: string;
   limit?: number;
+  sort?: string;
+  order?: string;
 };
 
 /** Whether an SWR key identifies a knowledge entry list query. */
@@ -35,6 +37,8 @@ export function buildEntriesPath(query: EntryQuery = {}): string {
   if (query.tag) params.set('tag', query.tag);
   if (query.cursor) params.set('cursor', query.cursor);
   if (typeof query.limit === 'number') params.set('limit', String(query.limit));
+  if (query.sort) params.set('sort', query.sort);
+  if (query.order) params.set('order', query.order);
   const suffix = params.toString();
   return suffix ? `/api/knowledge/entries?${suffix}` : '/api/knowledge/entries';
 }

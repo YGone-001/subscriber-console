@@ -33,6 +33,7 @@ export type KnowledgeSummary = {
   phenomenon: string;
   tags: string[];
   attachments: Attachment[];
+  attachmentCount: number;
   revision: number;
   createdAt: string;
   createdBy: string;

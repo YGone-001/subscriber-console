@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { BookOpen, ChevronRight, Plus, Search, Tag, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, ChevronRight, Paperclip, Plus, Search, Tag, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
@@ -10,10 +10,35 @@ import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { buildEntriesPath, fetchKnowledgeMeta } from './knowledge-api';
+import { HighlightText } from './components/HighlightText';
 import type { KnowledgeMeta, KnowledgeSummary } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
 
 const PAGE_LIMIT = 20;
+const DEFAULT_SORT = 'updatedAt';
+
+function defaultOrder(sort: string): string {
+  return sort === 'title' || sort === 'protocol' ? 'asc' : 'desc';
+}
+
+function readHistory(key: string): string[] {
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(key: string, history: string[]): void {
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(history));
+  } catch {
+    /* sessionStorage may be unavailable (private mode); paging still works. */
+  }
+}
 
 export function KnowledgePage() {
   const { t, formatDateTime, formatRelativeTime } = useI18n();
@@ -27,10 +52,17 @@ export function KnowledgePage() {
   const protocol = searchParams.get('protocol') ?? '';
   const tag = searchParams.get('tag') ?? '';
   const cursor = searchParams.get('cursor') ?? '';
+  const sort = searchParams.get('sort') || DEFAULT_SORT;
+  const order = searchParams.get('order') || defaultOrder(sort);
 
   const [searchInput, setSearchInput] = useState(q);
+  const [tagInput, setTagInput] = useState(tag);
   const [meta, setMeta] = useState<KnowledgeMeta | null>(null);
-  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+
+  // The cursor history is keyed by the active filter/sort signature so a refresh
+  // restores the back-stack for the current view instead of losing it.
+  const historyKey = `kb-history:${q}|${protocol}|${tag}|${sort}|${order}`;
+  const [cursorHistory, setCursorHistory] = useState<string[]>(() => readHistory(historyKey));
 
   useEffect(() => {
     void fetchKnowledgeMeta().then(setMeta).catch(() => {});
@@ -40,9 +72,25 @@ export function KnowledgePage() {
     setSearchInput(q);
   }, [q]);
 
+  useEffect(() => {
+    setTagInput(tag);
+  }, [tag]);
+
+  useEffect(() => {
+    setCursorHistory(readHistory(historyKey));
+  }, [historyKey]);
+
   const listPath = useMemo(
-    () => buildEntriesPath({ q: q || undefined, protocol: protocol || undefined, tag: tag || undefined, cursor: cursor || undefined, limit: PAGE_LIMIT }),
-    [q, protocol, tag, cursor],
+    () => buildEntriesPath({
+      q: q || undefined,
+      protocol: protocol || undefined,
+      tag: tag || undefined,
+      cursor: cursor || undefined,
+      limit: PAGE_LIMIT,
+      sort,
+      order,
+    }),
+    [q, protocol, tag, cursor, sort, order],
   );
   const { data, error, isLoading } = useRead<{ entries: KnowledgeSummary[]; total: number; page: { nextCursor: string | null; hasMore: boolean } }>(listPath);
 
@@ -58,7 +106,11 @@ export function KnowledgePage() {
   };
 
   const applySearch = (value: string) => {
-    setParam({ q: value.trim(), protocol, tag });
+    setParam({ q: value.trim() });
+  };
+
+  const applyTag = (value: string) => {
+    setParam({ tag: value.trim() });
   };
 
   const entries = data?.entries ?? [];
@@ -67,19 +119,21 @@ export function KnowledgePage() {
 
   const clearFilters = () => {
     setSearchInput('');
+    setTagInput('');
     setCursorHistory([]);
     setSearchParams(new URLSearchParams());
   };
 
   const kpi: MetricStripItem[] = [
     { key: 'total', icon: <BookOpen size={16} />, label: t('kb_kpi_total'), value: meta ? meta.total : (isLoading ? t('loading') : '—'), tone: 'primary' },
-    { key: 'protocols', icon: <Tag size={16} />, label: t('kb_kpi_protocols'), value: meta ? meta.protocolCounts.length : '—', tone: 'muted' },
+    { key: 'protocols', icon: <Tag size={16} />, label: t('kb_kpi_protocols'), value: meta ? `${meta.protocolCounts.length}/${meta.protocols.length}` : '—', tone: 'muted' },
   ];
 
   const goPrev = () => {
     const prev = cursorHistory[cursorHistory.length - 1];
     const next = cursorHistory.slice(0, -1);
     setCursorHistory(next);
+    writeHistory(historyKey, next);
     const params = new URLSearchParams(searchParams);
     if (prev) params.set('cursor', prev);
     else params.delete('cursor');
@@ -88,7 +142,9 @@ export function KnowledgePage() {
 
   const goNext = () => {
     if (data?.page.nextCursor) {
-      setCursorHistory((h) => [...h, cursor]);
+      const next = [...cursorHistory, cursor];
+      setCursorHistory(next);
+      writeHistory(historyKey, next);
       const params = new URLSearchParams(searchParams);
       params.set('cursor', data.page.nextCursor as string);
       setSearchParams(params);
@@ -136,11 +192,43 @@ export function KnowledgePage() {
           </div>
           <label className={styles.filter}>
             <span>{t('kb_filter_protocol')}</span>
-            <select value={protocol} onChange={(event) => setParam({ protocol: event.target.value, q, tag })}>
+            <select value={protocol} onChange={(event) => setParam({ protocol: event.target.value })}>
               <option value="">{t('kb_filter_all')}</option>
               {(meta?.protocols ?? []).map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </label>
+          <label className={styles.filter}>
+            <span>{t('kb_filter_tag')}</span>
+            <input
+              type="text"
+              value={tagInput}
+              placeholder={t('kb_filter_tag_placeholder')}
+              aria-label={t('kb_filter_tag')}
+              onChange={(event) => setTagInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') applyTag(tagInput);
+              }}
+              onBlur={() => { if (tagInput.trim() !== tag) applyTag(tagInput); }}
+            />
+          </label>
+          <label className={styles.filter}>
+            <span>{t('kb_sort_label')}</span>
+            <select value={sort} onChange={(event) => setParam({ sort: event.target.value, order: '' })}>
+              <option value="updatedAt">{t('kb_sort_updated')}</option>
+              <option value="createdAt">{t('kb_sort_created')}</option>
+              <option value="title">{t('kb_sort_title')}</option>
+              <option value="protocol">{t('kb_sort_protocol')}</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className={styles.orderToggle}
+            title={order === 'asc' ? t('kb_order_asc') : t('kb_order_desc')}
+            aria-label={t('kb_order_toggle')}
+            onClick={() => setParam({ order: order === 'asc' ? 'desc' : 'asc' })}
+          >
+            {order === 'asc' ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
+          </button>
         </div>
 
         {meta && meta.topTags.length > 0 && (
@@ -151,7 +239,7 @@ export function KnowledgePage() {
                 type="button"
                 role="listitem"
                 className={`${styles.tagChip} ${tag === item.tag ? styles.tagChipActive : ''}`}
-                onClick={() => setParam({ tag: tag === item.tag ? '' : item.tag, q, protocol })}
+                onClick={() => setParam({ tag: tag === item.tag ? '' : item.tag })}
               >
                 {item.tag} <span>{item.count}</span>
               </button>
@@ -187,17 +275,22 @@ export function KnowledgePage() {
                   <div className={styles.rowBadge} aria-hidden="true"><BookOpen size={16} /></div>
                   <div className={styles.rowBody}>
                     <div className={styles.rowTitle}>
-                      <span className={styles.rowTitleText}>{entry.title}</span>
+                      <span className={styles.rowTitleText}><HighlightText text={entry.title} query={q} /></span>
                       <span className={styles.rowProtocol}>{entry.protocol || t('kb_protocol_general')}</span>
                     </div>
-                    <p className={styles.rowPhenomenon}>{entry.phenomenon || t('kb_no_phenomenon')}</p>
+                    <p className={styles.rowPhenomenon}><HighlightText text={entry.phenomenon || t('kb_no_phenomenon')} query={q} /></p>
                     {entry.tags.length > 0 && (
                       <div className={styles.rowTags}>
-                        {entry.tags.slice(0, 4).map((t) => <span key={t}>{t}</span>)}
+                        {entry.tags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
                       </div>
                     )}
                   </div>
                   <div className={styles.rowMeta}>
+                    {entry.attachmentCount > 0 && (
+                      <span className={styles.rowAttach} title={t('kb_attachments_count', { count: entry.attachmentCount })}>
+                        <Paperclip size={13} /> {entry.attachmentCount}
+                      </span>
+                    )}
                     <span title={formatDateTime(entry.updatedAt)}>{formatRelativeTime(entry.updatedAt)}</span>
                     <ChevronRight size={16} />
                   </div>

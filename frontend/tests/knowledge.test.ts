@@ -17,6 +17,14 @@ test('the knowledge entries path carries only requested query values', () => {
   assert.equal(buildEntriesPath({ cursor: 'abc' }), '/api/knowledge/entries?cursor=abc');
 });
 
+test('the entries path carries sort and order when requested', () => {
+  assert.equal(buildEntriesPath({ sort: 'title', order: 'asc' }), '/api/knowledge/entries?sort=title&order=asc');
+  assert.equal(
+    buildEntriesPath({ q: 'sip', sort: 'createdAt', order: 'desc', limit: 20 }),
+    '/api/knowledge/entries?q=sip&limit=20&sort=createdAt&order=desc',
+  );
+});
+
 test('file size formatting keeps zero distinct from missing', () => {
   assert.equal(formatFileSize(0), '0 B');
   assert.equal(formatFileSize(512), '512 B');
