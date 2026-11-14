@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 	"unicode/utf8"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -24,10 +26,54 @@ const (
 // MaxSearchQueryLength bounds the search needle before it is escaped.
 const MaxSearchQueryLength = 64
 
-// CursorData is the opaque keyset cursor payload.
+// metaCacheTTL bounds how long the meta aggregates are reused across reads.
+const metaCacheTTL = 30 * time.Second
+
+// DefaultListSort is the historical list ordering.
+const DefaultListSort = "updatedAt"
+
+// listSortFields is the closed set of sortable list fields.
+var listSortFields = map[string]bool{
+	"updatedAt": true,
+	"createdAt": true,
+	"title":     true,
+	"protocol":  true,
+}
+
+// NormalizeListSort validates and defaults the sort field and direction. Empty
+// sort falls back to updatedAt; empty order falls back to desc for timestamps
+// and asc for text fields. An explicit order always wins.
+func NormalizeListSort(sort, order string) (string, string, error) {
+	s := strings.TrimSpace(sort)
+	if s == "" {
+		s = DefaultListSort
+	}
+	if !listSortFields[s] {
+		return "", "", fmt.Errorf("invalid sort field %q", sort)
+	}
+	o := strings.TrimSpace(order)
+	if o == "" {
+		if s == "title" || s == "protocol" {
+			o = "asc"
+		} else {
+			o = "desc"
+		}
+	}
+	if o != "asc" && o != "desc" {
+		return "", "", fmt.Errorf("invalid sort order %q", order)
+	}
+	return s, o, nil
+}
+
+// CursorData is the opaque keyset cursor payload. It binds the sort field and
+// direction so a cursor cannot be reused across a different ordering. The
+// legacy UpdatedAt field is honored for cursors issued before sort support.
 type CursorData struct {
-	UpdatedAt string `json:"u"`
+	Sort      string `json:"s,omitempty"`
+	Order     string `json:"o,omitempty"`
+	Value     string `json:"v,omitempty"`
 	ID        string `json:"i"`
+	UpdatedAt string `json:"u,omitempty"`
 }
 
 // ListFilter carries the list/search query parameters.
@@ -37,12 +83,18 @@ type ListFilter struct {
 	Tag      string
 	Limit    int
 	Cursor   string
+	Sort     string
+	Order    string
 }
 
 // Repository persists knowledge entries and attachment metadata in xcloud_ops.
 type Repository struct {
 	entries *mongo.Collection
 	files   *mongo.Collection
+
+	metaMu       sync.Mutex
+	metaCache    *MetaResponse
+	metaCachedAt time.Time
 }
 
 // NewRepository creates a knowledge repository over the two collections.
@@ -100,7 +152,8 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Entry, error) {
 }
 
 // List queries entries with filters and keyset cursor pagination. The solution
-// body is excluded from the projection so the list remains cheap.
+// body is excluded from the projection so the list remains cheap. The cursor
+// binds the active sort field and direction.
 func (r *Repository) List(ctx context.Context, filter ListFilter) ([]EntrySummary, int64, *string, bool, error) {
 	limit := filter.Limit
 	if limit <= 0 {
@@ -109,6 +162,13 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]EntrySummar
 	if limit > 100 {
 		limit = 100
 	}
+
+	sortField, sortOrder, err := NormalizeListSort(filter.Sort, filter.Order)
+	if err != nil {
+		return nil, 0, nil, false, err
+	}
+	filter.Sort = sortField
+	filter.Order = sortOrder
 
 	filterDoc, err := buildListFilter(filter)
 	if err != nil {
@@ -128,8 +188,12 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]EntrySummar
 		return nil, 0, nil, false, fmt.Errorf("failed to count knowledge entries: %w", err)
 	}
 
+	dir := 1
+	if sortOrder == "desc" {
+		dir = -1
+	}
 	opts := options.Find().
-		SetSort(bson.D{{Key: "updatedAt", Value: -1}, {Key: "_id", Value: 1}}).
+		SetSort(bson.D{{Key: sortField, Value: dir}, {Key: "_id", Value: 1}}).
 		SetLimit(int64(limit + 1)).
 		SetProjection(bson.M{"solution": 0})
 
@@ -145,6 +209,7 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]EntrySummar
 		if err := cursor.Decode(&item); err != nil {
 			return nil, 0, nil, false, fmt.Errorf("failed to decode knowledge entry: %w", err)
 		}
+		item.AttachmentCount = len(item.Attachments)
 		items = append(items, item)
 	}
 	if err := cursor.Err(); err != nil {
@@ -157,7 +222,7 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]EntrySummar
 		hasMore = true
 		items = items[:limit]
 		last := items[limit-1]
-		cData := CursorData{UpdatedAt: last.UpdatedAt, ID: last.ID}
+		cData := CursorData{Sort: sortField, Order: sortOrder, Value: sortFieldValue(last, sortField), ID: last.ID}
 		cBytes, _ := json.Marshal(cData)
 		encoded := base64.URLEncoding.EncodeToString(cBytes)
 		nextCursor = &encoded
@@ -166,6 +231,20 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]EntrySummar
 		items = []EntrySummary{}
 	}
 	return items, total, nextCursor, hasMore, nil
+}
+
+// sortFieldValue projects the active sort field from a list row for the cursor.
+func sortFieldValue(item EntrySummary, field string) string {
+	switch field {
+	case "createdAt":
+		return item.CreatedAt
+	case "title":
+		return item.Title
+	case "protocol":
+		return item.Protocol
+	default:
+		return item.UpdatedAt
+	}
 }
 
 func buildListFilter(filter ListFilter) (bson.M, error) {
@@ -196,13 +275,29 @@ func buildListFilter(filter ListFilter) (bson.M, error) {
 			return nil, fmt.Errorf("invalid pagination cursor encoding")
 		}
 		var cur CursorData
-		if err := json.Unmarshal(cursorBytes, &cur); err != nil || cur.UpdatedAt == "" || cur.ID == "" {
+		if err := json.Unmarshal(cursorBytes, &cur); err != nil {
 			return nil, fmt.Errorf("invalid pagination cursor payload")
+		}
+		// Legacy cursors carried only updatedAt/id and imply updatedAt desc.
+		if cur.Sort == "" && cur.UpdatedAt != "" {
+			cur.Sort = DefaultListSort
+			cur.Order = "desc"
+			cur.Value = cur.UpdatedAt
+		}
+		if cur.ID == "" || cur.Value == "" {
+			return nil, fmt.Errorf("invalid pagination cursor payload")
+		}
+		if cur.Sort != filter.Sort || cur.Order != filter.Order {
+			return nil, fmt.Errorf("pagination cursor does not match the current sort")
+		}
+		op := "$gt"
+		if filter.Order == "desc" {
+			op = "$lt"
 		}
 		cursorFilter := bson.M{
 			"$or": []bson.M{
-				{"updatedAt": bson.M{"$lt": cur.UpdatedAt}},
-				{"updatedAt": cur.UpdatedAt, "_id": bson.M{"$gt": cur.ID}},
+				{filter.Sort: bson.M{op: cur.Value}},
+				{filter.Sort: cur.Value, "_id": bson.M{"$gt": cur.ID}},
 			},
 		}
 		if len(doc) == 0 {
@@ -287,9 +382,25 @@ func (r *Repository) Delete(ctx context.Context, id string, revision int64) (*En
 	return existing, nil
 }
 
-// Stats computes the meta aggregates: total count, top tags and per-protocol
-// distribution.
+// Stats returns the meta aggregates (total count, top tags, per-protocol
+// distribution), reused from a short-lived cache so concurrent list/editor
+// reads collapse into a single aggregation window. Failures are never cached.
 func (r *Repository) Stats(ctx context.Context) (*MetaResponse, error) {
+	r.metaMu.Lock()
+	defer r.metaMu.Unlock()
+	if r.metaCache != nil && time.Since(r.metaCachedAt) < metaCacheTTL {
+		return r.metaCache, nil
+	}
+	meta, err := r.computeStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.metaCache = meta
+	r.metaCachedAt = time.Now()
+	return meta, nil
+}
+
+func (r *Repository) computeStats(ctx context.Context) (*MetaResponse, error) {
 	total, err := r.entries.CountDocuments(ctx, bson.M{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to count knowledge entries: %w", err)

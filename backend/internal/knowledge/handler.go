@@ -69,7 +69,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	allowed := map[string]bool{"q": true, "protocol": true, "tag": true, "cursor": true, "limit": true}
+	allowed := map[string]bool{"q": true, "protocol": true, "tag": true, "cursor": true, "limit": true, "sort": true, "order": true}
 	for param := range q {
 		if !allowed[param] {
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
@@ -87,12 +87,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		limit = parsed
 	}
 
+	sortField, sortOrder, err := NormalizeListSort(q.Get("sort"), q.Get("order"))
+	if err != nil {
+		response.BadRequest(w, err.Error(), "INVALID_QUERY_PARAMETER")
+		return
+	}
+
 	filter := ListFilter{
 		Query:    strings.TrimSpace(q.Get("q")),
 		Protocol: strings.TrimSpace(q.Get("protocol")),
 		Tag:      strings.TrimSpace(q.Get("tag")),
 		Limit:    limit,
 		Cursor:   strings.TrimSpace(q.Get("cursor")),
+		Sort:     sortField,
+		Order:    sortOrder,
 	}
 
 	items, total, nextCursor, hasMore, err := h.repo.List(r.Context(), filter)

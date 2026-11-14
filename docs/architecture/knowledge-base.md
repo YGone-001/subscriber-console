@@ -40,7 +40,7 @@ Eight Go registrations (five reads, three mutations):
 | Method + Path | Purpose | Permission |
 |---|---|---|
 | `GET /api/knowledge/meta` | protocol enum, top tags, protocol distribution, total, limits | `core.read` |
-| `GET /api/knowledge/entries` | list/search (`q`, `protocol`, `tag`, `cursor`, `limit`) | `core.read` |
+| `GET /api/knowledge/entries` | list/search (`q`, `protocol`, `tag`, `cursor`, `limit`, `sort`, `order`) | `core.read` |
 | `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body | `core.read` |
 | `POST /api/knowledge/entries` | create entry | `core.configure` |
 | `PUT /api/knowledge/entries/{entryId}` | update entry (revision CAS) | `core.configure` |
@@ -48,12 +48,20 @@ Eight Go registrations (five reads, three mutations):
 | `POST /api/knowledge/files` | multipart attachment upload | `core.configure` |
 | `GET /api/knowledge/files/{fileId}` | download; images inline, others attachment; `?download=1` forces download | `core.read` |
 
-List pagination is keyset-cursor ordered by `updatedAt` descending then `_id`
-ascending. The list projection omits the Markdown body; the detail endpoint is
-the only source of full content. The search needle is trimmed, bounded to 64
-characters and `regexp.QuoteMeta`-escaped before a case-insensitive match against
-title, phenomenon, rootCause, solution, tags and protocol. No text index is
-created.
+List pagination is keyset-cursor with `_id` ascending as the tie-break. The
+default order is `updatedAt` descending; `sort` accepts the closed set
+`updatedAt|createdAt|title|protocol` and `order` accepts `asc|desc` (timestamps
+default descending, text fields ascending; an explicit order always wins).
+Invalid sort/order returns 400 `INVALID_QUERY_PARAMETER`. The cursor binds the
+active sort field and direction, so reusing it under a different ordering is
+rejected; legacy `updatedAt`-only cursors remain valid for the default sort. The
+list projection omits the Markdown body and adds a computed `attachmentCount`;
+the detail endpoint is the only source of full content. The search needle is
+trimmed, bounded to 64 characters and `regexp.QuoteMeta`-escaped before a
+case-insensitive match against title, phenomenon, rootCause, solution, tags and
+protocol. No text index is created. The meta aggregates are reused from a 30s
+in-process cache (failures are never cached); the list `total` is always computed
+fresh from the filtered set.
 
 ## Security model
 

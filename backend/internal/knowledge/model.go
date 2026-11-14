@@ -115,11 +115,14 @@ type EntrySummary struct {
 	Phenomenon  string       `json:"phenomenon" bson:"phenomenon"`
 	Tags        []string     `json:"tags" bson:"tags"`
 	Attachments []Attachment `json:"attachments" bson:"attachments"`
-	Revision    int64        `json:"revision" bson:"revision"`
-	CreatedAt   string       `json:"createdAt" bson:"createdAt"`
-	CreatedBy   string       `json:"createdBy" bson:"createdBy"`
-	UpdatedAt   string       `json:"updatedAt" bson:"updatedAt"`
-	UpdatedBy   string       `json:"updatedBy" bson:"updatedBy"`
+	// AttachmentCount is a computed list projection (len(Attachments)); it is
+	// not a stored field.
+	AttachmentCount int    `json:"attachmentCount" bson:"-"`
+	Revision        int64  `json:"revision" bson:"revision"`
+	CreatedAt       string `json:"createdAt" bson:"createdAt"`
+	CreatedBy       string `json:"createdBy" bson:"createdBy"`
+	UpdatedAt       string `json:"updatedAt" bson:"updatedAt"`
+	UpdatedBy       string `json:"updatedBy" bson:"updatedBy"`
 }
 
 // CreateEntryRequest is the body of POST /api/knowledge/entries.
