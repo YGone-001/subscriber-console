@@ -15,12 +15,15 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"subscriber/internal/audit"
 )
 
 // Canonical collection names in xcloud_ops.
 const (
-	CollectionEntries = "app_knowledge_entries"
-	CollectionFiles   = "app_knowledge_files"
+	CollectionEntries  = "app_knowledge_entries"
+	CollectionFiles    = "app_knowledge_files"
+	CollectionVersions = "app_knowledge_entry_versions"
 )
 
 // MaxSearchQueryLength bounds the search needle before it is escaped.
@@ -90,8 +93,9 @@ type ListFilter struct {
 
 // Repository persists knowledge entries and attachment metadata in xcloud_ops.
 type Repository struct {
-	entries *mongo.Collection
-	files   *mongo.Collection
+	entries  *mongo.Collection
+	files    *mongo.Collection
+	versions *mongo.Collection
 
 	metaMu       sync.Mutex
 	metaCache    *MetaResponse
@@ -101,6 +105,13 @@ type Repository struct {
 // NewRepository creates a knowledge repository over the two collections.
 func NewRepository(entries, files *mongo.Collection) *Repository {
 	return &Repository{entries: entries, files: files}
+}
+
+// UseVersionStore wires the optional version-history collection. When unset,
+// content updates proceed without snapshotting and the detail endpoint returns
+// no history.
+func (r *Repository) UseVersionStore(versions *mongo.Collection) {
+	r.versions = versions
 }
 
 // Create inserts a new entry with revision 1. The caller owns the identity so
@@ -361,11 +372,95 @@ func (r *Repository) Update(ctx context.Context, id string, req *UpdateEntryRequ
 		return nil, nil, ErrRevisionConflict
 	}
 
+	// Snapshot the pre-update content for history. Best-effort: a snapshot
+	// failure must not roll back a successful content update.
+	r.snapshotVersion(ctx, existing)
+
 	updated, err := r.GetByID(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
 	return existing, updated, nil
+}
+
+// snapshotVersion records the pre-update content as a bounded history entry.
+func (r *Repository) snapshotVersion(ctx context.Context, existing *Entry) {
+	if r.versions == nil || existing == nil {
+		return
+	}
+	version := EntryVersion{
+		VersionID:  audit.GenerateUUID(),
+		EntryID:    existing.ID,
+		Revision:   existing.Revision,
+		Title:      existing.Title,
+		Protocol:   existing.Protocol,
+		Phenomenon: existing.Phenomenon,
+		RootCause:  existing.RootCause,
+		Solution:   existing.Solution,
+		Tags:       existing.Tags,
+		CreatedAt:  existing.UpdatedAt,
+		CreatedBy:  existing.UpdatedBy,
+	}
+	if _, err := r.versions.InsertOne(ctx, version); err != nil {
+		return
+	}
+	r.trimVersions(ctx, existing.ID)
+}
+
+// trimVersions keeps only the most recent MaxVersions snapshots per entry.
+func (r *Repository) trimVersions(ctx context.Context, entryID string) {
+	opts := options.Find().SetSort(bson.D{{Key: "revision", Value: -1}}).SetSkip(MaxVersions).SetProjection(bson.M{"_id": 1})
+	cursor, err := r.versions.Find(ctx, bson.M{"entryId": entryID}, opts)
+	if err != nil {
+		return
+	}
+	defer cursor.Close(ctx)
+	var stale []struct {
+		ID string `bson:"_id"`
+	}
+	if err := cursor.All(ctx, &stale); err != nil {
+		return
+	}
+	for _, doc := range stale {
+		_, _ = r.versions.DeleteOne(ctx, bson.M{"_id": doc.ID})
+	}
+}
+
+// ListVersions returns the bounded history for an entry, newest first.
+func (r *Repository) ListVersions(ctx context.Context, entryID string, limit int) ([]EntryVersion, error) {
+	if r.versions == nil {
+		return []EntryVersion{}, nil
+	}
+	if limit <= 0 || limit > MaxVersions {
+		limit = MaxVersions
+	}
+	opts := options.Find().SetSort(bson.D{{Key: "revision", Value: -1}}).SetLimit(int64(limit))
+	cursor, err := r.versions.Find(ctx, bson.M{"entryId": entryID}, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list knowledge versions: %w", err)
+	}
+	defer cursor.Close(ctx)
+	out := []EntryVersion{}
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, fmt.Errorf("failed to decode knowledge versions: %w", err)
+	}
+	return out, nil
+}
+
+// GetVersion retrieves a single snapshot scoped to its entry.
+func (r *Repository) GetVersion(ctx context.Context, entryID, versionID string) (*EntryVersion, error) {
+	if r.versions == nil || !IsValidID(versionID) {
+		return nil, ErrNotFound
+	}
+	var version EntryVersion
+	err := r.versions.FindOne(ctx, bson.M{"_id": versionID, "entryId": entryID}).Decode(&version)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to find knowledge version: %w", err)
+	}
+	return &version, nil
 }
 
 // SoftDelete marks an entry deleted atomically guarded by its revision. The

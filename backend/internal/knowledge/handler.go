@@ -150,6 +150,9 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w)
 		return
 	}
+	if versions, verr := h.repo.ListVersions(r.Context(), entryID, MaxVersions); verr == nil {
+		entry.Versions = versions
+	}
 	response.JSON(w, http.StatusOK, entry)
 }
 
@@ -227,6 +230,39 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		h.audit(p, "knowledge.entry.restore", "knowledge_entry", restored.ID, restored.Title, nil, restored, nil)
 		response.JSON(w, http.StatusOK, restored)
 		return
+	}
+
+	if req.RestoreVersionID != "" {
+		version, verr := h.repo.GetVersion(r.Context(), entryID, req.RestoreVersionID)
+		if verr != nil {
+			if errors.Is(verr, ErrNotFound) {
+				response.Error(w, http.StatusNotFound, "Knowledge version not found", "KNOWLEDGE_VERSION_NOT_FOUND")
+				return
+			}
+			response.InternalError(w)
+			return
+		}
+		current, gerr := h.repo.GetByID(r.Context(), entryID)
+		if gerr != nil {
+			if errors.Is(gerr, ErrNotFound) {
+				response.Error(w, http.StatusNotFound, "Knowledge entry not found", "KNOWLEDGE_ENTRY_NOT_FOUND")
+				return
+			}
+			response.InternalError(w)
+			return
+		}
+		req.Title = version.Title
+		req.Protocol = version.Protocol
+		req.Phenomenon = version.Phenomenon
+		req.RootCause = version.RootCause
+		req.Solution = version.Solution
+		req.Tags = version.Tags
+		// A content restore preserves the current attachment set; versions do
+		// not snapshot attachment bytes.
+		req.AttachmentFileIDs = make([]string, 0, len(current.Attachments))
+		for _, a := range current.Attachments {
+			req.AttachmentFileIDs = append(req.AttachmentFileIDs, a.FileID)
+		}
 	}
 
 	protocol, tags, err := ValidateUpdateRequest(&req)

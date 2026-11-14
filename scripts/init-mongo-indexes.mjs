@@ -664,6 +664,13 @@ async function ensureIndexes() {
     { key: { createdAt: 1 }, name: 'knowledge_files_created' },
   ])).map((name) => ({ database: appDbName, collection: 'app_knowledge_files', name })));
 
+  // ── xcloud_ops.app_knowledge_entry_versions ──
+  // Bounded content history. The detail endpoint reads an entry's snapshots
+  // newest-first and trims the oldest beyond the per-entry cap.
+  createdIndexes.push(...(await appDb.collection('app_knowledge_entry_versions').createIndexes([
+    { key: { entryId: 1, revision: -1 }, name: 'knowledge_versions_entry_revision' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_knowledge_entry_versions', name })));
+
 async function seedRootAdminUser(appDb) {
   const users = appDb.collection('app_users');
   const existingAdmin = await users.findOne({ username: 'admin' });

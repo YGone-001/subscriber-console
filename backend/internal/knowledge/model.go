@@ -41,6 +41,7 @@ const (
 	MaxTags             = 20
 	MaxTagLength        = 32
 	MaxAttachments      = 10
+	MaxVersions         = 20
 	MaxJSONBodyBytes    = 512 * 1024
 	MaxFileBytes        = 8 * 1024 * 1024
 
@@ -79,6 +80,23 @@ const (
 	StatusDeleted = "deleted"
 )
 
+// EntryVersion is an immutable snapshot of an entry's content taken before a
+// content update. Snapshots live in app_knowledge_entry_versions, bounded per
+// entry, and are exposed read-only on the detail endpoint.
+type EntryVersion struct {
+	VersionID  string   `json:"versionId" bson:"_id"`
+	EntryID    string   `json:"entryId" bson:"entryId"`
+	Revision   int64    `json:"revision" bson:"revision"`
+	Title      string   `json:"title" bson:"title"`
+	Protocol   string   `json:"protocol" bson:"protocol"`
+	Phenomenon string   `json:"phenomenon" bson:"phenomenon"`
+	RootCause  string   `json:"rootCause" bson:"rootCause"`
+	Solution   string   `json:"solution" bson:"solution"`
+	Tags       []string `json:"tags" bson:"tags"`
+	CreatedAt  string   `json:"createdAt" bson:"createdAt"`
+	CreatedBy  string   `json:"createdBy" bson:"createdBy"`
+}
+
 // Entry is a knowledge base article stored in app_knowledge_entries.
 type Entry struct {
 	ID            string       `json:"id" bson:"_id"`
@@ -97,6 +115,9 @@ type Entry struct {
 	CreatedBy     string       `json:"createdBy" bson:"createdBy"`
 	UpdatedAt     string       `json:"updatedAt" bson:"updatedAt"`
 	UpdatedBy     string       `json:"updatedBy" bson:"updatedBy"`
+	// Versions is a computed detail projection (bounded history); it is not a
+	// stored field on the entry document.
+	Versions []EntryVersion `json:"versions,omitempty" bson:"-"`
 }
 
 // FileMeta is the attachment metadata record stored in app_knowledge_files.
@@ -152,6 +173,7 @@ type CreateEntryRequest struct {
 type UpdateEntryRequest struct {
 	ExpectedRevision  int64    `json:"expectedRevision"`
 	Restore           bool     `json:"restore,omitempty"`
+	RestoreVersionID  string   `json:"restoreVersionId,omitempty"`
 	Title             string   `json:"title"`
 	Protocol          string   `json:"protocol,omitempty"`
 	Phenomenon        string   `json:"phenomenon,omitempty"`
