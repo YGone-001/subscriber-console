@@ -775,6 +775,7 @@ func main() {
 	mux.Handle("POST /api/nf-notifications/channels", authMiddleware(http.HandlerFunc(notifyHandler.CreateChannel)))
 	mux.Handle("PUT /api/nf-notifications/channels/{channelId}", authMiddleware(http.HandlerFunc(notifyHandler.UpdateChannel)))
 	mux.Handle("DELETE /api/nf-notifications/channels/{channelId}", authMiddleware(http.HandlerFunc(notifyHandler.DeleteChannel)))
+	mux.Handle("POST /api/nf-notifications/channels/{channelId}/test", authMiddleware(http.HandlerFunc(notifyHandler.TestChannel)))
 	mux.Handle("GET /api/nf-notifications/escalations", authMiddleware(http.HandlerFunc(notifyHandler.ListEscalations)))
 	mux.Handle("POST /api/nf-notifications/escalations", authMiddleware(http.HandlerFunc(notifyHandler.CreateEscalation)))
 	mux.Handle("PUT /api/nf-notifications/escalations/{escalationId}", authMiddleware(http.HandlerFunc(notifyHandler.UpdateEscalation)))

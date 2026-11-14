@@ -360,6 +360,25 @@ function handleApi(req, res, url, context) {
   if (pathname === '/api/nf-notifications/channels' && req.method === 'GET') {
     return sendJson(res, 200, { channels: NOTIFY_CHANNELS });
   }
+  if (pathname === '/api/nf-notifications/channels/ch-1/test' && req.method === 'POST') {
+    return sendJson(res, 202, {
+      id: 'd-test-1',
+      deliveryKey: 'test:ch-1:probe',
+      event: 'test',
+      alertId: '',
+      ruleId: '',
+      ruleName: 'Ops webhook',
+      targetId: '',
+      targetName: '',
+      severity: '',
+      triggerCount: 0,
+      occurredAt: TS.last,
+      channelId: 'ch-1',
+      status: 'pending',
+      attempts: 0,
+      createdAt: TS.last,
+    });
+  }
   if (pathname === '/api/nf-notifications/escalations' && req.method === 'GET') {
     return sendJson(res, 200, { escalations: NOTIFY_ESCALATIONS });
   }
@@ -499,6 +518,18 @@ async function main() {
       const channelText = await page.getByRole('dialog').first().innerText();
       check('notify_settings_show_channels', channelText.includes('Ops webhook'), 'channel row');
       check('notify_settings_never_echo_secret', !channelText.includes('s3cr3t'), 'the secret is write-only');
+
+      /* 7a. A channel probe is queued through the outbox and the dialog moves
+       * to the delivery ledger, where the operator watches it land. */
+      const probeButton = page.locator('[data-notify-test="ch-1"]');
+      await probeButton.click();
+      await page.locator('[data-notify-tab="deliveries"]').waitFor({ state: 'visible', timeout: 15000 });
+      check('notify_test_queued_moves_to_ledger', true, 'the dialog lands on the ledger after a probe');
+      await page.locator('[data-notify-tab="channels"]').click();
+      await page.locator('[data-notify-tab="channels"]').waitFor({ state: 'visible', timeout: 15000 });
+      const probeText = await page.getByRole('dialog').first().innerText();
+      check('notify_test_queued_feedback', /queued/i.test(probeText), 'the probe result is announced');
+
       await page.locator('[data-notify-tab="deliveries"]').click();
       await page.locator('[data-notify-deliveries="true"]').waitFor({ state: 'visible', timeout: 20000 });
       const deliveryText = await page.getByRole('dialog').first().innerText();

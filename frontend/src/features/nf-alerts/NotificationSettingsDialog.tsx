@@ -7,7 +7,7 @@
  * secret blank to keep the stored value.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, Plus, RefreshCw, RotateCw, Trash2, X } from 'lucide-react';
+import { Bell, Plus, RefreshCw, RotateCw, Send, Trash2, X } from 'lucide-react';
 import { Dialog } from '../../components/ui/Dialog';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { OperationFeedback } from '../../components/ui/OperationFeedback';
@@ -24,6 +24,7 @@ import {
   fetchNotificationDeliveries,
   fetchNotificationEscalations,
   retryNotificationDelivery,
+  testNotificationChannel,
 } from './nf-notifications-api';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import type {
@@ -58,6 +59,35 @@ export function NotificationSettingsDialog({ open, onClose, onChanged,subjectKin
   const [loading, setLoading] = useState(false);
   const [readFailures,setReadFailures]=useState<Tab[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /* The channel-probe feedback lives in the dialog, not in the section: after
+   * queuing a probe the operator is switched to the delivery ledger, and
+   * switching back to channels remounts the section. */
+  const [testFeedback, setTestFeedback] = useState<string | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const runChannelTest = useCallback(
+    async (channel: NotificationChannel) => {
+      setTestingId(channel.id);
+      setTestFeedback(null);
+      setTestError(null);
+      try {
+        const delivery = await testNotificationChannel(channel.id);
+        setTestFeedback(t('nf_notify_test_queued', { name: channel.name, id: delivery.id }));
+        setTab('deliveries');
+      } catch (err) {
+        const code = err instanceof MutationApiError ? err.code : undefined;
+        setTestError(
+          code === 'NOTIFY_CHANNEL_DISABLED'
+            ? t('nf_notify_test_disabled')
+            : t('nf_notify_test_failed'),
+        );
+      } finally {
+        setTestingId(null);
+      }
+    },
+    [t],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,7 +152,17 @@ export function NotificationSettingsDialog({ open, onClose, onChanged,subjectKin
         {error ? <p className={styles.probeEditorEmpty}>{error}</p> : null}
 
         {readFailures.includes(tab)?<ErrorState title={t('nf_notify_load_failed')} message={t('drift_retry')} retryLabel={t('refresh')} onRetry={()=>void load()}/>:tab === 'channels' ? (
-          <ChannelSection channels={channels} loading={loading} canConfigure={canConfigure} onChanged={onChanged} onReload={load} />
+          <ChannelSection
+            channels={channels}
+            loading={loading}
+            canConfigure={canConfigure}
+            onChanged={onChanged}
+            onReload={load}
+            onTest={runChannelTest}
+            testingId={testingId}
+            testFeedback={testFeedback}
+            testError={testError}
+          />
         ) : tab === 'escalations' ? (
           <EscalationSection
             initialKind={subjectKind}
@@ -205,12 +245,20 @@ function ChannelSection({
   canConfigure,
   onChanged,
   onReload,
+  onTest,
+  testingId,
+  testFeedback,
+  testError,
 }: {
   channels: NotificationChannel[];
   loading: boolean;
   canConfigure: boolean;
   onChanged: () => void;
   onReload: () => void;
+  onTest: (channel: NotificationChannel) => void;
+  testingId: string | null;
+  testFeedback: string | null;
+  testError: string | null;
 }) {
   const { t } = useI18n();
   const [name, setName] = useState('');
@@ -283,24 +331,45 @@ function ChannelSection({
       {channels.length === 0 && !loading ? (
         <p className={styles.probeEditorEmpty}>{t('nf_notify_channels_empty')}</p>
       ) : (
-        <ul className={styles.notifyList}>
-          {channels.map((channel) => (
-            <li key={channel.id} className={styles.notifyRow} data-notify-channel={channel.id}>
-              <div className={styles.stack}>
-                <strong>{channel.name}</strong>
-                <code className={styles.uuid}>{channel.url}</code>
-              </div>
-              <span className={channel.enabled ? styles.badgeHealthy : styles.badgeNotConfigured}>
-                {channel.enabled ? t('nf_notify_enabled') : t('nf_notify_disabled')}
-              </span>
-              {canConfigure ? (
-                <button type="button" className="btn btn-ghost" onClick={() => requestRemove(channel)} aria-label={t('nf_notify_channel_remove')}>
-                  <Trash2 size={14} aria-hidden="true" />
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+        <>
+          {testFeedback ? (
+            <p className={styles.probeEditorEmpty} role="status">{testFeedback}</p>
+          ) : null}
+          {testError ? (
+            <p className={styles.probeEditorEmpty} role="alert">{testError}</p>
+          ) : null}
+          <ul className={styles.notifyList}>
+            {channels.map((channel) => (
+              <li key={channel.id} className={styles.notifyRow} data-notify-channel={channel.id}>
+                <div className={styles.stack}>
+                  <strong>{channel.name}</strong>
+                  <code className={styles.uuid}>{channel.url}</code>
+                </div>
+                <span className={channel.enabled ? styles.badgeHealthy : styles.badgeNotConfigured}>
+                  {channel.enabled ? t('nf_notify_enabled') : t('nf_notify_disabled')}
+                </span>
+                {canConfigure ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => onTest(channel)}
+                      disabled={!channel.enabled || testingId === channel.id}
+                      aria-label={t('nf_notify_channel_test')}
+                      title={t('nf_notify_channel_test')}
+                      data-notify-test={channel.id}
+                    >
+                      <Send size={14} aria-hidden="true" />
+                    </button>
+                    <button type="button" className="btn btn-ghost" onClick={() => requestRemove(channel)} aria-label={t('nf_notify_channel_remove')}>
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
+                  </>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       <RemoveConfirmDialog

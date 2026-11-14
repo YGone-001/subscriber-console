@@ -35,6 +35,12 @@ const (
 // open past the configured escalation delay.
 const DeliveryEventEscalate = "escalate"
 
+// DeliveryEventTest is the operator-initiated channel probe: one delivery per
+// "test this channel" request, so an operator can verify a webhook before an
+// alert ever needs it. It travels through the same outbox and the same worker
+// as alert traffic, so the test exercises the real delivery path.
+const DeliveryEventTest = "test"
+
 // Delivery bounds and timing.
 const (
 	MaxDeliveryAttempts    = 5

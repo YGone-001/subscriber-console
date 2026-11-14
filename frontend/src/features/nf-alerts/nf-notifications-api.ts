@@ -32,6 +32,15 @@ export async function deleteNotificationChannel(channelId: string): Promise<{ st
   return deleteJson<{ status: string }>(`/api/nf-notifications/channels/${encodeURIComponent(channelId)}`);
 }
 
+/**
+ * Queues one channel probe. The worker delivers it through the real outbox, so
+ * the test exercises the same signing and transport as alert traffic; the
+ * result appears in the delivery ledger.
+ */
+export async function testNotificationChannel(channelId: string): Promise<Delivery> {
+  return postJson<Delivery>(`/api/nf-notifications/channels/${encodeURIComponent(channelId)}/test`, {});
+}
+
 export async function fetchNotificationEscalations(): Promise<Escalation[]> {
   const res = await getJson<{ escalations: Escalation[] }>('/api/nf-notifications/escalations');
   return res.escalations ?? [];

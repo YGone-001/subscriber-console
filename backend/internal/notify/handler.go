@@ -35,6 +35,7 @@ type AuditWriter interface {
 type Handler struct {
 	repo        *Repository
 	retrier     DeliveryRetrier
+	tester      ChannelTester
 	limiter     RateLimiter
 	auditWriter AuditWriter
 	actors      governance.ActorRepository
@@ -46,9 +47,15 @@ type DeliveryRetrier interface {
 	RetryDelivery(ctx context.Context, id string, now time.Time) (*Delivery, error)
 }
 
+// ChannelTester enqueues one channel probe. It is an interface so the test
+// endpoint can be exercised without a live Mongo collection.
+type ChannelTester interface {
+	CreateTestDelivery(ctx context.Context, channelID string, now time.Time) (*Delivery, error)
+}
+
 // NewHandler constructs the notification HTTP handler.
 func NewHandler(repo *Repository, limiter RateLimiter, auditWriter AuditWriter) *Handler {
-	return &Handler{repo: repo, retrier: repo, limiter: limiter, auditWriter: auditWriter}
+	return &Handler{repo: repo, retrier: repo, tester: repo, limiter: limiter, auditWriter: auditWriter}
 }
 
 func (h *Handler) UseActorRepository(a governance.ActorRepository) { h.actors = a }
@@ -295,6 +302,35 @@ func (h *Handler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
 	}
 	h.auditWrite(p, "POST", "/api/nf-notifications/deliveries/{deliveryId}/retry", id, "retried")
 	response.JSON(w, http.StatusOK, delivery)
+}
+
+// TestChannel handles POST /api/nf-notifications/channels/{channelId}/test.
+//
+// It enqueues one channel probe into the delivery ledger. The worker remains
+// the single component that talks to an external webhook — a test that bypassed
+// the outbox could succeed while the real delivery path was broken, which is
+// exactly what the test exists to catch. The response returns the probe so the
+// operator can watch it reach a terminal state in the ledger.
+func (h *Handler) TestChannel(w http.ResponseWriter, r *http.Request) {
+	p := h.requireConfigure(w, r, "POST", "/api/nf-notifications/channels/{channelId}/test")
+	if p == nil {
+		return
+	}
+	channelID := strings.TrimSpace(r.PathValue("channelId"))
+	if h.limiter != nil && !h.limiter.Enforce(w, r, "nf-notify:channel-test:"+p.Username, 10, 60) {
+		return
+	}
+	if h.tester == nil {
+		response.Error(w, http.StatusServiceUnavailable, "channel test is unavailable", "NOTIFY_TEST_UNAVAILABLE")
+		return
+	}
+	delivery, err := h.tester.CreateTestDelivery(r.Context(), channelID, time.Now().UTC())
+	if err != nil {
+		writeValidation(w, err)
+		return
+	}
+	h.auditWrite(p, "POST", "/api/nf-notifications/channels/{channelId}/test", channelID, "test_enqueued")
+	response.JSON(w, http.StatusAccepted, delivery)
 }
 
 /* -------------------------------------------------------------- escalations -- */

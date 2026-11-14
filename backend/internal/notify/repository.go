@@ -398,6 +398,47 @@ func (r *Repository) RetryDelivery(ctx context.Context, id string, now time.Time
 	return r.GetDelivery(ctx, id)
 }
 
+// CreateTestDelivery enqueues one operator-initiated channel probe.
+//
+// The test delivery travels through the same outbox and the same worker as
+// alert traffic, so a test exercises the real delivery path — signing,
+// transport and ledger accounting — rather than a shortcut that could lie
+// about what the channel actually accepts. The worker remains the single
+// component that talks to an external webhook.
+func (r *Repository) CreateTestDelivery(ctx context.Context, channelID string, now time.Time) (*Delivery, error) {
+	channelID = strings.TrimSpace(channelID)
+	channel, err := r.GetChannel(ctx, channelID)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errNotFound
+		}
+		return nil, err
+	}
+	if !channel.Enabled {
+		return nil, invalid("NOTIFY_CHANNEL_DISABLED", "the channel is disabled; enable it before testing")
+	}
+	doc := Delivery{
+		ID: newUUID(),
+		// A per-attempt key keeps repeated tests working: the ledger's
+		// idempotency index exists to dedupe alert transitions, not to limit
+		// how often an operator may verify a channel.
+		DeliveryKey:   DeliveryEventTest + ":" + channelID + ":" + newUUID(),
+		Event:         DeliveryEventTest,
+		RuleName:      channel.Name,
+		ChannelID:     channelID,
+		Status:        DeliveryPending,
+		NextAttemptAt: now.UTC(),
+		CreatedAt:     now.UTC().Format(time.RFC3339Nano),
+	}
+	if _, err := r.deliveries.InsertOne(ctx, doc); err != nil && !mongo.IsDuplicateKeyError(err) {
+		if r.logger != nil {
+			r.logger.Warn("notification test delivery enqueue failed", "error", err, "channelId", channelID)
+		}
+		return nil, err
+	}
+	return &doc, nil
+}
+
 /* ------------------------------------------------------------------- enqueue -- */
 
 // NotifyAlert implements nfalert.AlertEventSink. It resolves the matching
