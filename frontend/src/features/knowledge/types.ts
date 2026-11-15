@@ -110,6 +110,12 @@ export type KnowledgeMeta = {
   maxInlineImages: number;
   maxTags: number;
   maxTagLength: number;
+  listLatency?: {
+    samples: number;
+    p50Ms: number;
+    p95Ms: number;
+    maxMs: number;
+  };
 };
 
 export type KnowledgePageInfo = {

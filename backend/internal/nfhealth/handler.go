@@ -422,16 +422,16 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 
 	items, next, hasMore, err := h.repo.ListTargets(r.Context(), TargetListFilter{
-		Query:      strings.TrimSpace(q.Get("q")),
-		Enabled:    enabled,
-		Domain:     domain,
-		Overall:    overall,
-		Layers:     layers,
-		Freshness:  freshness,
-		Collection: collection,
-		Sort:       sortOrder,
-		Limit:      limit,
-		Cursor:     strings.TrimSpace(q.Get("cursor")),
+		Query:       strings.TrimSpace(q.Get("q")),
+		Enabled:     enabled,
+		Domain:      domain,
+		Overall:     overall,
+		Layers:      layers,
+		Freshness:   freshness,
+		Collection:  collection,
+		Sort:        sortOrder,
+		Limit:       limit,
+		Cursor:      strings.TrimSpace(q.Get("cursor")),
 		ResourceIDs: resourceIDs,
 		Now:         now,
 	})

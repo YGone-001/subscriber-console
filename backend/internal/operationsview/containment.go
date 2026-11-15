@@ -43,7 +43,7 @@ var TreeKinds = []string{
 // structural kinds above are containers, not network functions.
 var operationalKinds = map[string]bool{
 	inventory.KindNetworkFunctionInstance: true,
-	inventory.KindNetworkElement:         true,
+	inventory.KindNetworkElement:          true,
 }
 
 // ContainmentResource is the lightweight node projection consumed by the tree.
@@ -69,9 +69,9 @@ type ContainmentEdge struct {
 
 // ContainmentResponse is the bounded tree projection.
 type ContainmentResponse struct {
-	GeneratedAt string                `json:"generatedAt"`
-	Coverage    string                `json:"coverage"`
-	Truncated   bool                  `json:"truncated"`
+	GeneratedAt string `json:"generatedAt"`
+	Coverage    string `json:"coverage"`
+	Truncated   bool   `json:"truncated"`
 	// UnlinkedCount is the exact number of non-retired NF instances and
 	// standalone network elements that no active relationship references. It is
 	// computed server-side so the frontend tray never infers it from a bounded

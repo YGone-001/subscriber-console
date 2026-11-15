@@ -9,6 +9,7 @@ import { pageNumberFromStack, parseCursorStack, popCursorStack, pushCursorStack,
 import { runWithConcurrency } from '../src/features/knowledge/knowledge-batch';
 import { matchContext } from '../src/features/knowledge/knowledge-match';
 import { diffLines } from '../src/features/knowledge/knowledge-diff';
+import { parseKnowledgeImport } from '../src/features/knowledge/knowledge-import';
 import type { KnowledgeSummary } from '../src/features/knowledge/types';
 import { fileKindLabel, formatFileSize, isImage, isKnowledgeImageUrl, extractSolutionImageIds } from '../src/features/knowledge/knowledge-format';
 import { MutationApiError } from '../src/lib/api/mutation-client';
@@ -248,4 +249,27 @@ test('version diff reports added and removed lines', () => {
   assert.equal(diff.lines[2].text, 'b');
   assert.equal(diffLines('same', 'same').added, 0);
   assert.equal(diffLines('same', 'same').removed, 0);
+});
+
+test('knowledge import accepts single entries, arrays and export envelopes', () => {
+  const single = parseKnowledgeImport(JSON.stringify({
+    title: '  SIP failure  ',
+    protocol: 'SIP',
+    tags: ['VoLTE', 7],
+    applicableScope: 'Huawei 5.1',
+  }));
+  assert.equal(single.length, 1);
+  assert.equal(single[0].title, 'SIP failure');
+  assert.equal(single[0].protocol, 'SIP');
+  assert.deepEqual(single[0].tags, ['VoLTE']);
+  assert.equal(single[0].applicableScope, 'Huawei 5.1');
+
+  const envelope = parseKnowledgeImport(JSON.stringify({
+    entries: [{ title: 'A' }, { phenomenon: 'missing title' }, null, { title: '  ' }],
+  }));
+  assert.deepEqual(envelope.map((entry) => entry.title), ['A']);
+
+  const array = parseKnowledgeImport(JSON.stringify([{ title: 'B' }, { title: 'C' }]));
+  assert.deepEqual(array.map((entry) => entry.title), ['B', 'C']);
+  assert.throws(() => parseKnowledgeImport('{not-json'));
 });

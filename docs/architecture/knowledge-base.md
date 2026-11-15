@@ -73,7 +73,10 @@ and therefore never appear in entry history. The search needle is trimmed, bound
 phenomenon, rootCause, solution, tags and protocol. The `tag` filter is an
 anchored, case-insensitive exact match. No text index is created. The meta
 aggregates are reused from a 30s in-process cache (failures are never cached);
-the list `total` is always computed fresh from the filtered set.
+the list `total` is always computed fresh from the filtered set. `/api/knowledge/meta`
+also returns a live, non-persisted `listLatency` snapshot (samples, p50/p95/max)
+computed from a bounded in-process ring of authorized list requests; it is added
+to a copy of the cached meta and never mutates the cache.
 
 ## Security model
 
@@ -169,7 +172,10 @@ supports page-local multi-select with batch export, batch delete/permanent
 delete, batch restore and batch tag merge; batch writes reuse the single-entry
 endpoints through a bounded concurrency runner and report partial failures. Batch
 tag merges fetch each entry, merge tags case-insensitively, skip unchanged rows
-and update only the rows that actually change. The recycle-bin view
+and update only the rows that actually change. The list can import a single
+entry, an array, or a knowledge export envelope through the governed create
+endpoint (maximum 20 rows per run); attachments are not restored because exports
+carry attachment metadata but not bytes. The recycle-bin view
 has its own KPI, empty state and deleted-row marker, and an error state offers
 retry. The detail page renders the phenomenon, root cause and
 resolution as Markdown, with attachment image/PDF/text preview, version
@@ -202,6 +208,15 @@ trigger is reached; business index changes go through `npm run mongo:indexes`.
   `$or` regex across six fields with no text index, ordered by the active sort
   rather than relevance. Trigger: more than ~5000 active entries, or list p95
   above ~200ms. Action then: evaluate a text index and relevance ranking.
+- **Capacity baseline**: `npm run check:scale` includes knowledge active entries,
+  version snapshots and attachment metadata. It is read-only and reports
+  `warning`/`hard` states against the entry, version and attachment-count
+  triggers; it never creates an index, dedupe store or streaming upload path.
+  It also runs a representative MongoDB knowledge regex query and reports
+  p50/p95/max of that database path, plus attachment metadata count and total
+  bytes. That p95 is a query-path baseline, not an end-to-end HTTP latency
+  promise. Text index, dedupe and streaming upload remain trigger-driven and are
+  not pre-implemented.
 - **Version projection**: entry detail returns bounded version metadata only;
   snapshot bodies are fetched on demand. This keeps the detail response size
   independent of the number of retained versions (up to 20 × 200KB previously).

@@ -267,6 +267,17 @@ type MetaResponse struct {
 	MaxInlineImages int `json:"maxInlineImages"`
 	MaxTags         int `json:"maxTags"`
 	MaxTagLength    int `json:"maxTagLength"`
+	// ListLatency is a live in-process snapshot, added to a copy of the cached
+	// meta response. It is not persisted and resets on restart.
+	ListLatency LatencySnapshot `json:"listLatency"`
+}
+
+// LatencySnapshot is the bounded end-to-end list latency view.
+type LatencySnapshot struct {
+	Samples int     `json:"samples"`
+	P50Ms   float64 `json:"p50Ms"`
+	P95Ms   float64 `json:"p95Ms"`
+	MaxMs   float64 `json:"maxMs"`
 }
 
 // PageInfo mirrors the cursor-pagination shape used across the console.

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
-import { ArrowDown, ArrowUp, BookOpen, ChevronRight, Download, Paperclip, Plus, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, ChevronRight, Download, Paperclip, Plus, RotateCcw, Search, Tag, Trash2, Upload, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
 import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from '../../components/ui/OperationFeedback';
@@ -11,17 +11,19 @@ import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { currentListLocation, withReturnTo } from '../../lib/return-to';
-import { buildEntriesPath, deleteEntry, fetchEntry, restoreEntry, updateEntry } from './knowledge-api';
+import { buildEntriesPath, createEntry, deleteEntry, fetchEntry, restoreEntry, updateEntry } from './knowledge-api';
 import { knowledgeReadErrorMessage } from './knowledge-errors';
 import { runWithConcurrency } from './knowledge-batch';
 import { mergeTags, splitTagInput } from './knowledge-tags';
 import { matchContext } from './knowledge-match';
+import { parseKnowledgeImport, type KnowledgeImportEntry } from './knowledge-import';
 import { pageNumberFromStack, parseCursorStack, popCursorStack, pushCursorStack, serializeCursorStack } from './knowledge-paging';
 import { HighlightText } from './components/HighlightText';
 import type { KnowledgeMeta, KnowledgeSummary } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
 
 const PAGE_LIMIT = 20;
+const IMPORT_LIMIT = 20;
 const DEFAULT_SORT = 'updatedAt';
 
 type ListResponse = {
@@ -62,6 +64,8 @@ export function KnowledgePage() {
   const [batchTagWorking, setBatchTagWorking] = useState(false);
   const [batchNotice, setBatchNotice] = useState<string | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
+  const [importCandidates, setImportCandidates] = useState<KnowledgeImportEntry[] | null>(null);
+  const [importWorking, setImportWorking] = useState(false);
 
   const { data: meta } = useRead<KnowledgeMeta>('/api/knowledge/meta');
   const { data: tagDictionary } = useRead<{ tags: Array<{ tag: string; count: number }> }>('/api/knowledge/tags');
@@ -260,6 +264,44 @@ export function KnowledgePage() {
     else setBatchError(t('kb_batch_export_failed'));
   };
 
+  const handleImportFile = async (file: File) => {
+    setBatchError(null);
+    setBatchNotice(null);
+    try {
+      const entries = parseKnowledgeImport(await file.text());
+      if (entries.length === 0) {
+        setBatchError(t('kb_import_invalid'));
+        return;
+      }
+      if (entries.length > IMPORT_LIMIT) {
+        setBatchError(t('kb_import_limit', { max: IMPORT_LIMIT }));
+      }
+      setImportCandidates(entries.slice(0, IMPORT_LIMIT));
+    } catch {
+      setBatchError(t('kb_import_invalid'));
+    }
+  };
+
+  const runImport = async () => {
+    if (!importCandidates) return;
+    setImportWorking(true);
+    setBatchError(null);
+    setBatchNotice(null);
+    const results = await runWithConcurrency(importCandidates, 4, (entry) => createEntry(entry));
+    const ok = results.filter((result) => result.status === 'fulfilled').length;
+    const failed = results.length - ok;
+    setImportWorking(false);
+    setImportCandidates(null);
+    try {
+      await refreshList();
+      await mutateCache('/api/knowledge/meta');
+    } catch {
+      /* The list still revalidates when it mounts. */
+    }
+    if (failed > 0) setBatchError(t('kb_batch_partial', { ok, failed }));
+    else setBatchNotice(t('kb_import_success', { count: ok }));
+  };
+
   const runBatchTag = async () => {
     const additions = splitTagInput(batchTagInput);
     if (additions.length === 0) return;
@@ -311,9 +353,25 @@ export function KnowledgePage() {
         title={t('kb_page_title')}
         description={t('kb_page_description')}
         actions={canConfigure ? (
-          <Link to={withReturnTo('/knowledge/new', listLocation)} className={styles.newButton}>
-            <Plus size={15} /> {t('kb_new_entry')}
-          </Link>
+          <>
+            <label className={styles.secondaryButton}>
+              <Upload size={15} /> {t('kb_import')}
+              <input
+                type="file"
+                accept="application/json,.json"
+                className={styles.hiddenInput}
+                disabled={importWorking}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file) void handleImportFile(file);
+                }}
+              />
+            </label>
+            <Link to={withReturnTo('/knowledge/new', listLocation)} className={styles.newButton}>
+              <Plus size={15} /> {t('kb_new_entry')}
+            </Link>
+          </>
         ) : undefined}
       />
 
@@ -661,6 +719,22 @@ export function KnowledgePage() {
           onCancel={() => { if (!batchWorking) setBatchAction(null); }}
         />
       )}
+      {importCandidates && (
+        <ConfirmActionPanel
+          presentation="modal"
+          tone="info"
+          title={t('kb_import_title')}
+          message={t('kb_import_message', { count: importCandidates.length })}
+          confirmLabel={t('kb_import_confirm')}
+          cancelLabel={t('cancel')}
+          isWorking={importWorking}
+          onConfirm={() => void runImport()}
+          onCancel={() => { if (!importWorking) setImportCandidates(null); }}
+        >
+          <p className={styles.panelMeta}>{t('kb_import_attachment_note')}</p>
+        </ConfirmActionPanel>
+      )}
+
       {batchTagOpen && (
         <ConfirmActionPanel
           presentation="modal"

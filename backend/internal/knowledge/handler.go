@@ -34,11 +34,12 @@ type Handler struct {
 	limiter     RateLimiter
 	auditWriter AuditWriter
 	actorRepo   governance.ActorRepository
+	latency     *latencyTracker
 }
 
 // NewHandler creates a knowledge base HTTP handler.
 func NewHandler(repo *Repository, store *FileStore, limiter RateLimiter, auditWriter AuditWriter) *Handler {
-	return &Handler{repo: repo, store: store, limiter: limiter, auditWriter: auditWriter}
+	return &Handler{repo: repo, store: store, limiter: limiter, auditWriter: auditWriter, latency: &latencyTracker{}}
 }
 
 // UseActorRepository wires the account store used to revalidate the actor on
@@ -58,7 +59,11 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w)
 		return
 	}
-	response.JSON(w, http.StatusOK, meta)
+	// Copy the cached meta before adding the live latency snapshot so the shared
+	// cache entry is never mutated by a reader.
+	view := *meta
+	view.ListLatency = h.latency.snapshot()
+	response.JSON(w, http.StatusOK, view)
 }
 
 // ListTags handles GET /api/knowledge/tags.
@@ -80,6 +85,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if p == nil {
 		return
 	}
+	startedAt := time.Now()
+	defer func() { h.latency.record(time.Since(startedAt)) }()
 
 	q := r.URL.Query()
 	allowed := map[string]bool{"q": true, "protocol": true, "tag": true, "cursor": true, "limit": true, "sort": true, "order": true, "status": true}
