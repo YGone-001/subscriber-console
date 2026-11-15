@@ -344,6 +344,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		req.Phenomenon = version.Phenomenon
 		req.RootCause = version.RootCause
 		req.Solution = version.Solution
+		req.ApplicableScope = version.ApplicableScope
 		req.Tags = version.Tags
 		// A content restore preserves the current attachment set; versions do
 		// not snapshot attachment bytes.

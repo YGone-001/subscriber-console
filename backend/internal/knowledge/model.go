@@ -38,6 +38,7 @@ const (
 	MaxPhenomenonLength = 4000
 	MaxRootCauseLength  = 4000
 	MaxSolutionLength   = 200 * 1024
+	MaxApplicableScope  = 500
 	MaxTags             = 20
 	MaxTagLength        = 32
 	MaxAttachments      = 10
@@ -84,17 +85,18 @@ const (
 // content update. Snapshots live in app_knowledge_entry_versions, bounded per
 // entry, and are exposed read-only on the detail endpoint.
 type EntryVersion struct {
-	VersionID  string   `json:"versionId" bson:"_id"`
-	EntryID    string   `json:"entryId" bson:"entryId"`
-	Revision   int64    `json:"revision" bson:"revision"`
-	Title      string   `json:"title" bson:"title"`
-	Protocol   string   `json:"protocol" bson:"protocol"`
-	Phenomenon string   `json:"phenomenon" bson:"phenomenon"`
-	RootCause  string   `json:"rootCause" bson:"rootCause"`
-	Solution   string   `json:"solution" bson:"solution"`
-	Tags       []string `json:"tags" bson:"tags"`
-	CreatedAt  string   `json:"createdAt" bson:"createdAt"`
-	CreatedBy  string   `json:"createdBy" bson:"createdBy"`
+	VersionID       string   `json:"versionId" bson:"_id"`
+	EntryID         string   `json:"entryId" bson:"entryId"`
+	Revision        int64    `json:"revision" bson:"revision"`
+	Title           string   `json:"title" bson:"title"`
+	Protocol        string   `json:"protocol" bson:"protocol"`
+	Phenomenon      string   `json:"phenomenon" bson:"phenomenon"`
+	RootCause       string   `json:"rootCause" bson:"rootCause"`
+	Solution        string   `json:"solution" bson:"solution"`
+	Tags            []string `json:"tags" bson:"tags"`
+	ApplicableScope string   `json:"applicableScope,omitempty" bson:"applicableScope,omitempty"`
+	CreatedAt       string   `json:"createdAt" bson:"createdAt"`
+	CreatedBy       string   `json:"createdBy" bson:"createdBy"`
 }
 
 // EntryVersionSummary is the bounded list projection of a content snapshot.
@@ -136,22 +138,23 @@ type InvestigationRef struct {
 
 // Entry is a knowledge base article stored in app_knowledge_entries.
 type Entry struct {
-	ID            string       `json:"id" bson:"_id"`
-	SchemaVersion int          `json:"schemaVersion" bson:"schemaVersion"`
-	Title         string       `json:"title" bson:"title"`
-	Protocol      string       `json:"protocol" bson:"protocol"`
-	Phenomenon    string       `json:"phenomenon" bson:"phenomenon"`
-	RootCause     string       `json:"rootCause" bson:"rootCause"`
-	Solution      string       `json:"solution" bson:"solution"`
-	Tags          []string     `json:"tags" bson:"tags"`
-	Attachments   []Attachment `json:"attachments" bson:"attachments"`
-	Status        string       `json:"status" bson:"status"`
-	DeletedAt     string       `json:"deletedAt,omitempty" bson:"deletedAt,omitempty"`
-	Revision      int64        `json:"revision" bson:"revision"`
-	CreatedAt     string       `json:"createdAt" bson:"createdAt"`
-	CreatedBy     string       `json:"createdBy" bson:"createdBy"`
-	UpdatedAt     string       `json:"updatedAt" bson:"updatedAt"`
-	UpdatedBy     string       `json:"updatedBy" bson:"updatedBy"`
+	ID              string       `json:"id" bson:"_id"`
+	SchemaVersion   int          `json:"schemaVersion" bson:"schemaVersion"`
+	Title           string       `json:"title" bson:"title"`
+	Protocol        string       `json:"protocol" bson:"protocol"`
+	Phenomenon      string       `json:"phenomenon" bson:"phenomenon"`
+	RootCause       string       `json:"rootCause" bson:"rootCause"`
+	Solution        string       `json:"solution" bson:"solution"`
+	ApplicableScope string       `json:"applicableScope,omitempty" bson:"applicableScope,omitempty"`
+	Tags            []string     `json:"tags" bson:"tags"`
+	Attachments     []Attachment `json:"attachments" bson:"attachments"`
+	Status          string       `json:"status" bson:"status"`
+	DeletedAt       string       `json:"deletedAt,omitempty" bson:"deletedAt,omitempty"`
+	Revision        int64        `json:"revision" bson:"revision"`
+	CreatedAt       string       `json:"createdAt" bson:"createdAt"`
+	CreatedBy       string       `json:"createdBy" bson:"createdBy"`
+	UpdatedAt       string       `json:"updatedAt" bson:"updatedAt"`
+	UpdatedBy       string       `json:"updatedBy" bson:"updatedBy"`
 	// Versions is a computed detail projection (bounded history) and carries
 	// version metadata only; full snapshot content is served by the dedicated
 	// version content endpoint.
@@ -210,6 +213,7 @@ type CreateEntryRequest struct {
 	Phenomenon        string   `json:"phenomenon,omitempty"`
 	RootCause         string   `json:"rootCause,omitempty"`
 	Solution          string   `json:"solution,omitempty"`
+	ApplicableScope   string   `json:"applicableScope,omitempty"`
 	Tags              []string `json:"tags,omitempty"`
 	AttachmentFileIDs []string `json:"attachmentFileIds,omitempty"`
 }
@@ -226,6 +230,7 @@ type UpdateEntryRequest struct {
 	Phenomenon        string   `json:"phenomenon,omitempty"`
 	RootCause         string   `json:"rootCause,omitempty"`
 	Solution          string   `json:"solution,omitempty"`
+	ApplicableScope   string   `json:"applicableScope,omitempty"`
 	Tags              []string `json:"tags,omitempty"`
 	AttachmentFileIDs []string `json:"attachmentFileIds,omitempty"`
 }

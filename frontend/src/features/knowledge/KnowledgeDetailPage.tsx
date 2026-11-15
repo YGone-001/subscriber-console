@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
-import { Activity, ArrowLeft, Copy, Download, Edit, Eye, FileText, GitCompare, Link2, Printer, Trash2, TriangleAlert, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { Activity, ArrowLeft, Copy, Download, Edit, Eye, FileText, GitCompare, Link2, Printer, Tag, Trash2, TriangleAlert, X, ZoomIn, ZoomOut } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import { ConfirmActionPanel, EmptyState, OperationNotice } from '../../components/ui/OperationFeedback';
 import { Dialog } from '../../components/ui/Dialog';
@@ -339,6 +339,13 @@ export function KnowledgeDetailPage() {
         </div>
       )}
 
+      {data.applicableScope && (
+        <section className={styles.card}>
+          <h2 className={styles.cardTitle}><Tag size={15} /> {t('kb_applicable_scope')}</h2>
+          <p className={styles.cardBody}>{data.applicableScope}</p>
+        </section>
+      )}
+
       <div className={styles.grid2}>
         <section className={styles.card} data-tone="danger">
           <h2 className={styles.cardTitle}><TriangleAlert size={15} /> {t('kb_phenomenon')}</h2>
@@ -590,6 +597,12 @@ export function KnowledgeDetailPage() {
               <p className={styles.panelMeta}>
                 {versionView.content.protocol || t('kb_protocol_general')} · {formatDateTime(versionView.content.createdAt)} · {versionView.content.createdBy || '—'}
               </p>
+              {versionView.content.applicableScope && (
+                <>
+                  <h3>{t('kb_applicable_scope')}</h3>
+                  <p>{versionView.content.applicableScope}</p>
+                </>
+              )}
               <h3>{t('kb_phenomenon')}</h3>
               {versionView.content.phenomenon ? <MarkdownContent content={versionView.content.phenomenon} /> : <p>{t('kb_no_phenomenon')}</p>}
               <h3>{t('kb_root_cause')}</h3>
@@ -603,6 +616,7 @@ export function KnowledgeDetailPage() {
               {renderDiff(t('kb_field_phenomenon'), data.phenomenon, versionView.content.phenomenon)}
               {renderDiff(t('kb_field_root_cause'), data.rootCause, versionView.content.rootCause)}
               {renderDiff(t('kb_field_solution'), data.solution, versionView.content.solution)}
+              {renderDiff(t('kb_applicable_scope'), data.applicableScope ?? '', versionView.content.applicableScope ?? '')}
             </div>
           )}
         </Dialog>

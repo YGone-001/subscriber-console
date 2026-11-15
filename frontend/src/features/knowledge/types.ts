@@ -9,6 +9,7 @@ export type EntryVersion = {
   phenomenon: string;
   rootCause: string;
   solution: string;
+  applicableScope?: string;
   tags: string[];
   createdAt: string;
   createdBy: string;
@@ -60,6 +61,7 @@ export type KnowledgeEntry = {
   phenomenon: string;
   rootCause: string;
   solution: string;
+  applicableScope?: string;
   tags: string[];
   attachments: Attachment[];
   status: string;
@@ -137,6 +139,7 @@ export type KnowledgeEntryInput = {
   phenomenon?: string;
   rootCause?: string;
   solution?: string;
+  applicableScope?: string;
   tags?: string[];
   attachmentFileIds?: string[];
 };

@@ -134,21 +134,22 @@ func (r *Repository) UseAuditStore(auditLogs *mongo.Collection) {
 func (r *Repository) Create(ctx context.Context, id string, req *CreateEntryRequest, protocol string, tags []string, attachments []Attachment, actor string) (*Entry, error) {
 	now := CurrentTimestamp()
 	entry := &Entry{
-		ID:            id,
-		SchemaVersion: SchemaVersion,
-		Title:         req.Title,
-		Protocol:      protocol,
-		Phenomenon:    req.Phenomenon,
-		RootCause:     req.RootCause,
-		Solution:      req.Solution,
-		Tags:          tags,
-		Attachments:   attachments,
-		Status:        StatusActive,
-		Revision:      1,
-		CreatedAt:     now,
-		CreatedBy:     actor,
-		UpdatedAt:     now,
-		UpdatedBy:     actor,
+		ID:              id,
+		SchemaVersion:   SchemaVersion,
+		Title:           req.Title,
+		Protocol:        protocol,
+		Phenomenon:      req.Phenomenon,
+		RootCause:       req.RootCause,
+		Solution:        req.Solution,
+		ApplicableScope: req.ApplicableScope,
+		Tags:            tags,
+		Attachments:     attachments,
+		Status:          StatusActive,
+		Revision:        1,
+		CreatedAt:       now,
+		CreatedBy:       actor,
+		UpdatedAt:       now,
+		UpdatedBy:       actor,
 	}
 	if entry.Attachments == nil {
 		entry.Attachments = []Attachment{}
@@ -364,16 +365,17 @@ func (r *Repository) Update(ctx context.Context, id string, req *UpdateEntryRequ
 	updateFilter := bson.M{"_id": id, "revision": req.ExpectedRevision}
 	updateDoc := bson.M{
 		"$set": bson.M{
-			"title":       req.Title,
-			"protocol":    protocol,
-			"phenomenon":  req.Phenomenon,
-			"rootCause":   req.RootCause,
-			"solution":    req.Solution,
-			"tags":        tags,
-			"attachments": attachments,
-			"updatedAt":   now,
-			"updatedBy":   actor,
-			"revision":    req.ExpectedRevision + 1,
+			"title":           req.Title,
+			"protocol":        protocol,
+			"phenomenon":      req.Phenomenon,
+			"rootCause":       req.RootCause,
+			"solution":        req.Solution,
+			"applicableScope": req.ApplicableScope,
+			"tags":            tags,
+			"attachments":     attachments,
+			"updatedAt":       now,
+			"updatedBy":       actor,
+			"revision":        req.ExpectedRevision + 1,
 		},
 	}
 
@@ -405,17 +407,18 @@ func (r *Repository) snapshotVersion(ctx context.Context, existing *Entry) {
 		return
 	}
 	version := EntryVersion{
-		VersionID:  audit.GenerateUUID(),
-		EntryID:    existing.ID,
-		Revision:   existing.Revision,
-		Title:      existing.Title,
-		Protocol:   existing.Protocol,
-		Phenomenon: existing.Phenomenon,
-		RootCause:  existing.RootCause,
-		Solution:   existing.Solution,
-		Tags:       existing.Tags,
-		CreatedAt:  existing.UpdatedAt,
-		CreatedBy:  existing.UpdatedBy,
+		VersionID:       audit.GenerateUUID(),
+		EntryID:         existing.ID,
+		Revision:        existing.Revision,
+		Title:           existing.Title,
+		Protocol:        existing.Protocol,
+		Phenomenon:      existing.Phenomenon,
+		RootCause:       existing.RootCause,
+		Solution:        existing.Solution,
+		ApplicableScope: existing.ApplicableScope,
+		Tags:            existing.Tags,
+		CreatedAt:       existing.UpdatedAt,
+		CreatedBy:       existing.UpdatedBy,
 	}
 	if _, err := r.versions.InsertOne(ctx, version); err != nil {
 		return

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
@@ -87,6 +88,17 @@ func validateCommon(title, phenomenon, rootCause, solution string, tags []string
 	return t, normalized, nil
 }
 
+// normalizeApplicableScope trims the optional free-text environment note and
+// bounds it by rune count so Chinese text is not rejected at an arbitrary byte
+// boundary.
+func normalizeApplicableScope(value string) (string, error) {
+	scope := strings.TrimSpace(value)
+	if utf8.RuneCountInString(scope) > MaxApplicableScope {
+		return "", fmt.Errorf("applicableScope must not exceed %d characters", MaxApplicableScope)
+	}
+	return scope, nil
+}
+
 // validateAttachmentFileIDs ensures every referenced file id is a valid UUID and
 // that the count stays inside the per-entry attachment budget.
 func validateAttachmentFileIDs(ids []string) error {
@@ -137,6 +149,11 @@ func ValidateCreateRequest(req *CreateEntryRequest) (string, []string, error) {
 		return "", nil, err
 	}
 	req.Title = title
+	scope, err := normalizeApplicableScope(req.ApplicableScope)
+	if err != nil {
+		return "", nil, err
+	}
+	req.ApplicableScope = scope
 	protocol, err := normalizeProtocol(req.Protocol)
 	if err != nil {
 		return "", nil, err
@@ -164,6 +181,11 @@ func ValidateUpdateRequest(req *UpdateEntryRequest) (string, []string, error) {
 		return "", nil, err
 	}
 	req.Title = title
+	scope, err := normalizeApplicableScope(req.ApplicableScope)
+	if err != nil {
+		return "", nil, err
+	}
+	req.ApplicableScope = scope
 	protocol, err := normalizeProtocol(req.Protocol)
 	if err != nil {
 		return "", nil, err

@@ -1480,3 +1480,9 @@
     display: none;
   }
 }
+
+.fieldHint {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-micro);
+  line-height: 1.5;
+}

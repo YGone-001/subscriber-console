@@ -69,6 +69,64 @@ func TestHandlerCreateGetRoundTrip(t *testing.T) {
 	}
 }
 
+func TestHandlerApplicableScopeRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	h, cleanup := knowledgeTestHandler(t)
+	defer cleanup()
+
+	createRec := httptest.NewRecorder()
+	h.Create(createRec, knowledgeRequest(http.MethodPost, "/api/knowledge/entries", "operator",
+		`{"title":"scope","protocol":"SIP","applicableScope":"Huawei CloudCore 5.1"}`))
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d: %s", createRec.Code, createRec.Body.String())
+	}
+	var created Entry
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode created: %v", err)
+	}
+	if created.ApplicableScope != "Huawei CloudCore 5.1" {
+		t.Fatalf("unexpected created scope: %+v", created)
+	}
+
+	updateRec := httptest.NewRecorder()
+	h.Update(updateRec, withEntryID(knowledgeRequest(http.MethodPut, "/api/knowledge/entries/"+created.ID, "operator",
+		`{"title":"scope","expectedRevision":1,"applicableScope":"Huawei CloudCore 5.2"}`), created.ID))
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d: %s", updateRec.Code, updateRec.Body.String())
+	}
+
+	getRec := httptest.NewRecorder()
+	h.Get(getRec, withEntryID(knowledgeRequest(http.MethodGet, "/api/knowledge/entries/"+created.ID, "viewer", ""), created.ID))
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get: expected 200, got %d: %s", getRec.Code, getRec.Body.String())
+	}
+	var detail Entry
+	if err := json.Unmarshal(getRec.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+	if detail.ApplicableScope != "Huawei CloudCore 5.2" || len(detail.Versions) != 1 {
+		t.Fatalf("unexpected updated detail: %+v", detail)
+	}
+
+	versionRec := httptest.NewRecorder()
+	versionReq := knowledgeRequest(http.MethodGet, "/api/knowledge/entries/"+created.ID+"/versions/"+detail.Versions[0].VersionID, "viewer", "")
+	versionReq.SetPathValue("entryId", created.ID)
+	versionReq.SetPathValue("versionId", detail.Versions[0].VersionID)
+	h.GetVersion(versionRec, versionReq)
+	if versionRec.Code != http.StatusOK {
+		t.Fatalf("version: expected 200, got %d: %s", versionRec.Code, versionRec.Body.String())
+	}
+	var version EntryVersion
+	if err := json.Unmarshal(versionRec.Body.Bytes(), &version); err != nil {
+		t.Fatalf("decode version: %v", err)
+	}
+	if version.ApplicableScope != "Huawei CloudCore 5.1" {
+		t.Fatalf("expected snapshot scope 5.1, got %+v", version)
+	}
+}
+
 func TestHandlerUpdateRevisionConflict(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires MongoDB")

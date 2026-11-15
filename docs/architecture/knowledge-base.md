@@ -17,9 +17,9 @@ All metadata lives in `xcloud_ops`:
 
 | Collection | Purpose |
 |---|---|
-| `app_knowledge_entries` | Article: title, protocol, phenomenon, rootCause, Markdown solution, tags, attachments, status, revision, timestamps, actor |
+| `app_knowledge_entries` | Article: title, protocol, phenomenon, rootCause, Markdown solution, optional free-text `applicableScope`, tags, attachments, status, revision, timestamps, actor |
 | `app_knowledge_files` | Attachment metadata: original name, content type, kind, size, sha256, owning entry, timestamps, actor |
-| `app_knowledge_entry_versions` | Bounded content snapshots (max 20 per entry) taken before each content update; exposed read-only on the detail endpoint and restorable via `PUT` |
+| `app_knowledge_entry_versions` | Bounded content snapshots (max 20 per entry) taken before each content update; snapshots include `applicableScope`, exposed read-only on the detail endpoint and restorable via `PUT` |
 
 Attachment bytes live on the local filesystem under `KNOWLEDGE_UPLOAD_DIR`
 (default `/srv/internal-resource-server/uploads`). Deleting an attachment moves
@@ -44,7 +44,7 @@ Eleven Go registrations (six reads, five mutations):
 | `GET /api/knowledge/meta` | protocol enum, top tags, protocol distribution, active/recycle totals, limits | `core.read` |
 | `GET /api/knowledge/tags` | full active tag dictionary with counts for filter autocomplete | `core.read` |
 | `GET /api/knowledge/entries` | list/search (`q`, `protocol`, `tag`, `cursor`, `limit`, `sort`, `order`, `status`) | `core.read` |
-| `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body, version metadata, bounded operations history and `operationsComplete`; `?export=1` downloads a JSON backup | `core.read` |
+| `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body, optional `applicableScope`, version metadata, bounded operations history and `operationsComplete`; `?export=1` downloads a JSON backup | `core.read` |
 | `GET /api/knowledge/entries/{entryId}/versions/{versionId}` | full content of one historical snapshot | `core.read` |
 | `POST /api/knowledge/entries` | create entry | `core.configure` |
 | `PUT /api/knowledge/entries/{entryId}` | update entry (revision CAS); `restore:true` revives a soft-deleted entry; `restoreVersionId` reverts content to a snapshot | `core.configure` |
@@ -181,7 +181,9 @@ text) with a download action. The detail page shows bounded operation history,
 copy-link and print actions. The editor offers a
 Markdown toolbar (headings 1-3, bold/italic/strikethrough, inline code, ordered/
 unordered/task lists, quote, link, code block, table, horizontal rule, plus
-Ctrl+B/I/K shortcuts), Ctrl/Cmd+S save, preview, multi-file and drag/drop
+Ctrl+B/I/K shortcuts), Ctrl/Cmd+S save, preview, optional free-text
+`applicableScope` for environment/version guidance (display-only, not filtered
+or searched), multi-file and drag/drop
 attachment upload, inline image paste/drop, explicit unsaved-draft
 restore/discard, character counts, field-level labels and revision-conflict
 handling with copy-my-changes and reload-latest actions. New-entry drafts are

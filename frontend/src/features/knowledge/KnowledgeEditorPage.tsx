@@ -26,6 +26,7 @@ type DraftPayload = {
   phenomenon: string;
   rootCause: string;
   solution: string;
+  applicableScope: string;
   attachments: AttachmentDraft[];
   savedAt: string;
 };
@@ -35,6 +36,7 @@ const DEFAULT_MAX_FILE_BYTES = 8 * 1024 * 1024;
 const TITLE_MAX = 200;
 const TEXT_MAX = 4000;
 const SOLUTION_MAX = 200 * 1024;
+const APPLICABLE_SCOPE_MAX = 500;
 
 function readDraft(key: string): DraftPayload | null {
   try {
@@ -48,6 +50,7 @@ function readDraft(key: string): DraftPayload | null {
       phenomenon: typeof draft.phenomenon === 'string' ? draft.phenomenon : '',
       rootCause: typeof draft.rootCause === 'string' ? draft.rootCause : '',
       solution: typeof draft.solution === 'string' ? draft.solution : '',
+      applicableScope: typeof draft.applicableScope === 'string' ? draft.applicableScope : '',
       attachments: Array.isArray(draft.attachments) ? draft.attachments : [],
       savedAt: typeof draft.savedAt === 'string' ? draft.savedAt : '',
     };
@@ -71,6 +74,7 @@ export function KnowledgeEditorPage() {
   const [phenomenon, setPhenomenon] = useState('');
   const [rootCause, setRootCause] = useState('');
   const [solution, setSolution] = useState('');
+  const [applicableScope, setApplicableScope] = useState('');
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [revision, setRevision] = useState(0);
   const [meta, setMeta] = useState<KnowledgeMeta | null>(null);
@@ -98,6 +102,7 @@ export function KnowledgeEditorPage() {
     setPhenomenon(entry.phenomenon);
     setRootCause(entry.rootCause);
     setSolution(entry.solution);
+    setApplicableScope(entry.applicableScope ?? '');
     setAttachments(entry.attachments);
     setRevision(entry.revision);
     persistedFileIds.current = new Set(entry.attachments.map((file) => file.fileId));
@@ -164,6 +169,7 @@ export function KnowledgeEditorPage() {
           phenomenon,
           rootCause,
           solution,
+          applicableScope,
           attachments,
           savedAt: new Date().toISOString(),
         } satisfies DraftPayload));
@@ -172,7 +178,7 @@ export function KnowledgeEditorPage() {
       }
     }, 800);
     return () => window.clearTimeout(handle);
-  }, [isEdit, draftChecked, draftCandidate, draftKey, title, protocol, tags, phenomenon, rootCause, solution, attachments]);
+  }, [isEdit, draftChecked, draftCandidate, draftKey, title, protocol, tags, phenomenon, rootCause, solution, applicableScope, attachments]);
 
   const restoreDraft = () => {
     if (!draftCandidate) return;
@@ -182,6 +188,7 @@ export function KnowledgeEditorPage() {
     setPhenomenon(draftCandidate.phenomenon);
     setRootCause(draftCandidate.rootCause);
     setSolution(draftCandidate.solution);
+    setApplicableScope(draftCandidate.applicableScope);
     setAttachments(draftCandidate.attachments);
     setDirty(true);
     setDraftCandidate(null);
@@ -302,6 +309,7 @@ export function KnowledgeEditorPage() {
       phenomenon,
       rootCause,
       solution,
+      applicableScope,
       tags,
       attachmentFileIds: attachments.map((a) => a.fileId),
     };
@@ -352,6 +360,7 @@ export function KnowledgeEditorPage() {
       `${t('kb_field_phenomenon')}:\n${phenomenon}`,
       `${t('kb_field_root_cause')}:\n${rootCause}`,
       `${t('kb_field_solution')}:\n${solution}`,
+      `${t('kb_applicable_scope')}: ${applicableScope}`,
       `${t('kb_field_tags')}: ${tags.join(', ')}`,
     ].join('\n\n');
     try {
@@ -524,6 +533,23 @@ export function KnowledgeEditorPage() {
                   {protocols.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </label>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel} htmlFor="kb-entry-applicable-scope">{t('kb_applicable_scope')}</label>
+                <textarea
+                  id="kb-entry-applicable-scope"
+                  className={styles.textarea}
+                  rows={2}
+                  value={applicableScope}
+                  maxLength={APPLICABLE_SCOPE_MAX}
+                  aria-describedby="kb-applicable-scope-count"
+                  placeholder={t('kb_applicable_scope_placeholder')}
+                  onChange={(event) => markDirty(() => setApplicableScope(event.target.value))}
+                />
+                <span id="kb-applicable-scope-count" className={styles.charCount}>
+                  {t('kb_char_count', { count: applicableScope.length, max: APPLICABLE_SCOPE_MAX })}
+                </span>
+                <span className={styles.fieldHint}>{t('kb_applicable_scope_hint')}</span>
+              </div>
               <div className={styles.field}>
                 <label className={styles.fieldLabel} htmlFor="kb-entry-tags">{t('kb_field_tags')}</label>
                 <TagInput
