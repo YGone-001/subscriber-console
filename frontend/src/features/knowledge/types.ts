@@ -14,6 +14,14 @@ export type EntryVersion = {
   createdBy: string;
 };
 
+export type EntryVersionSummary = {
+  versionId: string;
+  entryId: string;
+  revision: number;
+  createdAt: string;
+  createdBy: string;
+};
+
 export type InvestigationRef = {
   investigationId: string;
   title: string;
@@ -46,7 +54,7 @@ export type KnowledgeEntry = {
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
-  versions?: EntryVersion[];
+  versions?: EntryVersionSummary[];
   referencedBy?: InvestigationRef[];
   referenceCount?: number;
 };
@@ -60,6 +68,7 @@ export type KnowledgeSummary = {
   attachments: Attachment[];
   attachmentCount: number;
   status: string;
+  deletedAt?: string;
   revision: number;
   createdAt: string;
   createdBy: string;
@@ -76,6 +85,7 @@ export type KnowledgeMeta = {
   topTags: TagCount[];
   protocolCounts: ProtocolCount[];
   total: number;
+  deletedTotal: number;
   maxFileBytes: number;
   maxAttachments: number;
   maxInlineImages: number;

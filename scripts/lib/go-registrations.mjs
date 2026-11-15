@@ -95,7 +95,7 @@ export function toInventoryPath(pattern) {
  * together with the AGENTS.md / CLAUDE.md totals that `test-agent-docs-parity`
  * cross-checks.
  */
-export const EXPECTED_GO_REGISTRATIONS = 210;
+export const EXPECTED_GO_REGISTRATIONS = 212;
 
 /**
  * The frozen business mutation census: unique METHOD+PATH mutation endpoints declared by
@@ -105,4 +105,4 @@ export const EXPECTED_GO_REGISTRATIONS = 210;
  * place after confirming the added endpoints are intended, exactly as EXPECTED_GO_REGISTRATIONS is
  * updated together with the AGENTS.md / CLAUDE.md totals.
  */
-export const MUTATION_CENSUS = Object.freeze({ uniqueEndpoints: 34, requestContracts: 33 });
+export const MUTATION_CENSUS = Object.freeze({ uniqueEndpoints: 35, requestContracts: 33 });

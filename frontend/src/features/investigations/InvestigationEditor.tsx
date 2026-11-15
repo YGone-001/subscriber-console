@@ -17,7 +17,7 @@ function KnowledgePicker({ids,known,onChange,disabled}:{ids:string[];known:Knowl
   const all=new Map([...known,...entries].map(k=>[k.id,k]));
   const searchKnowledge=()=>{const next=`/api/knowledge/entries?${new URLSearchParams({q:search.trim(),limit:'10'})}`;if(next===query)void read.mutate();else setQuery(next);};
   return <div className={styles.knowledge}>
-    <Field htmlFor="investigation-knowledge" label={t('inv_knowledge_search')}><input id="investigation-knowledge" className="form-input" value={search} onChange={e=>setSearch(e.target.value)} maxLength={160} disabled={disabled} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();searchKnowledge();}}}/></Field>
+    <Field htmlFor="investigation-knowledge" label={t('inv_knowledge_search')}><input id="investigation-knowledge" className="form-input" value={search} onChange={e=>setSearch(e.target.value)} maxLength={64} disabled={disabled} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();searchKnowledge();}}}/></Field>
     <button type="button" className="btn btn-secondary" disabled={disabled||read.isLoading} onClick={searchKnowledge}>{t('inv_knowledge_find')}</button>
     {read.error?<p role="status">{t('inv_load_error')}</p>:null}
     {query&&!read.isLoading&&!read.error&&!entries.length?<p className={styles.note}>{t('inv_knowledge_empty')}</p>:null}

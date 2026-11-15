@@ -3,9 +3,15 @@ import test from 'node:test';
 import { buildEntriesPath, isKnowledgeEntryKey, isKnowledgeListKey, entryExportUrl } from '../src/features/knowledge/knowledge-api';
 import { applyTool, insertImage } from '../src/features/knowledge/components/MarkdownEditor';
 import { mergeTags, splitTagInput } from '../src/features/knowledge/knowledge-tags';
-import { knowledgeErrorMessage } from '../src/features/knowledge/knowledge-errors';
+import { knowledgeErrorMessage, knowledgeReadErrorMessage } from '../src/features/knowledge/knowledge-errors';
+import { isSafeMarkdownLink } from '../src/features/knowledge/components/MarkdownContent';
+import { pageNumberFromStack, parseCursorStack, popCursorStack, pushCursorStack, serializeCursorStack } from '../src/features/knowledge/knowledge-paging';
+import { runWithConcurrency } from '../src/features/knowledge/knowledge-batch';
+import { matchContext } from '../src/features/knowledge/knowledge-match';
+import type { KnowledgeSummary } from '../src/features/knowledge/types';
 import { fileKindLabel, formatFileSize, isImage, isKnowledgeImageUrl, extractSolutionImageIds } from '../src/features/knowledge/knowledge-format';
 import { MutationApiError } from '../src/lib/api/mutation-client';
+import { ReadApiError } from '../src/lib/api/errors';
 
 test('the knowledge entries path carries only requested query values', () => {
   assert.equal(buildEntriesPath(), '/api/knowledge/entries');
@@ -121,6 +127,33 @@ test('knowledge mutation errors map to localized message keys', () => {
   assert.equal(knowledgeErrorMessage(new MutationApiError(500, 'boom'), t), 'kb_error_internal');
   assert.equal(knowledgeErrorMessage(new Error('network'), t), 'kb_save_failed');
   assert.equal(knowledgeErrorMessage(new Error('network'), t, 'kb_upload_failed'), 'kb_upload_failed');
+  assert.equal(
+    knowledgeErrorMessage(new MutationApiError(400, 'empty', undefined, 'KNOWLEDGE_FILE_EMPTY'), t),
+    'kb_error_file_empty',
+  );
+  assert.equal(
+    knowledgeErrorMessage(new MutationApiError(409, 'bound', undefined, 'KNOWLEDGE_FILE_BOUND'), t),
+    'kb_error_file_unavailable',
+  );
+});
+
+test('knowledge read errors distinguish not-found, forbidden and service failures', () => {
+  const t = (key: string) => key;
+  assert.equal(knowledgeReadErrorMessage(new ReadApiError(404, 'missing'), t), 'kb_error_not_found');
+  assert.equal(knowledgeReadErrorMessage(new ReadApiError(403, 'forbidden'), t), 'kb_error_forbidden');
+  assert.equal(knowledgeReadErrorMessage(new ReadApiError(400, 'bad'), t), 'kb_error_bad_request');
+  assert.equal(knowledgeReadErrorMessage(new ReadApiError(429, 'limited'), t), 'kb_error_rate_limited');
+  assert.equal(knowledgeReadErrorMessage(new ReadApiError(500, 'boom'), t), 'kb_error_internal');
+  assert.equal(knowledgeReadErrorMessage(new Error('network'), t), 'kb_error_body');
+});
+
+test('Markdown links reject protocol-relative targets and unsafe schemes', () => {
+  assert.equal(isSafeMarkdownLink('https://example.com/a'), true);
+  assert.equal(isSafeMarkdownLink('mailto:ops@example.com'), true);
+  assert.equal(isSafeMarkdownLink('/knowledge/123'), true);
+  assert.equal(isSafeMarkdownLink('#section'), true);
+  assert.equal(isSafeMarkdownLink('//evil.example/path'), false);
+  assert.equal(isSafeMarkdownLink('javascript:alert(1)'), false);
 });
 
 test('inline Markdown images are restricted to knowledge attachments', () => {
@@ -151,4 +184,56 @@ test('the entry export url targets the detail export query', () => {
     entryExportUrl('00000000-0000-4000-8000-000000000000'),
     '/api/knowledge/entries/00000000-0000-4000-8000-000000000000?export=1',
   );
+});
+
+test('cursor back-stack survives a URL round trip and returns to the first page', () => {
+  assert.deepEqual(parseCursorStack(null), []);
+  assert.deepEqual(parseCursorStack('a|b'), ['a', 'b']);
+  assert.equal(serializeCursorStack(['a', 'b']), 'a|b');
+  assert.deepEqual(pushCursorStack([], 'c'), ['c']);
+  assert.deepEqual(pushCursorStack(['a'], ''), ['a']);
+  assert.deepEqual(popCursorStack([]), { stack: [], cursor: '' });
+  assert.deepEqual(popCursorStack(['a', 'b']), { stack: ['a'], cursor: 'b' });
+  assert.equal(pageNumberFromStack([], false), 1);
+  assert.equal(pageNumberFromStack([], true), 2);
+  assert.equal(pageNumberFromStack(['a'], true), 3);
+});
+
+test('bounded batch concurrency preserves order and reports partial failures', async () => {
+  let active = 0;
+  let maxActive = 0;
+  const results = await runWithConcurrency([1, 2, 3, 4, 5], 2, async (value) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    active -= 1;
+    if (value === 3) throw new Error('failed');
+    return value * 2;
+  });
+  assert.equal(maxActive, 2);
+  assert.deepEqual(results.map((result) => result.status), ['fulfilled', 'fulfilled', 'rejected', 'fulfilled', 'fulfilled']);
+  assert.equal(results[0].status === 'fulfilled' ? results[0].value : 0, 2);
+});
+
+test('match context explains title, phenomenon, tag, protocol and body hits', () => {
+  const base: KnowledgeSummary = {
+    id: '00000000-0000-4000-8000-000000000000',
+    title: 'SIP 487 retransmission',
+    protocol: 'SIP',
+    phenomenon: 'UE receives 100 Trying repeatedly',
+    tags: ['VoLTE', 'REGISTER'],
+    attachments: [],
+    attachmentCount: 0,
+    status: 'active',
+    revision: 1,
+    createdAt: '2026-11-15T00:00:00.000Z',
+    createdBy: 'ops',
+    updatedAt: '2026-11-15T00:00:00.000Z',
+  };
+  assert.equal(matchContext(base, '487')?.field, 'title');
+  assert.equal(matchContext(base, 'trying')?.field, 'phenomenon');
+  assert.equal(matchContext(base, 'register')?.field, 'tag');
+  assert.equal(matchContext({ ...base, title: 'x', phenomenon: 'y', tags: [] }, 'sip')?.field, 'protocol');
+  assert.equal(matchContext({ ...base, title: 'x', phenomenon: 'y', tags: [] }, 'missing-in-list')?.field, 'body');
+  assert.equal(matchContext(base, '   '), null);
 });

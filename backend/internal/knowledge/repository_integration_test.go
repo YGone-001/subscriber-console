@@ -60,6 +60,22 @@ func TestStatsReportsTagLimits(t *testing.T) {
 	if meta.MaxTags != MaxTags || meta.MaxTagLength != MaxTagLength {
 		t.Fatalf("tag limits = %d/%d, want %d/%d", meta.MaxTags, meta.MaxTagLength, MaxTags, MaxTagLength)
 	}
+
+	entry, err := repo.Create(context.Background(), validEntryID, &CreateEntryRequest{Title: "trashed"}, "General", nil, nil, "tester")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := repo.SoftDelete(context.Background(), entry.ID, entry.Revision); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+	repo.InvalidateMeta()
+	meta, err = repo.Stats(context.Background())
+	if err != nil {
+		t.Fatalf("stats after delete: %v", err)
+	}
+	if meta.Total != 0 || meta.DeletedTotal != 1 {
+		t.Fatalf("expected total=0 deletedTotal=1, got total=%d deletedTotal=%d", meta.Total, meta.DeletedTotal)
+	}
 }
 
 // TestListTotalRemainsStableAcrossPages guards the contract that total describes

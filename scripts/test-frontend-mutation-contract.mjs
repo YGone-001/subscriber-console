@@ -54,7 +54,7 @@ const expectedContractRoutes = new Set([
   '/knowledge',
 ]);
 
-// Expected 34 enabled registered business mutations
+// Expected 35 enabled registered business mutations
 const expectedEnabledEndpoints = new Set([
   'POST /api/subscribers',
   'PUT /api/subscribers/{imsi}',
@@ -90,6 +90,7 @@ const expectedEnabledEndpoints = new Set([
   'PUT /api/knowledge/entries/{entryId}',
   'DELETE /api/knowledge/entries/{entryId}',
   'POST /api/knowledge/files',
+  'DELETE /api/knowledge/files/{fileId}',
 ]);
 
 const disabledEndpoints = new Set([
@@ -141,6 +142,7 @@ const expectedAuthorizations = {
   'PUT /api/knowledge/entries/{entryId}': { kind: 'permission', value: 'core.configure' },
   'DELETE /api/knowledge/entries/{entryId}': { kind: 'permission', value: 'core.configure' },
   'POST /api/knowledge/files': { kind: 'permission', value: 'core.configure' },
+  'DELETE /api/knowledge/files/{fileId}': { kind: 'permission', value: 'core.configure' },
 };
 
 function validateMutationContracts(entries) {

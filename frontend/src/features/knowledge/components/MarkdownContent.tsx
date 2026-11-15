@@ -3,7 +3,13 @@ import remarkGfm from 'remark-gfm';
 import { isKnowledgeImageUrl } from '../knowledge-format';
 import styles from '../../../styles/modules/knowledge.module.css';
 
-const SAFE_LINK = /^(https?:\/\/|mailto:|\/|#)/i;
+const SAFE_LINK = /^(https?:\/\/|mailto:|\/(?!\/)|#)/i;
+
+/** Whether a Markdown link target stays within the allowed schemes or the
+ *  current origin. Protocol-relative (`//host`) targets are rejected. */
+export function isSafeMarkdownLink(target: string): boolean {
+  return typeof target === 'string' && SAFE_LINK.test(target);
+}
 
 /**
  * Secure Markdown renderer for knowledge base solution bodies.
@@ -21,7 +27,7 @@ export function MarkdownContent({ content }: { content: string }) {
         components={{
           a: ({ href, children }) => {
             const target = typeof href === 'string' ? href : '';
-            if (!SAFE_LINK.test(target)) return <span>{children}</span>;
+            if (!isSafeMarkdownLink(target)) return <span>{children}</span>;
             return (
               <a href={target} target={target.startsWith('http') ? '_blank' : undefined} rel="noreferrer noopener">
                 {children}

@@ -3,14 +3,14 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
 import { ArrowLeft, FileText, Paperclip, Save, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
-import { OperationNotice } from '../../components/ui/OperationFeedback';
+import { EmptyState, OperationNotice } from '../../components/ui/OperationFeedback';
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/ui/UnsavedChangesGuard';
 import { useI18n } from '../../providers/I18nProvider';
 import { MarkdownEditor } from './components/MarkdownEditor';
 import { TagInput } from './components/TagInput';
 import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
-import { attachmentUrl, createEntry, fetchEntry, fetchKnowledgeMeta, isKnowledgeEntryKey, updateEntry, uploadKnowledgeFile } from './knowledge-api';
-import { knowledgeErrorMessage } from './knowledge-errors';
+import { attachmentUrl, createEntry, deleteKnowledgeFile, fetchEntry, fetchKnowledgeMeta, isKnowledgeEntryKey, updateEntry, uploadKnowledgeFile } from './knowledge-api';
+import { knowledgeErrorMessage, knowledgeReadErrorMessage } from './knowledge-errors';
 import { extractSolutionImageIds, fileKindLabel, formatFileSize } from './knowledge-format';
 import type { Attachment, KnowledgeMeta } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
@@ -19,6 +19,9 @@ type AttachmentDraft = Attachment;
 
 const ATTACHMENT_ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.log,.pcap,.pcapng';
 const DEFAULT_MAX_FILE_BYTES = 8 * 1024 * 1024;
+const TITLE_MAX = 200;
+const TEXT_MAX = 4000;
+const SOLUTION_MAX = 200 * 1024;
 
 export function KnowledgeEditorPage() {
   const { entryId } = useParams<{ entryId: string }>();
@@ -42,14 +45,24 @@ export function KnowledgeEditorPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [dirty, setDirty] = useState(false);
+  const persistedFileIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     void fetchKnowledgeMeta().then(setMeta).catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (!isEdit || !entryId) return;
+    if (!isEdit || !entryId) {
+      setLoadFailed(false);
+      return;
+    }
+    setLoading(true);
+    setLoadFailed(false);
     fetchEntry(entryId)
       .then((entry) => {
         setTitle(entry.title);
@@ -60,10 +73,14 @@ export function KnowledgeEditorPage() {
         setSolution(entry.solution);
         setAttachments(entry.attachments);
         setRevision(entry.revision);
+        persistedFileIds.current = new Set(entry.attachments.map((file) => file.fileId));
       })
-      .catch(() => setError(t('kb_error_body')))
+      .catch((err) => {
+        setLoadError(err);
+        setLoadFailed(true);
+      })
       .finally(() => setLoading(false));
-  }, [isEdit, entryId, t]);
+  }, [isEdit, entryId, t, reloadToken]);
 
   const markDirty = (fn: () => void) => {
     fn();
@@ -160,15 +177,27 @@ export function KnowledgeEditorPage() {
 
   const removeAttachment = (index: number) => {
     const removed = attachments[index];
-    if (removed && extractSolutionImageIds(solution).includes(removed.fileId.toLowerCase())) {
+    if (!removed) return;
+    if (extractSolutionImageIds(solution).includes(removed.fileId.toLowerCase())) {
       setError(t('kb_image_still_referenced'));
+      return;
+    }
+    if (!persistedFileIds.current.has(removed.fileId)) {
+      // Newly uploaded files are unbound until save; remove them immediately
+      // instead of waiting for the 24h janitor window.
+      void deleteKnowledgeFile(removed.fileId).catch(() => setError(t('kb_file_delete_failed')));
     }
     setAttachments((prev) => prev.filter((_, i) => i !== index));
     setDirty(true);
   };
 
   const handleSave = async () => {
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      setTitleError(true);
+      setError(t('kb_title_required'));
+      return;
+    }
+    setTitleError(false);
     const claimed = new Set(attachments.map((a) => a.fileId.toLowerCase()));
     const orphan = extractSolutionImageIds(solution).find((id) => !claimed.has(id));
     if (orphan) {
@@ -200,15 +229,29 @@ export function KnowledgeEditorPage() {
       // visible when the destination mounts inside SWR's dedupe window.
       try {
         await mutate(isKnowledgeEntryKey, undefined, { revalidate: true });
+        await mutate('/api/knowledge/meta');
       } catch {
         /* Routes still revalidate when they mount. */
       }
-      navigate(`/knowledge/${saved.id}`, { state: { knowledgeSaved: true } });
+      navigate(withReturnTo(`/knowledge/${saved.id}`, returnTo), { state: { knowledgeSaved: true } });
     } catch (err) {
       setError(knowledgeErrorMessage(err, t));
       setSaving(false);
     }
   };
+
+  const saveRef = useRef(handleSave);
+  saveRef.current = handleSave;
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        if (!saving) void saveRef.current();
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [saving]);
 
   return (
     <div className={`container animate-fade-in ${dirty ? styles.editorDirty : ''}`}>
@@ -233,68 +276,114 @@ export function KnowledgeEditorPage() {
 
       {loading ? (
         <div className={styles.loading}>{t('loading')}</div>
+      ) : loadFailed ? (
+        <EmptyState
+          icon={<FileText size={40} />}
+          title={t('kb_error_title')}
+          description={knowledgeReadErrorMessage(loadError, t, 'kb_error_body')}
+          action={(
+            <button
+              type="button"
+              className={styles.searchButton}
+              onClick={() => {
+                setError(null);
+                setReloadToken((value) => value + 1);
+              }}
+            >
+              {t('kb_retry')}
+            </button>
+          )}
+        />
       ) : (
         <div className={styles.editorLayout}>
           <div className={styles.editorMain}>
             <section className={styles.card}>
-              <label className={styles.field}>
+              <label className={styles.field} htmlFor="kb-entry-title">
                 <span className={styles.fieldLabel}>{t('kb_field_title')}</span>
                 <input
+                  id="kb-entry-title"
                   className={styles.input}
                   value={title}
-                  onChange={(event) => markDirty(() => setTitle(event.target.value))}
+                  maxLength={TITLE_MAX}
+                  aria-invalid={titleError}
+                  aria-describedby="kb-title-count"
+                  onChange={(event) => {
+                    setTitleError(false);
+                    markDirty(() => setTitle(event.target.value));
+                  }}
                   placeholder={t('kb_title_placeholder')}
                 />
+                <span id="kb-title-count" className={styles.charCount}>
+                  {t('kb_char_count', { count: title.length, max: TITLE_MAX })}
+                </span>
               </label>
             </section>
 
             <section className={styles.card} data-tone="danger">
-              <label className={styles.field}>
+              <label className={styles.field} htmlFor="kb-entry-phenomenon">
                 <span className={styles.fieldLabel}>{t('kb_field_phenomenon')}</span>
                 <textarea
+                  id="kb-entry-phenomenon"
                   className={styles.textarea}
                   rows={3}
                   value={phenomenon}
+                  maxLength={TEXT_MAX}
+                  aria-describedby="kb-phenomenon-count"
                   onChange={(event) => markDirty(() => setPhenomenon(event.target.value))}
                   placeholder={t('kb_phenomenon_placeholder')}
                 />
+                <span id="kb-phenomenon-count" className={styles.charCount}>
+                  {t('kb_char_count', { count: phenomenon.length, max: TEXT_MAX })}
+                </span>
               </label>
             </section>
 
             <section className={styles.card} data-tone="warning">
-              <label className={styles.field}>
+              <label className={styles.field} htmlFor="kb-entry-root-cause">
                 <span className={styles.fieldLabel}>{t('kb_field_root_cause')}</span>
                 <textarea
+                  id="kb-entry-root-cause"
                   className={styles.textarea}
                   rows={3}
                   value={rootCause}
+                  maxLength={TEXT_MAX}
+                  aria-describedby="kb-root-cause-count"
                   onChange={(event) => markDirty(() => setRootCause(event.target.value))}
                   placeholder={t('kb_root_cause_placeholder')}
                 />
+                <span id="kb-root-cause-count" className={styles.charCount}>
+                  {t('kb_char_count', { count: rootCause.length, max: TEXT_MAX })}
+                </span>
               </label>
             </section>
 
             <section className={styles.card}>
-              <span className={styles.fieldLabel}>{t('kb_field_solution')}</span>
+              <label className={styles.fieldLabel} htmlFor="kb-entry-solution">{t('kb_field_solution')}</label>
               <MarkdownEditor
+                id="kb-entry-solution"
+                describedBy="kb-solution-count"
                 value={solution}
                 onChange={(value) => markDirty(() => setSolution(value))}
                 onUploadImage={handleInlineImage}
               />
+              <span id="kb-solution-count" className={styles.charCount}>
+                {t('kb_char_count', { count: solution.length, max: SOLUTION_MAX })}
+              </span>
             </section>
           </div>
 
           <div className={styles.editorSide}>
             <section className={styles.card}>
-              <label className={styles.field}>
+              <label className={styles.field} htmlFor="kb-entry-protocol">
                 <span className={styles.fieldLabel}>{t('kb_field_protocol')}</span>
-                <select className={styles.input} value={protocol} onChange={(event) => markDirty(() => setProtocol(event.target.value))}>
+                <select id="kb-entry-protocol" className={styles.input} value={protocol} onChange={(event) => markDirty(() => setProtocol(event.target.value))}>
                   {protocols.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </label>
               <div className={styles.field}>
-                <span className={styles.fieldLabel}>{t('kb_field_tags')}</span>
+                <label className={styles.fieldLabel} htmlFor="kb-entry-tags">{t('kb_field_tags')}</label>
                 <TagInput
+                  id="kb-entry-tags"
                   value={tags}
                   onChange={(next) => markDirty(() => setTags(next))}
                   suggestions={meta?.topTags.map((item) => item.tag) ?? []}

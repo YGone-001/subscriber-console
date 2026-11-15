@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -90,6 +91,7 @@ func TestWriteEndpointsRejectViewer(t *testing.T) {
 		{"update", http.MethodPut, "/api/knowledge/entries/" + validEntryID, `{"title":"x","expectedRevision":1}`, h.Update},
 		{"delete", http.MethodDelete, "/api/knowledge/entries/" + validEntryID + "?revision=1", "", h.Delete},
 		{"upload", http.MethodPost, "/api/knowledge/files", "", h.Upload},
+		{"delete file", http.MethodDelete, "/api/knowledge/files/" + validEntryID, "", h.DeleteFile},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -118,6 +120,8 @@ func TestEndpointsRejectUnauthenticated(t *testing.T) {
 		{"get", http.MethodGet, "/api/knowledge/entries/" + validEntryID, h.Get},
 		{"create", http.MethodPost, "/api/knowledge/entries", h.Create},
 		{"upload", http.MethodPost, "/api/knowledge/files", h.Upload},
+		{"delete file", http.MethodDelete, "/api/knowledge/files/" + validEntryID, h.DeleteFile},
+		{"get version", http.MethodGet, "/api/knowledge/entries/" + validEntryID + "/versions/" + validEntryID, h.GetVersion},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -239,5 +243,75 @@ func TestListQueryValidation(t *testing.T) {
 				t.Fatalf("expected 400 %s, got %d: %s", tc.code, rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestGetVersionValidation(t *testing.T) {
+	h := newTestHandler()
+	cases := []struct {
+		name      string
+		entryID   string
+		versionID string
+		code      string
+	}{
+		{"invalid entry", "nope", validEntryID, "INVALID_ENTRY_ID"},
+		{"invalid version", validEntryID, "nope", "INVALID_VERSION_ID"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := knowledgeRequest(http.MethodGet, "/api/knowledge/entries/"+tc.entryID+"/versions/"+tc.versionID, "viewer", "")
+			req.SetPathValue("entryId", tc.entryID)
+			req.SetPathValue("versionId", tc.versionID)
+			h.GetVersion(rec, req)
+			if rec.Code != http.StatusBadRequest || errorCode(t, rec) != tc.code {
+				t.Fatalf("expected 400 %s, got %d: %s", tc.code, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestDeleteFileValidation(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := knowledgeRequest(http.MethodDelete, "/api/knowledge/files/nope", "operator", "")
+	req.SetPathValue("fileId", "nope")
+	newTestHandler().DeleteFile(rec, req)
+	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "INVALID_FILE_ID" {
+		t.Fatalf("expected 400 INVALID_FILE_ID, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSaveAttachmentRejectsEmptyFile(t *testing.T) {
+	store, err := NewFileStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatalf("file store: %v", err)
+	}
+	_, _, _, _, err = store.SaveAttachment(validEntryID, "empty.txt", strings.NewReader(""))
+	if !errors.Is(err, ErrFileEmpty) {
+		t.Fatalf("expected ErrFileEmpty, got %v", err)
+	}
+}
+
+func TestEntryAuditSnapshotExcludesBody(t *testing.T) {
+	entry := &Entry{
+		ID:          validEntryID,
+		Title:       "audit",
+		Protocol:    "SIP",
+		Status:      StatusActive,
+		Revision:    3,
+		Phenomenon:  "sensitive phenomenon",
+		RootCause:   "sensitive root cause",
+		Solution:    "sensitive solution body",
+		Tags:        []string{"sip"},
+		Attachments: []Attachment{{FileID: validEntryID}},
+	}
+	snapshot := entryAuditSnapshot(entry)
+	for _, forbidden := range []string{"phenomenon", "rootCause", "solution", "attachments"} {
+		if _, ok := snapshot[forbidden]; ok {
+			t.Fatalf("audit snapshot must not carry %q: %+v", forbidden, snapshot)
+		}
+	}
+	if snapshot["attachmentCount"] != 1 || snapshot["revision"] != int64(3) {
+		t.Fatalf("unexpected audit snapshot: %+v", snapshot)
 	}
 }

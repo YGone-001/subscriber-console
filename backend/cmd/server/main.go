@@ -867,15 +867,17 @@ func main() {
 	mux.Handle("GET /api/ims/registrations", authMiddleware(http.HandlerFunc(imsHandler.Get)))
 	mux.Handle("GET /api/ims/registrations/summary", authMiddleware(http.HandlerFunc(imsHandler.Get)))
 
-	// Knowledge base (five reads, three mutations)
+	// Knowledge base (five reads, five mutations)
 	mux.Handle("GET /api/knowledge/meta", authMiddleware(http.HandlerFunc(knowledgeHandler.Meta)))
 	mux.Handle("GET /api/knowledge/entries", authMiddleware(http.HandlerFunc(knowledgeHandler.List)))
 	mux.Handle("GET /api/knowledge/entries/{entryId}", authMiddleware(http.HandlerFunc(knowledgeHandler.Get)))
+	mux.Handle("GET /api/knowledge/entries/{entryId}/versions/{versionId}", authMiddleware(http.HandlerFunc(knowledgeHandler.GetVersion)))
 	mux.Handle("POST /api/knowledge/entries", authMiddleware(http.HandlerFunc(knowledgeHandler.Create)))
 	mux.Handle("PUT /api/knowledge/entries/{entryId}", authMiddleware(http.HandlerFunc(knowledgeHandler.Update)))
 	mux.Handle("DELETE /api/knowledge/entries/{entryId}", authMiddleware(http.HandlerFunc(knowledgeHandler.Delete)))
 	mux.Handle("POST /api/knowledge/files", authMiddleware(http.HandlerFunc(knowledgeHandler.Upload)))
 	mux.Handle("GET /api/knowledge/files/{fileId}", authMiddleware(http.HandlerFunc(knowledgeHandler.Download)))
+	mux.Handle("DELETE /api/knowledge/files/{fileId}", authMiddleware(http.HandlerFunc(knowledgeHandler.DeleteFile)))
 
 	// Operations resource projection (single read, one bounded Inventory page)
 	mux.Handle("GET /api/operations/resources", authMiddleware(http.HandlerFunc(operationsResourceHandler.Resources)))

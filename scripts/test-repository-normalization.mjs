@@ -154,16 +154,18 @@ const EXPECTED_UE_INFO_ROUTES = new Set([
   'GET /api/ims/registrations',
   'GET /api/ims/registrations/summary',
 ]);
-// Knowledge base: entry CRUD, the search vocabulary and attachment transfer.
+// Knowledge base: entry CRUD, version content, the search vocabulary and attachment transfer.
 const EXPECTED_KNOWLEDGE_ROUTES = new Set([
   'GET /api/knowledge/meta',
   'GET /api/knowledge/entries',
   'GET /api/knowledge/entries/{entryId}',
+  'GET /api/knowledge/entries/{entryId}/versions/{versionId}',
   'POST /api/knowledge/entries',
   'PUT /api/knowledge/entries/{entryId}',
   'DELETE /api/knowledge/entries/{entryId}',
   'GET /api/knowledge/files/{fileId}',
   'POST /api/knowledge/files',
+  'DELETE /api/knowledge/files/{fileId}',
 ]);
 // NF log sources plus the live stream.
 const EXPECTED_NF_LOGS_ROUTES = new Set([

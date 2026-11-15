@@ -113,6 +113,9 @@ func (fs *FileStore) SaveAttachment(id, originalName string, src io.Reader) (Fil
 	if int64(len(data)) > MaxFileBytes {
 		return "", "", 0, "", ErrFileTooLarge
 	}
+	if len(data) == 0 {
+		return "", "", 0, "", ErrFileEmpty
+	}
 
 	detKind, detCT, ok := detectKind(data)
 	if !ok {

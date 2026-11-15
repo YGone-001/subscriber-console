@@ -150,6 +150,10 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w)
 		return
 	}
+	if r.URL.Query().Get("export") == "1" {
+		h.writeExport(w, p, entry)
+		return
+	}
 	if versions, verr := h.repo.ListVersions(r.Context(), entryID, MaxVersions); verr == nil {
 		entry.Versions = versions
 	}
@@ -159,11 +163,36 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if count, cerr := h.repo.CountReferencingInvestigations(r.Context(), entryID); cerr == nil {
 		entry.ReferenceCount = int(count)
 	}
-	if r.URL.Query().Get("export") == "1" {
-		h.writeExport(w, p, entry)
+	response.JSON(w, http.StatusOK, entry)
+}
+
+// GetVersion handles GET /api/knowledge/entries/{entryId}/versions/{versionId}.
+// It is the on-demand content read for a snapshot; the entry detail projection
+// carries only version metadata.
+func (h *Handler) GetVersion(w http.ResponseWriter, r *http.Request) {
+	if h.requireRead(w, r, "knowledge:version") == nil {
 		return
 	}
-	response.JSON(w, http.StatusOK, entry)
+	entryID := r.PathValue("entryId")
+	versionID := r.PathValue("versionId")
+	if !IsValidID(entryID) {
+		response.BadRequest(w, "entryId must be a valid UUID v4", "INVALID_ENTRY_ID")
+		return
+	}
+	if !IsValidID(versionID) {
+		response.BadRequest(w, "versionId must be a valid UUID v4", "INVALID_VERSION_ID")
+		return
+	}
+	version, err := h.repo.GetVersion(r.Context(), entryID, versionID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "Knowledge version not found", "KNOWLEDGE_VERSION_NOT_FOUND")
+			return
+		}
+		response.InternalError(w)
+		return
+	}
+	response.JSON(w, http.StatusOK, version)
 }
 
 // writeExport streams a single entry as a JSON download. The contract pins the
@@ -214,11 +243,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	entry, err := h.repo.Create(r.Context(), entryID, &req, protocol, tags, attachments, p.Username)
 	if err != nil {
+		// The entry insert failed after the uploads were claimed. Release the
+		// claims so the files return to the unbound pool instead of pointing at
+		// an entry that never existed.
+		h.rollbackFileIDs(r.Context(), req.AttachmentFileIDs)
 		response.InternalError(w)
 		return
 	}
 
-	h.audit(p, "knowledge.entry.create", "knowledge_entry", entry.ID, entry.Title, nil, entry, nil)
+	h.audit(p, "knowledge.entry.create", "knowledge_entry", entry.ID, entry.Title, nil, entryAuditSnapshot(entry), nil)
+	h.repo.InvalidateMeta()
 	response.JSON(w, http.StatusCreated, entry)
 }
 
@@ -258,7 +292,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			response.InternalError(w)
 			return
 		}
-		h.audit(p, "knowledge.entry.restore", "knowledge_entry", restored.ID, restored.Title, nil, restored, nil)
+		h.audit(p, "knowledge.entry.restore", "knowledge_entry", restored.ID, restored.Title, nil, entryAuditSnapshot(restored), nil)
+		h.repo.InvalidateMeta()
 		response.JSON(w, http.StatusOK, restored)
 		return
 	}
@@ -316,7 +351,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	attachments, removed, err := h.reconcileFiles(r.Context(), entryID, existing.Attachments, req.AttachmentFileIDs)
+	attachments, removed, added, err := h.reconcileFiles(r.Context(), entryID, existing.Attachments, req.AttachmentFileIDs)
 	if err != nil {
 		h.mapFileError(w, err)
 		return
@@ -324,6 +359,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	before, after, err := h.repo.Update(r.Context(), entryID, &req, protocol, tags, attachments, p.Username)
 	if err != nil {
+		// The CAS may lose after new uploads were claimed. Unbind them so they
+		// do not become bound-but-invisible orphans that the janitor ignores.
+		h.rollbackAttachments(r.Context(), added)
 		if errors.Is(err, ErrNotFound) {
 			response.Error(w, http.StatusNotFound, "Knowledge entry not found", "KNOWLEDGE_ENTRY_NOT_FOUND")
 			return
@@ -337,7 +375,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.releaseFiles(r.Context(), removed)
-	h.audit(p, "knowledge.entry.update", "knowledge_entry", after.ID, after.Title, before, after, nil)
+	h.audit(p, "knowledge.entry.update", "knowledge_entry", after.ID, after.Title, entryAuditSnapshot(before), entryAuditSnapshot(after), nil)
+	h.repo.InvalidateMeta()
 	response.JSON(w, http.StatusOK, after)
 }
 
@@ -366,7 +405,12 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.releaseEntryFiles(r.Context(), entry)
-		h.audit(p, "knowledge.entry.purge", "knowledge_entry", entry.ID, entry.Title, entry, nil, nil)
+		// A permanently deleted entry must not leave its content snapshots
+		// behind; the purge is already committed, so version cleanup is
+		// best-effort and never reverses the business response.
+		_ = h.repo.DeleteVersions(r.Context(), entry.ID)
+		h.audit(p, "knowledge.entry.purge", "knowledge_entry", entry.ID, entry.Title, entryAuditSnapshot(entry), nil, nil)
+		h.repo.InvalidateMeta()
 		response.JSON(w, http.StatusOK, map[string]any{"deleted": true, "purged": true, "id": entry.ID})
 		return
 	}
@@ -376,7 +420,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		h.mapDeleteError(w, err)
 		return
 	}
-	h.audit(p, "knowledge.entry.delete", "knowledge_entry", entry.ID, entry.Title, entry, nil, nil)
+	h.audit(p, "knowledge.entry.delete", "knowledge_entry", entry.ID, entry.Title, entryAuditSnapshot(entry), nil, nil)
+	h.repo.InvalidateMeta()
 	response.JSON(w, http.StatusOK, map[string]any{"deleted": true, "id": entry.ID, "status": entry.Status})
 }
 
@@ -446,6 +491,49 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DeleteFile handles DELETE /api/knowledge/files/{fileId}. Only an unbound file
+// uploaded by the current actor may be removed; a bound file releases through
+// the entry update lifecycle instead.
+func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
+	p := h.requireConfigure(w, r, "file-delete", 20, "DELETE", "/api/knowledge/files/{fileId}")
+	if p == nil {
+		return
+	}
+	fileID := r.PathValue("fileId")
+	if !IsValidID(fileID) {
+		response.BadRequest(w, "fileId must be a valid UUID v4", "INVALID_FILE_ID")
+		return
+	}
+	meta, err := h.repo.GetFileMeta(r.Context(), fileID)
+	if err != nil {
+		if errors.Is(err, ErrFileNotFound) {
+			response.Error(w, http.StatusNotFound, "Attachment not found", "KNOWLEDGE_FILE_NOT_FOUND")
+			return
+		}
+		response.InternalError(w)
+		return
+	}
+	if meta.EntryID != "" {
+		response.Error(w, http.StatusConflict, "Attachment is bound to an entry", "KNOWLEDGE_FILE_BOUND")
+		return
+	}
+	// Hide another actor's unbound upload rather than exposing its existence.
+	if meta.CreatedBy != p.Username {
+		response.Error(w, http.StatusNotFound, "Attachment not found", "KNOWLEDGE_FILE_NOT_FOUND")
+		return
+	}
+	if err := h.store.Trash(fileID); err != nil {
+		response.InternalError(w)
+		return
+	}
+	if err := h.repo.ReleaseFile(r.Context(), fileID); err != nil {
+		response.InternalError(w)
+		return
+	}
+	h.audit(p, "knowledge.file.delete", "knowledge_file", fileID, meta.OriginalName, meta, nil, nil)
+	response.JSON(w, http.StatusOK, map[string]any{"deleted": true, "id": fileID})
+}
+
 // Download handles GET /api/knowledge/files/{fileId}. Images are served inline
 // (unless ?download=1); every other class is served as an attachment. Responses
 // carry nosniff, an explicit content type, ETag and cache controls.
@@ -467,6 +555,14 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response.InternalError(w)
+		return
+	}
+
+	// An unbound upload is private to its uploader until an entry claims it.
+	// Bound attachments follow the entry's core.read visibility (including the
+	// recycle bin), which is the documented read contract.
+	if meta.EntryID == "" && meta.CreatedBy != p.Username {
+		response.Error(w, http.StatusNotFound, "Attachment not found", "KNOWLEDGE_FILE_NOT_FOUND")
 		return
 	}
 
@@ -591,6 +687,10 @@ func (h *Handler) mapFileError(w http.ResponseWriter, err error) {
 		response.BadRequest(w, "Attachment type is not allowed", "KNOWLEDGE_FILE_TYPE_REJECTED")
 	case errors.Is(err, ErrFileUnavailable):
 		response.BadRequest(w, "Attachment is not available", "KNOWLEDGE_FILE_NOT_AVAILABLE")
+	case errors.Is(err, ErrFileEmpty):
+		response.BadRequest(w, "Attachment is empty", "KNOWLEDGE_FILE_EMPTY")
+	case errors.Is(err, ErrFileBound):
+		response.Error(w, http.StatusConflict, "Attachment is bound to an entry", "KNOWLEDGE_FILE_BOUND")
 	case errors.Is(err, ErrFileNotFound):
 		response.Error(w, http.StatusNotFound, "Attachment not found", "KNOWLEDGE_FILE_NOT_FOUND")
 	default:
@@ -644,9 +744,43 @@ func (h *Handler) rollbackClaims(ctx context.Context, metas []*FileMeta) {
 	}
 }
 
+// rollbackFileIDs returns freshly claimed uploads to the unbound pool after a
+// failed create. The bytes stay in place so a retry can claim the same ids.
+func (h *Handler) rollbackFileIDs(ctx context.Context, fileIDs []string) {
+	for _, id := range fileIDs {
+		_ = h.repo.UnbindFile(ctx, id)
+	}
+}
+
+// rollbackAttachments is the post-reconcile counterpart: it releases only the
+// files newly claimed by this update, never attachments that were already bound.
+func (h *Handler) rollbackAttachments(ctx context.Context, added []Attachment) {
+	for _, a := range added {
+		_ = h.repo.UnbindFile(ctx, a.FileID)
+	}
+}
+
+// entryAuditSnapshot is the bounded audit projection of an entry. Article
+// bodies are deliberately excluded so audit storage does not duplicate the
+// content (versions already retain it).
+func entryAuditSnapshot(entry *Entry) map[string]any {
+	if entry == nil {
+		return nil
+	}
+	return map[string]any{
+		"id":              entry.ID,
+		"title":           entry.Title,
+		"protocol":        entry.Protocol,
+		"status":          entry.Status,
+		"revision":        entry.Revision,
+		"attachmentCount": len(entry.Attachments),
+		"tags":            entry.Tags,
+	}
+}
+
 // reconcileFiles computes the new attachment set for an update, preserving
 // already-bound files and claiming only newly-added uploads.
-func (h *Handler) reconcileFiles(ctx context.Context, entryID string, existing []Attachment, requested []string) ([]Attachment, []Attachment, error) {
+func (h *Handler) reconcileFiles(ctx context.Context, entryID string, existing []Attachment, requested []string) ([]Attachment, []Attachment, []Attachment, error) {
 	existingByID := make(map[string]Attachment, len(existing))
 	for _, a := range existing {
 		existingByID[a.FileID] = a
@@ -672,7 +806,7 @@ func (h *Handler) reconcileFiles(ctx context.Context, entryID string, existing [
 
 	added, err := h.claimFiles(ctx, addIDs, entryID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	addedByID := make(map[string]Attachment, len(added))
 	for _, a := range added {
@@ -687,7 +821,7 @@ func (h *Handler) reconcileFiles(ctx context.Context, entryID string, existing [
 			attachments = append(attachments, a)
 		}
 	}
-	return attachments, removed, nil
+	return attachments, removed, added, nil
 }
 
 // releaseFiles trashes and releases attachment bytes for files no longer

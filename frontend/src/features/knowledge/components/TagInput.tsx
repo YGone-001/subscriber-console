@@ -5,6 +5,7 @@ import { mergeTags, splitTagInput } from '../knowledge-tags';
 import styles from '../../../styles/modules/knowledge.module.css';
 
 type TagInputProps = {
+  id?: string;
   value: string[];
   onChange: (tags: string[]) => void;
   suggestions?: string[];
@@ -15,6 +16,7 @@ type TagInputProps = {
 };
 
 export function TagInput({
+  id,
   value,
   onChange,
   suggestions = [],
@@ -80,6 +82,7 @@ export function TagInput({
         ))}
         <input
           ref={inputRef}
+          id={id}
           value={draft}
           aria-label={ariaLabel}
           placeholder={value.length === 0 ? placeholder : undefined}

@@ -554,6 +554,15 @@
           "value": "core.configure"
         },
         "confirmation": false
+      },
+      {
+        "name": "knowledge unbound file delete",
+        "request": "DELETE /api/knowledge/files/{fileId}",
+        "authorization": {
+          "kind": "permission",
+          "value": "core.configure"
+        },
+        "confirmation": false
       }
     ],
     "preflightOperations": [],

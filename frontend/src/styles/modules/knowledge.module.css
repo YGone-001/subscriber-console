@@ -89,6 +89,46 @@
   border-bottom: 1px solid var(--surface-border);
 }
 
+.tabs {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-16) 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--control-height);
+  padding: 0 var(--space-12);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-compact);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text-main);
+}
+
+.tabActive {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+}
+
+.tabCount {
+  min-width: 20px;
+  padding: 1px var(--space-8);
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface-field);
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-micro);
+  font-variant-numeric: tabular-nums;
+}
+
 .search {
   position: relative;
   display: flex;
@@ -272,20 +312,103 @@
   color: var(--text-muted);
 }
 
+.panelHeadActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+
+.selectAll {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--control-height);
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-caption);
+  cursor: pointer;
+}
+
+.selectAll input {
+  width: 16px;
+  height: 16px;
+}
+
+.batchBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  padding: var(--space-8) var(--space-16);
+  border-bottom: 1px solid var(--surface-border);
+  background: var(--surface-field);
+}
+
+.batchCount {
+  margin-right: var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-caption);
+  font-weight: 600;
+}
+
+.batchButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--control-height);
+  padding: 0 var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface);
+  color: var(--text-main);
+  font-size: var(--ref-font-size-body-compact);
+  cursor: pointer;
+}
+
+.batchButton:hover {
+  background: var(--surface-hover);
+}
+
+.batchButton:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
+.rowItem {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.rowSelect {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.rowSelect input {
+  width: 16px;
+  height: 16px;
+}
+
 .row {
   display: flex;
   align-items: flex-start;
   gap: var(--space-12);
+  flex: 1;
+  min-width: 0;
   padding: var(--space-16);
   text-decoration: none;
   color: inherit;
-  border-bottom: 1px solid var(--surface-border);
 }
 
 .row:hover {
@@ -339,6 +462,22 @@
   color: var(--text-muted);
   font-size: var(--ref-font-size-micro);
   font-weight: 500;
+}
+
+.rowStatus {
+  flex-shrink: 0;
+  padding: 1px var(--space-8);
+  border: 1px solid var(--danger);
+  border-radius: var(--ref-radius-pill);
+  color: var(--danger);
+  font-size: var(--ref-font-size-micro);
+  font-weight: 600;
+}
+
+.rowMatch {
+  margin: 2px 0 0;
+  color: var(--primary);
+  font-size: var(--ref-font-size-micro);
 }
 
 .rowPhenomenon {
@@ -440,7 +579,7 @@
   margin-bottom: var(--space-16);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .grid2 {
     grid-template-columns: 1fr;
   }
@@ -598,7 +737,7 @@
   align-items: start;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 980px) {
   .editorLayout {
     grid-template-columns: 1fr;
   }
@@ -614,6 +753,19 @@
   font-size: var(--ref-font-size-label);
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+.charCount {
+  align-self: flex-end;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.referenceNote {
+  margin: var(--space-4) 0 var(--space-8);
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-caption);
 }
 
 .input,
@@ -753,7 +905,7 @@
   padding-bottom: 88px;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 980px) {
   .floatingSave {
     right: var(--space-12);
     bottom: var(--space-12);
@@ -1033,4 +1185,19 @@
 
 .markdown a {
   color: var(--primary);
+}
+
+@media (pointer: coarse) {
+  .editorTool,
+  .editorToggle,
+  .attachmentDownload,
+  .attachRemove,
+  .attachButton,
+  .copyButton,
+  .tab,
+  .batchButton,
+  .selectAll {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }

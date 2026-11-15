@@ -96,12 +96,14 @@ export function insertImage(
 }
 
 type MarkdownEditorProps = {
+  id?: string;
+  describedBy?: string;
   value: string;
   onChange: (value: string) => void;
   onUploadImage?: (file: File) => Promise<{ url: string; name: string } | null>;
 };
 
-export function MarkdownEditor({ value, onChange, onUploadImage }: MarkdownEditorProps) {
+export function MarkdownEditor({ id, describedBy, value, onChange, onUploadImage }: MarkdownEditorProps) {
   const { t } = useI18n();
   const [preview, setPreview] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
@@ -224,12 +226,14 @@ export function MarkdownEditor({ value, onChange, onUploadImage }: MarkdownEdito
       ) : (
         <textarea
           ref={textareaRef}
+          id={id}
           className={styles.editorTextarea}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleShortcut}
           placeholder={t('kb_solution_placeholder')}
           aria-label={t('kb_field_solution')}
+          aria-describedby={describedBy}
         />
       )}
     </div>

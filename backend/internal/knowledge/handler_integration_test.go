@@ -3,12 +3,16 @@ package knowledge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+
+	"subscriber/internal/audit"
 )
 
 func knowledgeTestHandler(t *testing.T) (*Handler, func()) {
@@ -213,8 +217,24 @@ func TestHandlerVersionHistoryAndRestore(t *testing.T) {
 	if err := json.Unmarshal(getRec.Body.Bytes(), &detail); err != nil {
 		t.Fatalf("decode detail: %v", err)
 	}
-	if len(detail.Versions) != 1 || detail.Versions[0].Title != "round trip" {
-		t.Fatalf("expected one snapshot of the original title, got %+v", detail.Versions)
+	if len(detail.Versions) != 1 || detail.Versions[0].Revision != 1 {
+		t.Fatalf("expected one version summary at revision 1, got %+v", detail.Versions)
+	}
+
+	versionRec := httptest.NewRecorder()
+	versionReq := knowledgeRequest(http.MethodGet, "/api/knowledge/entries/"+created.ID+"/versions/"+detail.Versions[0].VersionID, "viewer", "")
+	versionReq.SetPathValue("entryId", created.ID)
+	versionReq.SetPathValue("versionId", detail.Versions[0].VersionID)
+	h.GetVersion(versionRec, versionReq)
+	if versionRec.Code != http.StatusOK {
+		t.Fatalf("get version: expected 200, got %d: %s", versionRec.Code, versionRec.Body.String())
+	}
+	var snapshot EntryVersion
+	if err := json.Unmarshal(versionRec.Body.Bytes(), &snapshot); err != nil {
+		t.Fatalf("decode version: %v", err)
+	}
+	if snapshot.Title != "round trip" || snapshot.Solution != "s" {
+		t.Fatalf("expected original snapshot content, got %+v", snapshot)
 	}
 
 	restoreRec := httptest.NewRecorder()
@@ -299,5 +319,172 @@ func TestHandlerReferencedByInvestigations(t *testing.T) {
 	}
 	if detail.ReferenceCount != 1 || len(detail.ReferencedBy) != 1 || detail.ReferencedBy[0].InvestigationID != "inv-1" {
 		t.Fatalf("expected one referencing investigation, got count=%d refs=%+v", detail.ReferenceCount, detail.ReferencedBy)
+	}
+}
+
+func withFileID(req *http.Request, id string) *http.Request {
+	req.SetPathValue("fileId", id)
+	return req
+}
+
+func seedUnboundFile(t *testing.T, h *Handler, fileID string) *FileMeta {
+	t.Helper()
+	kind, contentType, size, sum, err := h.store.SaveAttachment(fileID, "note.txt", strings.NewReader("hello"))
+	if err != nil {
+		t.Fatalf("save attachment: %v", err)
+	}
+	meta := &FileMeta{
+		ID:           fileID,
+		OriginalName: "note.txt",
+		ContentType:  contentType,
+		Kind:         kind,
+		Size:         size,
+		SHA256:       sum,
+		CreatedAt:    CurrentTimestamp(),
+		CreatedBy:    "operator",
+	}
+	if err := h.repo.InsertFileMeta(context.Background(), meta); err != nil {
+		t.Fatalf("insert file meta: %v", err)
+	}
+	return meta
+}
+
+func TestHandlerUnboundFilePrivacyAndDelete(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	h, cleanup := knowledgeTestHandler(t)
+	defer cleanup()
+
+	const fileID = "11111111-1111-4111-8111-111111111111"
+	seedUnboundFile(t, h, fileID)
+
+	// Another reader cannot see an unbound upload.
+	foreign := httptest.NewRecorder()
+	h.Download(foreign, withFileID(knowledgeRequest(http.MethodGet, "/api/knowledge/files/"+fileID, "admin", ""), fileID))
+	if foreign.Code != http.StatusNotFound {
+		t.Fatalf("foreign download: expected 404, got %d", foreign.Code)
+	}
+
+	// The uploader can read it.
+	own := httptest.NewRecorder()
+	h.Download(own, withFileID(knowledgeRequest(http.MethodGet, "/api/knowledge/files/"+fileID, "operator", ""), fileID))
+	if own.Code != http.StatusOK {
+		t.Fatalf("owner download: expected 200, got %d: %s", own.Code, own.Body.String())
+	}
+
+	// Another actor cannot delete it.
+	foreignDelete := httptest.NewRecorder()
+	h.DeleteFile(foreignDelete, withFileID(knowledgeRequest(http.MethodDelete, "/api/knowledge/files/"+fileID, "admin", ""), fileID))
+	if foreignDelete.Code != http.StatusNotFound {
+		t.Fatalf("foreign delete: expected 404, got %d", foreignDelete.Code)
+	}
+
+	deleteRec := httptest.NewRecorder()
+	h.DeleteFile(deleteRec, withFileID(knowledgeRequest(http.MethodDelete, "/api/knowledge/files/"+fileID, "operator", ""), fileID))
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("owner delete: expected 200, got %d: %s", deleteRec.Code, deleteRec.Body.String())
+	}
+	if _, err := h.repo.GetFileMeta(context.Background(), fileID); !errors.Is(err, ErrFileNotFound) {
+		t.Fatalf("expected deleted metadata, got %v", err)
+	}
+	if _, err := h.store.Open(fileID); !errors.Is(err, ErrFileNotFound) {
+		t.Fatalf("expected trashed bytes, got %v", err)
+	}
+}
+
+func TestHandlerDeleteBoundFileRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	h, cleanup := knowledgeTestHandler(t)
+	defer cleanup()
+
+	const fileID = "22222222-2222-4222-8222-222222222222"
+	seedUnboundFile(t, h, fileID)
+	if err := h.repo.ClaimFile(context.Background(), fileID, "33333333-3333-4333-8333-333333333333"); err != nil {
+		t.Fatalf("claim file: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	h.DeleteFile(rec, withFileID(knowledgeRequest(http.MethodDelete, "/api/knowledge/files/"+fileID, "operator", ""), fileID))
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "KNOWLEDGE_FILE_BOUND" {
+		t.Fatalf("expected 409 KNOWLEDGE_FILE_BOUND, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerPurgeDeletesVersions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	h, cleanup := knowledgeTestHandler(t)
+	defer cleanup()
+
+	created := createEntryForTest(t, h)
+	updateRec := httptest.NewRecorder()
+	h.Update(updateRec, withEntryID(knowledgeRequest(http.MethodPut, "/api/knowledge/entries/"+created.ID, "operator",
+		`{"title":"changed","expectedRevision":1}`), created.ID))
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d: %s", updateRec.Code, updateRec.Body.String())
+	}
+	before, err := h.repo.versions.CountDocuments(context.Background(), bson.M{"entryId": created.ID})
+	if err != nil || before != 1 {
+		t.Fatalf("expected one version snapshot, got count=%d err=%v", before, err)
+	}
+
+	deleteRec := httptest.NewRecorder()
+	h.Delete(deleteRec, withEntryID(knowledgeRequest(http.MethodDelete, "/api/knowledge/entries/"+created.ID+"?revision=2", "operator", ""), created.ID))
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("soft delete: expected 200, got %d: %s", deleteRec.Code, deleteRec.Body.String())
+	}
+	purgeRec := httptest.NewRecorder()
+	h.Delete(purgeRec, withEntryID(knowledgeRequest(http.MethodDelete, "/api/knowledge/entries/"+created.ID+"?revision=3&permanent=1", "operator", ""), created.ID))
+	if purgeRec.Code != http.StatusOK {
+		t.Fatalf("purge: expected 200, got %d: %s", purgeRec.Code, purgeRec.Body.String())
+	}
+	after, err := h.repo.versions.CountDocuments(context.Background(), bson.M{"entryId": created.ID})
+	if err != nil || after != 0 {
+		t.Fatalf("expected purged version history, got count=%d err=%v", after, err)
+	}
+}
+
+type captureAudit struct {
+	inputs []audit.WriteAuditInput
+}
+
+func (c *captureAudit) WriteBestEffort(input audit.WriteAuditInput) {
+	c.inputs = append(c.inputs, input)
+}
+
+func TestHandlerCreateAuditExcludesArticleBody(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := knowledgeTestRepo(t)
+	defer cleanup()
+	store, err := NewFileStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatalf("file store: %v", err)
+	}
+	capture := &captureAudit{}
+	h := NewHandler(repo, store, noopLimiter{}, capture)
+	h.UseActorRepository(fakeActorRepo{})
+
+	rec := httptest.NewRecorder()
+	h.Create(rec, knowledgeRequest(http.MethodPost, "/api/knowledge/entries", "operator",
+		`{"title":"audit","phenomenon":"secret phenomenon","rootCause":"secret root cause","solution":"secret body"}`))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(capture.inputs) != 1 {
+		t.Fatalf("expected one audit record, got %d", len(capture.inputs))
+	}
+	after, ok := capture.inputs[0].After.(map[string]any)
+	if !ok {
+		t.Fatalf("expected bounded audit metadata, got %#v", capture.inputs[0].After)
+	}
+	for _, forbidden := range []string{"phenomenon", "rootCause", "solution", "attachments"} {
+		if _, exists := after[forbidden]; exists {
+			t.Fatalf("audit record must not carry %q: %+v", forbidden, after)
+		}
 	}
 }

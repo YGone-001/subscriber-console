@@ -4,6 +4,7 @@ import { useSWRConfig } from 'swr';
 import { Activity, ArrowLeft, Copy, Download, Edit, Eye, FileText, Trash2, TriangleAlert, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import { ConfirmActionPanel, EmptyState, OperationNotice } from '../../components/ui/OperationFeedback';
+import { getBlob } from '../../lib/api/read-client';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
@@ -12,9 +13,9 @@ import { copyText } from '../../lib/clipboard';
 import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
 import { MarkdownContent } from './components/MarkdownContent';
 import { attachmentUrl, deleteEntry, entryExportUrl, isKnowledgeListKey, restoreEntry, restoreVersion } from './knowledge-api';
-import { knowledgeErrorMessage } from './knowledge-errors';
+import { knowledgeErrorMessage, knowledgeReadErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize, isImage } from './knowledge-format';
-import type { Attachment, KnowledgeEntry } from './types';
+import type { Attachment, EntryVersionSummary, KnowledgeEntry } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
 
 export function KnowledgeDetailPage() {
@@ -36,11 +37,14 @@ export function KnowledgeDetailPage() {
   const [savedNotice, setSavedNotice] = useState(
     Boolean((location.state as { knowledgeSaved?: boolean } | null)?.knowledgeSaved),
   );
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreVersionTarget, setRestoreVersionTarget] = useState<EntryVersionSummary | null>(null);
   const copyTimer = useRef<number | null>(null);
   const [preview, setPreview] = useState<{ name: string; kind: string; url: string; text: string | null } | null>(null);
   const previewUrlRef = useRef<string | null>(null);
 
-  const { data, error, isLoading } = useRead<KnowledgeEntry>(entryId ? `/api/knowledge/entries/${entryId}` : null);
+  const { data, error, isLoading, mutate: retryRead } = useRead<KnowledgeEntry>(entryId ? `/api/knowledge/entries/${entryId}` : null);
 
   useEffect(() => () => {
     if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
@@ -59,12 +63,11 @@ export function KnowledgeDetailPage() {
     setPreview(null);
     setActionError(null);
     try {
-      const res = await fetch(attachmentUrl(file.fileId));
-      if (!res.ok) throw new Error('preview fetch failed');
+      const blob = await getBlob(attachmentUrl(file.fileId));
       if (file.kind === 'text') {
-        setPreview({ name: file.originalName, kind: file.kind, url: '', text: await res.text() });
+        setPreview({ name: file.originalName, kind: file.kind, url: '', text: await blob.text() });
       } else {
-        const url = URL.createObjectURL(await res.blob());
+        const url = URL.createObjectURL(blob);
         previewUrlRef.current = url;
         setPreview({ name: file.originalName, kind: file.kind, url, text: null });
       }
@@ -92,14 +95,26 @@ export function KnowledgeDetailPage() {
       // reappear from SWR's dedupe window.
       try {
         await mutate(isKnowledgeListKey, undefined, { revalidate: true });
+        await mutate(`/api/knowledge/entries/${data.id}`, undefined, { revalidate: true });
+        await mutate('/api/knowledge/meta');
       } catch {
-        /* The list still revalidates when it mounts. */
+        /* Reads still revalidate when they mount. */
       }
-      navigate(permanent ? '/knowledge?status=deleted' : '/knowledge');
-    } catch (err) {
       setDeleting(false);
       setDeleteOpen(false);
       setPurgeOpen(false);
+      // Return to the originating list view so filters, sort and the cursor
+      // back-stack survive the delete. A direct detail link falls back to the
+      // recycle bin after a permanent delete.
+      const destination = listReturnTo !== '/knowledge'
+        ? listReturnTo
+        : permanent
+          ? '/knowledge?status=deleted'
+          : '/knowledge';
+      navigate(destination);
+    } catch (err) {
+      setDeleting(false);
+      setDeleteOpen(false);
       setActionError(knowledgeErrorMessage(err, t, 'kb_delete_failed'));
     }
   };
@@ -113,29 +128,35 @@ export function KnowledgeDetailPage() {
       try {
         await mutate(isKnowledgeListKey, undefined, { revalidate: true });
         await mutate(`/api/knowledge/entries/${data.id}`, undefined, { revalidate: true });
+        await mutate('/api/knowledge/meta');
       } catch {
         /* Reads still revalidate when they mount. */
       }
       setRestoring(false);
+      setRestoreOpen(false);
+      setSuccessNotice(t('kb_restore_success'));
     } catch (err) {
       setRestoring(false);
       setActionError(knowledgeErrorMessage(err, t, 'kb_restore_failed'));
     }
   };
 
-  const confirmRestoreVersion = async (versionId: string) => {
+  const confirmRestoreVersion = async (version: EntryVersionSummary) => {
     if (!data) return;
-    setRestoringVersion(versionId);
+    setRestoringVersion(version.versionId);
     setActionError(null);
     try {
-      await restoreVersion(data.id, versionId, data.revision);
+      await restoreVersion(data.id, version.versionId, data.revision);
       try {
         await mutate(isKnowledgeListKey, undefined, { revalidate: true });
         await mutate(`/api/knowledge/entries/${data.id}`, undefined, { revalidate: true });
+        await mutate('/api/knowledge/meta');
       } catch {
         /* Reads still revalidate when they mount. */
       }
       setRestoringVersion(null);
+      setRestoreVersionTarget(null);
+      setSuccessNotice(t('kb_restore_version_success'));
     } catch (err) {
       setRestoringVersion(null);
       setActionError(knowledgeErrorMessage(err, t, 'kb_restore_failed'));
@@ -157,7 +178,20 @@ export function KnowledgeDetailPage() {
     return <div className="container animate-fade-in"><EmptyState icon={<FileText size={40} />} title={t('loading')} /></div>;
   }
   if (error || !data) {
-    return <div className="container animate-fade-in"><EmptyState icon={<FileText size={40} />} title={t('kb_error_title')} description={t('kb_error_body')} /></div>;
+    return (
+      <div className="container animate-fade-in">
+        <EmptyState
+          icon={<FileText size={40} />}
+          title={t('kb_error_title')}
+          description={knowledgeReadErrorMessage(error, t, 'kb_error_body')}
+          action={(
+            <button type="button" className={styles.secondaryButton} onClick={() => void retryRead()}>
+              {t('kb_retry')}
+            </button>
+          )}
+        />
+      </div>
+    );
   }
 
   return (
@@ -174,7 +208,7 @@ export function KnowledgeDetailPage() {
             </a>
             {canConfigure && data.status === 'deleted' && (
               <>
-                <button type="button" className={styles.secondaryButton} onClick={() => void confirmRestore()} disabled={restoring}>
+                <button type="button" className={styles.secondaryButton} onClick={() => setRestoreOpen(true)} disabled={restoring}>
                   <Edit size={15} /> {restoring ? t('saving') : t('kb_restore')}
                 </button>
                 <button type="button" className={styles.dangerButton} onClick={() => setPurgeOpen(true)}>
@@ -196,6 +230,9 @@ export function KnowledgeDetailPage() {
 
       {savedNotice && (
         <OperationNotice tone="success" message={t('kb_save_success')} onClose={() => setSavedNotice(false)} />
+      )}
+      {successNotice && (
+        <OperationNotice tone="success" message={successNotice} onClose={() => setSuccessNotice(null)} />
       )}
       {actionError && (
         <OperationNotice tone="danger" message={actionError} onClose={() => setActionError(null)} />
@@ -293,7 +330,7 @@ export function KnowledgeDetailPage() {
                       type="button"
                       className={styles.copyButton}
                       disabled={restoringVersion !== null}
-                      onClick={() => void confirmRestoreVersion(version.versionId)}
+                      onClick={() => setRestoreVersionTarget(version)}
                     >
                       {restoringVersion === version.versionId ? t('saving') : t('kb_restore_version')}
                     </button>
@@ -309,6 +346,11 @@ export function KnowledgeDetailPage() {
         <section className={styles.card}>
           <h2 className={styles.cardTitle}><Activity size={15} /> {t('kb_referenced_by')}</h2>
           <p className={styles.cardBody}>{t('kb_reference_count', { count: data.referenceCount ?? data.referencedBy.length })}</p>
+          {(data.referenceCount ?? data.referencedBy.length) > data.referencedBy.length && (
+            <p className={styles.referenceNote}>
+              {t('kb_reference_truncated', { shown: data.referencedBy.length, count: data.referenceCount ?? data.referencedBy.length })}
+            </p>
+          )}
           <ul className={styles.attachList}>
             {data.referencedBy.map((ref) => (
               <li key={ref.investigationId} className={styles.attachItem}>
@@ -342,7 +384,10 @@ export function KnowledgeDetailPage() {
           presentation="modal"
           tone="danger"
           title={t('delete')}
-          message={t('kb_delete_confirm')}
+          message={t('kb_delete_confirm_impact', {
+            refs: data.referenceCount ?? data.referencedBy?.length ?? 0,
+            attachments: data.attachments.length,
+          })}
           confirmLabel={t('delete')}
           cancelLabel={t('cancel')}
           isWorking={deleting}
@@ -356,12 +401,42 @@ export function KnowledgeDetailPage() {
           presentation="modal"
           tone="danger"
           title={t('kb_permanent_delete')}
-          message={t('kb_permanent_delete_confirm')}
+          message={t('kb_permanent_delete_confirm_impact', {
+            refs: data.referenceCount ?? data.referencedBy?.length ?? 0,
+            attachments: data.attachments.length,
+          })}
           confirmLabel={t('kb_permanent_delete')}
           cancelLabel={t('cancel')}
           isWorking={deleting}
           onConfirm={() => void confirmDelete(true)}
           onCancel={() => { if (!deleting) setPurgeOpen(false); }}
+        />
+      )}
+      {restoreOpen && (
+        <ConfirmActionPanel
+          presentation="modal"
+          tone="info"
+          title={t('kb_restore')}
+          message={t('kb_restore_confirm')}
+          confirmLabel={t('kb_restore')}
+          cancelLabel={t('cancel')}
+          isWorking={restoring}
+          onConfirm={() => void confirmRestore()}
+          onCancel={() => { if (!restoring) setRestoreOpen(false); }}
+        />
+      )}
+
+      {restoreVersionTarget && (
+        <ConfirmActionPanel
+          presentation="modal"
+          tone="info"
+          title={t('kb_restore_version')}
+          message={t('kb_version_restore_confirm', { revision: restoreVersionTarget.revision })}
+          confirmLabel={t('kb_restore_version')}
+          cancelLabel={t('cancel')}
+          isWorking={restoringVersion !== null}
+          onConfirm={() => void confirmRestoreVersion(restoreVersionTarget)}
+          onCancel={() => { if (restoringVersion === null) setRestoreVersionTarget(null); }}
         />
       )}
     </div>

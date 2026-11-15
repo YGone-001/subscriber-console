@@ -1,6 +1,7 @@
 import { getJson } from '../../lib/api/read-client';
 import { deleteJson, postForm, postJson, putJson } from '../../lib/api/mutation-client';
 import type {
+  EntryVersion,
   KnowledgeEntry,
   KnowledgeEntryInput,
   KnowledgeEntryUpdate,
@@ -57,6 +58,10 @@ export function fetchEntry(id: string): Promise<KnowledgeEntry> {
   return getJson<KnowledgeEntry>(`/api/knowledge/entries/${id}`);
 }
 
+export function fetchEntryVersion(entryId: string, versionId: string): Promise<EntryVersion> {
+  return getJson<EntryVersion>(`/api/knowledge/entries/${entryId}/versions/${versionId}`);
+}
+
 export function createEntry(input: KnowledgeEntryInput): Promise<KnowledgeEntry> {
   return postJson<KnowledgeEntry>('/api/knowledge/entries', input);
 }
@@ -82,6 +87,10 @@ export function uploadKnowledgeFile(file: File): Promise<KnowledgeUploadResponse
   const formData = new FormData();
   formData.append('file', file);
   return postForm<KnowledgeUploadResponse>('/api/knowledge/files', formData);
+}
+
+export function deleteKnowledgeFile(fileId: string): Promise<{ deleted: boolean; id: string }> {
+  return deleteJson<{ deleted: boolean; id: string }>(`/api/knowledge/files/${fileId}`);
 }
 
 export function attachmentUrl(fileId: string): string {

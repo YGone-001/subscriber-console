@@ -283,7 +283,8 @@ func buildListFilter(filter ListFilter) (bson.M, error) {
 		doc["protocol"] = filter.Protocol
 	}
 	if filter.Tag != "" {
-		doc["tags"] = filter.Tag
+		pattern := "^" + regexp.QuoteMeta(filter.Tag) + "$"
+		doc["tags"] = bson.M{"$regex": pattern, "$options": "i"}
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		if utf8.RuneCountInString(q) > MaxSearchQueryLength {
@@ -434,25 +435,42 @@ func (r *Repository) trimVersions(ctx context.Context, entryID string) {
 	}
 }
 
-// ListVersions returns the bounded history for an entry, newest first.
-func (r *Repository) ListVersions(ctx context.Context, entryID string, limit int) ([]EntryVersion, error) {
+// ListVersions returns the bounded history metadata for an entry, newest first.
+// Snapshot bodies are excluded so the entry detail response stays small; callers
+// fetch a specific snapshot through GetVersion when they need its content.
+func (r *Repository) ListVersions(ctx context.Context, entryID string, limit int) ([]EntryVersionSummary, error) {
 	if r.versions == nil {
-		return []EntryVersion{}, nil
+		return []EntryVersionSummary{}, nil
 	}
 	if limit <= 0 || limit > MaxVersions {
 		limit = MaxVersions
 	}
-	opts := options.Find().SetSort(bson.D{{Key: "revision", Value: -1}}).SetLimit(int64(limit))
+	opts := options.Find().
+		SetSort(bson.D{{Key: "revision", Value: -1}}).
+		SetLimit(int64(limit)).
+		SetProjection(bson.M{"_id": 1, "entryId": 1, "revision": 1, "createdAt": 1, "createdBy": 1})
 	cursor, err := r.versions.Find(ctx, bson.M{"entryId": entryID}, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list knowledge versions: %w", err)
 	}
 	defer cursor.Close(ctx)
-	out := []EntryVersion{}
+	out := []EntryVersionSummary{}
 	if err := cursor.All(ctx, &out); err != nil {
 		return nil, fmt.Errorf("failed to decode knowledge versions: %w", err)
 	}
 	return out, nil
+}
+
+// DeleteVersions purges every snapshot owned by an entry. It is called after a
+// permanent entry delete so the version history cannot outlive its entry.
+func (r *Repository) DeleteVersions(ctx context.Context, entryID string) error {
+	if r.versions == nil {
+		return nil
+	}
+	if _, err := r.versions.DeleteMany(ctx, bson.M{"entryId": entryID}); err != nil {
+		return fmt.Errorf("failed to delete knowledge versions: %w", err)
+	}
+	return nil
 }
 
 // GetVersion retrieves a single snapshot scoped to its entry.
@@ -620,10 +638,24 @@ func (r *Repository) Stats(ctx context.Context) (*MetaResponse, error) {
 	return meta, nil
 }
 
+// InvalidateMeta drops the cached meta aggregates after a successful write, so
+// the next meta read reflects create/delete/restore immediately instead of
+// waiting for the 30s cache TTL.
+func (r *Repository) InvalidateMeta() {
+	r.metaMu.Lock()
+	defer r.metaMu.Unlock()
+	r.metaCache = nil
+	r.metaCachedAt = time.Time{}
+}
+
 func (r *Repository) computeStats(ctx context.Context) (*MetaResponse, error) {
 	total, err := r.entries.CountDocuments(ctx, bson.M{"status": bson.M{"$ne": StatusDeleted}})
 	if err != nil {
 		return nil, fmt.Errorf("failed to count knowledge entries: %w", err)
+	}
+	deletedTotal, err := r.entries.CountDocuments(ctx, bson.M{"status": StatusDeleted})
+	if err != nil {
+		return nil, fmt.Errorf("failed to count deleted knowledge entries: %w", err)
 	}
 
 	topTags, err := r.topTags(ctx)
@@ -641,6 +673,7 @@ func (r *Repository) computeStats(ctx context.Context) (*MetaResponse, error) {
 		TopTags:         topTags,
 		ProtocolCounts:  protocols,
 		Total:           total,
+		DeletedTotal:    deletedTotal,
 		MaxFileBytes:    MaxFileBytes,
 		MaxAttachments:  MaxAttachments,
 		MaxInlineImages: MaxAttachments,

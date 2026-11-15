@@ -37,18 +37,20 @@ app_knowledge_entry_versions: {entryId:1,revision:-1}
 
 ## API surface
 
-Eight Go registrations (five reads, three mutations):
+Ten Go registrations (five reads, five mutations):
 
 | Method + Path | Purpose | Permission |
 |---|---|---|
-| `GET /api/knowledge/meta` | protocol enum, top tags, protocol distribution, total, limits | `core.read` |
+| `GET /api/knowledge/meta` | protocol enum, top tags, protocol distribution, active/recycle totals, limits | `core.read` |
 | `GET /api/knowledge/entries` | list/search (`q`, `protocol`, `tag`, `cursor`, `limit`, `sort`, `order`, `status`) | `core.read` |
-| `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body; `?export=1` downloads a JSON backup | `core.read` |
+| `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body and version metadata; `?export=1` downloads a JSON backup | `core.read` |
+| `GET /api/knowledge/entries/{entryId}/versions/{versionId}` | full content of one historical snapshot | `core.read` |
 | `POST /api/knowledge/entries` | create entry | `core.configure` |
 | `PUT /api/knowledge/entries/{entryId}` | update entry (revision CAS); `restore:true` revives a soft-deleted entry; `restoreVersionId` reverts content to a snapshot | `core.configure` |
-| `DELETE /api/knowledge/entries/{entryId}?revision=` | soft-delete entry (revision CAS); `&permanent=1` purges a deleted entry | `core.configure` |
+| `DELETE /api/knowledge/entries/{entryId}?revision=` | soft-delete entry (revision CAS); `&permanent=1` purges a deleted entry and its version history | `core.configure` |
 | `POST /api/knowledge/files` | multipart attachment upload | `core.configure` |
 | `GET /api/knowledge/files/{fileId}` | download; images inline, others attachment; `?download=1` forces download | `core.read` |
+| `DELETE /api/knowledge/files/{fileId}` | delete an unbound upload owned by the current actor | `core.configure` |
 
 List pagination is keyset-cursor with `_id` ascending as the tie-break. The
 default order is `updatedAt` descending; `sort` accepts the closed set
@@ -58,12 +60,15 @@ Invalid sort/order returns 400 `INVALID_QUERY_PARAMETER`. The cursor binds the
 active sort field and direction, so reusing it under a different ordering is
 rejected; legacy `updatedAt`-only cursors remain valid for the default sort. The
 list projection omits the Markdown body and adds a computed `attachmentCount`;
-the detail endpoint is the only source of full content. The search needle is
-trimmed, bounded to 64 characters and `regexp.QuoteMeta`-escaped before a
-case-insensitive match against title, phenomenon, rootCause, solution, tags and
-protocol. No text index is created. The meta aggregates are reused from a 30s
-in-process cache (failures are never cached); the list `total` is always computed
-fresh from the filtered set.
+the detail endpoint is the only source of full entry content. Entry detail
+projects bounded `versions[]` metadata only (`versionId`, `revision`,
+`createdAt`, `createdBy`); `GET /api/knowledge/entries/{entryId}/versions/{versionId}`
+returns one full snapshot on demand. The search needle is trimmed, bounded to 64
+characters and `regexp.QuoteMeta`-escaped before a case-insensitive match against
+title, phenomenon, rootCause, solution, tags and protocol. The `tag` filter is an
+anchored, case-insensitive exact match. No text index is created. The meta
+aggregates are reused from a 30s in-process cache (failures are never cached);
+the list `total` is always computed fresh from the filtered set.
 
 ## Security model
 
@@ -83,11 +88,16 @@ fresh from the filtered set.
   inline images and attachments stay consistent and cannot break after janitor
   cleanup.
 - Attachments are double-validated by declared extension and detected magic
-  bytes. Allowed classes: PNG/JPEG/GIF/WebP, PDF, TXT/LOG, PCAP/PCAPNG. SVG,
-  HTML, JavaScript and executables are rejected. Per-file cap 8 MiB, per-entry
-  cap 10 explicit attachments. Inline Markdown images are attachments and count
-  against the same per-entry cap; the meta `maxInlineImages` field equals
-  `maxAttachments`.
+  bytes. Empty files are rejected. Allowed classes: PNG/JPEG/GIF/WebP, PDF,
+  TXT/LOG, PCAP/PCAPNG. SVG, HTML, JavaScript and executables are rejected.
+  Per-file cap 8 MiB, per-entry cap 10 explicit attachments. Inline Markdown
+  images are attachments and count against the same per-entry cap; the meta
+  `maxInlineImages` field equals `maxAttachments`.
+- An unbound upload is private to its uploader until an entry claims it; bound
+  attachments follow the owning entry's `core.read` visibility (including the
+  recycle bin). The upload owner can delete an unbound upload immediately
+  through `DELETE /api/knowledge/files/{fileId}`; a bound file is released via
+  the entry update lifecycle.
 - Attachment bytes are stored under a canonical UUID filename; client-supplied
   names are never used in paths, so path traversal is impossible. Download
   responses set `X-Content-Type-Options: nosniff`, an explicit content type,
@@ -96,20 +106,27 @@ fresh from the filtered set.
 - The Markdown renderer does not enable raw HTML; link targets are restricted
   to http(s)/mailto/in-site paths, and images render only for
   `/api/knowledge/files/{uuid}`. External images are not rendered.
-- Audit (best-effort) records `knowledge.entry.create/update/delete`,
-  `knowledge.file.upload` and `knowledge.denied` without the article body.
+- Audit (best-effort) records `knowledge.entry.create/update/delete/restore/purge`,
+  `knowledge.file.upload/delete` and `knowledge.denied` with bounded entry
+  metadata (id, title, protocol, status, revision, attachment count, tags) and
+  never the article body.
 
 ## Attachment lifecycle
 
 1. Upload writes the bytes and a metadata record with an empty `entryId`.
-2. Entry save atomically claims the referenced files; a file already owned by
+2. An unbound upload can be deleted by its uploader through
+   `DELETE /api/knowledge/files/{fileId}`; the bytes move to trash and the
+   metadata record is released immediately.
+3. Entry save atomically claims the referenced files; a file already owned by
    another entry returns `KNOWLEDGE_FILE_NOT_AVAILABLE`.
-3. Update reconciles the attachment set: kept files stay bound, removed files
-   are trashed, newly referenced files are claimed.
-4. Delete trashes and releases every bound file.
-5. A background janitor (hourly, bounded) reclaims unbound uploads older than
+4. Update reconciles the attachment set: kept files stay bound, removed files
+   are trashed, newly referenced files are claimed. If the update loses its
+   revision CAS after new files were claimed, those claims are rolled back so
+   the files return to the unbound pool.
+5. Delete trashes and releases every bound file.
+6. A background janitor (hourly, bounded) reclaims unbound uploads older than
    24 hours and orphan files whose entry no longer exists.
-6. Trashed bytes are physically purged after `KNOWLEDGE_TRASH_RETENTION_DAYS`
+7. Trashed bytes are physically purged after `KNOWLEDGE_TRASH_RETENTION_DAYS`
    (default 30, `0` disables cleanup). Trash time is stamped on deletion, so the
    recovery window measures from deletion rather than upload.
 
@@ -122,9 +139,11 @@ its attachments for recovery. The list defaults to `status=active`;
 `status=deleted` is the recycle bin and `status=all` spans both. A deleted entry
 remains readable via the detail endpoint. `PUT` with `restore:true` (and the
 current revision) flips it back to active. `DELETE?permanent=1` purges a deleted
-entry permanently, releasing its attachments to trash; an active entry must be
-soft-deleted first. Meta aggregates (total, top tags, protocol distribution)
-count active entries only.
+entry permanently, releasing its attachments to trash and deleting its version
+history; an active entry must be soft-deleted first. Meta aggregates (total, top
+tags, protocol distribution) count active entries only; `deletedTotal` reports
+the recycle-bin count. The meta cache is invalidated after every successful
+create/update/delete/restore so the next read does not wait for the 30s TTL.
 
 The detail endpoint also projects a bounded read-only `referencedBy` list and
 `referenceCount` of investigations whose `knowledgeIds` cite the entry, linking
@@ -135,15 +154,28 @@ is a cross-domain read-only projection; it never writes investigations.
 ## Frontend
 
 Four SPA routes in the platform group: `/knowledge`, `/knowledge/new`,
-`/knowledge/:entryId`, `/knowledge/:entryId/edit`. The list page exposes
-submit-triggered search (Enter or the search button) with match highlighting,
-protocol and free-text tag filters, sort/order controls and cursor paging whose
-back-stack survives refresh; the detail page renders the phenomenon as text and
-the root cause and resolution as Markdown, with attachment image/PDF/text
-preview; the editor offers a Markdown toolbar (including code block, table and
-horizontal rule, plus Ctrl+B/I/K shortcuts), preview, attachment upload,
-new-entry draft autosave and revision-conflict handling. `viewer` hides all
-mutation entry points, and the backend remains the authorization authority.
+`/knowledge/:entryId`, `/knowledge/:entryId/edit`. The list page uses explicit
+active/recycle tabs with independent counts, submit-triggered search (Enter or
+the search button) with match highlighting and a coarse match-location hint for
+tag/protocol/body hits, protocol and free-text tag filters, sort/order controls,
+and cursor paging whose back-stack is carried in the URL (`cursor` + `stack`) so
+refresh, back/forward navigation and shared links keep the page depth. The list
+supports page-local multi-select with batch export, batch delete/permanent
+delete, batch restore and batch tag merge; batch writes reuse the single-entry
+endpoints through a bounded concurrency runner and report partial failures. Batch
+tag merges fetch each entry, merge tags case-insensitively, skip unchanged rows
+and update only the rows that actually change. The recycle-bin view
+has its own KPI, empty state and deleted-row marker, and an error state offers
+retry. The detail page renders the phenomenon as text and the root cause and
+resolution as Markdown, with attachment image/PDF/text preview, version
+metadata, explicit restore confirmation and success feedback; delete
+confirmations include reference and attachment impact. The editor offers a
+Markdown toolbar (including code block, table and horizontal rule, plus
+Ctrl+B/I/K shortcuts), Ctrl/Cmd+S save, preview, attachment upload, new-entry
+draft autosave, character counts, field-level labels and revision-conflict
+handling. Saving preserves the originating list URL (`returnTo`) so filters and
+paging survive. `viewer` hides all mutation entry points, and the backend remains
+the authorization authority.
 
 ## Performance and scale triggers
 
@@ -155,8 +187,12 @@ trigger is reached; business index changes go through `npm run mongo:indexes`.
   `$or` regex across six fields with no text index, ordered by the active sort
   rather than relevance. Trigger: more than ~5000 active entries, or list p95
   above ~200ms. Action then: evaluate a text index and relevance ranking.
-- **Meta aggregates**: already served from a 30s in-process cache; the list
-  `total` is computed fresh. No further action unless aggregation latency grows.
+- **Version projection**: entry detail returns bounded version metadata only;
+  snapshot bodies are fetched on demand. This keeps the detail response size
+  independent of the number of retained versions (up to 20 × 200KB previously).
+- **Meta aggregates**: served from a 30s in-process cache and invalidated on
+  every successful entry mutation; the list `total` is computed fresh. No
+  further action unless aggregation latency grows.
 - **Attachment deduplication**: SHA256 is computed but not used to deduplicate;
   identical uploads store separate copies. Trigger: attachment storage growth
   warrants content-addressed dedup. Action then: reference-counted dedup.

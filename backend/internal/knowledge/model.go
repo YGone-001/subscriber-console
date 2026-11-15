@@ -97,6 +97,17 @@ type EntryVersion struct {
 	CreatedBy  string   `json:"createdBy" bson:"createdBy"`
 }
 
+// EntryVersionSummary is the bounded list projection of a content snapshot.
+// The Markdown body is intentionally omitted from list reads; callers fetch the
+// full snapshot through the version content endpoint.
+type EntryVersionSummary struct {
+	VersionID string `json:"versionId" bson:"_id"`
+	EntryID   string `json:"entryId" bson:"entryId"`
+	Revision  int64  `json:"revision" bson:"revision"`
+	CreatedAt string `json:"createdAt" bson:"createdAt"`
+	CreatedBy string `json:"createdBy" bson:"createdBy"`
+}
+
 // InvestigationRef is a bounded read-only projection of an investigation that
 // cites this entry. It links knowledge back to the operational records that
 // reference it.
@@ -124,9 +135,10 @@ type Entry struct {
 	CreatedBy     string       `json:"createdBy" bson:"createdBy"`
 	UpdatedAt     string       `json:"updatedAt" bson:"updatedAt"`
 	UpdatedBy     string       `json:"updatedBy" bson:"updatedBy"`
-	// Versions is a computed detail projection (bounded history); it is not a
-	// stored field on the entry document.
-	Versions []EntryVersion `json:"versions,omitempty" bson:"-"`
+	// Versions is a computed detail projection (bounded history) and carries
+	// version metadata only; full snapshot content is served by the dedicated
+	// version content endpoint.
+	Versions []EntryVersionSummary `json:"versions,omitempty" bson:"-"`
 	// ReferencedBy and ReferenceCount are computed detail projections of the
 	// investigations citing this entry; they are not stored fields.
 	ReferencedBy   []InvestigationRef `json:"referencedBy,omitempty" bson:"-"`
@@ -162,6 +174,7 @@ type EntrySummary struct {
 	// not a stored field.
 	AttachmentCount int    `json:"attachmentCount" bson:"-"`
 	Status          string `json:"status" bson:"status"`
+	DeletedAt       string `json:"deletedAt,omitempty" bson:"deletedAt,omitempty"`
 	Revision        int64  `json:"revision" bson:"revision"`
 	CreatedAt       string `json:"createdAt" bson:"createdAt"`
 	CreatedBy       string `json:"createdBy" bson:"createdBy"`
@@ -214,6 +227,7 @@ type MetaResponse struct {
 	TopTags        []TagCount      `json:"topTags"`
 	ProtocolCounts []ProtocolCount `json:"protocolCounts"`
 	Total          int64           `json:"total"`
+	DeletedTotal   int64           `json:"deletedTotal"`
 	MaxFileBytes   int64           `json:"maxFileBytes"`
 	MaxAttachments int             `json:"maxAttachments"`
 	// MaxInlineImages equals MaxAttachments: inline Markdown images are
@@ -255,6 +269,8 @@ var (
 	ErrFileUnavailable  = errors.New("KNOWLEDGE_FILE_NOT_AVAILABLE")
 	ErrFileTooLarge     = errors.New("KNOWLEDGE_FILE_TOO_LARGE")
 	ErrFileTypeRejected = errors.New("KNOWLEDGE_FILE_TYPE_REJECTED")
+	ErrFileEmpty        = errors.New("KNOWLEDGE_FILE_EMPTY")
+	ErrFileBound        = errors.New("KNOWLEDGE_FILE_BOUND")
 )
 
 // CurrentTimestamp returns an RFC3339 formatted UTC timestamp.
