@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (212 exact METHOD+PATH registrations)
+Read + write APIs (213 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 212
+Go registration set                  = 213
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -554,8 +554,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 212 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，212 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 213 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，213 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -585,7 +585,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (212 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (213 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -635,7 +635,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **212 条** METHOD+PATH 精确注册（GET 110 / POST 71 / PUT 16 / DELETE 11 / PATCH 4）：
+路由权威为源码派生的 Go 注册集合，共 **213 条** METHOD+PATH 精确注册（GET 111 / POST 71 / PUT 16 / DELETE 11 / PATCH 4）：
 
 ```text
 GET    /api/agents
@@ -679,6 +679,7 @@ GET    /api/knowledge/entries/{entryId}
 GET    /api/knowledge/entries/{entryId}/versions/{versionId}
 GET    /api/knowledge/files/{fileId}
 GET    /api/knowledge/meta
+GET    /api/knowledge/tags
 GET    /api/nf-alerts
 GET    /api/nf-alerts/meta
 GET    /api/nf-alerts/rules
@@ -855,7 +856,7 @@ DELETE /api/tariff-plans/{planId}/rules/{ruleId}
 状态：
 
 ```text
-Go production API registrations = 212 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 213 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0

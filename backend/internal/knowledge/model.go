@@ -108,6 +108,23 @@ type EntryVersionSummary struct {
 	CreatedBy string `json:"createdBy" bson:"createdBy"`
 }
 
+// EntryOperation is a bounded read-only projection of the audit trail for an
+// entry lifecycle. It never carries the article body.
+type EntryOperation struct {
+	ID             string   `json:"id"`
+	Timestamp      string   `json:"timestamp"`
+	Action         string   `json:"action"`
+	Actor          string   `json:"actor"`
+	Role           string   `json:"role"`
+	Result         string   `json:"result"`
+	Reason         string   `json:"reason,omitempty"`
+	BeforeRevision int64    `json:"beforeRevision,omitempty"`
+	AfterRevision  int64    `json:"afterRevision,omitempty"`
+	BeforeStatus   string   `json:"beforeStatus,omitempty"`
+	AfterStatus    string   `json:"afterStatus,omitempty"`
+	Files          []string `json:"files,omitempty"`
+}
+
 // InvestigationRef is a bounded read-only projection of an investigation that
 // cites this entry. It links knowledge back to the operational records that
 // reference it.
@@ -139,6 +156,10 @@ type Entry struct {
 	// version metadata only; full snapshot content is served by the dedicated
 	// version content endpoint.
 	Versions []EntryVersionSummary `json:"versions,omitempty" bson:"-"`
+	// Operations is the bounded audit projection; OperationsComplete reports
+	// whether the audit read succeeded rather than whether records exist.
+	Operations         []EntryOperation `json:"operations,omitempty" bson:"-"`
+	OperationsComplete bool             `json:"operationsComplete" bson:"-"`
 	// ReferencedBy and ReferenceCount are computed detail projections of the
 	// investigations citing this entry; they are not stored fields.
 	ReferencedBy   []InvestigationRef `json:"referencedBy,omitempty" bson:"-"`
@@ -213,6 +234,12 @@ type UpdateEntryRequest struct {
 type TagCount struct {
 	Tag   string `json:"tag"`
 	Count int64  `json:"count"`
+}
+
+// TagListResponse is the full active tag dictionary used by filter
+// autocomplete; meta.topTags remains the bounded KPI projection.
+type TagListResponse struct {
+	Tags []TagCount `json:"tags"`
 }
 
 type ProtocolCount struct {

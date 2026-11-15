@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, BookOpen, ChevronRight, Download, Paperclip, Plus, 
 import PageHeader from '../../components/ui/PageHeader';
 import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
 import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from '../../components/ui/OperationFeedback';
+import { ViewSwitch } from '../../components/ui/ViewSwitch';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
@@ -49,6 +50,7 @@ export function KnowledgePage() {
   const sort = searchParams.get('sort') || DEFAULT_SORT;
   const order = searchParams.get('order') || defaultOrder(sort);
   const status = searchParams.get('status') === 'deleted' ? 'deleted' : 'active';
+  const view = searchParams.get('view') === 'table' ? 'table' : 'list';
 
   const [searchInput, setSearchInput] = useState(q);
   const [tagInput, setTagInput] = useState(tag);
@@ -62,6 +64,7 @@ export function KnowledgePage() {
   const [batchError, setBatchError] = useState<string | null>(null);
 
   const { data: meta } = useRead<KnowledgeMeta>('/api/knowledge/meta');
+  const { data: tagDictionary } = useRead<{ tags: Array<{ tag: string; count: number }> }>('/api/knowledge/tags');
   const { mutate: mutateCache } = useSWRConfig();
 
   useEffect(() => {
@@ -110,6 +113,13 @@ export function KnowledgePage() {
     setParam({ tag: value.trim() });
   };
 
+  const setView = (next: 'list' | 'table') => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'table') params.set('view', 'table');
+    else params.delete('view');
+    setSearchParams(params);
+  };
+
   const entries = data?.entries ?? [];
   const total = data?.total ?? 0;
   const hasFilters = Boolean(q || protocol || tag);
@@ -120,6 +130,7 @@ export function KnowledgePage() {
     setTagInput('');
     const params = new URLSearchParams();
     if (status === 'deleted') params.set('status', 'deleted');
+    if (view === 'table') params.set('view', 'table');
     setSearchParams(params);
   };
 
@@ -368,6 +379,7 @@ export function KnowledgePage() {
             <input
               type="text"
               value={tagInput}
+              list="kb-tag-dictionary"
               placeholder={t('kb_filter_tag_placeholder')}
               aria-label={t('kb_filter_tag')}
               onChange={(event) => setTagInput(event.target.value)}
@@ -412,11 +424,25 @@ export function KnowledgePage() {
             ))}
           </div>
         )}
+        <datalist id="kb-tag-dictionary">
+          {(tagDictionary?.tags ?? []).map((item) => (
+            <option key={item.tag} value={item.tag}>{item.count}</option>
+          ))}
+        </datalist>
 
         <div className={styles.panelHead}>
           <h2 id="kb-list-title" className={styles.sectionTitle}>{t('kb_list_title')}</h2>
           <div className={styles.panelHeadActions}>
-            {entries.length > 0 && (
+            <ViewSwitch
+              options={[
+                { value: 'list', label: t('kb_view_list') },
+                { value: 'table', label: t('kb_view_table') },
+              ]}
+              value={view}
+              onChange={setView}
+              ariaLabel={t('kb_view_tabs')}
+            />
+            {view === 'list' && entries.length > 0 && (
               <label className={styles.selectAll}>
                 <input
                   type="checkbox"
@@ -485,6 +511,70 @@ export function KnowledgePage() {
               </button>
             ) : undefined}
           />
+        ) : view === 'table' ? (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <caption className={styles.tableCaption}>{t('kb_list_title')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className={styles.tableSelect}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      disabled={batchWorking}
+                      aria-label={t('kb_select_all')}
+                      onChange={toggleAll}
+                    />
+                  </th>
+                  <th scope="col">{t('kb_field_title')}</th>
+                  <th scope="col" className={styles.tableOptional}>{t('kb_field_protocol')}</th>
+                  <th scope="col" className={styles.tableOptional}>{t('kb_field_tags')}</th>
+                  <th scope="col" className={styles.tableOptional}>{t('kb_attachments')}</th>
+                  <th scope="col">{t('kb_sort_updated')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => {
+                  const match = matchContext(entry, q);
+                  const matchText = match?.field === 'tag'
+                    ? t('kb_match_tag', { value: match.value })
+                    : match?.field === 'protocol'
+                      ? t('kb_match_protocol', { value: match.value })
+                      : match?.field === 'body'
+                        ? t('kb_match_body')
+                        : '';
+                  return (
+                    <tr key={entry.id}>
+                      <td className={styles.tableSelect}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(entry.id)}
+                          disabled={batchWorking}
+                          aria-label={t('kb_select_entry', { title: entry.title })}
+                          onChange={(event) => toggleSelect(entry.id, event.target.checked)}
+                        />
+                      </td>
+                      <td>
+                        <Link to={withReturnTo(`/knowledge/${entry.id}`, listLocation)} className={styles.tableTitleLink}>
+                          <HighlightText text={entry.title} query={q} />
+                        </Link>
+                        {entry.status === 'deleted' && <span className={styles.rowStatus}>{t('kb_status_deleted')}</span>}
+                        {matchText && <span className={styles.tableMatch}>{matchText}</span>}
+                      </td>
+                      <td className={styles.tableOptional}>{entry.protocol || t('kb_protocol_general')}</td>
+                      <td className={styles.tableOptional}>
+                        <div className={styles.rowTags}>
+                          {entry.tags.slice(0, 4).map((value) => <span key={value}>{value}</span>)}
+                        </div>
+                      </td>
+                      <td className={styles.tableOptional}>{entry.attachmentCount || '—'}</td>
+                      <td>{formatDateTime(entry.deletedAt || entry.updatedAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <ul className={styles.list}>
             {entries.map((entry) => {

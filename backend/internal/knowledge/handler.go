@@ -61,6 +61,19 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, meta)
 }
 
+// ListTags handles GET /api/knowledge/tags.
+func (h *Handler) ListTags(w http.ResponseWriter, r *http.Request) {
+	if h.requireRead(w, r, "knowledge:tags") == nil {
+		return
+	}
+	tags, err := h.repo.ListTags(r.Context(), 200)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	response.JSON(w, http.StatusOK, TagListResponse{Tags: tags})
+}
+
 // List handles GET /api/knowledge/entries.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	p := h.requireRead(w, r, "knowledge:list")
@@ -163,6 +176,14 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if count, cerr := h.repo.CountReferencingInvestigations(r.Context(), entryID); cerr == nil {
 		entry.ReferenceCount = int(count)
 	}
+	operations, operationsComplete, oerr := h.repo.ListOperations(r.Context(), entryID, 20)
+	if oerr == nil {
+		entry.Operations = operations
+		entry.OperationsComplete = operationsComplete
+	} else {
+		entry.Operations = []EntryOperation{}
+		entry.OperationsComplete = false
+	}
 	response.JSON(w, http.StatusOK, entry)
 }
 
@@ -252,6 +273,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.audit(p, "knowledge.entry.create", "knowledge_entry", entry.ID, entry.Title, nil, entryAuditSnapshot(entry), nil)
+	h.auditFileChange(p, entry, "attach", attachments)
 	h.repo.InvalidateMeta()
 	response.JSON(w, http.StatusCreated, entry)
 }
@@ -376,6 +398,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	h.releaseFiles(r.Context(), removed)
 	h.audit(p, "knowledge.entry.update", "knowledge_entry", after.ID, after.Title, entryAuditSnapshot(before), entryAuditSnapshot(after), nil)
+	h.auditFileChange(p, after, "attach", added)
+	h.auditFileChange(p, after, "detach", removed)
 	h.repo.InvalidateMeta()
 	response.JSON(w, http.StatusOK, after)
 }
@@ -410,6 +434,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		// best-effort and never reverses the business response.
 		_ = h.repo.DeleteVersions(r.Context(), entry.ID)
 		h.audit(p, "knowledge.entry.purge", "knowledge_entry", entry.ID, entry.Title, entryAuditSnapshot(entry), nil, nil)
+		h.auditFileChange(p, entry, "detach", entry.Attachments)
 		h.repo.InvalidateMeta()
 		response.JSON(w, http.StatusOK, map[string]any{"deleted": true, "purged": true, "id": entry.ID})
 		return
@@ -676,6 +701,36 @@ func (h *Handler) audit(p *auth.Principal, action, resourceType, id, name string
 		Before:   before,
 		After:    after,
 		Result:   "success",
+	})
+}
+
+// auditFileChange records an attachment attach/detach event against the owning
+// entry. Unbound uploads have no entry context and therefore stay out of the
+// entry operation history; binding and release are the truthful entry-level
+// file operations.
+func (h *Handler) auditFileChange(p *auth.Principal, entry *Entry, operation string, files []Attachment) {
+	if h.auditWriter == nil || entry == nil || len(files) == 0 {
+		return
+	}
+	names := make([]string, 0, len(files))
+	for _, file := range files {
+		names = append(names, file.OriginalName)
+	}
+	h.auditWriter.WriteBestEffort(audit.WriteAuditInput{
+		Action: "knowledge.file." + operation,
+		Module: "knowledge",
+		Actor:  audit.ActorInput{Type: "user", Username: p.Username, Role: p.Role},
+		Resource: &audit.ResourceInput{
+			Type: "knowledge_entry",
+			ID:   entry.ID,
+			Name: entry.Title,
+		},
+		TargetID: entry.ID,
+		Metadata: map[string]interface{}{
+			"operation": operation,
+			"files":     names,
+		},
+		Result: "success",
 	})
 }
 

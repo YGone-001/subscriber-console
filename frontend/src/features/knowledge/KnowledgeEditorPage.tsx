@@ -1,27 +1,60 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
 import { ArrowLeft, FileText, Paperclip, Save, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
-import { EmptyState, OperationNotice } from '../../components/ui/OperationFeedback';
+import { ConfirmActionPanel, EmptyState, OperationNotice } from '../../components/ui/OperationFeedback';
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/ui/UnsavedChangesGuard';
 import { useI18n } from '../../providers/I18nProvider';
 import { MarkdownEditor } from './components/MarkdownEditor';
 import { TagInput } from './components/TagInput';
 import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
+import { MutationApiError } from '../../lib/api/mutation-client';
 import { attachmentUrl, createEntry, deleteKnowledgeFile, fetchEntry, fetchKnowledgeMeta, isKnowledgeEntryKey, updateEntry, uploadKnowledgeFile } from './knowledge-api';
 import { knowledgeErrorMessage, knowledgeReadErrorMessage } from './knowledge-errors';
 import { extractSolutionImageIds, fileKindLabel, formatFileSize } from './knowledge-format';
-import type { Attachment, KnowledgeMeta } from './types';
+import type { Attachment, KnowledgeEntry, KnowledgeMeta } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
 
 type AttachmentDraft = Attachment;
+
+type DraftPayload = {
+  title: string;
+  protocol: string;
+  tags: string[];
+  phenomenon: string;
+  rootCause: string;
+  solution: string;
+  attachments: AttachmentDraft[];
+  savedAt: string;
+};
 
 const ATTACHMENT_ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.log,.pcap,.pcapng';
 const DEFAULT_MAX_FILE_BYTES = 8 * 1024 * 1024;
 const TITLE_MAX = 200;
 const TEXT_MAX = 4000;
 const SOLUTION_MAX = 200 * 1024;
+
+function readDraft(key: string): DraftPayload | null {
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as Partial<DraftPayload>;
+    return {
+      title: typeof draft.title === 'string' ? draft.title : '',
+      protocol: typeof draft.protocol === 'string' ? draft.protocol : 'General',
+      tags: Array.isArray(draft.tags) ? draft.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+      phenomenon: typeof draft.phenomenon === 'string' ? draft.phenomenon : '',
+      rootCause: typeof draft.rootCause === 'string' ? draft.rootCause : '',
+      solution: typeof draft.solution === 'string' ? draft.solution : '',
+      attachments: Array.isArray(draft.attachments) ? draft.attachments : [],
+      savedAt: typeof draft.savedAt === 'string' ? draft.savedAt : '',
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function KnowledgeEditorPage() {
   const { entryId } = useParams<{ entryId: string }>();
@@ -50,7 +83,25 @@ export function KnowledgeEditorPage() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [dirty, setDirty] = useState(false);
+  const [draftCandidate, setDraftCandidate] = useState<DraftPayload | null>(null);
+  const [draftChecked, setDraftChecked] = useState(isEdit);
+  const [conflict, setConflict] = useState<KnowledgeEntry | null>(null);
+  const [conflictReloading, setConflictReloading] = useState(false);
+  const [conflictNotice, setConflictNotice] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const persistedFileIds = useRef<Set<string>>(new Set());
+
+  const applyEntry = useCallback((entry: KnowledgeEntry) => {
+    setTitle(entry.title);
+    setProtocol(entry.protocol);
+    setTags(entry.tags);
+    setPhenomenon(entry.phenomenon);
+    setRootCause(entry.rootCause);
+    setSolution(entry.solution);
+    setAttachments(entry.attachments);
+    setRevision(entry.revision);
+    persistedFileIds.current = new Set(entry.attachments.map((file) => file.fileId));
+  }, []);
 
   useEffect(() => {
     void fetchKnowledgeMeta().then(setMeta).catch(() => {});
@@ -64,64 +115,86 @@ export function KnowledgeEditorPage() {
     setLoading(true);
     setLoadFailed(false);
     fetchEntry(entryId)
-      .then((entry) => {
-        setTitle(entry.title);
-        setProtocol(entry.protocol);
-        setTags(entry.tags);
-        setPhenomenon(entry.phenomenon);
-        setRootCause(entry.rootCause);
-        setSolution(entry.solution);
-        setAttachments(entry.attachments);
-        setRevision(entry.revision);
-        persistedFileIds.current = new Set(entry.attachments.map((file) => file.fileId));
-      })
+      .then(applyEntry)
       .catch((err) => {
         setLoadError(err);
         setLoadFailed(true);
       })
       .finally(() => setLoading(false));
-  }, [isEdit, entryId, t, reloadToken]);
+  }, [applyEntry, isEdit, entryId, reloadToken]);
 
   const markDirty = (fn: () => void) => {
     fn();
     setDirty(true);
   };
 
-  // Draft autosave protects long new entries from accidental loss. Edit mode is
-  // excluded: the server document is authoritative there and revision CAS guards
-  // concurrent changes.
+  // Draft autosave protects long new entries from accidental loss. It uses
+// sessionStorage so tabs editing different entries do not overwrite each other;
+// edit mode is excluded because the server document and revision CAS are
+// authoritative there.
   const draftKey = `kb-draft:${entryId ?? 'new'}`;
-  const restoredRef = useRef(false);
   useEffect(() => {
-    if (isEdit || restoredRef.current) return;
-    restoredRef.current = true;
-    try {
-      const raw = window.localStorage.getItem(draftKey);
-      if (!raw) return;
-      const draft = JSON.parse(raw) as Partial<{ title: string; protocol: string; tags: string[]; phenomenon: string; rootCause: string; solution: string }>;
-      if (typeof draft.title === 'string') setTitle(draft.title);
-      if (typeof draft.protocol === 'string') setProtocol(draft.protocol);
-      if (Array.isArray(draft.tags)) setTags(draft.tags);
-      if (typeof draft.phenomenon === 'string') setPhenomenon(draft.phenomenon);
-      if (typeof draft.rootCause === 'string') setRootCause(draft.rootCause);
-      if (typeof draft.solution === 'string') setSolution(draft.solution);
-      setDirty(true);
-    } catch {
-      /* A corrupt draft is ignored; the editor starts empty. */
+    if (isEdit) {
+      setDraftChecked(true);
+      return;
     }
+    const candidate = readDraft(draftKey);
+    const hasContent = Boolean(candidate && (candidate.title.trim() || candidate.phenomenon || candidate.rootCause || candidate.solution || candidate.attachments.length));
+    setDraftCandidate(hasContent ? candidate : null);
+    setDraftChecked(true);
   }, [isEdit, draftKey]);
 
   useEffect(() => {
-    if (isEdit) return;
+    if (isEdit || !draftChecked || draftCandidate) return;
+    const hasContent = Boolean(title.trim() || phenomenon || rootCause || solution || attachments.length);
+    if (!hasContent) {
+      try {
+        window.sessionStorage.removeItem(draftKey);
+      } catch {
+        /* Best effort. */
+      }
+      return;
+    }
     const handle = window.setTimeout(() => {
       try {
-        window.localStorage.setItem(draftKey, JSON.stringify({ title, protocol, tags, phenomenon, rootCause, solution }));
+        window.sessionStorage.setItem(draftKey, JSON.stringify({
+          title,
+          protocol,
+          tags,
+          phenomenon,
+          rootCause,
+          solution,
+          attachments,
+          savedAt: new Date().toISOString(),
+        } satisfies DraftPayload));
       } catch {
-        /* localStorage may be unavailable; autosave is best-effort. */
+        /* sessionStorage may be unavailable; autosave is best-effort. */
       }
     }, 800);
     return () => window.clearTimeout(handle);
-  }, [isEdit, draftKey, title, protocol, tags, phenomenon, rootCause, solution]);
+  }, [isEdit, draftChecked, draftCandidate, draftKey, title, protocol, tags, phenomenon, rootCause, solution, attachments]);
+
+  const restoreDraft = () => {
+    if (!draftCandidate) return;
+    setTitle(draftCandidate.title);
+    setProtocol(draftCandidate.protocol);
+    setTags(draftCandidate.tags);
+    setPhenomenon(draftCandidate.phenomenon);
+    setRootCause(draftCandidate.rootCause);
+    setSolution(draftCandidate.solution);
+    setAttachments(draftCandidate.attachments);
+    setDirty(true);
+    setDraftCandidate(null);
+  };
+
+  const discardDraft = () => {
+    try {
+      window.sessionStorage.removeItem(draftKey);
+    } catch {
+      /* Best effort. */
+    }
+    setDraftCandidate(null);
+  };
 
   const unsavedChanges = useUnsavedChangesGuard(dirty, () => setDirty(false));
 
@@ -129,29 +202,46 @@ export function KnowledgeEditorPage() {
   const maxFileBytes = meta?.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
   const maxAttachments = meta?.maxAttachments ?? 10;
 
-  const handleUpload = async (file: File) => {
+  const handleUploadFiles = async (files: FileList | File[]) => {
+    if (uploading) return;
+    const list = Array.from(files);
+    if (list.length === 0) return;
     setError(null);
-    if (attachments.length >= maxAttachments) {
+    const slots = Math.max(0, maxAttachments - attachments.length);
+    if (slots === 0) {
       setError(t('kb_attachment_limit', { max: maxAttachments }));
       return;
     }
-    if (file.size > maxFileBytes) {
-      setError(t('kb_file_too_large', { size: formatFileSize(maxFileBytes) }));
-      return;
-    }
+    const selected = list.slice(0, slots);
+    if (list.length > slots) setError(t('kb_attachment_limit', { max: maxAttachments }));
     setUploading(true);
     try {
-      const uploaded = await uploadKnowledgeFile(file);
-      setAttachments((prev) => [...prev, { ...uploaded }]);
-      setDirty(true);
-    } catch (err) {
-      setError(knowledgeErrorMessage(err, t, 'kb_upload_failed'));
+      for (const file of selected) {
+        if (file.size > maxFileBytes) {
+          setError(t('kb_file_too_large', { size: formatFileSize(maxFileBytes) }));
+          continue;
+        }
+        try {
+          const uploaded = await uploadKnowledgeFile(file);
+          setAttachments((prev) => [...prev, { ...uploaded }]);
+          setDirty(true);
+        } catch (err) {
+          setError(knowledgeErrorMessage(err, t, 'kb_upload_failed'));
+        }
+      }
     } finally {
       setUploading(false);
     }
   };
 
+  const handleAttachmentDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragActive(false);
+    if (event.dataTransfer.files?.length) void handleUploadFiles(event.dataTransfer.files);
+  };
+
   const handleInlineImage = async (file: File): Promise<{ url: string; name: string } | null> => {
+    if (uploading) return null;
     setError(null);
     if (attachments.length >= maxAttachments) {
       setError(t('kb_attachment_limit', { max: maxAttachments }));
@@ -221,7 +311,7 @@ export function KnowledgeEditorPage() {
         : await createEntry(payload);
       setDirty(false);
       try {
-        window.localStorage.removeItem(draftKey);
+        window.sessionStorage.removeItem(draftKey);
       } catch {
         /* Draft cleanup is best-effort. */
       }
@@ -235,8 +325,57 @@ export function KnowledgeEditorPage() {
       }
       navigate(withReturnTo(`/knowledge/${saved.id}`, returnTo), { state: { knowledgeSaved: true } });
     } catch (err) {
+      if (isEdit && entryId && err instanceof MutationApiError && err.code === 'KNOWLEDGE_REVISION_CONFLICT') {
+        setError(null);
+        try {
+          const latest = await fetchEntry(entryId);
+          setConflict(latest);
+        } catch {
+          setError(knowledgeErrorMessage(err, t));
+        } finally {
+          setSaving(false);
+        }
+        return;
+      }
       setError(knowledgeErrorMessage(err, t));
       setSaving(false);
+    }
+  };
+
+  const copyConflictDraft = async () => {
+    if (!navigator.clipboard) {
+      setError(t('kb_copy_failed'));
+      return;
+    }
+    const text = [
+      `${t('kb_field_title')}: ${title}`,
+      `${t('kb_field_phenomenon')}:\n${phenomenon}`,
+      `${t('kb_field_root_cause')}:\n${rootCause}`,
+      `${t('kb_field_solution')}:\n${solution}`,
+      `${t('kb_field_tags')}: ${tags.join(', ')}`,
+    ].join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setConflictNotice(t('kb_conflict_copied'));
+    } catch {
+      setError(t('kb_copy_failed'));
+    }
+  };
+
+  const reloadConflict = async () => {
+    if (!entryId) return;
+    setConflictReloading(true);
+    try {
+      const latest = await fetchEntry(entryId);
+      applyEntry(latest);
+      setDirty(false);
+      setConflict(null);
+      setError(null);
+      setConflictNotice(t('kb_conflict_reloaded'));
+    } catch (err) {
+      setError(knowledgeReadErrorMessage(err, t, 'kb_error_body'));
+    } finally {
+      setConflictReloading(false);
     }
   };
 
@@ -273,6 +412,19 @@ export function KnowledgeEditorPage() {
       />
 
       {error && <OperationNotice tone="danger" message={error} onClose={() => setError(null)} />}
+      {conflictNotice && <OperationNotice tone="success" message={conflictNotice} onClose={() => setConflictNotice(null)} />}
+      {draftCandidate && !isEdit && (
+        <ConfirmActionPanel
+          presentation="inline"
+          tone="info"
+          title={t('kb_draft_found_title')}
+          message={t('kb_draft_found_message')}
+          confirmLabel={t('kb_draft_restore')}
+          cancelLabel={t('kb_draft_discard')}
+          onConfirm={restoreDraft}
+          onCancel={discardDraft}
+        />
+      )}
 
       {loading ? (
         <div className={styles.loading}>{t('loading')}</div>
@@ -320,41 +472,33 @@ export function KnowledgeEditorPage() {
             </section>
 
             <section className={styles.card} data-tone="danger">
-              <label className={styles.field} htmlFor="kb-entry-phenomenon">
-                <span className={styles.fieldLabel}>{t('kb_field_phenomenon')}</span>
-                <textarea
-                  id="kb-entry-phenomenon"
-                  className={styles.textarea}
-                  rows={3}
-                  value={phenomenon}
-                  maxLength={TEXT_MAX}
-                  aria-describedby="kb-phenomenon-count"
-                  onChange={(event) => markDirty(() => setPhenomenon(event.target.value))}
-                  placeholder={t('kb_phenomenon_placeholder')}
-                />
-                <span id="kb-phenomenon-count" className={styles.charCount}>
-                  {t('kb_char_count', { count: phenomenon.length, max: TEXT_MAX })}
-                </span>
-              </label>
+              <label className={styles.fieldLabel} htmlFor="kb-entry-phenomenon">{t('kb_field_phenomenon')}</label>
+              <MarkdownEditor
+                id="kb-entry-phenomenon"
+                describedBy="kb-phenomenon-count"
+                value={phenomenon}
+                onChange={(value) => markDirty(() => setPhenomenon(value))}
+                placeholder={t('kb_phenomenon_placeholder')}
+                ariaLabel={t('kb_field_phenomenon')}
+              />
+              <span id="kb-phenomenon-count" className={styles.charCount}>
+                {t('kb_char_count', { count: phenomenon.length, max: TEXT_MAX })}
+              </span>
             </section>
 
             <section className={styles.card} data-tone="warning">
-              <label className={styles.field} htmlFor="kb-entry-root-cause">
-                <span className={styles.fieldLabel}>{t('kb_field_root_cause')}</span>
-                <textarea
-                  id="kb-entry-root-cause"
-                  className={styles.textarea}
-                  rows={3}
-                  value={rootCause}
-                  maxLength={TEXT_MAX}
-                  aria-describedby="kb-root-cause-count"
-                  onChange={(event) => markDirty(() => setRootCause(event.target.value))}
-                  placeholder={t('kb_root_cause_placeholder')}
-                />
-                <span id="kb-root-cause-count" className={styles.charCount}>
-                  {t('kb_char_count', { count: rootCause.length, max: TEXT_MAX })}
-                </span>
-              </label>
+              <label className={styles.fieldLabel} htmlFor="kb-entry-root-cause">{t('kb_field_root_cause')}</label>
+              <MarkdownEditor
+                id="kb-entry-root-cause"
+                describedBy="kb-root-cause-count"
+                value={rootCause}
+                onChange={(value) => markDirty(() => setRootCause(value))}
+                placeholder={t('kb_root_cause_placeholder')}
+                ariaLabel={t('kb_field_root_cause')}
+              />
+              <span id="kb-root-cause-count" className={styles.charCount}>
+                {t('kb_char_count', { count: rootCause.length, max: TEXT_MAX })}
+              </span>
             </section>
 
             <section className={styles.card}>
@@ -395,42 +539,53 @@ export function KnowledgeEditorPage() {
               </div>
             </section>
 
-            <section className={styles.card}>
-              <div className={styles.cardHead}>
-                <span className={styles.fieldLabel}>{t('kb_attachments')}</span>
-                <label className={styles.attachButton}>
-                  <Paperclip size={13} /> {uploading ? t('kb_uploading') : t('kb_attachment_add')}
-                  <input
-                    type="file"
-                    accept={ATTACHMENT_ACCEPT}
-                    className={styles.hiddenInput}
-                    disabled={uploading}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void handleUpload(file);
-                      event.target.value = '';
-                    }}
-                  />
-                </label>
-              </div>
-              {attachments.length === 0 ? (
-                <p className={styles.attachEmpty}>{t('kb_attachment_empty')}</p>
-              ) : (
-                <ul className={styles.attachList}>
-                  {attachments.map((file, index) => (
-                    <li key={file.fileId} className={styles.attachItem}>
-                      <span className={styles.attachKind}>{fileKindLabel(file.kind)}</span>
-                      <span className={styles.attachName} title={file.originalName}>{file.originalName}</span>
-                      <span className={styles.attachSize}>{formatFileSize(file.size)}</span>
-                      <button type="button" className={styles.attachRemove} aria-label={t('kb_attachment_remove')} onClick={() => removeAttachment(index)}>
-                        <X size={14} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className={styles.attachHint}>{t('kb_attachment_hint', { size: formatFileSize(maxFileBytes) })}</p>
-            </section>
+<section className={styles.card}>
+                <div className={styles.cardHead}>
+                  <span className={styles.fieldLabel}>{t('kb_attachments')}</span>
+                  <label className={styles.attachButton}>
+                    <Paperclip size={13} /> {uploading ? t('kb_uploading') : t('kb_attachment_add')}
+                    <input
+                      type="file"
+                      accept={ATTACHMENT_ACCEPT}
+                      multiple
+                      className={styles.hiddenInput}
+                      disabled={uploading}
+                      onChange={(event) => {
+                        const files = event.target.files;
+                        event.target.value = '';
+                        if (files?.length) void handleUploadFiles(files);
+                      }}
+                    />
+                  </label>
+                </div>
+                <div
+                  className={`${styles.attachDrop} ${dragActive ? styles.attachDropActive : ''}`}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={() => setDragActive(false)}
+                  onDrop={handleAttachmentDrop}
+                >
+                  {attachments.length === 0 ? (
+                    <p className={styles.attachEmpty}>{t('kb_attachment_empty')}</p>
+                  ) : (
+                    <ul className={styles.attachList}>
+                      {attachments.map((file, index) => (
+                        <li key={file.fileId} className={styles.attachItem}>
+                          <span className={styles.attachKind}>{fileKindLabel(file.kind)}</span>
+                          <span className={styles.attachName} title={file.originalName}>{file.originalName}</span>
+                          <span className={styles.attachSize}>{formatFileSize(file.size)}</span>
+                          <button type="button" className={styles.attachRemove} aria-label={t('kb_attachment_remove')} onClick={() => removeAttachment(index)}>
+                            <X size={14} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className={styles.attachHint}>{t('kb_attachment_drop')} {t('kb_attachment_hint', { size: formatFileSize(maxFileBytes) })}</p>
+                </div>
+              </section>
           </div>
         </div>
       )}
@@ -442,6 +597,24 @@ export function KnowledgeEditorPage() {
             <Save size={15} /> {saving ? t('saving') : t('save')}
           </button>
         </div>
+      )}
+
+      {conflict && (
+        <ConfirmActionPanel
+          presentation="modal"
+          tone="warning"
+          title={t('kb_conflict_title')}
+          message={t('kb_conflict_message', { serverRevision: conflict.revision, localRevision: revision })}
+          confirmLabel={t('kb_conflict_reload')}
+          cancelLabel={t('kb_conflict_keep')}
+          isWorking={conflictReloading}
+          onConfirm={() => void reloadConflict()}
+          onCancel={() => { if (!conflictReloading) setConflict(null); }}
+        >
+          <button type="button" className={styles.secondaryButton} onClick={() => void copyConflictDraft()}>
+            {t('kb_conflict_copy')}
+          </button>
+        </ConfirmActionPanel>
       )}
 
       <UnsavedChangesDialog

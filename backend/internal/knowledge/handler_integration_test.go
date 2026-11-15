@@ -488,3 +488,66 @@ func TestHandlerCreateAuditExcludesArticleBody(t *testing.T) {
 		}
 	}
 }
+
+func TestHandlerDetailProjectsOperations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	h, cleanup := knowledgeTestHandler(t)
+	defer cleanup()
+
+	created := createEntryForTest(t, h)
+	ctx := context.Background()
+	_, err := h.repo.audit.InsertOne(ctx, bson.M{
+		"module":       "knowledge",
+		"targetId":     created.ID,
+		"action":       "knowledge.entry.update",
+		"timestamp":    "2026-11-15T00:00:00.000Z",
+		"actor":        "operator",
+		"actorContext": bson.M{"role": "operator"},
+		"result":       "success",
+		"oldData":      bson.M{"revision": int64(1), "status": StatusActive},
+		"newData":      bson.M{"revision": int64(2), "status": StatusActive},
+	})
+	if err != nil {
+		t.Fatalf("insert audit: %v", err)
+	}
+	_, err = h.repo.audit.InsertOne(ctx, bson.M{
+		"module":       "knowledge",
+		"targetId":     created.ID,
+		"action":       "knowledge.file.attach",
+		"timestamp":    "2026-11-15T00:00:01.000Z",
+		"actor":        "operator",
+		"actorContext": bson.M{"role": "operator"},
+		"result":       "success",
+		"metadata":     bson.M{"operation": "attach", "files": []string{"a.txt", "b.txt"}},
+	})
+	if err != nil {
+		t.Fatalf("insert file audit: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.Get(rec, withEntryID(knowledgeRequest(http.MethodGet, "/api/knowledge/entries/"+created.ID, "viewer", ""), created.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var detail Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+	if !detail.OperationsComplete {
+		t.Fatal("expected operationsComplete=true")
+	}
+	if len(detail.Operations) != 2 {
+		t.Fatalf("expected two operations, got %+v", detail.Operations)
+	}
+	if detail.Operations[0].Action != "knowledge.file.attach" || len(detail.Operations[0].Files) != 2 {
+		t.Fatalf("unexpected file operation projection: %+v", detail.Operations[0])
+	}
+	if detail.Operations[1].Action != "knowledge.entry.update" {
+		t.Fatalf("unexpected lifecycle operation: %+v", detail.Operations[1])
+	}
+	if detail.Operations[1].BeforeRevision != 1 || detail.Operations[1].AfterRevision != 2 || detail.Operations[1].Role != "operator" {
+		t.Fatalf("unexpected operation projection: %+v", detail.Operations[1])
+	}
+}

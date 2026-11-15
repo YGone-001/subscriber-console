@@ -97,6 +97,7 @@ type Repository struct {
 	files          *mongo.Collection
 	versions       *mongo.Collection
 	investigations *mongo.Collection
+	audit          *mongo.Collection
 
 	metaMu       sync.Mutex
 	metaCache    *MetaResponse
@@ -120,6 +121,12 @@ func (r *Repository) UseVersionStore(versions *mongo.Collection) {
 // endpoint reports no references.
 func (r *Repository) UseInvestigationStore(investigations *mongo.Collection) {
 	r.investigations = investigations
+}
+
+// UseAuditStore wires the read-only audit collection used to project entry
+// lifecycle operations. When unset, detail reports operationsComplete=false.
+func (r *Repository) UseAuditStore(auditLogs *mongo.Collection) {
+	r.audit = auditLogs
 }
 
 // Create inserts a new entry with revision 1. The caller owns the identity so
@@ -527,6 +534,137 @@ func (r *Repository) CountReferencingInvestigations(ctx context.Context, entryID
 	return total, nil
 }
 
+// ListOperations returns the bounded entry-lifecycle audit projection, newest
+// first. A nil audit store reports complete=false instead of an empty history,
+// so the UI never turns an unavailable read into "no operations".
+func (r *Repository) ListOperations(ctx context.Context, entryID string, limit int) ([]EntryOperation, bool, error) {
+	if r.audit == nil {
+		return []EntryOperation{}, false, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "timestamp", Value: -1}}).
+		SetLimit(int64(limit)).
+		SetProjection(bson.M{
+			"id":                 1,
+			"eventId":            1,
+			"timestamp":          1,
+			"createdAt":          1,
+			"action":             1,
+			"actor":              1,
+			"actorContext.role":  1,
+			"result":             1,
+			"reason":             1,
+			"metadata.operation": 1,
+			"metadata.files":     1,
+			"oldData.revision":   1,
+			"newData.revision":   1,
+			"oldData.status":     1,
+			"newData.status":     1,
+		})
+	cursor, err := r.audit.Find(ctx, bson.M{"module": "knowledge", "targetId": entryID}, opts)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to list knowledge operations: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	out := make([]EntryOperation, 0, limit)
+	for cursor.Next(ctx) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			continue
+		}
+		oldData := auditMap(doc["oldData"])
+		newData := auditMap(doc["newData"])
+		actorContext := auditMap(doc["actorContext"])
+		metadata := auditMap(doc["metadata"])
+		id := auditString(doc, "id")
+		if id == "" {
+			id = auditString(doc, "eventId")
+		}
+		timestamp := auditString(doc, "timestamp")
+		if timestamp == "" {
+			timestamp = auditString(doc, "createdAt")
+		}
+		out = append(out, EntryOperation{
+			ID:             id,
+			Timestamp:      timestamp,
+			Action:         auditString(doc, "action"),
+			Actor:          auditString(doc, "actor"),
+			Role:           auditString(actorContext, "role"),
+			Result:         auditString(doc, "result"),
+			Reason:         auditString(doc, "reason"),
+			BeforeRevision: auditInt64(oldData["revision"]),
+			AfterRevision:  auditInt64(newData["revision"]),
+			BeforeStatus:   auditString(oldData, "status"),
+			AfterStatus:    auditString(newData, "status"),
+			Files:          auditStrings(metadata["files"]),
+		})
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, false, fmt.Errorf("failed to read knowledge operations: %w", err)
+	}
+	return out, true, nil
+}
+
+func auditMap(value any) bson.M {
+	switch doc := value.(type) {
+	case bson.M:
+		return doc
+	case map[string]any:
+		return bson.M(doc)
+	case bson.D:
+		out := make(bson.M, len(doc))
+		for _, item := range doc {
+			out[item.Key] = item.Value
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func auditString(doc bson.M, key string) string {
+	if value, ok := doc[key].(string); ok {
+		return value
+	}
+	return ""
+}
+
+func auditInt64(value any) int64 {
+	switch number := value.(type) {
+	case int:
+		return int64(number)
+	case int32:
+		return int64(number)
+	case int64:
+		return number
+	case float64:
+		return int64(number)
+	default:
+		return 0
+	}
+}
+
+func auditStrings(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		if values, ok := value.([]string); ok {
+			return values
+		}
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if text, ok := item.(string); ok {
+			out = append(out, text)
+		}
+	}
+	return out
+}
+
 // SoftDelete marks an entry deleted atomically guarded by its revision. The
 // document and its attachments are retained for recovery until Purge.
 func (r *Repository) SoftDelete(ctx context.Context, id string, revision int64) (*Entry, error) {
@@ -680,6 +818,44 @@ func (r *Repository) computeStats(ctx context.Context) (*MetaResponse, error) {
 		MaxTags:         MaxTags,
 		MaxTagLength:    MaxTagLength,
 	}, nil
+}
+
+// ListTags returns the active tag dictionary, most used first, for filter
+// autocomplete. It is separate from meta.topTags, which stays bounded for KPI
+// rendering.
+func (r *Repository) ListTags(ctx context.Context, limit int) ([]TagCount, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"status": bson.M{"$ne": StatusDeleted}}}},
+		{{Key: "$unwind", Value: "$tags"}},
+		{{Key: "$match", Value: bson.M{"tags": bson.M{"$ne": ""}}}},
+		{{Key: "$group", Value: bson.M{"_id": "$tags", "count": bson.M{"$sum": 1}}}},
+		{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}, {Key: "_id", Value: 1}}}},
+		{{Key: "$limit", Value: limit}},
+	}
+	cursor, err := r.entries.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("failed to aggregate knowledge tag dictionary: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	out := []TagCount{}
+	for cursor.Next(ctx) {
+		var row struct {
+			ID    string `bson:"_id"`
+			Count int64  `bson:"count"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			return nil, fmt.Errorf("failed to decode tag dictionary: %w", err)
+		}
+		out = append(out, TagCount{Tag: row.ID, Count: row.Count})
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read tag dictionary: %w", err)
+	}
+	return out, nil
 }
 
 func (r *Repository) topTags(ctx context.Context) ([]TagCount, error) {

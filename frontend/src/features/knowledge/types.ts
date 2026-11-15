@@ -14,6 +14,21 @@ export type EntryVersion = {
   createdBy: string;
 };
 
+export type EntryOperation = {
+  id: string;
+  timestamp: string;
+  action: string;
+  actor: string;
+  role: string;
+  result: string;
+  reason?: string;
+  beforeRevision?: number;
+  afterRevision?: number;
+  beforeStatus?: string;
+  afterStatus?: string;
+  files?: string[];
+};
+
 export type EntryVersionSummary = {
   versionId: string;
   entryId: string;
@@ -57,6 +72,8 @@ export type KnowledgeEntry = {
   versions?: EntryVersionSummary[];
   referencedBy?: InvestigationRef[];
   referenceCount?: number;
+  operations?: EntryOperation[];
+  operationsComplete?: boolean;
 };
 
 export type KnowledgeSummary = {

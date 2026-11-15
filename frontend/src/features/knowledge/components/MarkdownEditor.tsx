@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
-import type { KeyboardEvent, ReactNode } from 'react';
-import { Bold, Code, Heading1, Heading2, Image as ImageIcon, Italic, Link, List, Minus, Quote, Table, Eye, Pencil } from 'lucide-react';
+import type { ClipboardEvent, DragEvent, KeyboardEvent, ReactNode } from 'react';
+import { Bold, Code, Eye, Heading1, Heading2, Heading3, Image as ImageIcon, Italic, Link, List, ListChecks, ListOrdered, Minus, Pencil, Quote, Strikethrough, Table } from 'lucide-react';
 import { useI18n } from '../../../providers/I18nProvider';
 import { MarkdownContent } from './MarkdownContent';
 import styles from '../../../styles/modules/knowledge.module.css';
@@ -95,15 +95,36 @@ export function insertImage(
   return { text, selectionStart: cursor, selectionEnd: cursor };
 }
 
+function firstImageFile(files: FileList | File[] | null | undefined): File | null {
+  if (!files) return null;
+  for (const file of Array.from(files)) {
+    if (file.type.startsWith('image/')) return file;
+  }
+  return null;
+}
+
+function firstImageFromItems(items: DataTransferItemList | null): File | null {
+  if (!items) return null;
+  for (const item of Array.from(items)) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) return file;
+    }
+  }
+  return null;
+}
+
 type MarkdownEditorProps = {
   id?: string;
   describedBy?: string;
+  placeholder?: string;
+  ariaLabel?: string;
   value: string;
   onChange: (value: string) => void;
   onUploadImage?: (file: File) => Promise<{ url: string; name: string } | null>;
 };
 
-export function MarkdownEditor({ id, describedBy, value, onChange, onUploadImage }: MarkdownEditorProps) {
+export function MarkdownEditor({ id, describedBy, placeholder, ariaLabel, value, onChange, onUploadImage }: MarkdownEditorProps) {
   const { t } = useI18n();
   const [preview, setPreview] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
@@ -113,10 +134,14 @@ export function MarkdownEditor({ id, describedBy, value, onChange, onUploadImage
   const tools: Tool[] = [
     { key: 'h1', icon: <Heading1 size={15} />, title: t('kb_tool_h1'), prefix: '# ' },
     { key: 'h2', icon: <Heading2 size={15} />, title: t('kb_tool_h2'), prefix: '## ' },
+    { key: 'h3', icon: <Heading3 size={15} />, title: t('kb_tool_h3'), prefix: '### ' },
     { key: 'bold', icon: <Bold size={15} />, title: t('kb_tool_bold'), wrap: '**' },
     { key: 'italic', icon: <Italic size={15} />, title: t('kb_tool_italic'), wrap: '*' },
+    { key: 'strike', icon: <Strikethrough size={15} />, title: t('kb_tool_strike'), wrap: '~~' },
     { key: 'code', icon: <Code size={15} />, title: t('kb_tool_code'), wrap: '`' },
     { key: 'list', icon: <List size={15} />, title: t('kb_tool_list'), prefix: '- ' },
+    { key: 'ordered', icon: <ListOrdered size={15} />, title: t('kb_tool_ordered_list'), prefix: '1. ' },
+    { key: 'task', icon: <ListChecks size={15} />, title: t('kb_tool_task_list'), prefix: '- [ ] ' },
     { key: 'quote', icon: <Quote size={15} />, title: t('kb_tool_quote'), prefix: '> ' },
     { key: 'link', icon: <Link size={15} />, title: t('kb_tool_link') },
     { key: 'codeBlock', icon: <Code size={15} />, title: t('kb_tool_code_block') },
@@ -166,6 +191,22 @@ export function MarkdownEditor({ id, describedBy, value, onChange, onUploadImage
     } finally {
       setImageUploading(false);
     }
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onUploadImage) return;
+    const file = firstImageFromItems(event.clipboardData?.items ?? null);
+    if (!file) return;
+    event.preventDefault();
+    void uploadImage(file);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLTextAreaElement>) => {
+    if (!onUploadImage) return;
+    const file = firstImageFile(event.dataTransfer?.files);
+    if (!file) return;
+    event.preventDefault();
+    void uploadImage(file);
   };
 
   return (
@@ -231,8 +272,13 @@ export function MarkdownEditor({ id, describedBy, value, onChange, onUploadImage
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleShortcut}
-          placeholder={t('kb_solution_placeholder')}
-          aria-label={t('kb_field_solution')}
+          onPaste={handlePaste}
+          onDrop={handleDrop}
+          onDragOver={(event) => {
+            if (onUploadImage && event.dataTransfer?.types?.includes('Files')) event.preventDefault();
+          }}
+          placeholder={placeholder ?? t('kb_solution_placeholder')}
+          aria-label={ariaLabel ?? t('kb_field_solution')}
           aria-describedby={describedBy}
         />
       )}

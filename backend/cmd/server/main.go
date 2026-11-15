@@ -540,6 +540,7 @@ func main() {
 	)
 	knowledgeRepo.UseVersionStore(mc.Ops.Collection(knowledge.CollectionVersions))
 	knowledgeRepo.UseInvestigationStore(mc.Ops.Collection("app_investigations"))
+	knowledgeRepo.UseAuditStore(mc.Ops.Collection("app_audit_logs"))
 	knowledgeHandler := knowledge.NewHandler(knowledgeRepo, knowledgeStore, limiter, auditWriter)
 	knowledgeHandler.UseActorRepository(userRepo)
 	knowledgeJanitor := knowledge.NewJanitor(knowledgeRepo, knowledgeStore, logger)
@@ -867,8 +868,9 @@ func main() {
 	mux.Handle("GET /api/ims/registrations", authMiddleware(http.HandlerFunc(imsHandler.Get)))
 	mux.Handle("GET /api/ims/registrations/summary", authMiddleware(http.HandlerFunc(imsHandler.Get)))
 
-	// Knowledge base (five reads, five mutations)
+	// Knowledge base (six reads, five mutations)
 	mux.Handle("GET /api/knowledge/meta", authMiddleware(http.HandlerFunc(knowledgeHandler.Meta)))
+	mux.Handle("GET /api/knowledge/tags", authMiddleware(http.HandlerFunc(knowledgeHandler.ListTags)))
 	mux.Handle("GET /api/knowledge/entries", authMiddleware(http.HandlerFunc(knowledgeHandler.List)))
 	mux.Handle("GET /api/knowledge/entries/{entryId}", authMiddleware(http.HandlerFunc(knowledgeHandler.Get)))
 	mux.Handle("GET /api/knowledge/entries/{entryId}/versions/{versionId}", authMiddleware(http.HandlerFunc(knowledgeHandler.GetVersion)))

@@ -8,6 +8,7 @@ import { isSafeMarkdownLink } from '../src/features/knowledge/components/Markdow
 import { pageNumberFromStack, parseCursorStack, popCursorStack, pushCursorStack, serializeCursorStack } from '../src/features/knowledge/knowledge-paging';
 import { runWithConcurrency } from '../src/features/knowledge/knowledge-batch';
 import { matchContext } from '../src/features/knowledge/knowledge-match';
+import { diffLines } from '../src/features/knowledge/knowledge-diff';
 import type { KnowledgeSummary } from '../src/features/knowledge/types';
 import { fileKindLabel, formatFileSize, isImage, isKnowledgeImageUrl, extractSolutionImageIds } from '../src/features/knowledge/knowledge-format';
 import { MutationApiError } from '../src/lib/api/mutation-client';
@@ -236,4 +237,15 @@ test('match context explains title, phenomenon, tag, protocol and body hits', ()
   assert.equal(matchContext({ ...base, title: 'x', phenomenon: 'y', tags: [] }, 'sip')?.field, 'protocol');
   assert.equal(matchContext({ ...base, title: 'x', phenomenon: 'y', tags: [] }, 'missing-in-list')?.field, 'body');
   assert.equal(matchContext(base, '   '), null);
+});
+
+test('version diff reports added and removed lines', () => {
+  const diff = diffLines('a\nb\nc', 'a\nx\nc');
+  assert.equal(diff.added, 1);
+  assert.equal(diff.removed, 1);
+  assert.deepEqual(diff.lines.map((line) => line.type), ['same', 'removed', 'added', 'same']);
+  assert.equal(diff.lines[1].text, 'x');
+  assert.equal(diff.lines[2].text, 'b');
+  assert.equal(diffLines('same', 'same').added, 0);
+  assert.equal(diffLines('same', 'same').removed, 0);
 });

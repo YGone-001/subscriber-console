@@ -157,6 +157,7 @@ const EXPECTED_UE_INFO_ROUTES = new Set([
 // Knowledge base: entry CRUD, version content, the search vocabulary and attachment transfer.
 const EXPECTED_KNOWLEDGE_ROUTES = new Set([
   'GET /api/knowledge/meta',
+  'GET /api/knowledge/tags',
   'GET /api/knowledge/entries',
   'GET /api/knowledge/entries/{entryId}',
   'GET /api/knowledge/entries/{entryId}/versions/{versionId}',

@@ -37,13 +37,14 @@ app_knowledge_entry_versions: {entryId:1,revision:-1}
 
 ## API surface
 
-Ten Go registrations (five reads, five mutations):
+Eleven Go registrations (six reads, five mutations):
 
 | Method + Path | Purpose | Permission |
 |---|---|---|
 | `GET /api/knowledge/meta` | protocol enum, top tags, protocol distribution, active/recycle totals, limits | `core.read` |
+| `GET /api/knowledge/tags` | full active tag dictionary with counts for filter autocomplete | `core.read` |
 | `GET /api/knowledge/entries` | list/search (`q`, `protocol`, `tag`, `cursor`, `limit`, `sort`, `order`, `status`) | `core.read` |
-| `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body and version metadata; `?export=1` downloads a JSON backup | `core.read` |
+| `GET /api/knowledge/entries/{entryId}` | entry detail with Markdown body, version metadata, bounded operations history and `operationsComplete`; `?export=1` downloads a JSON backup | `core.read` |
 | `GET /api/knowledge/entries/{entryId}/versions/{versionId}` | full content of one historical snapshot | `core.read` |
 | `POST /api/knowledge/entries` | create entry | `core.configure` |
 | `PUT /api/knowledge/entries/{entryId}` | update entry (revision CAS); `restore:true` revives a soft-deleted entry; `restoreVersionId` reverts content to a snapshot | `core.configure` |
@@ -63,9 +64,13 @@ list projection omits the Markdown body and adds a computed `attachmentCount`;
 the detail endpoint is the only source of full entry content. Entry detail
 projects bounded `versions[]` metadata only (`versionId`, `revision`,
 `createdAt`, `createdBy`); `GET /api/knowledge/entries/{entryId}/versions/{versionId}`
-returns one full snapshot on demand. The search needle is trimmed, bounded to 64
-characters and `regexp.QuoteMeta`-escaped before a case-insensitive match against
-title, phenomenon, rootCause, solution, tags and protocol. The `tag` filter is an
+returns one full snapshot on demand. Entry detail also projects at most 20
+entry-lifecycle audit operations (`operations`) plus attachment attach/detach
+events, and always reports `operationsComplete`; an unavailable audit read sets
+it to false instead of claiming no history. Unbound uploads have no entry context
+and therefore never appear in entry history. The search needle is trimmed, bounded to 64 characters and
+`regexp.QuoteMeta`-escaped before a case-insensitive match against title,
+phenomenon, rootCause, solution, tags and protocol. The `tag` filter is an
 anchored, case-insensitive exact match. No text index is created. The meta
 aggregates are reused from a 30s in-process cache (failures are never cached);
 the list `total` is always computed fresh from the filtered set.
@@ -157,8 +162,8 @@ Four SPA routes in the platform group: `/knowledge`, `/knowledge/new`,
 `/knowledge/:entryId`, `/knowledge/:entryId/edit`. The list page uses explicit
 active/recycle tabs with independent counts, submit-triggered search (Enter or
 the search button) with match highlighting and a coarse match-location hint for
-tag/protocol/body hits, protocol and free-text tag filters, sort/order controls,
-and cursor paging whose back-stack is carried in the URL (`cursor` + `stack`) so
+tag/protocol/body hits, protocol and free-text tag filters with dictionary autocomplete, sort/order controls,
+a list/table view switch, and cursor paging whose back-stack is carried in the URL (`cursor` + `stack`) so
 refresh, back/forward navigation and shared links keep the page depth. The list
 supports page-local multi-select with batch export, batch delete/permanent
 delete, batch restore and batch tag merge; batch writes reuse the single-entry
@@ -166,16 +171,24 @@ endpoints through a bounded concurrency runner and report partial failures. Batc
 tag merges fetch each entry, merge tags case-insensitively, skip unchanged rows
 and update only the rows that actually change. The recycle-bin view
 has its own KPI, empty state and deleted-row marker, and an error state offers
-retry. The detail page renders the phenomenon as text and the root cause and
+retry. The detail page renders the phenomenon, root cause and
 resolution as Markdown, with attachment image/PDF/text preview, version
 metadata, explicit restore confirmation and success feedback; delete
-confirmations include reference and attachment impact. The editor offers a
-Markdown toolbar (including code block, table and horizontal rule, plus
-Ctrl+B/I/K shortcuts), Ctrl/Cmd+S save, preview, attachment upload, new-entry
-draft autosave, character counts, field-level labels and revision-conflict
-handling. Saving preserves the originating list URL (`returnTo`) so filters and
-paging survive. `viewer` hides all mutation entry points, and the backend remains
-the authorization authority.
+confirmations include reference and attachment impact. Version history supports
+on-demand preview and a bounded line diff against the current entry, alongside
+the restore action. Attachments open in a unified viewer (image zoom, PDF,
+text) with a download action. The detail page shows bounded operation history,
+copy-link and print actions. The editor offers a
+Markdown toolbar (headings 1-3, bold/italic/strikethrough, inline code, ordered/
+unordered/task lists, quote, link, code block, table, horizontal rule, plus
+Ctrl+B/I/K shortcuts), Ctrl/Cmd+S save, preview, multi-file and drag/drop
+attachment upload, inline image paste/drop, explicit unsaved-draft
+restore/discard, character counts, field-level labels and revision-conflict
+handling with copy-my-changes and reload-latest actions. New-entry drafts are
+stored in sessionStorage so tabs editing different entries do not overwrite each
+other; empty forms never create a draft. Saving preserves the originating list
+URL (`returnTo`) so filters and paging survive. `viewer` hides all mutation entry
+points, and the backend remains the authorization authority.
 
 ## Performance and scale triggers
 

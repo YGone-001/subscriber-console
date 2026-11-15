@@ -36,6 +36,7 @@ func knowledgeTestRepo(t *testing.T) (*Repository, func()) {
 	repo := NewRepository(db.Collection(CollectionEntries), db.Collection(CollectionFiles))
 	repo.UseVersionStore(db.Collection(CollectionVersions))
 	repo.UseInvestigationStore(db.Collection("app_investigations"))
+	repo.UseAuditStore(db.Collection("app_audit_logs"))
 
 	cleanup := func() {
 		dropCtx, dropCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -59,6 +60,22 @@ func TestStatsReportsTagLimits(t *testing.T) {
 	}
 	if meta.MaxTags != MaxTags || meta.MaxTagLength != MaxTagLength {
 		t.Fatalf("tag limits = %d/%d, want %d/%d", meta.MaxTags, meta.MaxTagLength, MaxTags, MaxTagLength)
+	}
+
+	_, err = repo.Create(context.Background(), "11111111-1111-4111-8111-111111111111", &CreateEntryRequest{Title: "tagged one"}, "General", []string{"SIP", "VoLTE"}, nil, "tester")
+	if err != nil {
+		t.Fatalf("create tagged one: %v", err)
+	}
+	_, err = repo.Create(context.Background(), "22222222-2222-4222-8222-222222222222", &CreateEntryRequest{Title: "tagged two"}, "General", []string{"SIP"}, nil, "tester")
+	if err != nil {
+		t.Fatalf("create tagged two: %v", err)
+	}
+	tags, err := repo.ListTags(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("list tags: %v", err)
+	}
+	if len(tags) != 2 || tags[0].Tag != "SIP" || tags[0].Count != 2 || tags[1].Tag != "VoLTE" || tags[1].Count != 1 {
+		t.Fatalf("unexpected tag dictionary: %+v", tags)
 	}
 
 	entry, err := repo.Create(context.Background(), validEntryID, &CreateEntryRequest{Title: "trashed"}, "General", nil, nil, "tester")
