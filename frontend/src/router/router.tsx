@@ -101,8 +101,12 @@ const businessRoutes = APP_ROUTES.filter((route) => route.route !== '/login').ma
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
-  { element: <AuthGate><AppShell /></AuthGate>, children: [
-    ...businessRoutes,
-  ] },
+  {
+    element: <AuthGate><AppShell /></AuthGate>,
+    children: [
+      ...businessRoutes,
+      { path: '*', element: <NotFoundPage /> },
+    ],
+  },
   { path: '*', element: <NotFoundPage /> },
 ]);

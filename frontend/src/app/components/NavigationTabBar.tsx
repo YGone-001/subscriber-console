@@ -5,13 +5,12 @@
  * frontend/src/components/NavigationTabBar.tsx
  *
  * This is the visited-tab model, not a static navigation strip: the tab set is
- * the pages the operator has actually opened, persisted in localStorage, with a
- * pinned home tab, per-tab close, close-others / close-all, horizontal scrolling
- * and role-based cleanup when a session loses access to a route.
+ * the pages the operator has actually opened, persisted in localStorage with
+ * user-level scoping, with a pinned home tab, per-tab close, close-others / close-all,
+ * horizontal scrolling and role-based cleanup when a session loses access to a route.
  *
- * Adaptations: the Next.js router and Link components are replaced by
- * react-router-dom; the retired `prefetchNavigationData` helper is not restored
- * (the current read client already caches per request key).
+ * Visited paths store the normalized real destination pathname, never unresolved
+ * parameter templates (e.g. /subscribers/460020000000400 instead of /subscribers/:imsi).
  */
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -19,18 +18,30 @@ import { X, Pin, MoreHorizontal, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import {
-  canAccessNavigationRoute,
   getNavigationRoute,
+  isNavigableDestination,
+  normalizePathname,
   resolveNavigationRoute,
+  UUID_SEGMENT,
   type NavigationRoute,
 } from '../../lib/navigation';
+import type { CanonicalRole } from '../../types/auth';
 
-const STORAGE_KEY = 'XCLOUD_OPEN_TABS';
+export const STORAGE_KEY = 'XCLOUD_OPEN_TABS';
 
-interface TabDefinition {
+export function getTabsStorageKey(username?: string | null): string {
+  return username ? `${STORAGE_KEY}:${username}` : STORAGE_KEY;
+}
+
+export interface TabDefinition {
   path: string;
   labelKey: string;
   icon: React.ReactNode;
+  isPinned?: boolean;
+}
+
+interface StoredTabEntry {
+  path?: unknown;
   isPinned?: boolean;
 }
 
@@ -38,37 +49,61 @@ const DEFAULT_TABS: TabDefinition[] = [
   { path: '/', labelKey: 'nav_dashboard', icon: createElement(getNavigationRoute('/')!.icon, { size: 14 }), isPinned: true },
 ];
 
-let cachedRawTabs: string | null = null;
-let cachedTabs: TabDefinition[] = DEFAULT_TABS;
+const tabsMemoryCache = new Map<string, { raw: string | null; tabs: TabDefinition[] }>();
 
-function getStoredTabsSnapshot(): TabDefinition[] {
+export function getStoredTabsSnapshot(username?: string | null, role?: CanonicalRole): TabDefinition[] {
   if (typeof window === 'undefined') return DEFAULT_TABS;
+  const key = getTabsStorageKey(username);
+  const cached = tabsMemoryCache.get(key);
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === cachedRawTabs && cachedTabs) {
-      return cachedTabs;
-    }
-    cachedRawTabs = raw;
-    if (raw) {
-      const parsed: Array<{ path: string; isPinned?: boolean }> = JSON.parse(raw);
-      const reconstructed: TabDefinition[] = parsed
-        .filter((entry) => Boolean(getNavigationRoute(entry.path)))
-        .map((entry) => ({
-          path: entry.path,
-          labelKey: getNavigationRoute(entry.path)!.labelKey,
-          icon: createElement(getNavigationRoute(entry.path)!.icon, { size: 14 }),
-          isPinned: entry.path === '/' ? true : (entry.isPinned ?? false),
-        }));
-      if (!reconstructed.some((tab) => tab.path === '/')) {
-        reconstructed.unshift(DEFAULT_TABS[0]);
+    let raw = localStorage.getItem(key);
+    // Safe legacy migration: if user-scoped key does not exist yet, check for legacy un-scoped key
+    if (raw === null && username) {
+      const legacyRaw = localStorage.getItem(STORAGE_KEY);
+      if (legacyRaw !== null) {
+        raw = legacyRaw;
+        try { localStorage.removeItem(STORAGE_KEY); } catch { /* best-effort cleanup */ }
       }
-      cachedTabs = reconstructed;
-      return reconstructed;
+    }
+    if (cached && cached.raw === raw) {
+      return cached.tabs;
+    }
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const reconstructed: TabDefinition[] = [];
+        for (const entry of parsed) {
+          if (
+            typeof entry === 'object' &&
+            entry !== null &&
+            typeof (entry as StoredTabEntry).path === 'string'
+          ) {
+            const rawPath = (entry as StoredTabEntry).path as string;
+            const normalizedPath = normalizePathname(rawPath);
+            if (isNavigableDestination(normalizedPath, role)) {
+              const route = resolveNavigationRoute(normalizedPath);
+              if (route && !reconstructed.some((t) => t.path === normalizedPath)) {
+                reconstructed.push({
+                  path: normalizedPath,
+                  labelKey: route.labelKey,
+                  icon: createElement(route.icon, { size: 14 }),
+                  isPinned: normalizedPath === '/' ? true : Boolean((entry as StoredTabEntry).isPinned),
+                });
+              }
+            }
+          }
+        }
+        if (!reconstructed.some((tab) => tab.path === '/')) {
+          reconstructed.unshift(DEFAULT_TABS[0]);
+        }
+        tabsMemoryCache.set(key, { raw, tabs: reconstructed });
+        return reconstructed;
+      }
     }
   } catch {
-    /* Unreadable storage: fall back to the default tab set. */
+    /* Unreadable storage: fall back to default */
   }
-  cachedTabs = DEFAULT_TABS;
+  tabsMemoryCache.set(key, { raw: null, tabs: DEFAULT_TABS });
   return DEFAULT_TABS;
 }
 
@@ -76,8 +111,8 @@ const tabListeners = new Set<() => void>();
 function subscribeTabs(onStoreChange: () => void) {
   tabListeners.add(onStoreChange);
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY) {
-      cachedRawTabs = null;
+    if (event.key && event.key.startsWith(STORAGE_KEY)) {
+      tabsMemoryCache.clear();
       onStoreChange();
     }
   };
@@ -88,12 +123,13 @@ function subscribeTabs(onStoreChange: () => void) {
   };
 }
 
-function writeTabs(newTabs: TabDefinition[]) {
-  cachedTabs = newTabs;
+export function writeTabs(newTabs: TabDefinition[], username?: string | null) {
+  const key = getTabsStorageKey(username);
   try {
     const serialized = newTabs.map((tab) => ({ path: tab.path, isPinned: tab.isPinned }));
-    cachedRawTabs = JSON.stringify(serialized);
-    localStorage.setItem(STORAGE_KEY, cachedRawTabs);
+    const raw = JSON.stringify(serialized);
+    tabsMemoryCache.set(key, { raw, tabs: newTabs });
+    localStorage.setItem(key, raw);
   } catch {
     /* Storage is best-effort: a failed write must not break navigation. */
   }
@@ -112,57 +148,65 @@ export function NavigationTabBar() {
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [permissionNotice, setPermissionNotice] = useState('');
 
-  const storedTabs = useSyncExternalStore(subscribeTabs, getStoredTabsSnapshot, () => DEFAULT_TABS);
+  const getSnapshot = useCallback(() => {
+    return getStoredTabsSnapshot(user?.username, user?.role);
+  }, [user?.username, user?.role]);
+
+  const storedTabs = useSyncExternalStore(subscribeTabs, getSnapshot, () => DEFAULT_TABS);
   const tabs = useMemo(
-    () => storedTabs.filter((tab) => {
-      const route = getNavigationRoute(tab.path);
-      return route && canAccessNavigationRoute(route, user?.role);
-    }),
+    () => storedTabs.filter((tab) => isNavigableDestination(tab.path, user?.role)),
     [storedTabs, user?.role],
   );
 
   const saveTabs = useCallback((newTabs: TabDefinition[]) => {
-    writeTabs(newTabs);
-  }, []);
+    writeTabs(newTabs, user?.username);
+  }, [user?.username]);
 
-  // Opening a route adds it to the workspace.
+  const normalizedCurrentPath = useMemo(() => {
+    return normalizePathname(pathname);
+  }, [pathname]);
+
+  const activeTabPath = normalizedCurrentPath;
+  const currentRoute: NavigationRoute | undefined = useMemo(
+    () => resolveNavigationRoute(normalizedCurrentPath),
+    [normalizedCurrentPath],
+  );
+
+  // Opening a navigable route adds it to the workspace tabs.
   useEffect(() => {
-    if (!pathname) return;
-    const matchedRoute = resolveNavigationRoute(pathname);
-    if (matchedRoute && canAccessNavigationRoute(matchedRoute, user?.role)) {
-      const currentTabs = getStoredTabsSnapshot();
-      if (!currentTabs.some((tab) => tab.path === matchedRoute.route)) {
-        const newTab: TabDefinition = {
-          path: matchedRoute.route,
-          labelKey: matchedRoute.labelKey,
-          icon: createElement(matchedRoute.icon, { size: 14 }),
-          isPinned: matchedRoute.route === '/',
-        };
-        writeTabs([...currentTabs, newTab]);
+    if (!pathname || isAuthLoading) return;
+    const normalized = normalizePathname(pathname);
+    if (isNavigableDestination(normalized, user?.role)) {
+      const matchedRoute = resolveNavigationRoute(normalized);
+      if (matchedRoute) {
+        const currentTabs = getStoredTabsSnapshot(user?.username, user?.role);
+        if (!currentTabs.some((tab) => tab.path === normalized)) {
+          const newTab: TabDefinition = {
+            path: normalized,
+            labelKey: matchedRoute.labelKey,
+            icon: createElement(matchedRoute.icon, { size: 14 }),
+            isPinned: normalized === '/',
+          };
+          writeTabs([...currentTabs, newTab], user?.username);
+        }
       }
     }
-  }, [pathname, user?.role]);
+  }, [pathname, isAuthLoading, user?.username, user?.role]);
 
   // Dropping a role removes the tabs it can no longer reach.
   useEffect(() => {
     if (isAuthLoading || !user) return;
-    const currentTabs = getStoredTabsSnapshot();
-    const accessibleTabs = currentTabs.filter((tab) => {
-      const route = getNavigationRoute(tab.path);
-      return route && canAccessNavigationRoute(route, user.role);
-    });
+    const currentTabs = getStoredTabsSnapshot(user.username, user.role);
+    const accessibleTabs = currentTabs.filter((tab) => isNavigableDestination(tab.path, user.role));
     let noticeTimer: number | undefined;
     if (accessibleTabs.length !== currentTabs.length) {
-      writeTabs(accessibleTabs);
+      writeTabs(accessibleTabs, user.username);
       noticeTimer = window.setTimeout(() => setPermissionNotice(t('nav_tab_permissions_cleaned')), 0);
     }
     return () => {
       if (noticeTimer !== undefined) window.clearTimeout(noticeTimer);
     };
-  }, [isAuthLoading, t, user]);
-
-  const activeTabPath = useMemo(() => resolveNavigationRoute(pathname)?.route || '/', [pathname]);
-  const currentRoute: NavigationRoute | undefined = useMemo(() => resolveNavigationRoute(pathname), [pathname]);
+  }, [isAuthLoading, t, user?.username, user?.role]);
 
   const handleCloseTab = (event: React.MouseEvent, targetPath: string) => {
     event.preventDefault();
@@ -227,16 +271,27 @@ export function NavigationTabBar() {
       <div className="nav-tab-track" ref={tabsScrollRef} role="list">
         {tabs.map((tab) => {
           const isActive = tab.path === activeTabPath;
+          const route = resolveNavigationRoute(tab.path);
+          const lastSegment = route && route.dynamicParameters.length > 0 && !tab.isPinned
+            ? tab.path.split('/').filter(Boolean).at(-1)
+            : null;
+          const displayParam = lastSegment && UUID_SEGMENT.test(lastSegment)
+            ? `${lastSegment.slice(0, 8)}...`
+            : lastSegment;
+          const tabLabel = displayParam
+            ? `${t(tab.labelKey)} (${displayParam})`
+            : t(tab.labelKey);
+
           return (
             <div key={tab.path} className={`nav-tab-item ${isActive ? 'active' : ''}`} role="listitem">
               <Link
                 to={tab.path}
                 className={`nav-tab-link ${tab.isPinned ? 'pinned' : ''}`}
                 aria-current={isActive ? 'page' : undefined}
-                title={t(tab.labelKey)}
+                title={tabLabel}
               >
                 <span className="nav-tab-icon" aria-hidden="true">{tab.icon}</span>
-                <span className="nav-tab-label">{t(tab.labelKey)}</span>
+                <span className="nav-tab-label">{tabLabel}</span>
                 {tab.isPinned ? <Pin size={11} className="nav-tab-pin-icon" aria-hidden="true" /> : null}
               </Link>
               {!tab.isPinned ? (
@@ -245,7 +300,7 @@ export function NavigationTabBar() {
                   className="nav-tab-close"
                   onClick={(event) => handleCloseTab(event, tab.path)}
                   title={t('nav_tab_close')}
-                  aria-label={`${t('nav_tab_close')}: ${t(tab.labelKey)}`}
+                  aria-label={`${t('nav_tab_close')}: ${tabLabel}`}
                 >
                   <X size={12} />
                 </button>

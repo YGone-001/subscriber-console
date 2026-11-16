@@ -2,61 +2,102 @@
  * Breadcrumb bar with the tool cluster.
  *
  * Forward-ported from the historical xCloud UI (reference commit 2c40903):
- * frontend/src/components/NavigationBreadcrumbs.tsx
+ * frontend/src/app/components/NavigationBreadcrumbs.tsx
  *
  * Crumbs stay derived from the current route authority (`getBreadcrumbs`), so the
  * presentation cannot diverge from the accepted route set. The right-hand cluster
  * restores the reference quick-jump tools: recent destinations, copy link and a
  * data refresh.
  *
- * Adaptations: the Next.js router is replaced by react-router-dom.
- * `router.refresh()` has no React Router equivalent, so refresh revalidates the
- * SWR cache instead, which is the honest analogue for a client-rendered SPA.
+ * Destinations store the normalized real destination pathname, never unresolved
+ * parameter templates (e.g. /subscribers/460020000000400 instead of /subscribers/:imsi).
+ * Recent destinations are scoped per user to prevent cross-user information leakage.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
 import { ChevronRight, Home, Clock, Copy, Check, RotateCw, Trash2, ExternalLink } from 'lucide-react';
-import { getBreadcrumbs, canAccessNavigationRoute, getNavigationRoute, resolveNavigationRoute } from '../../lib/navigation';
+import {
+  getBreadcrumbs,
+  isNavigableDestination,
+  normalizePathname,
+  resolveNavigationRoute,
+  UUID_SEGMENT,
+} from '../../lib/navigation';
 import { copyText } from '../../lib/clipboard';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
+import type { CanonicalRole } from '../../types/auth';
 
-const RECENT_PAGES_STORAGE_KEY = 'XCLOUD_RECENT_PAGES';
+export const RECENT_PAGES_STORAGE_KEY = 'XCLOUD_RECENT_PAGES';
 
-interface RecentPageItem {
+export function getRecentPagesStorageKey(username?: string | null): string {
+  return username ? `${RECENT_PAGES_STORAGE_KEY}:${username}` : RECENT_PAGES_STORAGE_KEY;
+}
+
+export interface RecentPageItem {
   path: string;
   labelKey: string;
   timestamp: number;
 }
 
-const EMPTY_RECENT: RecentPageItem[] = [];
-let cachedRawRecent: string | null = null;
-let cachedRecent: RecentPageItem[] = EMPTY_RECENT;
+interface StoredRecentEntry {
+  path?: unknown;
+  labelKey?: unknown;
+  timestamp?: unknown;
+}
 
-function getRecentPagesSnapshot(): RecentPageItem[] {
+const EMPTY_RECENT: RecentPageItem[] = [];
+const recentMemoryCache = new Map<string, { raw: string | null; recent: RecentPageItem[] }>();
+
+export function getStoredRecentSnapshot(username?: string | null, role?: CanonicalRole): RecentPageItem[] {
   if (typeof window === 'undefined') return EMPTY_RECENT;
+  const key = getRecentPagesStorageKey(username);
+  const cached = recentMemoryCache.get(key);
   try {
-    const raw = localStorage.getItem(RECENT_PAGES_STORAGE_KEY);
-    if (raw === cachedRawRecent && cachedRecent) return cachedRecent;
-    cachedRawRecent = raw;
+    let raw = localStorage.getItem(key);
+    // Safe legacy migration: if user-scoped key does not exist yet, check for legacy un-scoped key
+    if (raw === null && username) {
+      const legacyRaw = localStorage.getItem(RECENT_PAGES_STORAGE_KEY);
+      if (legacyRaw !== null) {
+        raw = legacyRaw;
+        try { localStorage.removeItem(RECENT_PAGES_STORAGE_KEY); } catch { /* best-effort cleanup */ }
+      }
+    }
+    if (cached && cached.raw === raw) return cached.recent;
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) throw new Error('Invalid recent page storage');
-      cachedRecent = parsed.filter((item): item is RecentPageItem => (
-        typeof item === 'object' &&
-        item !== null &&
-        typeof (item as RecentPageItem).path === 'string' &&
-        typeof (item as RecentPageItem).labelKey === 'string' &&
-        typeof (item as RecentPageItem).timestamp === 'number' &&
-        Boolean(getNavigationRoute((item as RecentPageItem).path))
-      ));
-      return cachedRecent;
+      if (Array.isArray(parsed)) {
+        const reconstructed: RecentPageItem[] = [];
+        for (const item of parsed) {
+          if (
+            typeof item === 'object' &&
+            item !== null &&
+            typeof (item as StoredRecentEntry).path === 'string' &&
+            typeof (item as StoredRecentEntry).timestamp === 'number'
+          ) {
+            const rawPath = (item as StoredRecentEntry).path as string;
+            const normalizedPath = normalizePathname(rawPath);
+            if (isNavigableDestination(normalizedPath, role)) {
+              const route = resolveNavigationRoute(normalizedPath);
+              if (route && !reconstructed.some((r) => r.path === normalizedPath)) {
+                reconstructed.push({
+                  path: normalizedPath,
+                  labelKey: route.labelKey,
+                  timestamp: (item as StoredRecentEntry).timestamp as number,
+                });
+              }
+            }
+          }
+        }
+        recentMemoryCache.set(key, { raw, recent: reconstructed });
+        return reconstructed;
+      }
     }
   } catch {
-    /* Unreadable storage: fall back to the empty recent list. */
+    /* Unreadable storage: fall back to empty list */
   }
-  cachedRecent = EMPTY_RECENT;
+  recentMemoryCache.set(key, { raw: null, recent: EMPTY_RECENT });
   return EMPTY_RECENT;
 }
 
@@ -64,8 +105,8 @@ const recentListeners = new Set<() => void>();
 function subscribeRecent(onStoreChange: () => void) {
   recentListeners.add(onStoreChange);
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === RECENT_PAGES_STORAGE_KEY) {
-      cachedRawRecent = null;
+    if (event.key && event.key.startsWith(RECENT_PAGES_STORAGE_KEY)) {
+      recentMemoryCache.clear();
       onStoreChange();
     }
   };
@@ -76,11 +117,12 @@ function subscribeRecent(onStoreChange: () => void) {
   };
 }
 
-function writeRecentPages(next: RecentPageItem[]) {
-  cachedRecent = next;
+export function writeRecentPages(next: RecentPageItem[], username?: string | null) {
+  const key = getRecentPagesStorageKey(username);
   try {
-    cachedRawRecent = JSON.stringify(next);
-    localStorage.setItem(RECENT_PAGES_STORAGE_KEY, cachedRawRecent);
+    const raw = JSON.stringify(next);
+    recentMemoryCache.set(key, { raw, recent: next });
+    localStorage.setItem(key, raw);
   } catch {
     /* Storage is best-effort: a failed write must not break navigation. */
   }
@@ -102,39 +144,40 @@ export function NavigationBreadcrumbs() {
 
   const crumbs = getBreadcrumbs(pathname);
 
-  const storedRecentPages = useSyncExternalStore(subscribeRecent, getRecentPagesSnapshot, () => EMPTY_RECENT);
+  const getSnapshot = useCallback(() => {
+    return getStoredRecentSnapshot(user?.username, user?.role);
+  }, [user?.username, user?.role]);
+
+  const storedRecentPages = useSyncExternalStore(subscribeRecent, getSnapshot, () => EMPTY_RECENT);
   const recentPages = useMemo(
-    () => storedRecentPages.filter((item) => {
-      const route = getNavigationRoute(item.path);
-      return route && canAccessNavigationRoute(route, user?.role);
-    }),
+    () => storedRecentPages.filter((item) => isNavigableDestination(item.path, user?.role)),
     [storedRecentPages, user?.role],
   );
 
   // Track recent destinations as the operator moves around.
   useEffect(() => {
-    if (!pathname) return;
-    const matchedRoute = resolveNavigationRoute(pathname);
-    if (matchedRoute && canAccessNavigationRoute(matchedRoute, user?.role)) {
-      const current = getRecentPagesSnapshot();
-      const filtered = current.filter((item) => item.path !== matchedRoute.route);
-      writeRecentPages([
-        { path: matchedRoute.route, labelKey: matchedRoute.labelKey, timestamp: Date.now() },
-        ...filtered,
-      ].slice(0, 8));
+    if (!pathname || isAuthLoading) return;
+    const normalized = normalizePathname(pathname);
+    if (isNavigableDestination(normalized, user?.role)) {
+      const matchedRoute = resolveNavigationRoute(normalized);
+      if (matchedRoute) {
+        const current = getStoredRecentSnapshot(user?.username, user?.role);
+        const filtered = current.filter((item) => item.path !== normalized);
+        writeRecentPages([
+          { path: normalized, labelKey: matchedRoute.labelKey, timestamp: Date.now() },
+          ...filtered,
+        ].slice(0, 8), user?.username);
+      }
     }
-  }, [pathname, user?.role]);
+  }, [pathname, isAuthLoading, user?.username, user?.role]);
 
   // Drop destinations the current role can no longer reach.
   useEffect(() => {
     if (isAuthLoading || !user) return;
-    const current = getRecentPagesSnapshot();
-    const accessible = current.filter((item) => {
-      const route = getNavigationRoute(item.path);
-      return route && canAccessNavigationRoute(route, user.role);
-    });
-    if (accessible.length !== current.length) writeRecentPages(accessible);
-  }, [isAuthLoading, user]);
+    const current = getStoredRecentSnapshot(user.username, user.role);
+    const accessible = current.filter((item) => isNavigableDestination(item.path, user.role));
+    if (accessible.length !== current.length) writeRecentPages(accessible, user.username);
+  }, [isAuthLoading, user?.username, user?.role]);
 
   const handleCopyLink = useCallback(async () => {
     if (!(await copyText(window.location.href))) return;
@@ -149,9 +192,9 @@ export function NavigationBreadcrumbs() {
   }, [mutate]);
 
   const handleClearRecent = useCallback(() => {
-    writeRecentPages([]);
+    writeRecentPages([], user?.username);
     setRecentDropdownOpen(false);
-  }, []);
+  }, [user?.username]);
 
   return (
     <nav className="nav-breadcrumbs-bar" aria-label={t('breadcrumbs_label')}>
@@ -207,17 +250,31 @@ export function NavigationBreadcrumbs() {
                   {recentPages.length === 0 ? (
                     <div className="nav-recent-empty">{t('nav_crumb_no_recent')}</div>
                   ) : (
-                    recentPages.map((item) => (
-                      <Link
-                        key={item.path}
-                        to={item.path}
-                        className={`nav-recent-item ${item.path === pathname ? 'active' : ''}`}
-                        onClick={() => setRecentDropdownOpen(false)}
-                      >
-                        <span className="nav-recent-label">{t(item.labelKey)}</span>
-                        <ExternalLink size={12} className="nav-recent-link-icon" aria-hidden="true" />
-                      </Link>
-                    ))
+                    recentPages.map((item) => {
+                      const route = resolveNavigationRoute(item.path);
+                      const lastSegment = route && route.dynamicParameters.length > 0
+                        ? item.path.split('/').filter(Boolean).at(-1)
+                        : null;
+                      const displayParam = lastSegment && UUID_SEGMENT.test(lastSegment)
+                        ? `${lastSegment.slice(0, 8)}...`
+                        : lastSegment;
+                      const label = displayParam
+                        ? `${t(item.labelKey)} (${displayParam})`
+                        : t(item.labelKey);
+
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          className={`nav-recent-item ${item.path === pathname ? 'active' : ''}`}
+                          onClick={() => setRecentDropdownOpen(false)}
+                          title={item.path}
+                        >
+                          <span className="nav-recent-label">{label}</span>
+                          <ExternalLink size={12} className="nav-recent-link-icon" aria-hidden="true" />
+                        </Link>
+                      );
+                    })
                   )}
                 </div>
               </div>

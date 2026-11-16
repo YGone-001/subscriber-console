@@ -1,5 +1,6 @@
 import { Activity, BellRing, BookOpen, Boxes, Briefcase, CreditCard, Cpu, DatabaseBackup, FileText, Gauge, HeartPulse, LayoutDashboard, Network, SearchCheck, Radar, Radio, ScrollText, Settings, Smartphone, Table2, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 import type { CanonicalRole } from '../types/auth';
+import { COMPATIBILITY_REDIRECTS } from '../router/redirects';
 import { hasNavigationPermission } from './permissions';
 
 export type NavigationRoute = {
@@ -25,10 +26,10 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/inventory/assets', targetRoute: '/inventory/assets', dynamicParameters: [], labelKey: 'nav_inventory_assets', icon: Table2, group: 'network' },
   { route: '/inventory/runtime', targetRoute: '/inventory/runtime', dynamicParameters: [], labelKey: 'nav_inventory_runtime', icon: Cpu, group: 'network' },
   { route: '/inventory/groups', targetRoute: '/inventory/groups', dynamicParameters: [], labelKey: 'groups_title', icon: Boxes, group: 'network' },
-  { route: '/inventory/:resourceId', targetRoute: '/inventory/:resourceId', dynamicParameters: ['resourceId'], labelKey: 'nav_dashboard', icon: FileText },
+  { route: '/inventory/:resourceId', targetRoute: '/inventory/:resourceId', dynamicParameters: ['resourceId'], labelKey: 'nav_inventory', icon: Boxes },
   { route: '/inventory/create', targetRoute: '/inventory/create', dynamicParameters: [], labelKey: 'nav_inventory_create', icon: Boxes },
   { route: '/topology', targetRoute: '/topology', dynamicParameters: [], labelKey: 'nav_topology', icon: Network, group: 'network', visible: true },
-  { route: '/topology/:resourceId', targetRoute: '/topology/:resourceId', dynamicParameters: ['resourceId'], labelKey: 'nav_dashboard', icon: FileText },
+  { route: '/topology/:resourceId', targetRoute: '/topology/:resourceId', dynamicParameters: ['resourceId'], labelKey: 'nav_topology', icon: Network },
   { route: '/discovery', targetRoute: '/discovery', dynamicParameters: [], labelKey: 'nav_discovery', icon: Radar, group: 'network', visible: true },
   { route: '/discovery/sources/:sourceId', targetRoute: '/discovery/sources/:sourceId', dynamicParameters: ['sourceId'], labelKey: 'nav_discovery', icon: FileText },
   { route: '/nf-health', targetRoute: '/nf-health', dynamicParameters: [], labelKey: 'nav_nf_health', icon: HeartPulse, group: 'network', visible: true },
@@ -45,14 +46,14 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/knowledge/:entryId/edit', targetRoute: '/knowledge/:entryId/edit', dynamicParameters: ['entryId'], labelKey: 'nav_knowledge_edit', icon: BookOpen },
   { route: '/ocs', targetRoute: '/ocs', dynamicParameters: [], labelKey: 'nav_ocs', icon: Zap },
   { route: '/ocs/balances', targetRoute: '/ocs/balances', dynamicParameters: [], labelKey: 'nav_ocs_balances', icon: Wallet, group: 'business', visible: true },
-  { route: '/ocs/balances/:imsi', targetRoute: '/ocs/balances/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_dashboard', icon: FileText },
+  { route: '/ocs/balances/:imsi', targetRoute: '/ocs/balances/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_ocs_balances', icon: Wallet },
   { route: '/ocs/contracts', targetRoute: '/ocs/contracts', dynamicParameters: [], labelKey: 'nav_ocs_contracts', icon: Users, group: 'business', visible: true },
-  { route: '/ocs/contracts/:imsi', targetRoute: '/ocs/contracts/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_dashboard', icon: FileText },
+  { route: '/ocs/contracts/:imsi', targetRoute: '/ocs/contracts/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_ocs_contracts', icon: Users },
   { route: '/ocs/dashboard', targetRoute: '/ocs/dashboard', dynamicParameters: [], labelKey: 'nav_ocs_dashboard', icon: LayoutDashboard },
   { route: '/ocs/sessions', targetRoute: '/ocs/sessions', dynamicParameters: [], labelKey: 'nav_ocs_sessions', icon: Activity },
   { route: '/ocs/subscribers', targetRoute: '/ocs/subscribers', dynamicParameters: [], labelKey: 'nav_ocs_subscribers', icon: Users },
   { route: '/ocs/tariffs', targetRoute: '/ocs/tariffs', dynamicParameters: [], labelKey: 'nav_ocs_tariffs', icon: CreditCard, group: 'business', visible: true },
-  { route: '/ocs/tariffs/:planId', targetRoute: '/ocs/tariffs/:planId', dynamicParameters: ['planId'], labelKey: 'nav_dashboard', icon: FileText },
+  { route: '/ocs/tariffs/:planId', targetRoute: '/ocs/tariffs/:planId', dynamicParameters: ['planId'], labelKey: 'nav_ocs_tariffs', icon: CreditCard },
   { route: '/ocs/usage', targetRoute: '/ocs/usage', dynamicParameters: [], labelKey: 'nav_ocs_usage', icon: Gauge },
   { route: '/profile', targetRoute: '/profile', dynamicParameters: [], labelKey: 'nav_profile', icon: FileText, group: 'business', visible: true },
   { route: '/profile/new', targetRoute: '/profile/new', dynamicParameters: [], labelKey: 'nav_profile_new', icon: FileText },
@@ -67,7 +68,7 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/system-health', targetRoute: '/system-health', dynamicParameters: [], labelKey: 'nav_system_health', icon: Activity, group: 'platform', visible: true },
   { route: '/system/retention', targetRoute: '/system/retention', dynamicParameters: [], labelKey: 'nav_system_retention', icon: DatabaseBackup, group: 'platform', visible: true, permission: 'users.read' },
   { route: '/users', targetRoute: '/users', dynamicParameters: [], labelKey: 'nav_system_users', icon: UserCog, group: 'platform', visible: true, permission: 'users.read' },
-  { route: '/users/:username', targetRoute: '/users/:username', dynamicParameters: ['username'], labelKey: 'nav_dashboard', icon: FileText },
+  { route: '/users/:username', targetRoute: '/users/:username', dynamicParameters: ['username'], labelKey: 'nav_system_users', icon: UserCog, permission: 'users.read' },
   { route: '/users/create', targetRoute: '/users/create', dynamicParameters: [], labelKey: 'nav_user_create', icon: UserCog, permission: 'users.read' },
 ];
 
@@ -87,7 +88,7 @@ export function matchesRoute(pattern: string, pathname: string): boolean {
   return expression.test(pathname);
 }
 
-const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Resolve a live pathname to its navigation route.
@@ -97,7 +98,7 @@ const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * longest-prefix match, so `/ocs/tariffs/` resolves to `/ocs/tariffs`.
  */
 export function resolveNavigationRoute(pathname: string): NavigationRoute | undefined {
-  const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  const normalized = normalizePathname(pathname);
   return getNavigationRoute(normalized);
 }
 
@@ -113,6 +114,42 @@ export function canAccessNavigationRoute(route: NavigationRoute, role?: Canonica
 
 export function getVisibleNavigation(role: CanonicalRole | undefined): NavigationRoute[] {
   return APP_ROUTES.filter((route) => route.visible && hasNavigationPermission(role, route.permission));
+}
+
+/**
+ * Whether the given role may reach the route destination based on role permissions.
+ * Unlike canAccessNavigationRoute (which checks sidebar visibility), this evaluates
+ * whether the destination is accessible regardless of sidebar visibility.
+ */
+export function canAccessDestinationRoute(route: NavigationRoute, role?: CanonicalRole): boolean {
+  return hasNavigationPermission(role, route.permission);
+}
+
+/**
+ * Normalizes a URL pathname by trimming whitespace, collapsing multiple adjacent slashes,
+ * and stripping any trailing slash (except for the root path '/').
+ */
+export function normalizePathname(pathname: string): string {
+  if (!pathname || typeof pathname !== 'string') return '/';
+  const trimmed = pathname.trim();
+  if (!trimmed || trimmed === '/') return '/';
+  const collapsed = trimmed.replace(/\/+/g, '/');
+  return collapsed.length > 1 ? collapsed.replace(/\/+$/, '') : collapsed;
+}
+
+/**
+ * Validate whether a pathname represents a valid, real navigable destination
+ * (not an unresolved parameter template, redirect alias, or login gateway)
+ * that the given role has presentation permission to visit.
+ */
+export function isNavigableDestination(pathname: string, role?: CanonicalRole): boolean {
+  if (!pathname || typeof pathname !== 'string') return false;
+  const normalized = normalizePathname(pathname);
+  if (!normalized.startsWith('/') || normalized.includes(':') || normalized === '/login') return false;
+  if (normalized in COMPATIBILITY_REDIRECTS) return false;
+  const route = resolveNavigationRoute(normalized);
+  if (!route) return false;
+  return canAccessDestinationRoute(route, role);
 }
 
 export function getBreadcrumbs(pathname: string): Array<{ labelKey: string; path?: string; current: boolean }> {
