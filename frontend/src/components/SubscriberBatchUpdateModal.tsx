@@ -56,7 +56,7 @@ export default function SubscriberBatchUpdateModal({ isOpen, selectedImsis, onCl
   ].filter(Boolean).join(', ') || t('sub_batch_none_selected');
 
   return (
-    <Dialog open={isOpen} onClose={() => { if (!isSaving) onClose(); }} overlayClassName="modal-overlay" className="modal-content animate-modal-enter bu-modal-content" labelledBy="subscriber-batch-update-title" initialFocusRef={cancelRef} closeOnOverlay={!isSaving}>
+    <Dialog open={isOpen} onClose={() => { if (!isSaving) onClose(); }} overlayClassName="modal-overlay" className="modal-content animate-modal-enter bu-modal-content" labelledBy="subscriber-batch-update-title" initialFocusRef={cancelRef} closeOnOverlay={!isSaving} closeOnEscape={!isSaving}>
       <div className="workflow-header bu-header">
         <div>
           <h2 id="subscriber-batch-update-title" className="bu-title"><Settings2 size={18} /> {t('sub_batch_update_title')}</h2>

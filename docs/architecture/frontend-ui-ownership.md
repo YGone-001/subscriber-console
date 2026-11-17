@@ -136,6 +136,26 @@ and uses the existing token variables. User-facing drift copy belongs to the
 existing bilingual locale layer through `lib/locales/config-drift.ts` and the
 English and Chinese locale exports.
 
+## Shared overlay interaction contract
+
+`frontend/src/components/ui/Dialog.tsx` and
+`frontend/src/components/ui/useDialogFocus.ts` are the single interaction
+authority for modal surfaces. `frontend/src/components/Modal.tsx` is a
+compatibility adapter over the same contract; it is not a second authority.
+
+| Concern | Contract |
+|---|---|
+| Dismissal | `closeOnOverlay` and `closeOnEscape` are independent policies. A blocked topmost overlay consumes Escape without invoking `onClose` and never passes it to an underlying dialog. |
+| Focus | Initial focus enters the topmost dialog (explicit ref, then the first eligible control, then the dialog surface). Tab and Shift+Tab wrap inside the topmost dialog; keyboard focus that drifted behind it is pulled back. Disabled, hidden, inert and non-rendered controls are excluded. |
+| Restoration | Closing restores focus to the trigger while it is still valid; a removed trigger (route transition, refreshed list) falls back to the remaining topmost dialog instead of focusing a detached node. |
+| Background isolation | Sibling isolation is reference counted per element, and every overlay also locks the layers below it in the overlay stack. Nested dialogs therefore inert the parent even when the child renders inside the parent's layer. The final release restores the original `inert`, `aria-hidden` and body `overflow` exactly once. |
+| Stacking | Inline overlays keep their existing CSS `z-index`. Opt-in portals mount into a per-dialog body-level host (`data-xcloud-overlay-portal`) with a deterministic monotonic level, so a child always paints above its parent. React context, theme and localisation are preserved by `createPortal`. |
+| Portal hosts | One host per portal dialog, removed with that dialog. There is no parallel application root or second provider tree. |
+
+Portal use is opt-in (`portal` on `Dialog` / `Modal`). The governed runtime
+bootstrap dialog is the current portal consumer; the remaining overlays keep
+their inline position until they have equivalent browser evidence.
+
 ## Rules for new UI work
 
 - A new page starts from `PageHeader`, `MetricStrip`, the shared pagination and

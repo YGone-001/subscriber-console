@@ -159,7 +159,7 @@ export function AgentsPage() {
     </>}
     {editor ? <AgentEditor key={editor === 'new' ? 'new' : editor.agentId} agent={editor === 'new' ? undefined : editor} onClose={() => setEditor(null)} onChanged={refresh} onCredential={setCredential} /> : null}
     {credential ? <CredentialDialog credential={credential} onClose={() => setCredential(null)} /> : null}
-    {action ? <Dialog open onClose={() => { if (!busy) setAction(null); }} ariaLabel={t(action === 'rotate' ? 'agents_rotate' : current?.enabled ? 'agents_disable' : 'agents_enable')} overlayClassName="modal-overlay" className="modal-content">
+    {action ? <Dialog open onClose={() => { if (!busy) setAction(null); }} ariaLabel={t(action === 'rotate' ? 'agents_rotate' : current?.enabled ? 'agents_disable' : 'agents_enable')} overlayClassName="modal-overlay" className="modal-content" closeOnOverlay={!busy} closeOnEscape={!busy}>
       <div className={styles.dialog}><h2>{t(action === 'rotate' ? 'agents_rotate' : current?.enabled ? 'agents_disable' : 'agents_enable')}</h2>
         <p>{t(action === 'rotate' ? 'agents_rotate_hint' : current?.enabled ? 'agents_disable_hint' : 'agents_enable_hint')}</p>
         {actionError ? <p className={styles.error} role="alert">{actionError}</p> : null}

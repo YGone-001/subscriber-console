@@ -208,6 +208,8 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
       overlayClassName="modal-overlay"
       className="modal-content animate-fade-in"
       labelledBy={titleId}
+      closeOnOverlay={!submitting}
+      closeOnEscape={!submitting}
     >
       <div className={styles.modalHeader}>
         <h2 id={titleId}>{isEdit ? t('nf_alerts_edit_rule') : t('nf_alerts_add_rule')}</h2>

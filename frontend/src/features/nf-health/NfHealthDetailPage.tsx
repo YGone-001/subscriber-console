@@ -720,6 +720,7 @@ export function NfHealthDetailPage() {
             labelledBy="nf-health-collect-confirm-title"
             role="alertdialog"
             closeOnOverlay={!busy}
+            closeOnEscape={!busy}
           >
             <div className={styles.modalHeader}>
               <h2 id="nf-health-collect-confirm-title">{t('nf_health_collect_confirm_title')}</h2>

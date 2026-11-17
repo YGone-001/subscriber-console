@@ -142,6 +142,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
         labelledBy="batch-create-modal-title"
         initialFocusRef={cancelButtonRef}
         closeOnOverlay={!batchLoading}
+        closeOnEscape={!batchLoading}
       >
           <div className="bc-header">
             <h2 id="batch-create-modal-title" className="bc-header-title">{t("batch_create")}</h2>

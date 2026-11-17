@@ -61,6 +61,8 @@ export default function TariffCloneDialog({ open, sourcePlanId, onClose, onClone
       overlayClassName="ocs-dialog-overlay"
       labelledBy="ocs-clone-title"
       initialFocusRef={inputRef}
+      closeOnOverlay={!submitting}
+      closeOnEscape={!submitting}
     >
       <div className="ocs-dialog-header">
         <h3 id="ocs-clone-title">{t('ocs_clone_title')}</h3>

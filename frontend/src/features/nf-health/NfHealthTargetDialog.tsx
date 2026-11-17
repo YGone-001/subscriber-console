@@ -256,6 +256,8 @@ export function NfHealthTargetDialog({
       overlayClassName={`modal-overlay ${styles.modalOverlay}`}
       className={`modal-content animate-fade-in ${styles.modalContent}`}
       labelledBy={titleId}
+      closeOnOverlay={!submitting}
+      closeOnEscape={!submitting}
     >
       <div className={styles.modalHeader}>
         <h2 id={titleId}>

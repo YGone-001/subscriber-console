@@ -37,6 +37,7 @@ export function BulkProgressModal({ progress, onCancel, onClose }: BulkProgressM
       describedBy={descriptionId}
       initialFocusRef={actionButtonRef}
       closeOnOverlay={progress.completed}
+      closeOnEscape={progress.completed}
     >
       <header className={styles.progressHeader}>
         <div>

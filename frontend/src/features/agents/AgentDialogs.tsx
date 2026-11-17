@@ -44,7 +44,7 @@ export function AgentEditor({ agent, onClose, onChanged, onCredential }: EditorP
     ['siteResourceId', 'agents_site', agent?.scope.siteResourceId ?? '', false, 36],
     ['hostResourceId', 'agents_host_resource', agent?.scope.hostResourceId ?? '', false, 36],
   ] as const;
-  return <Dialog open onClose={onClose} ariaLabel={t(agent ? 'agents_edit' : 'agents_create')} overlayClassName="modal-overlay" className="modal-content">
+  return <Dialog open onClose={onClose} ariaLabel={t(agent ? 'agents_edit' : 'agents_create')} overlayClassName="modal-overlay" className="modal-content" closeOnOverlay={!busy} closeOnEscape={!busy}>
     <form className={styles.dialog} onSubmit={(event) => { void submit(event); }}>
       <header className={styles.dialogHead}>
         <h2>{t(agent ? 'agents_edit' : 'agents_create')}</h2>

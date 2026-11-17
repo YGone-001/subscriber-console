@@ -93,7 +93,7 @@ export function RuntimeBootstrapDialog({ template, componentIds, onClose, onAppl
 
   const footer = (
     <div className={styles.dialogFooter}>
-      <button type="button" className={styles.button} onClick={onClose}>
+      <button type="button" className={styles.button} onClick={onClose} disabled={applying}>
         {t('runtime_bootstrap_close')}
       </button>
       <button
@@ -122,6 +122,11 @@ export function RuntimeBootstrapDialog({ template, componentIds, onClose, onAppl
       title={t('runtime_bootstrap_title')}
       maxWidth="960px"
       footer={footer}
+      portal
+      /* An in-flight apply has an uncertain outcome: dismissing the dialog
+       * would hide whether the plan was committed. */
+      closeOnOverlay={!applying}
+      closeOnEscape={!applying}
     >
       <p className={styles.dialogNote}>{t('runtime_bootstrap_note')}</p>
 

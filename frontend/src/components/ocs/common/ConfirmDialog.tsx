@@ -58,6 +58,7 @@ export default function ConfirmDialog({
       labelledBy="ocs-confirm-title"
       role="alertdialog"
       closeOnOverlay={!loading}
+      closeOnEscape={!loading}
     >
       <div className="ocs-dialog-header">
         {danger && <AlertTriangle size={20} className="ocs-dialog-danger-icon" aria-hidden="true" />}

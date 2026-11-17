@@ -436,6 +436,8 @@ export function DiscoveryPage() {
         overlayClassName={`modal-overlay ${styles.modalOverlay}`}
         className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="discovery-create-title"
+        closeOnOverlay={!submitting}
+        closeOnEscape={!submitting}
       >
         <div className={styles.modalHeader}>
           <h2 id="discovery-create-title">{t('discovery_create_source')}</h2>

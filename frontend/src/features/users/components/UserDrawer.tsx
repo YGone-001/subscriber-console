@@ -59,6 +59,8 @@ export function UserDrawer(props: UserDrawerProps) {
           labelledBy={titleId}
           describedBy={descriptionId}
           initialFocusRef={closeButtonRef}
+          closeOnOverlay={!props.savingAction}
+          closeOnEscape={!props.savingAction}
         >
           <header className={styles.drawerHeader}>
             <div>

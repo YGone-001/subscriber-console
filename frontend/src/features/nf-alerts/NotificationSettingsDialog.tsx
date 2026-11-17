@@ -212,6 +212,7 @@ function RemoveConfirmDialog({
       labelledBy={titleId}
       role="alertdialog"
       closeOnOverlay={!busy}
+      closeOnEscape={!busy}
     >
       <div className={styles.notifyDialog}>
         <header className={styles.drawerHead}>
@@ -798,6 +799,7 @@ function RetryConfirmDialog({
       labelledBy="nf-notify-retry-title"
       role="alertdialog"
       closeOnOverlay={!busy}
+      closeOnEscape={!busy}
     >
       <div className={styles.notifyDialog}>
         <header className={styles.drawerHead}>

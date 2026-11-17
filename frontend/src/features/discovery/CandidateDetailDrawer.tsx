@@ -20,7 +20,7 @@ import { Link } from 'react-router-dom';
 import { Link2, Link2Off, ShieldCheck, X } from 'lucide-react';
 import { TopologyResourcePicker } from '../topology/components/TopologyResourcePicker';
 import { currentListLocation, withReturnTo } from '../../lib/return-to';
-import { useDialogFocus } from '../../components/ui/useDialogFocus';
+import { Dialog } from '../../components/ui/Dialog';
 import { useI18n } from '../../providers/I18nProvider';
 import type { RuntimeComponent } from '../runtime/runtime-types';
 import type { NfObservation } from './discovery-types';
@@ -53,7 +53,6 @@ export function CandidateDetailDrawer({
   onBootstrap,
 }: Props) {
   const { t } = useI18n();
-  const dialogRef = useDialogFocus({ open: true, onClose });
   const [linkResourceId, setLinkResourceId] = useState('');
   const listLocation = typeof window === 'undefined'
     ? ''
@@ -104,15 +103,16 @@ export function CandidateDetailDrawer({
   };
 
   return (
-    <div className={styles.drawerLayer}>
-      <div
-        className={styles.drawer}
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="candidate-detail-title"
-        tabIndex={-1}
-      >
+    <Dialog
+      open
+      onClose={onClose}
+      overlayClassName={styles.drawerLayer}
+      className={styles.drawer}
+      labelledBy="candidate-detail-title"
+      /* The drawer keeps its explicit close action; a backdrop click must not
+       * discard an in-progress link selection. */
+      closeOnOverlay={false}
+    >
         <header className={styles.drawerHead}>
           <div>
             <h3 id="candidate-detail-title" className={styles.detailTitle}>{candidate.nfType}</h3>
@@ -370,8 +370,7 @@ export function CandidateDetailDrawer({
             )}
           </section>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 

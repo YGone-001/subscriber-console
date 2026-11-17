@@ -641,6 +641,8 @@ export function TopologyPage() {
         overlayClassName={`modal-overlay ${styles.modalOverlay}`}
         className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="topology-create-title"
+        closeOnOverlay={!submitting}
+        closeOnEscape={!submitting}
       >
         <div className={styles.modalHeader}>
           <h2 id="topology-create-title">{t('topology_create_relationship')}</h2>
@@ -665,6 +667,8 @@ export function TopologyPage() {
         overlayClassName={`modal-overlay ${styles.modalOverlay}`}
         className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="topology-edit-title"
+        closeOnOverlay={!submitting}
+        closeOnEscape={!submitting}
       >
         <div className={styles.modalHeader}>
           <h2 id="topology-edit-title">{t('topology_edit_relationship')}</h2>
@@ -691,6 +695,8 @@ export function TopologyPage() {
         overlayClassName={`modal-overlay ${styles.modalOverlay}`}
         className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="topology-retire-title"
+        closeOnOverlay={!submitting}
+        closeOnEscape={!submitting}
       >
         <div className={styles.modalHeader}>
           <h2 id="topology-retire-title">{t('topology_retire_title')}</h2>

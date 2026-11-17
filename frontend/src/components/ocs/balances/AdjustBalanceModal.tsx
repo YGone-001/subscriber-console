@@ -496,6 +496,7 @@ export default function AdjustBalanceModal({
       labelledBy="balance-modal-title"
       role="dialog"
       closeOnOverlay={!isSubmitting && !refreshing}
+      closeOnEscape={!isSubmitting && !refreshing}
     >
       <div className="ocs-dialog-header ocs-dialog-header-between">
         <div>

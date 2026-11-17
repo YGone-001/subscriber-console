@@ -272,6 +272,8 @@ export default function CreateContractDialog({ open, initialImsi, onClose, onCre
       className="ocs-dialog"
       overlayClassName="ocs-dialog-overlay"
       labelledBy="contract-create-title"
+      closeOnOverlay={!busy}
+      closeOnEscape={!busy}
     >
       <div className="ocs-dialog-header">
         <h3 id="contract-create-title">{t('ocs_contract_create_title')}</h3>

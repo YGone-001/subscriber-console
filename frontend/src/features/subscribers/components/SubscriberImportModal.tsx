@@ -160,6 +160,8 @@ export function SubscriberImportModal({ isOpen, onClose, onImported }: {
       overlayClassName="modal-overlay"
       className="modal-content workflow-modal animate-modal-enter"
       labelledBy="subscriber-import-title"
+      closeOnOverlay={!isImporting}
+      closeOnEscape={!isImporting}
     >
       <div className="workflow-header">
         <h2 id="subscriber-import-title" className="sub-modal-new-title">{t('sub_import_title')}</h2>

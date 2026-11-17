@@ -508,6 +508,8 @@ export function DiscoverySourceDetailPage() {
         overlayClassName={`modal-overlay ${styles.modalOverlay}`}
         className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="discovery-edit-title"
+        closeOnOverlay={!busy}
+        closeOnEscape={!busy}
       >
         <div className={styles.modalHeader}>
           <h2 id="discovery-edit-title">{t('discovery_edit_source')}</h2>
@@ -587,6 +589,8 @@ export function DiscoverySourceDetailPage() {
         overlayClassName={`modal-overlay ${styles.modalOverlay}`}
         className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="discovery-link-title"
+        closeOnOverlay={!busy}
+        closeOnEscape={!busy}
       >
         <div className={styles.modalHeader}>
           <h2 id="discovery-link-title">{t('discovery_link_title')}</h2>
@@ -638,6 +642,8 @@ export function DiscoverySourceDetailPage() {
         className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="discovery-unlink-title"
         role="alertdialog"
+        closeOnOverlay={!busy}
+        closeOnEscape={!busy}
       >
         <div className={styles.modalHeader}>
           <h2 id="discovery-unlink-title">{t('discovery_unlink_title')}</h2>

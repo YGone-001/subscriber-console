@@ -1028,6 +1028,8 @@ function NfHealthAlertsPage() {
         overlayClassName="modal-overlay"
         className="modal-content animate-fade-in"
         labelledBy="nf-alerts-bulk-title"
+        closeOnOverlay={!bulkBusy}
+        closeOnEscape={!bulkBusy}
       >
         <div className={styles.modalHeader}>
           <h2 id="nf-alerts-bulk-title">

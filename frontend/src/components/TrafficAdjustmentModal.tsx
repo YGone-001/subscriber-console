@@ -177,6 +177,7 @@ export default function TrafficAdjustmentModal({
       labelledBy="traffic-adjustment-modal-title"
       initialFocusRef={cancelButtonRef}
       closeOnOverlay={!isSaving}
+      closeOnEscape={!isSaving}
     >
         <div className="workflow-header ta-header">
           <div>

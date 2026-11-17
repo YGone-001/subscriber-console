@@ -164,6 +164,7 @@ export function ConfirmActionPanel({
         initialFocusRef={cancelRef}
         role="alertdialog"
         closeOnOverlay={!isWorking}
+        closeOnEscape={!isWorking}
       >
         {panel}
       </Dialog>
