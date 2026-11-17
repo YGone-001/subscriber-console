@@ -184,7 +184,7 @@ export default function TariffPlanModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="tariff-plan-modal-title"
-      onClick={onClose}
+      onClick={submitting ? undefined : onClose}
     >
       <div className="ocs-modal-container" onClick={(event) => event.stopPropagation()}>
         <div className="ocs-modal-header">
@@ -198,6 +198,7 @@ export default function TariffPlanModal({
             type="button"
             className="ocs-modal-close"
             onClick={onClose}
+            disabled={submitting}
             aria-label={t('close')}
           >
             <X size={18} aria-hidden="true" />
