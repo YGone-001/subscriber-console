@@ -12,6 +12,23 @@
  * Destinations store the normalized real destination pathname, never unresolved
  * parameter templates (e.g. /subscribers/460020000000400 instead of /subscribers/:imsi).
  * Recent destinations are scoped per user to prevent cross-user information leakage.
+ *
+ * Privacy & Persistence Architecture Notice:
+ * 1. Storage Scoping: Recent page records are keyed per authenticated username
+ *    ('XCLOUD_RECENT_PAGES:<username>') to enforce workspace isolation across operators.
+ * 2. Unauthenticated Safety: If the authenticated username is unavailable (e.g.
+ *    during checking or unauthenticated states), history is neither read from nor
+ *    written to any global unpartitioned storage key.
+ * 3. Legacy Purge: Ownerless legacy unpartitioned storage ('XCLOUD_RECENT_PAGES') is
+ *    unconditionally purged upon detection and never assigned to any authenticated user.
+ * 4. Local Storage Confidentiality Boundary: Prefixing localStorage keys with the
+ *    username provides application-level namespace partitioning between operator
+ *    accounts; it does NOT provide cryptographic confidentiality against other
+ *    local OS users who share the same browser profile or same-origin JavaScript.
+ *    In shared workstation environments, separate OS logins or private browsing
+ *    must be used.
+ * 5. Role-Aware Pruning: Recent destinations containing restricted routes (such as user
+ *    management surfaces) are pruned upon load and whenever a role transition occurs.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -50,20 +67,27 @@ interface StoredRecentEntry {
 const EMPTY_RECENT: RecentPageItem[] = [];
 const recentMemoryCache = new Map<string, { raw: string | null; recent: RecentPageItem[] }>();
 
+export function clearRecentMemoryCache(): void {
+  recentMemoryCache.clear();
+}
+
 export function getStoredRecentSnapshot(username?: string | null, role?: CanonicalRole): RecentPageItem[] {
   if (typeof window === 'undefined') return EMPTY_RECENT;
+  // Unconditionally purge ownerless legacy unpartitioned storage if present.
+  try {
+    if (localStorage.getItem(RECENT_PAGES_STORAGE_KEY) !== null) {
+      localStorage.removeItem(RECENT_PAGES_STORAGE_KEY);
+    }
+  } catch { /* best-effort cleanup */ }
+
+  if (!username) {
+    return EMPTY_RECENT;
+  }
+
   const key = getRecentPagesStorageKey(username);
   const cached = recentMemoryCache.get(key);
   try {
-    let raw = localStorage.getItem(key);
-    // Safe legacy migration: if user-scoped key does not exist yet, check for legacy un-scoped key
-    if (raw === null && username) {
-      const legacyRaw = localStorage.getItem(RECENT_PAGES_STORAGE_KEY);
-      if (legacyRaw !== null) {
-        raw = legacyRaw;
-        try { localStorage.removeItem(RECENT_PAGES_STORAGE_KEY); } catch { /* best-effort cleanup */ }
-      }
-    }
+    const raw = localStorage.getItem(key);
     if (cached && cached.raw === raw) return cached.recent;
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
@@ -105,7 +129,7 @@ const recentListeners = new Set<() => void>();
 function subscribeRecent(onStoreChange: () => void) {
   recentListeners.add(onStoreChange);
   const handleStorage = (event: StorageEvent) => {
-    if (event.key && event.key.startsWith(RECENT_PAGES_STORAGE_KEY)) {
+    if (event.key === null || (event.key && event.key.startsWith(RECENT_PAGES_STORAGE_KEY))) {
       recentMemoryCache.clear();
       onStoreChange();
     }
@@ -118,6 +142,7 @@ function subscribeRecent(onStoreChange: () => void) {
 }
 
 export function writeRecentPages(next: RecentPageItem[], username?: string | null) {
+  if (!username) return;
   const key = getRecentPagesStorageKey(username);
   try {
     const raw = JSON.stringify(next);
@@ -156,7 +181,7 @@ export function NavigationBreadcrumbs() {
 
   // Track recent destinations as the operator moves around.
   useEffect(() => {
-    if (!pathname || isAuthLoading) return;
+    if (!pathname || isAuthLoading || !user?.username) return;
     const normalized = normalizePathname(pathname);
     if (isNavigableDestination(normalized, user?.role)) {
       const matchedRoute = resolveNavigationRoute(normalized);
@@ -173,7 +198,7 @@ export function NavigationBreadcrumbs() {
 
   // Drop destinations the current role can no longer reach.
   useEffect(() => {
-    if (isAuthLoading || !user) return;
+    if (isAuthLoading || !user?.username) return;
     const current = getStoredRecentSnapshot(user.username, user.role);
     const accessible = current.filter((item) => isNavigableDestination(item.path, user.role));
     if (accessible.length !== current.length) writeRecentPages(accessible, user.username);

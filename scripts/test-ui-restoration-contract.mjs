@@ -148,10 +148,15 @@ check('UI-10', /NocSentinel/.test(headerSource) && /NotificationCenter/.test(hea
 check('UI-11', sidebarSource.includes('sidebar-filter-wrap') && sidebarSource.includes('sidebar-active-bar') && sidebarSource.includes('sidebar-tooltip') && sidebarSource.includes('sidebar-subnav') && sidebarSource.includes('sidebar-toggle-btn'), 'sidebar_composition=filter+rail+tooltip+subnav+toggle');
 check('UI-12', paletteSource.includes('cp-overlay') && paletteSource.includes('cp-search-input') && /getVisibleNavigation|filterNavigation/.test(paletteSource), 'command_palette=restored+route_authority');
 // The tab set must be derived from the navigation authority, never hardcoded.
-// The reference visited-tab model filters through canAccessNavigationRoute, which
-// itself derives from getVisibleNavigation; accept either entry point (same
-// alternation style as UI-12).
-check('UI-13', tabBarSource.includes('nav-tab-bar') && /getVisibleNavigation|canAccessNavigationRoute/.test(tabBarSource), 'tab_bar=restored+role_filtered');
+// The visited-tab model filters through the destination navigation authority
+// (isNavigableDestination / canAccessDestinationRoute), validating role-aware access
+// while allowing secondary and dynamic routes that are not sidebar-visible.
+const navSource = readSource('lib/navigation.ts');
+const hasRouteAuthority = /isNavigableDestination|canAccessDestinationRoute|canAccessNavigationRoute/.test(tabBarSource);
+const hasRoleFilter = /user\?\.role|user\.role|role/.test(tabBarSource);
+const secondaryRoutesSupported = routes.some((r) => r.dynamicParameters?.length > 0);
+const restrictedEnforced = navSource.includes("permission: 'users.read'") && /canAccessDestinationRoute|hasNavigationPermission/.test(navSource);
+check('UI-13', tabBarSource.includes('nav-tab-bar') && hasRouteAuthority && hasRoleFilter && secondaryRoutesSupported && restrictedEnforced, 'tab_bar=restored+role_filtered');
 check('UI-13b', /XCLOUD_OPEN_TABS/.test(tabBarSource) && /nav-tab-close/.test(tabBarSource) && /nav-tab-scroll-btn/.test(tabBarSource) && /nav-tab-dropdown/.test(tabBarSource), 'tab_bar=visited_model+close+scroll+overflow');
 check('UI-14', breadcrumbSource.includes('nav-breadcrumbs-bar') && breadcrumbSource.includes('aria-current') && /getBreadcrumbs/.test(breadcrumbSource), 'breadcrumbs=restored+route_derived');
 check('UI-15', notificationSource.includes('notif-bell-button') && notificationSource.includes('notif-dropdown-panel') && /useNotifications/.test(notificationSource), 'notification_presentation=restored');

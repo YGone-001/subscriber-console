@@ -5,8 +5,8 @@ import { useI18n } from '../providers/I18nProvider';
 import { ToastRegion } from '../providers/ToastProvider';
 import { AppHeader } from './components/AppHeader';
 import { AppSidebar } from './components/AppSidebar';
-import { NavigationBreadcrumbs } from './components/NavigationBreadcrumbs';
-import { NavigationTabBar } from './components/NavigationTabBar';
+import { NavigationBreadcrumbs, clearRecentMemoryCache } from './components/NavigationBreadcrumbs';
+import { NavigationTabBar, clearTabsMemoryCache } from './components/NavigationTabBar';
 
 const DESKTOP_SHELL_QUERY = '(min-width: 981px)';
 
@@ -71,6 +71,8 @@ export function AppShell() {
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
     } finally {
+      clearTabsMemoryCache();
+      clearRecentMemoryCache();
       await refresh();
       navigate('/login', { replace: true });
     }

@@ -11,6 +11,23 @@
  *
  * Visited paths store the normalized real destination pathname, never unresolved
  * parameter templates (e.g. /subscribers/460020000000400 instead of /subscribers/:imsi).
+ *
+ * Privacy & Persistence Architecture Notice:
+ * 1. Storage Scoping: History records are keyed per authenticated username
+ *    ('XCLOUD_OPEN_TABS:<username>') to enforce workspace isolation across operators.
+ * 2. Unauthenticated Safety: If the authenticated username is unavailable (e.g.
+ *    during checking or unauthenticated states), history is neither read from nor
+ *    written to any global unpartitioned storage key.
+ * 3. Legacy Purge: Ownerless legacy unpartitioned storage ('XCLOUD_OPEN_TABS') is
+ *    unconditionally purged upon detection and never assigned to any authenticated user.
+ * 4. Local Storage Confidentiality Boundary: Prefixing localStorage keys with the
+ *    username provides application-level namespace partitioning between operator
+ *    accounts; it does NOT provide cryptographic confidentiality against other
+ *    local OS users who share the same browser profile or same-origin JavaScript.
+ *    In shared workstation environments, separate OS logins or private browsing
+ *    must be used.
+ * 5. Role-Aware Pruning: Visited tabs containing restricted routes (such as user
+ *    management surfaces) are pruned upon load and whenever a role transition occurs.
  */
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -51,20 +68,27 @@ const DEFAULT_TABS: TabDefinition[] = [
 
 const tabsMemoryCache = new Map<string, { raw: string | null; tabs: TabDefinition[] }>();
 
+export function clearTabsMemoryCache(): void {
+  tabsMemoryCache.clear();
+}
+
 export function getStoredTabsSnapshot(username?: string | null, role?: CanonicalRole): TabDefinition[] {
   if (typeof window === 'undefined') return DEFAULT_TABS;
+  // Unconditionally purge ownerless legacy unpartitioned storage if present.
+  try {
+    if (localStorage.getItem(STORAGE_KEY) !== null) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  } catch { /* best-effort cleanup */ }
+
+  if (!username) {
+    return DEFAULT_TABS;
+  }
+
   const key = getTabsStorageKey(username);
   const cached = tabsMemoryCache.get(key);
   try {
-    let raw = localStorage.getItem(key);
-    // Safe legacy migration: if user-scoped key does not exist yet, check for legacy un-scoped key
-    if (raw === null && username) {
-      const legacyRaw = localStorage.getItem(STORAGE_KEY);
-      if (legacyRaw !== null) {
-        raw = legacyRaw;
-        try { localStorage.removeItem(STORAGE_KEY); } catch { /* best-effort cleanup */ }
-      }
-    }
+    const raw = localStorage.getItem(key);
     if (cached && cached.raw === raw) {
       return cached.tabs;
     }
@@ -111,7 +135,7 @@ const tabListeners = new Set<() => void>();
 function subscribeTabs(onStoreChange: () => void) {
   tabListeners.add(onStoreChange);
   const handleStorage = (event: StorageEvent) => {
-    if (event.key && event.key.startsWith(STORAGE_KEY)) {
+    if (event.key === null || (event.key && event.key.startsWith(STORAGE_KEY))) {
       tabsMemoryCache.clear();
       onStoreChange();
     }
@@ -124,6 +148,7 @@ function subscribeTabs(onStoreChange: () => void) {
 }
 
 export function writeTabs(newTabs: TabDefinition[], username?: string | null) {
+  if (!username) return;
   const key = getTabsStorageKey(username);
   try {
     const serialized = newTabs.map((tab) => ({ path: tab.path, isPinned: tab.isPinned }));
@@ -174,7 +199,7 @@ export function NavigationTabBar() {
 
   // Opening a navigable route adds it to the workspace tabs.
   useEffect(() => {
-    if (!pathname || isAuthLoading) return;
+    if (!pathname || isAuthLoading || !user?.username) return;
     const normalized = normalizePathname(pathname);
     if (isNavigableDestination(normalized, user?.role)) {
       const matchedRoute = resolveNavigationRoute(normalized);
@@ -195,7 +220,7 @@ export function NavigationTabBar() {
 
   // Dropping a role removes the tabs it can no longer reach.
   useEffect(() => {
-    if (isAuthLoading || !user) return;
+    if (isAuthLoading || !user?.username) return;
     const currentTabs = getStoredTabsSnapshot(user.username, user.role);
     const accessibleTabs = currentTabs.filter((tab) => isNavigableDestination(tab.path, user.role));
     let noticeTimer: number | undefined;

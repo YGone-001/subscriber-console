@@ -10,8 +10,8 @@ import {
   isNavigableDestination,
   normalizePathname,
 } from '../src/lib/navigation';
-import { getStoredTabsSnapshot, getTabsStorageKey } from '../src/app/components/NavigationTabBar';
-import { getRecentPagesStorageKey, getStoredRecentSnapshot } from '../src/app/components/NavigationBreadcrumbs';
+import { clearTabsMemoryCache, getStoredTabsSnapshot, getTabsStorageKey, writeTabs } from '../src/app/components/NavigationTabBar';
+import { clearRecentMemoryCache, getRecentPagesStorageKey, getStoredRecentSnapshot, writeRecentPages } from '../src/app/components/NavigationBreadcrumbs';
 
 const frontendRoot = resolve(import.meta.dirname, '..');
 const readSource = (relPath: string) => readFileSync(resolve(frontendRoot, relPath), 'utf8');
@@ -221,7 +221,7 @@ test('breadcrumbs resolve valid labels and navigable parent hierarchy for dynami
   assert.equal(userCrumbs[2].labelKey, 'alice');
 });
 
-test('functional migration purges invalid templates and migrates legacy unpartitioned storage', () => {
+test('unpartitioned legacy history is purged and discarded upon authentication without disclosure to the new operator', () => {
   const store = new Map<string, string>();
   const mockStorage = {
     getItem: (key: string) => store.get(key) ?? null,
@@ -236,51 +236,339 @@ test('functional migration purges invalid templates and migrates legacy unpartit
   const originalLocalStorage = (globalThis as unknown as { localStorage: unknown }).localStorage;
 
   try {
-    // Provide window and localStorage in test environment
     (globalThis as unknown as { localStorage: unknown }).localStorage = mockStorage;
-    (globalThis as unknown as { window: unknown }).window = {
-      localStorage: mockStorage,
-    };
+    (globalThis as unknown as { window: unknown }).window = { localStorage: mockStorage };
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
 
-    // 1. Tab Bar Legacy Migration
+    // 1. Pre-seed unpartitioned legacy history containing sensitive Alice destinations
     store.set('XCLOUD_OPEN_TABS', JSON.stringify([
-      { path: '/subscribers/:imsi' },
       { path: '/subscribers/460020000000400' },
-      { path: '/inventory/:resourceId' },
-      { path: '/does-not-exist' },
+      { path: '/users/alice' },
+      { path: '/subscribers/:imsi' },
     ]));
-
-    const tabs = getStoredTabsSnapshot('operator1', 'operator');
-
-    // Legacy un-scoped key must be cleared after migration
-    assert.equal(store.has('XCLOUD_OPEN_TABS'), false, 'legacy XCLOUD_OPEN_TABS must be cleared on migration');
-
-    // Migrated tabs must contain the pinned home tab and the valid real destination, with templates removed
-    const paths = tabs.map((t) => t.path);
-    assert.ok(paths.includes('/'), 'home tab must be present');
-    assert.ok(paths.includes('/subscribers/460020000000400'), 'real dynamic subscriber destination must be preserved');
-    assert.ok(!paths.includes('/subscribers/:imsi'), 'unresolved :imsi template must be purged');
-    assert.ok(!paths.includes('/inventory/:resourceId'), 'unresolved :resourceId template must be purged');
-    assert.ok(!paths.includes('/does-not-exist'), 'nonexistent route must be purged');
-
-    // 2. Recent Pages Legacy Migration
     store.set('XCLOUD_RECENT_PAGES', JSON.stringify([
-      { path: '/users/:username', timestamp: 1000 },
-      { path: '/subscribers/460020000000400', timestamp: 2000 },
-      { path: '/does-not-exist', timestamp: 3000 },
+      { path: '/subscribers/460020000000400', timestamp: 1000 },
+      { path: '/users/alice', timestamp: 2000 },
     ]));
 
-    const recent = getStoredRecentSnapshot('operator1', 'operator');
+    // 2. Operator Bob logs in (first time, no scoped history yet)
+    const bobTabs = getStoredTabsSnapshot('bob', 'operator');
+    const bobRecent = getStoredRecentSnapshot('bob', 'operator');
 
-    // Legacy un-scoped key must be cleared after migration
-    assert.equal(store.has('XCLOUD_RECENT_PAGES'), false, 'legacy XCLOUD_RECENT_PAGES must be cleared on migration');
+    // 3. Invariants:
+    // a) Legacy unpartitioned storage must be purged
+    assert.equal(store.has('XCLOUD_OPEN_TABS'), false, 'legacy XCLOUD_OPEN_TABS must be purged');
+    assert.equal(store.has('XCLOUD_RECENT_PAGES'), false, 'legacy XCLOUD_RECENT_PAGES must be purged');
 
-    const recentPaths = recent.map((r) => r.path);
-    assert.ok(recentPaths.includes('/subscribers/460020000000400'), 'real subscriber destination must be preserved');
-    assert.ok(!recentPaths.includes('/users/:username'), 'unresolved :username template must be purged');
-    assert.ok(!recentPaths.includes('/does-not-exist'), 'nonexistent route must be purged');
+    // b) Bob must NOT inherit Alice's legacy tabs or recent pages
+    const bobTabPaths = bobTabs.map((t) => t.path);
+    assert.deepEqual(bobTabPaths, ['/'], 'Bob must only have the default home tab');
+    assert.equal(bobRecent.length, 0, 'Bob must have an empty recent pages list');
+
+    // c) Sensitive paths from Alice must never appear in Bob's view
+    assert.ok(!bobTabPaths.includes('/subscribers/460020000000400'), 'Alice subscriber detail must not leak to Bob');
+    assert.ok(!bobTabPaths.includes('/users/alice'), 'Alice user management must not leak to Bob');
   } finally {
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
     (globalThis as unknown as { window: unknown }).window = originalWindow;
     (globalThis as unknown as { localStorage: unknown }).localStorage = originalLocalStorage;
   }
+});
+
+test('account switching keeps distinct user history isolated and prevents disclosure from Alice to Bob', () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value); },
+    removeItem: (key: string) => { store.delete(key); },
+    clear: () => store.clear(),
+    key: () => null,
+    length: 0,
+  };
+
+  const originalWindow = globalThis.window;
+  const originalLocalStorage = (globalThis as unknown as { localStorage: unknown }).localStorage;
+
+  try {
+    (globalThis as unknown as { localStorage: unknown }).localStorage = mockStorage;
+    (globalThis as unknown as { window: unknown }).window = { localStorage: mockStorage };
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
+
+    // Alice (admin) has valid user-scoped history
+    writeTabs([
+      { path: '/', labelKey: 'nav_dashboard', icon: null, isPinned: true },
+      { path: '/subscribers/460020000000400', labelKey: 'nav_subscriber', icon: null },
+      { path: '/users/alice', labelKey: 'nav_system_users', icon: null },
+    ], 'alice');
+
+    writeRecentPages([
+      { path: '/subscribers/460020000000400', labelKey: 'nav_subscriber', timestamp: 1000 },
+      { path: '/users/alice', labelKey: 'nav_system_users', timestamp: 2000 },
+    ], 'alice');
+
+    // Clear memory caches as occurs on logout
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
+
+    // Bob (operator) authenticates
+    const bobTabs = getStoredTabsSnapshot('bob', 'operator');
+    const bobRecent = getStoredRecentSnapshot('bob', 'operator');
+
+    // Bob sees clean default state with no Alice history
+    assert.deepEqual(bobTabs.map((t) => t.path), ['/']);
+    assert.equal(bobRecent.length, 0);
+
+    // Bob visits his own destinations
+    writeTabs([
+      { path: '/', labelKey: 'nav_dashboard', icon: null, isPinned: true },
+      { path: '/inventory/00000000-0000-4000-8000-000000000001', labelKey: 'nav_inventory', icon: null },
+    ], 'bob');
+
+    writeRecentPages([
+      { path: '/inventory/00000000-0000-4000-8000-000000000001', labelKey: 'nav_inventory', timestamp: 3000 },
+    ], 'bob');
+
+    // Verify Bob's storage is isolated
+    assert.ok(store.has('XCLOUD_OPEN_TABS:bob'));
+    assert.ok(store.has('XCLOUD_OPEN_TABS:alice'));
+
+    // Re-verify Alice's history is intact under her own key
+    clearTabsMemoryCache();
+    const aliceTabs = getStoredTabsSnapshot('alice', 'admin');
+    assert.deepEqual(aliceTabs.map((t) => t.path), ['/', '/subscribers/460020000000400', '/users/alice']);
+  } finally {
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
+    (globalThis as unknown as { window: unknown }).window = originalWindow;
+    (globalThis as unknown as { localStorage: unknown }).localStorage = originalLocalStorage;
+  }
+});
+
+test('user-scoped history persists across simulated reload and restores valid destinations', () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value); },
+    removeItem: (key: string) => { store.delete(key); },
+    clear: () => store.clear(),
+    key: () => null,
+    length: 0,
+  };
+
+  const originalWindow = globalThis.window;
+  const originalLocalStorage = (globalThis as unknown as { localStorage: unknown }).localStorage;
+
+  try {
+    (globalThis as unknown as { localStorage: unknown }).localStorage = mockStorage;
+    (globalThis as unknown as { window: unknown }).window = { localStorage: mockStorage };
+    clearTabsMemoryCache();
+
+    // Bob saves tabs during his session
+    writeTabs([
+      { path: '/', labelKey: 'nav_dashboard', icon: null, isPinned: true },
+      { path: '/subscribers/460020000000400', labelKey: 'nav_subscriber', icon: null },
+      { path: '/inventory/00000000-0000-4000-8000-000000000001', labelKey: 'nav_inventory', icon: null },
+      { path: '/knowledge/example-entry', labelKey: 'nav_knowledge', icon: null },
+    ], 'bob');
+
+    // Simulate page reload (F5) by evicting memory cache
+    clearTabsMemoryCache();
+
+    // Reload tabs from persistent storage
+    const reloaded = getStoredTabsSnapshot('bob', 'operator');
+    const paths = reloaded.map((t) => t.path);
+
+    assert.equal(paths.length, 4);
+    assert.equal(paths[0], '/');
+    assert.ok(paths.includes('/subscribers/460020000000400'));
+    assert.ok(paths.includes('/inventory/00000000-0000-4000-8000-000000000001'));
+    assert.ok(paths.includes('/knowledge/example-entry'));
+    assert.equal(reloaded[0].isPinned, true, 'home tab must remain pinned across reload');
+  } finally {
+    clearTabsMemoryCache();
+    (globalThis as unknown as { window: unknown }).window = originalWindow;
+    (globalThis as unknown as { localStorage: unknown }).localStorage = originalLocalStorage;
+  }
+});
+
+test('role downgrade prunes unauthorized destinations upon storage read and revalidation', () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value); },
+    removeItem: (key: string) => { store.delete(key); },
+    clear: () => store.clear(),
+    key: () => null,
+    length: 0,
+  };
+
+  const originalWindow = globalThis.window;
+  const originalLocalStorage = (globalThis as unknown as { localStorage: unknown }).localStorage;
+
+  try {
+    (globalThis as unknown as { localStorage: unknown }).localStorage = mockStorage;
+    (globalThis as unknown as { window: unknown }).window = { localStorage: mockStorage };
+    clearTabsMemoryCache();
+
+    // User Charlie stored tabs when previously having admin role
+    store.set('XCLOUD_OPEN_TABS:charlie', JSON.stringify([
+      { path: '/' },
+      { path: '/subscribers/460020000000400' },
+      { path: '/users/alice' },
+      { path: '/system/retention' },
+    ]));
+
+    // 1. When evaluated under 'operator' role: user-management destinations are pruned
+    const operatorTabs = getStoredTabsSnapshot('charlie', 'operator');
+    const operatorPaths = operatorTabs.map((t) => t.path);
+    assert.ok(operatorPaths.includes('/'));
+    assert.ok(operatorPaths.includes('/subscribers/460020000000400'));
+    assert.ok(!operatorPaths.includes('/users/alice'), '/users/alice must be pruned for operator');
+    assert.ok(!operatorPaths.includes('/system/retention'), '/system/retention must be pruned for operator');
+
+    // 2. When evaluated under 'viewer' role: user-management destinations are also pruned
+    clearTabsMemoryCache();
+    const viewerTabs = getStoredTabsSnapshot('charlie', 'viewer');
+    const viewerPaths = viewerTabs.map((t) => t.path);
+    assert.ok(viewerPaths.includes('/'));
+    assert.ok(viewerPaths.includes('/subscribers/460020000000400'));
+    assert.ok(!viewerPaths.includes('/users/alice'), '/users/alice must be pruned for viewer');
+  } finally {
+    clearTabsMemoryCache();
+    (globalThis as unknown as { window: unknown }).window = originalWindow;
+    (globalThis as unknown as { localStorage: unknown }).localStorage = originalLocalStorage;
+  }
+});
+
+test('unauthenticated and session-checking states never read or write unpartitioned storage', () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value); },
+    removeItem: (key: string) => { store.delete(key); },
+    clear: () => store.clear(),
+    key: () => null,
+    length: 0,
+  };
+
+  const originalWindow = globalThis.window;
+  const originalLocalStorage = (globalThis as unknown as { localStorage: unknown }).localStorage;
+
+  try {
+    (globalThis as unknown as { localStorage: unknown }).localStorage = mockStorage;
+    (globalThis as unknown as { window: unknown }).window = { localStorage: mockStorage };
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
+
+    // Reading with undefined or null returns defaults and never touches storage
+    const tabsUndef = getStoredTabsSnapshot(undefined);
+    const tabsNull = getStoredTabsSnapshot(null);
+    assert.deepEqual(tabsUndef.map((t) => t.path), ['/']);
+    assert.deepEqual(tabsNull.map((t) => t.path), ['/']);
+
+    const recentUndef = getStoredRecentSnapshot(undefined);
+    const recentNull = getStoredRecentSnapshot(null);
+    assert.deepEqual(recentUndef, []);
+    assert.deepEqual(recentNull, []);
+
+    // Writing with undefined or null is a safe no-op that never writes to unscoped keys
+    writeTabs([{ path: '/subscribers/460020000000400', labelKey: 'nav_subscriber', icon: null }], undefined);
+    writeTabs([{ path: '/subscribers/460020000000400', labelKey: 'nav_subscriber', icon: null }], null);
+    writeRecentPages([{ path: '/subscribers/460020000000400', labelKey: 'nav_subscriber', timestamp: 1 }], undefined);
+    writeRecentPages([{ path: '/subscribers/460020000000400', labelKey: 'nav_subscriber', timestamp: 1 }], null);
+
+    assert.equal(store.has('XCLOUD_OPEN_TABS'), false, 'unscoped XCLOUD_OPEN_TABS must not be written');
+    assert.equal(store.has('XCLOUD_RECENT_PAGES'), false, 'unscoped XCLOUD_RECENT_PAGES must not be written');
+    assert.equal(store.size, 0, 'no unauthenticated storage keys must be created');
+  } finally {
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
+    (globalThis as unknown as { window: unknown }).window = originalWindow;
+    (globalThis as unknown as { localStorage: unknown }).localStorage = originalLocalStorage;
+  }
+});
+
+test('corrupted or malformed storage payloads fail safe to default tabs and empty recent list', () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value); },
+    removeItem: (key: string) => { store.delete(key); },
+    clear: () => store.clear(),
+    key: () => null,
+    length: 0,
+  };
+
+  const originalWindow = globalThis.window;
+  const originalLocalStorage = (globalThis as unknown as { localStorage: unknown }).localStorage;
+
+  try {
+    (globalThis as unknown as { localStorage: unknown }).localStorage = mockStorage;
+    (globalThis as unknown as { window: unknown }).window = { localStorage: mockStorage };
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
+
+    // 1. Malformed JSON
+    store.set('XCLOUD_OPEN_TABS:bob', '{not valid json');
+    store.set('XCLOUD_RECENT_PAGES:bob', '<<<bad json>>>');
+
+    const tabsMalformed = getStoredTabsSnapshot('bob', 'operator');
+    const recentMalformed = getStoredRecentSnapshot('bob', 'operator');
+
+    assert.deepEqual(tabsMalformed.map((t) => t.path), ['/']);
+    assert.deepEqual(recentMalformed, []);
+
+    // 2. Non-array JSON
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
+    store.set('XCLOUD_OPEN_TABS:bob', JSON.stringify({ path: '/subscribers/123' }));
+    store.set('XCLOUD_RECENT_PAGES:bob', JSON.stringify("string"));
+
+    const tabsNonArray = getStoredTabsSnapshot('bob', 'operator');
+    const recentNonArray = getStoredRecentSnapshot('bob', 'operator');
+
+    assert.deepEqual(tabsNonArray.map((t) => t.path), ['/']);
+    assert.deepEqual(recentNonArray, []);
+
+    // 3. Duplicate paths in stored tabs are de-duplicated
+    clearTabsMemoryCache();
+    store.set('XCLOUD_OPEN_TABS:bob', JSON.stringify([
+      { path: '/subscribers/460020000000400' },
+      { path: '/subscribers/460020000000400' },
+      { path: '/' },
+    ]));
+    const tabsDedup = getStoredTabsSnapshot('bob', 'operator');
+    const dedupPaths = tabsDedup.map((t) => t.path);
+    assert.equal(dedupPaths.filter((p) => p === '/subscribers/460020000000400').length, 1);
+  } finally {
+    clearTabsMemoryCache();
+    clearRecentMemoryCache();
+    (globalThis as unknown as { window: unknown }).window = originalWindow;
+    (globalThis as unknown as { localStorage: unknown }).localStorage = originalLocalStorage;
+  }
+});
+
+test('static paths take precedence over dynamic route templates', () => {
+  // /subscribers/new vs /subscribers/:imsi
+  const subNew = getNavigationRoute('/subscribers/new');
+  assert.equal(subNew?.route, '/subscribers/new');
+  assert.deepEqual(subNew?.dynamicParameters, []);
+
+  // /inventory/create vs /inventory/:resourceId
+  const invCreate = getNavigationRoute('/inventory/create');
+  assert.equal(invCreate?.route, '/inventory/create');
+  assert.deepEqual(invCreate?.dynamicParameters, []);
+
+  // /knowledge/new vs /knowledge/:entryId
+  const knowNew = getNavigationRoute('/knowledge/new');
+  assert.equal(knowNew?.route, '/knowledge/new');
+  assert.deepEqual(knowNew?.dynamicParameters, []);
+
+  // /users/create vs /users/:username
+  const userCreate = getNavigationRoute('/users/create');
+  assert.equal(userCreate?.route, '/users/create');
+  assert.deepEqual(userCreate?.dynamicParameters, []);
 });
