@@ -632,7 +632,7 @@ try {
 
   await page.evaluate(() => {
     window.history.pushState({}, '', '/ocs/balances/460009999999999');
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.dispatchEvent(new window.PopStateEvent('popstate'));
   });
 
   // 3. Assert detail page immediately renders loading state, NOT previous IMSI's data
@@ -666,7 +666,7 @@ try {
   currentBalance = makeBalanceRecordView({ version: 8 });
   await page.evaluate((imsi) => {
     window.history.pushState({}, '', `/ocs/balances/${imsi}`);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.dispatchEvent(new window.PopStateEvent('popstate'));
   }, TEST_IMSI);
   await page.locator('.ocs-detail-grid').waitFor({ state: 'visible', timeout: 10000 });
 
