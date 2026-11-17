@@ -15,6 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../src/providers/I18nProvider';
 import AdjustBalanceModal from '../src/components/ocs/balances/AdjustBalanceModal';
 import {
+  isNonNegativeSafeInteger,
   parseCanonicalAdjustmentAmount,
   projectBalanceAdjustment,
 } from '../src/features/ocs/ocs-balance-math';
@@ -388,4 +389,158 @@ test('modal initially renders editing state without issuing any network request'
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+/* ---------------------------------------------------------------------------
+ * Task A & E: Safe Integer and Invariant Validation Tests
+ * ------------------------------------------------------------------------- */
+
+test('isNonNegativeSafeInteger correctly accepts non-negative safe integers', () => {
+  assert.equal(isNonNegativeSafeInteger(0), true);
+  assert.equal(isNonNegativeSafeInteger(1), true);
+  assert.equal(isNonNegativeSafeInteger(42), true);
+  assert.equal(isNonNegativeSafeInteger(1073741824), true);
+  assert.equal(isNonNegativeSafeInteger(Number.MAX_SAFE_INTEGER), true);
+});
+
+test('isNonNegativeSafeInteger rejects negative, fractional, unsafe and non-number values', () => {
+  // Negative
+  assert.equal(isNonNegativeSafeInteger(-1), false);
+  assert.equal(isNonNegativeSafeInteger(-100), false);
+  // Fractional
+  assert.equal(isNonNegativeSafeInteger(1.5), false);
+  assert.equal(isNonNegativeSafeInteger(0.1), false);
+  // Non-finite
+  assert.equal(isNonNegativeSafeInteger(NaN), false);
+  assert.equal(isNonNegativeSafeInteger(Infinity), false);
+  assert.equal(isNonNegativeSafeInteger(-Infinity), false);
+  // Unsafe integers beyond MAX_SAFE_INTEGER
+  assert.equal(isNonNegativeSafeInteger(Number.MAX_SAFE_INTEGER + 1), false);
+  assert.equal(isNonNegativeSafeInteger(Number.MAX_SAFE_INTEGER + 2), false);
+  // Non-numbers
+  assert.equal(isNonNegativeSafeInteger(null), false);
+  assert.equal(isNonNegativeSafeInteger(undefined), false);
+  assert.equal(isNonNegativeSafeInteger('42'), false);
+  assert.equal(isNonNegativeSafeInteger(true), false);
+  assert.equal(isNonNegativeSafeInteger({}), false);
+  assert.equal(isNonNegativeSafeInteger([]), false);
+});
+
+test('projectBalanceAdjustment rejects unbalanced baseline totals (total !== used + reserved + available)', () => {
+  // total is 5000, but used(1000) + reserved(1000) + available(3000) = 5000.
+  // Corrupt total to 6000:
+  const balance = createTestBalance({
+    data: {
+      total: 6000,
+      used: 1000,
+      reserved: 1000,
+      available: 3000,
+    },
+  });
+  const res = projectBalanceAdjustment({
+    balance,
+    bucket: 'data',
+    operation: 'credit',
+    canonicalAmount: 1000,
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.equal(res.errorKey, 'ocs_balance_invariants_broken');
+  }
+});
+
+test('projectBalanceAdjustment rejects unsafe integer bucket metrics beyond MAX_SAFE_INTEGER', () => {
+  const balance = createTestBalance({
+    data: {
+      total: Number.MAX_SAFE_INTEGER + 1,
+      used: 0,
+      reserved: 0,
+      available: Number.MAX_SAFE_INTEGER + 1,
+    },
+  });
+  const res = projectBalanceAdjustment({
+    balance,
+    bucket: 'data',
+    operation: 'credit',
+    canonicalAmount: 1000,
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.equal(res.errorKey, 'ocs_balance_fields_missing');
+  }
+});
+
+test('projectBalanceAdjustment rejects negative version or unsafe integer version', () => {
+  const negVer = createTestBalance({ version: -1 });
+  const resNeg = projectBalanceAdjustment({
+    balance: negVer,
+    bucket: 'data',
+    operation: 'credit',
+    canonicalAmount: 1000,
+  });
+  assert.equal(resNeg.ok, false);
+  if (!resNeg.ok) {
+    assert.equal(resNeg.errorKey, 'ocs_balance_version_missing');
+  }
+
+  const unsafeVer = createTestBalance({ version: Number.MAX_SAFE_INTEGER + 1 });
+  const resUnsafe = projectBalanceAdjustment({
+    balance: unsafeVer,
+    bucket: 'data',
+    operation: 'credit',
+    canonicalAmount: 1000,
+  });
+  assert.equal(resUnsafe.ok, false);
+  if (!resUnsafe.ok) {
+    assert.equal(resUnsafe.errorKey, 'ocs_balance_version_missing');
+  }
+});
+
+test('modal renders safe unavailable card when authoritative balance is null or undefined', () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      I18nProvider,
+      null,
+      createElement(AdjustBalanceModal, {
+        isOpen: true,
+        imsi: '460001234567890',
+        balance: null,
+        onClose: () => {},
+        onSuccess: () => {},
+      }),
+    ),
+  );
+
+  // Must show unavailable alert
+  assert.match(markup, /class="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row"/);
+  assert.match(markup, /(Authoritative balance record is unavailable|权威余额记录不可用)/);
+  // Must NOT render adjustment form or bucket controls
+  assert.doesNotMatch(markup, /<form/);
+  assert.doesNotMatch(markup, /id="adjust-bucket"/);
+  assert.doesNotMatch(markup, /id="adjust-amount"/);
+  // Must NOT render synthetic bucket numbers
+  assert.doesNotMatch(markup, /ocs-balance-modal-imsi-note/);
+});
+
+test('modal disables review action when authoritative balance version is missing', () => {
+  const balance = createTestBalance({ version: null });
+  const markup = renderToStaticMarkup(
+    createElement(
+      I18nProvider,
+      null,
+      createElement(AdjustBalanceModal, {
+        isOpen: true,
+        imsi: '460001234567890',
+        balance,
+        onClose: () => {},
+        onSuccess: () => {},
+      }),
+    ),
+  );
+
+  // Must render version missing warning
+  assert.match(markup, /class="warning-text"/);
+  assert.match(markup, /(does not report a version|未提供版本)/);
+  // Submit button must be disabled
+  assert.match(markup, /<button[^>]*type="submit"[^>]*disabled[^>]*>/);
 });

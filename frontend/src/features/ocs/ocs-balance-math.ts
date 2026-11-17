@@ -67,6 +67,19 @@ const POSITIVE_DECIMAL_REGEX = /^[0-9]+(\.[0-9]+)?$/;
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
 /**
+ * Validates that a value is a finite, non-negative integer within JavaScript's safe integer range.
+ */
+export function isNonNegativeSafeInteger(val: unknown): val is number {
+  return (
+    typeof val === 'number' &&
+    Number.isInteger(val) &&
+    Number.isFinite(val) &&
+    val >= 0 &&
+    val <= Number.MAX_SAFE_INTEGER
+  );
+}
+
+/**
  * Parses a raw user-entered amount string into an exact canonical positive integer.
  *
  * Rules:
@@ -197,16 +210,13 @@ export function projectBalanceAdjustment({
   }
 
   const version = balance.version;
-  if (typeof version !== 'number' || !Number.isInteger(version) || version < 0) {
+  if (!isNonNegativeSafeInteger(version)) {
     return { ok: false, errorKey: 'ocs_balance_version_missing' };
   }
 
-  // Check invariants: if reported invariants are false or null/missing, block mutation
-  if (balance.invariants.all === false || balance.invariants[bucket] === false) {
+  // Check invariants: if reported invariants are not explicitly true, block mutation
+  if (balance.invariants.all !== true || balance.invariants[bucket] !== true) {
     return { ok: false, errorKey: 'ocs_balance_invariants_broken' };
-  }
-  if (balance.invariants.all === null || balance.invariants[bucket] === null) {
-    return { ok: false, errorKey: 'ocs_balance_fields_missing' };
   }
 
   const bucketData = balance[bucket];
@@ -219,31 +229,23 @@ export function projectBalanceAdjustment({
   const beforeUsed = bucketData.used;
   const beforeReserved = bucket === 'sms' ? null : bucketData.reserved;
 
-  // Never substitute 0 for missing/unknown fields
+  // Never substitute 0 for missing/unknown fields; require safe non-negative integers
   if (
-    beforeTotal === null ||
-    beforeAvailable === null ||
-    beforeUsed === null ||
-    (bucket !== 'sms' && beforeReserved === null)
+    !isNonNegativeSafeInteger(beforeTotal) ||
+    !isNonNegativeSafeInteger(beforeAvailable) ||
+    !isNonNegativeSafeInteger(beforeUsed) ||
+    (bucket !== 'sms' && !isNonNegativeSafeInteger(beforeReserved))
   ) {
     return { ok: false, errorKey: 'ocs_balance_fields_missing' };
   }
 
-  if (
-    !Number.isFinite(beforeTotal) ||
-    !Number.isFinite(beforeAvailable) ||
-    !Number.isFinite(beforeUsed) ||
-    (beforeReserved !== null && !Number.isFinite(beforeReserved))
-  ) {
-    return { ok: false, errorKey: 'ocs_balance_fields_missing' };
+  // Authoritative baseline invariant validation
+  const baselineReserved = bucket === 'sms' ? 0 : (beforeReserved ?? 0);
+  if (beforeTotal !== beforeUsed + baselineReserved + beforeAvailable) {
+    return { ok: false, errorKey: 'ocs_balance_invariants_broken' };
   }
 
-  if (
-    typeof canonicalAmount !== 'number' ||
-    !Number.isInteger(canonicalAmount) ||
-    canonicalAmount <= 0 ||
-    canonicalAmount > Number.MAX_SAFE_INTEGER
-  ) {
+  if (!isNonNegativeSafeInteger(canonicalAmount) || canonicalAmount === 0) {
     return { ok: false, errorKey: 'ocs_balance_amount_invalid' };
   }
 
@@ -255,8 +257,8 @@ export function projectBalanceAdjustment({
     expectedTotal = beforeTotal + canonicalAmount;
     expectedAvailable = beforeAvailable + canonicalAmount;
     if (
-      expectedTotal > Number.MAX_SAFE_INTEGER ||
-      expectedAvailable > Number.MAX_SAFE_INTEGER
+      !isNonNegativeSafeInteger(expectedTotal) ||
+      !isNonNegativeSafeInteger(expectedAvailable)
     ) {
       return { ok: false, errorKey: 'ocs_balance_overflow' };
     }
@@ -267,16 +269,21 @@ export function projectBalanceAdjustment({
     expectedTotal = beforeTotal - canonicalAmount;
     expectedAvailable = beforeAvailable - canonicalAmount;
 
-    if (expectedTotal < 0 || expectedAvailable < 0) {
+    if (!isNonNegativeSafeInteger(expectedTotal) || !isNonNegativeSafeInteger(expectedAvailable)) {
       return { ok: false, errorKey: 'ocs_balance_insufficient' };
     }
 
-    const minRequiredTotal = beforeUsed + (beforeReserved ?? 0);
+    const minRequiredTotal = beforeUsed + baselineReserved;
     if (expectedTotal < minRequiredTotal) {
       return { ok: false, errorKey: 'ocs_balance_insufficient' };
     }
   } else {
     return { ok: false, errorKey: 'ocs_balance_amount_invalid' };
+  }
+
+  // Projected invariant preservation check
+  if (expectedTotal !== beforeUsed + baselineReserved + expectedAvailable) {
+    return { ok: false, errorKey: 'ocs_balance_invariants_broken' };
   }
 
   return {

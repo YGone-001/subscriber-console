@@ -1,13 +1,18 @@
 /*
  * Governed balance adjustment (`POST /api/ocs/balances/{imsi}/adjust`).
  *
- * Implements a strict two-step confirmation workflow:
+ * Implements a strict two-step confirmation workflow with resilient retry safety:
  *   1. Editing state: validates amount, bucket, operation, CAS version, and reason.
  *   2. Reviewing state: renders an exact projected before/delta/after preview
  *      from the authoritative balance snapshot before any mutation request is issued.
- *   3. Submitting state: executes a single CAS-governed mutation with double-submit protection.
+ *   3. Submitting state: executes a single CAS-governed mutation with double-submit protection
+ *      guaranteed by an immediate synchronous ref latch.
+ *   4. Conflict state: on CAS precondition change, reviewed intent is permanently invalidated,
+ *      execution button is eliminated, and authoritative refresh is required.
+ *   5. OutcomeUnknown state: on network or transport failure, execution outcome is uncertain;
+ *      resubmission is blocked to prevent duplicate credit/debit, requiring explicit refresh.
  */
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, RefreshCw, X } from 'lucide-react';
 import { useI18n } from '../../../providers/I18nProvider';
 import { postJson, MutationApiError } from '../../../lib/api/mutation-client';
@@ -24,6 +29,14 @@ import {
   type VoiceUnitType,
 } from '../../../features/ocs/ocs-balance-math';
 import { Dialog } from '../../ui/Dialog';
+
+export type AdjustModalStep =
+  | 'editing'
+  | 'reviewing'
+  | 'submitting'
+  | 'conflict'
+  | 'outcomeUnknown'
+  | 'completed';
 
 export interface AdjustBalanceModalProps {
   isOpen: boolean;
@@ -60,66 +73,17 @@ function formatBucketDisplay(bucket: BalanceBucketType, value: number | null): s
   return value.toLocaleString();
 }
 
-function createFallbackBalance(
-  imsi: string,
-  version?: number | null,
-  dataAvailable?: number | null,
-  voiceAvailable?: number | null,
-  smsAvailable?: number | null,
-): OcsBalanceViewModel {
-  return {
-    id: null,
-    imsi,
-    planId: null,
-    status: 'active',
-    data: {
-      total: dataAvailable ?? null,
-      used: dataAvailable !== null && dataAvailable !== undefined ? 0 : null,
-      reserved: dataAvailable !== null && dataAvailable !== undefined ? 0 : null,
-      available: dataAvailable ?? null,
-    },
-    voice: {
-      total: voiceAvailable ?? null,
-      used: voiceAvailable !== null && voiceAvailable !== undefined ? 0 : null,
-      reserved: voiceAvailable !== null && voiceAvailable !== undefined ? 0 : null,
-      available: voiceAvailable ?? null,
-    },
-    sms: {
-      total: smsAvailable ?? null,
-      used: smsAvailable !== null && smsAvailable !== undefined ? 0 : null,
-      reserved: null,
-      available: smsAvailable ?? null,
-    },
-    moneyBalance: null,
-    version: version ?? null,
-    invariants: {
-      data: dataAvailable !== null && dataAvailable !== undefined,
-      voice: voiceAvailable !== null && voiceAvailable !== undefined,
-      sms: smsAvailable !== null && smsAvailable !== undefined,
-      all: true,
-    },
-    createdAt: null,
-    updatedAt: null,
-    cycleStartAt: null,
-    cycleResetAt: null,
-  };
-}
-
 export default function AdjustBalanceModal({
   isOpen,
   onClose,
   imsi,
-  dataAvailable,
-  voiceAvailable,
-  smsAvailable,
-  version,
   balance,
   onRefresh,
   onSuccess,
 }: AdjustBalanceModalProps) {
   const { t } = useI18n();
 
-  const [step, setStep] = useState<'editing' | 'reviewing'>('editing');
+  const [step, setStep] = useState<AdjustModalStep>('editing');
   const [bucket, setBucket] = useState<BalanceBucketType>('data');
   const [operation, setOperation] = useState<BalanceOperationType>('credit');
   const [amountInput, setAmountInput] = useState<string>('1');
@@ -127,17 +91,78 @@ export default function AdjustBalanceModal({
   const [voiceUnit, setVoiceUnit] = useState<VoiceUnitType>('Minutes');
   const [reason, setReason] = useState<string>('');
   const [ticketId, setTicketId] = useState<string>('');
-  const [submitting, setSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [casConflict, setCasConflict] = useState<boolean>(false);
   const [projection, setProjection] = useState<BalanceAdjustmentProjection | null>(null);
   const [reviewedVersion, setReviewedVersion] = useState<number | null>(null);
 
+  // Synchronous submission latch to protect against rapid double-clicks or keypresses
+  const isSubmittingRef = useRef<boolean>(false);
+
   if (!isOpen) return null;
 
-  const effectiveBalance: OcsBalanceViewModel =
-    balance ??
-    createFallbackBalance(imsi, version, dataAvailable, voiceAvailable, smsAvailable);
+  // Task D: Remove Fabricated Balance Fallback.
+  // If authoritative balance snapshot is missing, render safe unavailable alert;
+  // never synthesize artificial metrics or assume invariant compliance.
+  if (!balance) {
+    return (
+      <Dialog
+        open={isOpen}
+        onClose={onClose}
+        className="ocs-dialog ocs-modal-dialog"
+        overlayClassName="ocs-dialog-overlay"
+        labelledBy="balance-modal-title"
+        role="dialog"
+        closeOnOverlay={true}
+      >
+        <div className="ocs-dialog-header ocs-dialog-header-between">
+          <div>
+            <h3 id="balance-modal-title">{t('ocs_balance_modal_title')}</h3>
+          </div>
+          <button
+            type="button"
+            className="ocs-btn-icon"
+            onClick={onClose}
+            aria-label={t('close')}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="ocs-balance-modal-imsi">
+          <span className="ocs-balance-modal-imsi-line">
+            IMSI: <strong className="ocs-mono">{imsi}</strong>
+          </span>
+        </div>
+
+        <div className="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row" role="alert">
+          <AlertCircle size={16} aria-hidden="true" />
+          <span>{t('ocs_balance_unavailable')}</span>
+        </div>
+
+        <div className="ocs-dialog-actions ocs-dialog-actions-spaced">
+          <button
+            type="button"
+            className="ocs-btn ocs-btn-secondary"
+            onClick={onClose}
+          >
+            {t('close')}
+          </button>
+          {onRefresh && (
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-primary"
+              onClick={() => {
+                onClose();
+                onRefresh();
+              }}
+            >
+              <RefreshCw size={14} aria-hidden="true" /> {t('refresh')}
+            </button>
+          )}
+        </div>
+      </Dialog>
+    );
+  }
 
   const selectedUnit = bucket === 'data' ? dataUnit : bucket === 'voice' ? voiceUnit : 'SMS';
 
@@ -147,15 +172,17 @@ export default function AdjustBalanceModal({
 
   // Stale snapshot detection
   const isSnapshotStale =
-    step === 'reviewing' &&
+    (step === 'reviewing' || step === 'submitting') &&
     reviewedVersion !== null &&
-    typeof effectiveBalance.version === 'number' &&
-    effectiveBalance.version !== reviewedVersion;
+    typeof balance.version === 'number' &&
+    balance.version !== reviewedVersion;
+
+  const isSubmitting = step === 'submitting';
 
   const handleProceedToReview = (event: React.FormEvent) => {
     event.preventDefault();
+    if (isSubmitting) return;
     setError(null);
-    setCasConflict(false);
 
     if (!parseAttempt.ok) {
       setError(t(parseAttempt.errorKey));
@@ -168,7 +195,7 @@ export default function AdjustBalanceModal({
     }
 
     const projResult = projectBalanceAdjustment({
-      balance: effectiveBalance,
+      balance,
       bucket,
       operation,
       canonicalAmount: parseAttempt.canonicalAmount,
@@ -185,18 +212,19 @@ export default function AdjustBalanceModal({
   };
 
   const handleConfirmAdjustment = async () => {
-    if (!projection || submitting) return;
+    // Synchronously check and lock latch
+    if (!projection || isSubmittingRef.current || isSubmitting) return;
     setError(null);
-    setCasConflict(false);
 
     if (isSnapshotStale) {
       setError(t('ocs_balance_snapshot_stale'));
       return;
     }
 
-    setSubmitting(true);
+    isSubmittingRef.current = true;
+    setStep('submitting');
     try {
-      const result = await postJson<{ outcome?: string; message?: string }>(
+      const result = await postJson<{ ok?: boolean; outcome?: string; message?: string }>(
         `/api/ocs/balances/${encodeURIComponent(projection.imsi)}/adjust`,
         {
           operation: projection.operation,
@@ -208,55 +236,85 @@ export default function AdjustBalanceModal({
         },
       );
 
+      // Task F: Validate Mutation Response Outcome
+      const isOk = result?.ok === true;
+      const outcome = result?.outcome;
+      const isValidOutcome = outcome === 'success' || outcome === 'executed_audit_warning';
+
+      if (!isOk || !isValidOutcome) {
+        setProjection(null);
+        setReviewedVersion(null);
+        setStep('outcomeUnknown');
+        setError(t('ocs_balance_response_ambiguous'));
+        return;
+      }
+
+      setStep('completed');
       onSuccess({
-        outcome: result?.outcome || 'success',
-        message: t('ocs_balance_success_executed'),
+        outcome,
+        message: result?.message || t('ocs_balance_success_executed'),
       });
       onClose();
     } catch (failure) {
+      // Invalidate reviewed projection on failure to prevent stale resubmission
+      setProjection(null);
+      setReviewedVersion(null);
+
       if (failure instanceof MutationApiError) {
         if (failure.code && CAS_CODES.includes(failure.code)) {
-          setCasConflict(true);
+          // Task B: Fail closed on CAS precondition conflict
+          setStep('conflict');
           setError(t('ocs_balance_precondition_changed'));
-        } else if (failure.code && BACKEND_UNREACHABLE_CODES.includes(failure.code)) {
-          setError(t('ocs_balance_backend_unreachable'));
-        } else if (failure.status === 0) {
+        } else if (
+          (failure.code && BACKEND_UNREACHABLE_CODES.includes(failure.code)) ||
+          failure.status === 0
+        ) {
+          // Task C: Handle uncertain / transport failure safely
+          setStep('outcomeUnknown');
           setError(t('ocs_balance_network_uncertain'));
         } else {
+          setStep('editing');
           setError(failure.message || t('network_error'));
         }
       } else {
+        setStep('outcomeUnknown');
         const message = failure instanceof Error ? failure.message : t('network_error');
         setError(message);
       }
     } finally {
-      setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
   const handleBackToEdit = () => {
-    if (submitting) return;
+    if (isSubmitting) return;
     setStep('editing');
     setError(null);
-    setCasConflict(false);
   };
+
+  const dialogTitle =
+    step === 'editing'
+      ? t('ocs_balance_modal_title')
+      : step === 'conflict'
+      ? t('ocs_balance_precondition_changed')
+      : step === 'outcomeUnknown'
+      ? t('ocs_balance_outcome_unknown_title')
+      : t('ocs_balance_review_title');
 
   return (
     <Dialog
       open={isOpen}
-      onClose={submitting ? () => {} : onClose}
+      onClose={isSubmitting ? () => {} : onClose}
       className="ocs-dialog ocs-modal-dialog"
       overlayClassName="ocs-dialog-overlay"
       labelledBy="balance-modal-title"
       role="dialog"
-      closeOnOverlay={!submitting}
+      closeOnOverlay={!isSubmitting}
     >
       <div className="ocs-dialog-header ocs-dialog-header-between">
         <div>
-          <h3 id="balance-modal-title">
-            {step === 'editing' ? t('ocs_balance_modal_title') : t('ocs_balance_review_title')}
-          </h3>
-          {step === 'reviewing' && (
+          <h3 id="balance-modal-title">{dialogTitle}</h3>
+          {(step === 'reviewing' || step === 'submitting') && (
             <div className="ocs-dialog-subtitle">{t('ocs_balance_review_subtitle')}</div>
           )}
         </div>
@@ -264,7 +322,7 @@ export default function AdjustBalanceModal({
           type="button"
           className="ocs-btn-icon"
           onClick={onClose}
-          disabled={submitting}
+          disabled={isSubmitting}
           aria-label={t('close')}
         >
           <X size={18} aria-hidden="true" />
@@ -276,15 +334,15 @@ export default function AdjustBalanceModal({
           IMSI: <strong className="ocs-mono">{imsi}</strong>
         </span>
         <div className="ocs-balance-modal-imsi-note">
-          {t('ocs_col_data_available')}: {formatOcsBytes(effectiveBalance.data.available)} |{' '}
+          {t('ocs_col_data_available')}: {formatOcsBytes(balance.data.available)} |{' '}
           {t('ocs_col_voice_avail')}:{' '}
-          {effectiveBalance.voice.available === null ? '\u2014' : `${effectiveBalance.voice.available}s`} |{' '}
+          {balance.voice.available === null ? '\u2014' : `${balance.voice.available}s`} |{' '}
           {t('ocs_col_sms_avail')}:{' '}
-          {effectiveBalance.sms.available === null ? '\u2014' : effectiveBalance.sms.available}
+          {balance.sms.available === null ? '\u2014' : balance.sms.available}
         </div>
       </div>
 
-      {typeof effectiveBalance.version !== 'number' && (
+      {step === 'editing' && typeof balance.version !== 'number' && (
         <div className="warning-text" role="alert">
           {t('ocs_balance_version_missing')}
         </div>
@@ -309,26 +367,82 @@ export default function AdjustBalanceModal({
         </div>
       )}
 
-      {error && (
+      {error && step !== 'conflict' && step !== 'outcomeUnknown' && (
         <div className="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row" role="alert">
           <AlertCircle size={16} aria-hidden="true" />
           <span>{error}</span>
-          {casConflict && onRefresh && (
-            <button
-              type="button"
-              className="ocs-btn ocs-btn-secondary ocs-btn-compact-auto"
-              onClick={() => {
-                onClose();
-                onRefresh();
-              }}
-            >
-              <RefreshCw size={12} aria-hidden="true" /> {t('refresh')}
-            </button>
-          )}
         </div>
       )}
 
-      {step === 'editing' ? (
+      {step === 'conflict' && (
+        <div className="ocs-review-workflow">
+          <div className="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row" role="alert">
+            <AlertCircle size={16} aria-hidden="true" />
+            <span>{error || t('ocs_balance_precondition_changed')}</span>
+          </div>
+
+          <div className="ocs-dialog-actions ocs-dialog-actions-spaced">
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-secondary"
+              onClick={onClose}
+            >
+              {t('close')}
+            </button>
+            {onRefresh && (
+              <button
+                type="button"
+                className="ocs-btn ocs-btn-primary"
+                onClick={() => {
+                  onRefresh();
+                  setStep('editing');
+                  setError(null);
+                }}
+              >
+                <RefreshCw size={14} aria-hidden="true" /> {t('ocs_balance_btn_refresh_rereview')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {step === 'outcomeUnknown' && (
+        <div className="ocs-review-workflow">
+          <div className="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row" role="alert">
+            <AlertCircle size={16} aria-hidden="true" />
+            <span>{error || t('ocs_balance_network_uncertain')}</span>
+          </div>
+
+          <div className="ocs-review-notice" style={{ marginTop: '0.75rem', marginBottom: '1rem' }}>
+            <AlertCircle size={16} aria-hidden="true" />
+            <span>{t('ocs_balance_outcome_unknown_desc')}</span>
+          </div>
+
+          <div className="ocs-dialog-actions ocs-dialog-actions-spaced">
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-secondary"
+              onClick={onClose}
+            >
+              {t('close')}
+            </button>
+            {onRefresh && (
+              <button
+                type="button"
+                className="ocs-btn ocs-btn-primary"
+                onClick={() => {
+                  onRefresh();
+                  onClose();
+                }}
+              >
+                <RefreshCw size={14} aria-hidden="true" /> {t('ocs_balance_btn_refresh_history')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {step === 'editing' && (
         <form onSubmit={handleProceedToReview}>
           <div className="ocs-form-group">
             <label className="ocs-form-label" htmlFor="adjust-bucket">
@@ -451,20 +565,22 @@ export default function AdjustBalanceModal({
               type="button"
               className="ocs-btn ocs-btn-secondary"
               onClick={onClose}
-              disabled={submitting}
+              disabled={isSubmitting}
             >
               {t('cancel')}
             </button>
             <button
               type="submit"
               className="ocs-btn ocs-btn-primary"
-              disabled={submitting || typeof effectiveBalance.version !== 'number'}
+              disabled={isSubmitting || typeof balance.version !== 'number'}
             >
               {t('ocs_balance_btn_review')}
             </button>
           </div>
         </form>
-      ) : (
+      )}
+
+      {(step === 'reviewing' || step === 'submitting') && (
         <div className="ocs-review-workflow">
           <div className="ocs-review-notice">
             <CheckCircle2 size={16} aria-hidden="true" />
@@ -506,7 +622,7 @@ export default function AdjustBalanceModal({
             <div className="ocs-review-item">
               <span className="ocs-review-item-label">{t('ocs_balance_canonical_amount')}</span>
               <span className="ocs-review-item-value ocs-mono">
-                {projection?.canonicalAmount.toLocaleString()} {projection ? parseAttempt.ok ? parseAttempt.canonicalUnit : '' : ''}
+                {projection?.canonicalAmount.toLocaleString()} {projection ? (parseAttempt.ok ? parseAttempt.canonicalUnit : '') : ''}
               </span>
             </div>
 
@@ -520,7 +636,7 @@ export default function AdjustBalanceModal({
                 {projection && projection.signedDelta > 0
                   ? `+${projection.signedDelta.toLocaleString()}`
                   : projection?.signedDelta.toLocaleString()}{' '}
-                {projection ? parseAttempt.ok ? parseAttempt.canonicalUnit : '' : ''}
+                {projection ? (parseAttempt.ok ? parseAttempt.canonicalUnit : '') : ''}
               </span>
             </div>
 
@@ -619,7 +735,7 @@ export default function AdjustBalanceModal({
               type="button"
               className="ocs-btn ocs-btn-secondary"
               onClick={handleBackToEdit}
-              disabled={submitting}
+              disabled={isSubmitting}
             >
               <ArrowLeft size={14} aria-hidden="true" /> {t('ocs_balance_btn_back')}
             </button>
@@ -627,7 +743,7 @@ export default function AdjustBalanceModal({
               type="button"
               className="ocs-btn ocs-btn-secondary"
               onClick={onClose}
-              disabled={submitting}
+              disabled={isSubmitting}
             >
               {t('cancel')}
             </button>
@@ -635,9 +751,9 @@ export default function AdjustBalanceModal({
               type="button"
               className={`ocs-btn ${operation === 'debit' ? 'ocs-btn-danger' : 'ocs-btn-primary'}`}
               onClick={handleConfirmAdjustment}
-              disabled={submitting || isSnapshotStale}
+              disabled={isSubmitting || isSnapshotStale || !projection}
             >
-              {submitting ? (
+              {isSubmitting ? (
                 <>
                   <RefreshCw size={14} className="ocs-spin" aria-hidden="true" /> {t('submitting')}
                 </>

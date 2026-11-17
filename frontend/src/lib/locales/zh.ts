@@ -1704,6 +1704,12 @@ export const zh: Record<string, string> = {
     ocs_balance_network_uncertain: "网络请求失败，执行结果不确定；重试前请先刷新余额与调整记录确认状态。",
     ocs_balance_invariants_broken: "无法调整：该账户存在不变量异常",
     ocs_balance_fields_missing: "无法调整：缺少必要的余额桶数据",
+    ocs_balance_unavailable: "权威余额记录不可用，请刷新页面",
+    ocs_balance_response_ambiguous: "服务器返回了不明确的响应，请刷新余额与调整记录以确认状态",
+    ocs_balance_btn_refresh_rereview: "刷新并重新审核",
+    ocs_balance_btn_refresh_history: "刷新余额与历史记录",
+    ocs_balance_outcome_unknown_title: "执行结果不确定",
+    ocs_balance_outcome_unknown_desc: "提交过程中发生传输层故障。服务器可能已处理也可能未处理该调整。为防止重复调整，在核实状态前已禁止重新提交。",
 
     // -- 页面面包屑标签 --
     eyebrow_imsi_hss: "IMSI / HSS",

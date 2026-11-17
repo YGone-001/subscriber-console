@@ -1705,6 +1705,12 @@ export const en: Record<string, string> = {
     ocs_balance_network_uncertain: "Network request failed. Mutation outcome is uncertain; please refresh balance and adjustment history before retrying.",
     ocs_balance_invariants_broken: "Cannot adjust: balance invariant constraints are violated on this account",
     ocs_balance_fields_missing: "Cannot adjust: required balance bucket fields are missing",
+    ocs_balance_unavailable: "Authoritative balance record is unavailable; please refresh the page",
+    ocs_balance_response_ambiguous: "Server returned an ambiguous response; please refresh balance and adjustment history to confirm state",
+    ocs_balance_btn_refresh_rereview: "Refresh & Re-review",
+    ocs_balance_btn_refresh_history: "Refresh Balance & History",
+    ocs_balance_outcome_unknown_title: "Execution Outcome Uncertain",
+    ocs_balance_outcome_unknown_desc: "A transport failure occurred during submission. The server may or may not have applied the adjustment. To prevent duplicate adjustments, resubmission is blocked until state is verified.",
 
     // -- Page Eyebrow Labels --
     eyebrow_imsi_hss: "IMSI / HSS",
