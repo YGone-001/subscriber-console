@@ -623,3 +623,26 @@ test('hasSnapshotConflict detects value differences at identical version', () =>
   // Different versions do not count as a same-version snapshot value conflict
   assert.equal(hasSnapshotConflict(a, bDifferentVersion), false);
 });
+
+test('hasSnapshotConflict detects value differences across all buckets', () => {
+  const base = createTestBalance({ version: 7 });
+  // Matching snapshot has no conflict
+  assert.equal(hasSnapshotConflict(base, createTestBalance({ version: 7 })), false);
+
+  // Mismatched IMSI has conflict
+  assert.equal(hasSnapshotConflict(base, createTestBalance({ version: 7, imsi: '460009999999999' })), true);
+
+  // Different voice metrics have conflict at same version
+  const diffVoice = createTestBalance({
+    version: 7,
+    voice: { total: 6000, used: 2000, reserved: 0, available: 4000 },
+  });
+  assert.equal(hasSnapshotConflict(base, diffVoice), true);
+
+  // Different SMS metrics have conflict at same version
+  const diffSms = createTestBalance({
+    version: 7,
+    sms: { total: 200, used: 50, reserved: null, available: 150 },
+  });
+  assert.equal(hasSnapshotConflict(base, diffSms), true);
+});

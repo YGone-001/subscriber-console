@@ -14,7 +14,7 @@
  * hands the record version to the adjustment dialog so a concurrent write is
  * rejected instead of silently overwritten.
  */
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Database, History, MessageSquare, Phone, ShieldCheck, SlidersHorizontal, Wallet } from 'lucide-react';
 import PageHeader from '../../ui/PageHeader';
@@ -28,6 +28,7 @@ import { useRead } from '../../../lib/api/use-read';
 import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
+import { hasSnapshotConflict } from '../../../features/ocs/ocs-balance-math';
 import {
   toBalanceViewModel,
   toAdjustmentListViewModel,
@@ -41,14 +42,29 @@ interface OcsBalanceDetailProps {
   imsi: string;
 }
 
+interface ActiveBalanceState {
+  imsi: string;
+  balance: OcsBalanceViewModel;
+  hasConflict: boolean;
+}
+
 export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
   const { t } = useI18n();
   const { user } = useAuth();
   const canAdjust = hasPermission(user, 'ocs.balance.adjust');
 
+  const [prevImsi, setPrevImsi] = useState(imsi);
+  const [activeState, setActiveState] = useState<ActiveBalanceState | null>(null);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [overrideBalance, setOverrideBalance] = useState<OcsBalanceViewModel | null>(null);
+
+  // Synchronously reset IMSI-scoped state when the route prop changes
+  if (prevImsi !== imsi) {
+    setPrevImsi(imsi);
+    setActiveState(null);
+    setFeedback(null);
+    setAdjustOpen(false);
+  }
 
   const encoded = encodeURIComponent(imsi);
   const { data, error, isLoading: loading, mutate: refresh } = useRead<unknown>(
@@ -61,16 +77,64 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
   );
 
   const rawBalance = toBalanceViewModel(data);
-  const balance = useMemo(() => {
-    if (!rawBalance) return overrideBalance;
-    if (!overrideBalance) return rawBalance;
-    if (typeof rawBalance.version === 'number' && typeof overrideBalance.version === 'number') {
-      if (rawBalance.version < overrideBalance.version) {
-        return overrideBalance;
-      }
+  const isCurrentImsiData = rawBalance?.imsi === imsi;
+
+  const applyAuthoritativeSnapshot = useCallback(
+    (fresh: OcsBalanceViewModel) => {
+      if (!fresh || fresh.imsi !== imsi) return;
+
+      setActiveState((prev) => {
+        if (!prev || prev.imsi !== imsi) {
+          return { imsi, balance: fresh, hasConflict: false };
+        }
+        const prevVer = prev.balance.version;
+        const newVer = fresh.version;
+
+        if (typeof prevVer === 'number' && typeof newVer === 'number') {
+          if (newVer > prevVer) {
+            // Strictly higher version: advance watermark and clear conflict
+            return { imsi, balance: fresh, hasConflict: false };
+          }
+          if (newVer < prevVer) {
+            // Stale lower version: reject, retain authoritative watermark
+            return prev;
+          }
+          // Same version: check for value conflict
+          if (hasSnapshotConflict(prev.balance, fresh)) {
+            return { imsi, balance: prev.balance, hasConflict: true };
+          }
+          // Same version, matching values: retain cleanly
+          return prev;
+        }
+        return { imsi, balance: fresh, hasConflict: false };
+      });
+    },
+    [imsi],
+  );
+
+  useEffect(() => {
+    if (rawBalance && rawBalance.imsi === imsi) {
+      applyAuthoritativeSnapshot(rawBalance);
     }
-    return rawBalance;
-  }, [rawBalance, overrideBalance]);
+  }, [rawBalance, imsi, applyAuthoritativeSnapshot]);
+
+  const currentScoped = activeState && activeState.imsi === imsi ? activeState : null;
+  const balance = currentScoped?.balance ?? (isCurrentImsiData ? rawBalance : null);
+  const hasConflict = currentScoped?.hasConflict ?? false;
+
+  const handleManualRefresh = useCallback(async () => {
+    try {
+      const freshRaw = await getJson<unknown>(`/api/ocs/balances/${encoded}`);
+      const fresh = toBalanceViewModel(freshRaw);
+      if (fresh && fresh.imsi === imsi) {
+        applyAuthoritativeSnapshot(fresh);
+      }
+    } catch {
+      // SWR refresh below will capture network errors or update SWR state
+    }
+    void refresh();
+  }, [encoded, imsi, refresh, applyAuthoritativeSnapshot]);
+
   const adjustments = toAdjustmentListViewModel(adjustmentsData).records;
   const location = useLocation();
   const returnTo = resolveReturnTo(location.search, '/ocs/balances', ['/ocs/balances']);
@@ -106,7 +170,31 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
     return result || '\u2014';
   };
 
+  const isWaitingForCurrentImsi = !isCurrentImsiData;
+
   if (loading && !balance) {
+    return (
+      <div className="ocs-container">
+        <OcsDetailState kind="loading" />
+      </div>
+    );
+  }
+
+  if (isWaitingForCurrentImsi && !balance) {
+    if (error) {
+      const status = (error as { status?: number }).status ?? 0;
+      if (status === 403) {
+        return <div className="ocs-container"><OcsDetailState kind="forbidden" backTo={backTo} /></div>;
+      }
+      if (status === 404) {
+        return <div className="ocs-container"><OcsDetailState kind="notFound" backTo={backTo} /></div>;
+      }
+      return (
+        <div className="ocs-container">
+          <OcsDetailState kind="error" detail={error.message} onRetry={() => void refresh()} backTo={backTo} />
+        </div>
+      );
+    }
     return (
       <div className="ocs-container">
         <OcsDetailState kind="loading" />
@@ -150,9 +238,18 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
             <Link to={`/subscribers/${encodeURIComponent(balance.imsi ?? '')}`} className="ocs-btn ocs-btn-secondary">
               {t('ocs_balance_view_subscriber')}
             </Link>
-            <RefreshButton loading={loading} onClick={() => void refresh()} label={t('refresh')} className="ocs-btn" />
+            <RefreshButton loading={loading} onClick={() => void handleManualRefresh()} label={t('refresh')} className="ocs-btn" />
             {canAdjust && balance.status !== 'terminated' && (
-              <button type="button" className="ocs-btn ocs-btn-primary" onClick={() => setAdjustOpen(true)}>
+              <button
+                type="button"
+                className="ocs-btn ocs-btn-primary"
+                disabled={hasConflict}
+                aria-disabled={hasConflict}
+                onClick={() => {
+                  if (hasConflict) return;
+                  setAdjustOpen(true);
+                }}
+              >
                 <SlidersHorizontal size={14} aria-hidden="true" />
                 <span>{t('ocs_balance_adjust')}</span>
               </button>
@@ -160,6 +257,12 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
           </div>
         }
       />
+
+      {hasConflict && (
+        <div className="ocs-feedback-error ocs-feedback-spaced" role="alert">
+          <span>{t('ocs_balance_snapshot_conflict')}</span>
+        </div>
+      )}
 
       {feedback && (
         <div className={feedback.type === 'success' ? 'ocs-feedback-success ocs-feedback-spaced' : 'ocs-feedback-error ocs-feedback-spaced'} role={feedback.type === 'error' ? 'alert' : 'status'}>
@@ -342,7 +445,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
         )}
       </section>
 
-      {adjustOpen && (
+      {adjustOpen && !hasConflict && balance && balance.imsi === imsi && (
         <AdjustBalanceModal
           isOpen={true}
           imsi={balance.imsi ?? ''}
@@ -355,7 +458,9 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
           onRefresh={async () => {
             const raw = await getJson<unknown>(`/api/ocs/balances/${encoded}`);
             const fresh = toBalanceViewModel(raw);
-            if (fresh) setOverrideBalance(fresh);
+            if (fresh && fresh.imsi === imsi) {
+              applyAuthoritativeSnapshot(fresh);
+            }
             void refresh();
           }}
           onRefreshHistory={async () => {
@@ -363,7 +468,9 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
             void refreshAdjustments();
           }}
           onBalanceUpdate={(fresh) => {
-            setOverrideBalance(fresh);
+            if (fresh && fresh.imsi === imsi) {
+              applyAuthoritativeSnapshot(fresh);
+            }
           }}
           onClose={() => setAdjustOpen(false)}
           onSuccess={(result) => {
@@ -371,7 +478,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
               type: result.outcome === 'executed_audit_warning' ? 'error' : 'success',
               message: result.message,
             });
-            void refresh();
+            void handleManualRefresh();
             void refreshAdjustments();
           }}
         />

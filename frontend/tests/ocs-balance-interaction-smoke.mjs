@@ -202,21 +202,27 @@ try {
     if (url.pathname === '/api/auth/me') {
       return json(route, ADMIN_USER);
     }
-    if (url.pathname === `/api/ocs/balances/${TEST_IMSI}`) {
-      detailBalanceReadCount++;
-      if (getDetailBalanceHandler) {
-        return getDetailBalanceHandler(route);
+    if (url.pathname.startsWith('/api/ocs/balances/') && !url.pathname.endsWith('/adjustments') && !url.pathname.endsWith('/adjust')) {
+      const matchImsi = decodeURIComponent(url.pathname.slice('/api/ocs/balances/'.length));
+      if (matchImsi === TEST_IMSI) {
+        detailBalanceReadCount++;
       }
-      return json(route, { ok: true, balance: currentBalance });
+      if (getDetailBalanceHandler) {
+        return getDetailBalanceHandler(route, matchImsi);
+      }
+      return json(route, { ok: true, balance: matchImsi === TEST_IMSI ? currentBalance : makeBalanceRecordView({ imsi: matchImsi, version: 1 }) });
     }
-    if (url.pathname === `/api/ocs/balances/${TEST_IMSI}/adjustments`) {
-      adjustmentsReadCount++;
+    if (url.pathname.startsWith('/api/ocs/balances/') && url.pathname.endsWith('/adjustments')) {
+      const matchImsi = decodeURIComponent(url.pathname.slice('/api/ocs/balances/'.length, -'/adjustments'.length));
+      if (matchImsi === TEST_IMSI) {
+        adjustmentsReadCount++;
+      }
       if (getAdjustmentsHandler) {
-        return getAdjustmentsHandler(route);
+        return getAdjustmentsHandler(route, matchImsi);
       }
       return json(route, {
         ok: true,
-        imsi: TEST_IMSI,
+        imsi: matchImsi,
         records: [
           {
             id: 'adj-001',
@@ -478,25 +484,191 @@ try {
   await dialog.locator('#adjust-amount').waitFor({ state: 'visible' });
   check('S3-05', true, 'fresh snapshot v7 cleanly unlocked editing step');
 
-  // Scenario C5: Detail-page snapshot regression prevention against delayed parent SWR
-  const detailVerText = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
-  check('S3-C5-01', detailVerText?.includes('7') || detailVerText?.includes('6'), 'detail surface tracks authoritative version state');
-
-  // Review and confirm with version 7
-  adjustPostLog = [];
-  postAdjustHandler = async (route) => {
-    currentBalance = makeBalanceRecordView({ version: 8 });
-    return json(route, { ok: true, outcome: 'success', message: 'Recovered mutation done' });
-  };
+  // Review step reflects fresh version v7
   await dialog.locator('button[type="submit"]').click();
   await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
   const reviewV7 = await dialog.locator('.ocs-review-item-value.ocs-mono').last().textContent();
   check('S3-06', reviewV7?.includes('v7'), `review step reflects fresh version v7 (saw ${reviewV7})`);
 
+  // =========================================================================
+  // Scenario C5-1: Authoritative v7 preservation on delayed v6 SWR arrival
+  // =========================================================================
+  console.log('\n--- Scenario C5-1: Authoritative v7 Preservation on Delayed v6 SWR ---');
+  // Step 3 of C5-1: Close modal to inspect detail surface
+  await dialog.locator('button:has-text("Cancel")').click();
+  await dialog.waitFor({ state: 'detached' });
+
+  // Step 4 of C5-1: Intercept next SWR balance fetch and return stale version 6
+  currentBalance = makeBalanceRecordView({ version: 6 });
+  const refreshBtnC5 = page.locator('button:has-text("Refresh")').first();
+  await refreshBtnC5.click();
+  await page.waitForTimeout(300);
+
+  // Step 5 of C5-1: Assert detail page displays version 7 and retains v7 available metrics
+  const detailVerC51 = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
+  check('S3-C5-1-01', detailVerC51?.trim() === '7', `detail surface strictly retains authoritative version 7 against stale v6 (saw ${detailVerC51})`);
+  const detailAvailC51 = await page.locator('.ocs-detail-value-strong').first().textContent();
+  check('S3-C5-1-02', detailAvailC51?.includes('8 GB'), `detail surface retains v7 available metrics (saw ${detailAvailC51})`);
+
+  // Step 6 of C5-1: Assert version 6 is strictly rejected and never rendered
+  check('S3-C5-1-03', !detailVerC51?.includes('6'), 'stale version 6 strictly rejected from rendering');
+
+  // Submit recovered mutation with fresh version 7 to advance to v8 and verify S3-07
+  adjustPostLog = [];
+  postAdjustHandler = async (route) => {
+    currentBalance = makeBalanceRecordView({
+      version: 8,
+      data_total: 10737418240,
+      data_used: 3221225472,       // 3 GiB used
+      data_reserved: 0,
+      data_available: 7516192768,  // 7 GiB available
+    });
+    return json(route, { ok: true, outcome: 'success', message: 'Recovered mutation done' });
+  };
+  await adjustTrigger.click();
+  await dialog.waitFor({ state: 'visible' });
+  await dialog.locator('#adjust-amount').fill('1');
+  await dialog.locator('#adjust-reason').fill('Recovered v7 mutation');
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
   await dialog.locator('button:has-text("Confirm Adjustment")').scrollIntoViewIfNeeded();
   await dialog.locator('button:has-text("Confirm Adjustment")').click();
   await dialog.waitFor({ state: 'detached' });
   check('S3-07', adjustPostLog[0]?.payload?.version === 7, `mutation submitted with fresh version 7 (saw ${adjustPostLog[0]?.payload?.version})`);
+
+  // =========================================================================
+  // Scenario C5-2: Monotonic progression to higher version
+  // =========================================================================
+  console.log('\n--- Scenario C5-2: Monotonic Progression to Higher Version ---');
+  // 1. Deliver valid version 8 balance snapshot via SWR
+  await refreshBtnC5.click();
+  await page.waitForTimeout(300);
+  const detailVerC52 = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
+  check('S3-C5-2-01', detailVerC52?.trim() === '8', `detail page monotonically advanced to version 8 (saw ${detailVerC52})`);
+  const detailAvailC52 = await page.locator('.ocs-detail-value-strong').first().textContent();
+  check('S3-C5-2-02', detailAvailC52?.includes('7 GB'), `detail page displays v8 metrics 7 GB (saw ${detailAvailC52})`);
+
+  // 2. Deliver delayed version 7 snapshot
+  currentBalance = makeBalanceRecordView({ version: 7 });
+  await refreshBtnC5.click();
+  await page.waitForTimeout(300);
+  const detailVerAfterDelayed7 = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
+  check('S3-C5-2-03', detailVerAfterDelayed7?.trim() === '8', `detail page remains strictly at version 8 after delayed v7 arrival (saw ${detailVerAfterDelayed7})`);
+
+  // =========================================================================
+  // Scenario C5-3: Same-version conflicting snapshot handling
+  // =========================================================================
+  console.log('\n--- Scenario C5-3: Same-Version Conflicting Snapshot Handling ---');
+  // 1. Deliver a version 8 balance snapshot with conflicting data metrics (altered data.available)
+  currentBalance = makeBalanceRecordView({
+    version: 8,
+    data_total: 10737418240,
+    data_used: 5368709120,       // altered metrics: used 5 GiB, available 5 GiB instead of used 3 GiB, available 7 GiB
+    data_reserved: 0,
+    data_available: 5368709120,
+  });
+  await refreshBtnC5.click();
+  await page.waitForTimeout(300);
+
+  // 2 & 3. Assert detail page identifies conflict and displays conflict warning
+  const conflictAlert = page.locator('.ocs-feedback-error[role="alert"]');
+  await conflictAlert.waitFor({ state: 'visible', timeout: 5000 });
+  const detailConflictAlertText = await conflictAlert.textContent();
+  check('S3-C5-3-01', detailConflictAlertText?.includes('conflict') || detailConflictAlertText?.includes('Balance snapshot'), `conflict alert displayed on identical version with conflicting metrics (saw ${detailConflictAlertText})`);
+
+  // 4. Assert 'Adjust Balance' button is disabled
+  const isAdjustDisabledConflict = await adjustTrigger.isDisabled();
+  check('S3-C5-3-02', isAdjustDisabledConflict === true, 'Adjust Balance button is disabled during snapshot conflict');
+
+  // 5. Assert clicking 'Adjust Balance' does not open modal and dispatches 0 adjustment requests
+  adjustPostLog = [];
+  await adjustTrigger.click({ force: true }).catch(() => {});
+  const isModalOpenDuringConflict = (await page.locator('[role="dialog"]').count()) > 0;
+  check('S3-C5-3-03', !isModalOpenDuringConflict && adjustPostLog.length === 0, 'clicking disabled adjust button did not open modal and dispatched 0 POSTs');
+
+  // Clear conflict state by advancing to valid higher version 9
+  currentBalance = makeBalanceRecordView({
+    version: 9,
+    data_total: 10737418240,
+    data_used: 2147483648,
+    data_reserved: 0,
+    data_available: 8589934592,
+  });
+  await refreshBtnC5.click();
+  await page.waitForTimeout(300);
+  const conflictCleared = (await page.locator('.ocs-feedback-error[role="alert"]').count()) === 0;
+  check('S3-C5-3-04', conflictCleared, 'higher version 9 cleared conflict state and warning alert');
+
+  // =========================================================================
+  // Scenario C5-4: IMSI route transition isolation
+  // =========================================================================
+  console.log('\n--- Scenario C5-4: IMSI Route Transition Isolation ---');
+  // 1. Verify IMSI A data renders at version 9
+  const detailVerA = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
+  check('S3-C5-4-01', detailVerA?.trim() === '9', `IMSI A verified rendering version 9 before transition (saw ${detailVerA})`);
+
+  // 2. Client-side navigate to IMSI B (460009999999999) with delayed response
+  let releaseImsiB;
+  const imsiBPromise = new Promise((resolve) => {
+    releaseImsiB = resolve;
+  });
+  getDetailBalanceHandler = async (route, reqImsi) => {
+    if (reqImsi === '460009999999999') {
+      await imsiBPromise;
+      return json(route, {
+        ok: true,
+        balance: makeBalanceRecordView({
+          imsi: '460009999999999',
+          version: 1,
+          data_total: 5368709120,
+          data_used: 1073741824,
+          data_reserved: 0,
+          data_available: 4294967296,
+        }),
+      });
+    }
+    return json(route, { ok: true, balance: currentBalance });
+  };
+
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/ocs/balances/460009999999999');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+
+  // 3. Assert detail page immediately renders loading state, NOT previous IMSI's data
+  await page.locator('.ocs-detail-state').waitFor({ state: 'visible', timeout: 5000 });
+  const previousImsiVisible = await page.evaluate((imsi) => {
+    const container = document.querySelector('.ocs-container') || document.body;
+    return container.innerText.includes(imsi);
+  }, TEST_IMSI);
+  check('S3-C5-4-02', !previousImsiVisible, 'detail page immediately rendered loading state with zero leakage of previous IMSI data');
+
+  // 4 & 5. Deliver IMSI B response (version 1) and assert detail displays IMSI B with version 1
+  releaseImsiB();
+  getDetailBalanceHandler = null;
+
+  await page.locator('.ocs-detail-grid').waitFor({ state: 'visible', timeout: 10000 });
+  const pageTitleB = await page.locator('h1').textContent();
+  check('S3-C5-4-03', pageTitleB?.includes('460009999999999'), `page renders new IMSI 460009999999999 (saw ${pageTitleB})`);
+  const detailVerB = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
+  check('S3-C5-4-04', detailVerB?.trim() === '1', `page renders version 1 for new IMSI (saw ${detailVerB})`);
+
+  // 6. Open Adjust Balance modal and assert target IMSI is strictly 460009999999999
+  const adjustBtnB = page.locator('button:has-text("Adjust Balance")').first();
+  await adjustBtnB.click();
+  await dialog.waitFor({ state: 'visible' });
+  const dialogHtml = await dialog.innerHTML();
+  check('S3-C5-4-05', dialogHtml.includes('460009999999999') && !dialogHtml.includes(TEST_IMSI), 'adjustment modal targets strictly new IMSI 460009999999999');
+  await dialog.locator('button:has-text("Cancel")').click();
+  await dialog.waitFor({ state: 'detached' });
+
+  // Navigate back to TEST_IMSI for Scenario 4
+  currentBalance = makeBalanceRecordView({ version: 8 });
+  await page.evaluate((imsi) => {
+    window.history.pushState({}, '', `/ocs/balances/${imsi}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, TEST_IMSI);
+  await page.locator('.ocs-detail-grid').waitFor({ state: 'visible', timeout: 10000 });
 
   // =========================================================================
   // Scenario 4: Unknown Outcome & Truthful Reconciliation Permutations (Task D)
