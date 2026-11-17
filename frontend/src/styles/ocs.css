@@ -1413,6 +1413,122 @@
   margin-top: 1.25rem;
 }
 
+/* ── Balance adjustment review and preview step ─────────────── */
+
+.ocs-dialog-subtitle {
+  font-size: var(--ref-font-size-label);
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+.ocs-review-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--surface-field);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-compact);
+  font-size: var(--ref-font-size-label);
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.ocs-review-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--surface-field);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-compact);
+}
+
+.ocs-review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ocs-review-item-label {
+  font-size: var(--ref-font-size-caption);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ocs-review-item-value {
+  font-size: var(--ref-font-size-data-relaxed);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.ocs-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ref-font-size-data-relaxed);
+  margin-bottom: 1rem;
+}
+
+.ocs-review-table th,
+.ocs-review-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--surface-border);
+  text-align: left;
+}
+
+.ocs-review-table th {
+  font-size: var(--ref-font-size-label);
+  color: var(--text-secondary);
+  font-weight: 600;
+  background: var(--surface-field);
+}
+
+.ocs-review-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ocs-op-badge-credit {
+  background: var(--status-success-soft, rgba(16, 185, 129, 0.1));
+  color: var(--status-success, #10b981);
+  border: 1px solid var(--status-success-border, rgba(16, 185, 129, 0.25));
+}
+
+.ocs-op-badge-debit {
+  background: var(--status-danger-soft, rgba(239, 68, 68, 0.1));
+  color: var(--status-danger, #ef4444);
+  border: 1px solid var(--status-danger-border, rgba(239, 68, 68, 0.25));
+}
+
+.ocs-delta-credit {
+  color: var(--status-success, #10b981);
+  font-weight: 600;
+}
+
+.ocs-delta-debit {
+  color: var(--status-danger, #ef4444);
+  font-weight: 600;
+}
+
+.ocs-expected-highlight {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ocs-spin {
+  animation: ocs-spin 1s linear infinite;
+}
+
+@keyframes ocs-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ---------------------------------------------------------------------------
  * Compatibility aliases for class hooks the reference markup uses but the
  * reference stylesheet never defines.

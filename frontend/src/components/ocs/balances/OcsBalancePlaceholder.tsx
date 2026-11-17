@@ -335,6 +335,7 @@ export default function OcsBalancePlaceholder() {
         <AdjustBalanceModal
           isOpen={true}
           imsi={adjustTarget.imsi ?? ''}
+          balance={adjustTarget}
           dataAvailable={adjustTarget.data.available}
           voiceAvailable={adjustTarget.voice.available}
           smsAvailable={adjustTarget.sms.available}

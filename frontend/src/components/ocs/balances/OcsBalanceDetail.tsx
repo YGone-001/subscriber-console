@@ -329,6 +329,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
         <AdjustBalanceModal
           isOpen={true}
           imsi={balance.imsi ?? ''}
+          balance={balance}
           dataAvailable={balance.data.available}
           voiceAvailable={balance.voice.available}
           smsAvailable={balance.sms.available}
