@@ -1711,6 +1711,15 @@ export const en: Record<string, string> = {
     ocs_balance_btn_refresh_history: "Refresh Balance & History",
     ocs_balance_outcome_unknown_title: "Execution Outcome Uncertain",
     ocs_balance_outcome_unknown_desc: "A transport failure occurred during submission. The server may or may not have applied the adjustment. To prevent duplicate adjustments, resubmission is blocked until state is verified.",
+    ocs_balance_btn_refresh_list: "Refresh List",
+    ocs_balance_btn_view_history: "View Balance & History",
+    ocs_balance_partial_history_failed: "Balance was refreshed, but adjustment history could not be updated",
+    ocs_balance_partial_balance_failed: "Adjustment history was refreshed, but balance could not be updated",
+    ocs_balance_evidence_refreshed: "Balance and adjustment history have been refreshed with latest evidence",
+    ocs_balance_conflict_unresolved: "Refreshed balance still has the conflicting version; waiting for authoritative state to propagate",
+    ocs_balance_refresh_mismatch: "Refreshed balance record does not match subscriber IMSI",
+    ocs_balance_refresh_failed: "Failed to refresh authoritative balance snapshot",
+    ocs_balance_refreshing: "Refreshing authoritative balance...",
 
     // -- Page Eyebrow Labels --
     eyebrow_imsi_hss: "IMSI / HSS",

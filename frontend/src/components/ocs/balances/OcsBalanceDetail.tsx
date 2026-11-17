@@ -334,7 +334,13 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
           voiceAvailable={balance.voice.available}
           smsAvailable={balance.sms.available}
           version={balance.version}
-          onRefresh={() => { void refresh(); }}
+          hasHistoryOnSurface={true}
+          onRefresh={async () => {
+            await refresh();
+          }}
+          onRefreshHistory={async () => {
+            await refreshAdjustments();
+          }}
           onClose={() => setAdjustOpen(false)}
           onSuccess={(result) => {
             setFeedback({

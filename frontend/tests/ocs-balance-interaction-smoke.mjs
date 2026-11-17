@@ -1,0 +1,597 @@
+#!/usr/bin/env node
+/*
+ * OCS Balance Adjustment Interaction Acceptance Smoke Test.
+ *
+ * Verifies the asynchronous mutation lifecycle of governed balance adjustments:
+ *   1. Normal editing, review projection, zero mutations before confirmation,
+ *      exact BigInt canonical delta and version sent in POST, and page update.
+ *   2. Synchronous submission latch: in-flight double-submission prevention,
+ *      disabled controls and overlays while pending.
+ *   3. CAS precondition conflict recovery: 412 permanently disables confirm,
+ *      stale read defense blocks re-review, fresh read unlocks editing with updated version.
+ *   4. Uncertain outcome reconciliation: detail page refreshes balance & history,
+ *      list page provides link to detail and list refresh without false claims.
+ *   5. Keyboard accessibility: modal dialog role, focus trap, and focus restoration.
+ *
+ * Usage: node frontend/tests/ocs-balance-interaction-smoke.mjs
+ */
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { build } from 'vite';
+
+const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const viewport = { width: 1440, height: 900 };
+
+const contentTypes = {
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+};
+
+async function startStaticServer(distDirectory) {
+  await stat(path.join(distDirectory, 'index.html'));
+  const server = createServer(async (request, response) => {
+    try {
+      const requestPath = decodeURIComponent(new URL(request.url || '/', 'http://127.0.0.1').pathname);
+      const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\/+/, '');
+      const candidate = path.resolve(distDirectory, relativePath);
+      const safeCandidate = candidate.startsWith(`${distDirectory}${path.sep}`) ? candidate : path.join(distDirectory, 'index.html');
+      const filePath = await stat(safeCandidate).then((entry) => (entry.isFile() ? safeCandidate : path.join(distDirectory, 'index.html'))).catch(() => path.join(distDirectory, 'index.html'));
+      const body = await readFile(filePath);
+      response.writeHead(200, { 'Content-Type': contentTypes[path.extname(filePath)] || 'application/octet-stream' });
+      response.end(body);
+    } catch (error) {
+      response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end(error instanceof Error ? error.message : 'Static server failure');
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === 'object', 'static server must expose a TCP address');
+  return { server, baseUrl: `http://127.0.0.1:${address.port}` };
+}
+
+const json = (route, body, status = 200) =>
+  route.fulfill({
+    status,
+    contentType: 'application/json; charset=utf-8',
+    body: JSON.stringify(body),
+  });
+
+const checks = [];
+const failures = [];
+
+function check(id, ok, detail = '') {
+  checks.push({ id, ok: Boolean(ok), detail });
+  if (!ok) {
+    console.error(`[FAIL] ${id}: ${detail}`);
+    failures.push(`${id} ${detail}`);
+  } else {
+    console.log(`[PASS] ${id}${detail ? ` - ${detail}` : ''}`);
+  }
+}
+
+const TEST_IMSI = '460001234567890';
+const ADMIN_USER = {
+  username: 'admin',
+  role: 'admin',
+  normalizedRole: 'admin',
+  status: 'active',
+  permissions: [
+    'subscribers.read',
+    'subscribers.write',
+    'ocs.read',
+    'ocs.balance.adjust',
+    'ocs.contracts.read',
+    'tariffs.read',
+    'profiles.read',
+    'core.read',
+    'core.configure',
+  ],
+};
+
+function makeBalanceRecordView(overrides = {}) {
+  return {
+    id: 'bal-001',
+    imsi: TEST_IMSI,
+    plan_id: 'default_plan',
+    status: 'active',
+    data_total: 10737418240,     // 10 GiB
+    data_used: 2147483648,       // 2 GiB
+    data_reserved: 0,
+    data_available: 8589934592,  // 8 GiB
+    voice_total: 6000,
+    voice_used: 1200,
+    voice_reserved: 0,
+    voice_available: 4800,
+    sms_total: 100,
+    sms_used: 10,
+    sms_available: 90,
+    money_balance: 50,
+    version: 4,
+    data_invariant_ok: true,
+    voice_invariant_ok: true,
+    sms_invariant_ok: true,
+    invariant_ok: true,
+    created_at: '2026-11-17T10:00:00Z',
+    updated_at: '2026-11-17T12:00:00Z',
+    ...overrides,
+  };
+}
+
+const BENIGN_CONSOLE = [
+  /Download the React DevTools/i,
+  /favicon/i,
+  /status of 412/i,
+  /net::ERR_FAILED/i,
+  /Failed to fetch/i,
+];
+
+let temporaryBuildDirectory = null;
+let ownedServer = null;
+let browser = null;
+
+try {
+  let effectiveDistDir = process.env.OCS_BALANCE_UI_DIST_DIR
+    ? path.resolve(process.env.OCS_BALANCE_UI_DIST_DIR)
+    : null;
+
+  if (!effectiveDistDir && !process.env.OCS_BALANCE_UI_BASE_URL) {
+    console.log('[acceptance:ocs-balance] Building frontend SPA to temporary directory...');
+    temporaryBuildDirectory = await mkdtemp(path.join(tmpdir(), 'xcloud-ocs-balance-'));
+    await build({
+      root: frontendRoot,
+      build: { outDir: temporaryBuildDirectory, emptyOutDir: true },
+      logLevel: 'warn',
+    });
+    effectiveDistDir = temporaryBuildDirectory;
+  }
+
+  ownedServer = effectiveDistDir ? await startStaticServer(effectiveDistDir) : null;
+  const baseUrl = process.env.OCS_BALANCE_UI_BASE_URL || ownedServer.baseUrl;
+
+  console.log(`[acceptance:ocs-balance] Launching browser against ${baseUrl}...`);
+  browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
+  const page = await context.newPage();
+
+  const consoleErrors = [];
+  const pageErrors = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      const text = msg.text();
+      if (BENIGN_CONSOLE.some((pattern) => pattern.test(text))) return;
+      consoleErrors.push(text);
+    }
+  });
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    localStorage.setItem('XCLOUD_LANGUAGE_PREFERENCE', 'en');
+    localStorage.setItem('XCLOUD_THEME_PREFERENCE', 'light');
+    Object.defineProperty(window, 'EventSource', { configurable: true, value: undefined });
+  });
+
+  // Dynamic route states
+  let currentBalance = makeBalanceRecordView();
+  let adjustPostLog = [];
+  let postAdjustHandler = null;
+  let detailBalanceReadCount = 0;
+  let adjustmentsReadCount = 0;
+  let listReadCount = 0;
+
+  await page.route('**/data/mcc-mnc-table.json', (route) => json(route, []));
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+
+    if (url.pathname === '/api/auth/me') {
+      return json(route, ADMIN_USER);
+    }
+    if (url.pathname === `/api/ocs/balances/${TEST_IMSI}`) {
+      detailBalanceReadCount++;
+      return json(route, { ok: true, balance: currentBalance });
+    }
+    if (url.pathname === `/api/ocs/balances/${TEST_IMSI}/adjustments`) {
+      adjustmentsReadCount++;
+      return json(route, {
+        ok: true,
+        imsi: TEST_IMSI,
+        records: [
+          {
+            id: 'adj-001',
+            createdAt: '2026-11-17T10:00:00Z',
+            action: 'BALANCE_ADJUST',
+            actor: 'admin',
+            role: 'admin',
+            result: 'success',
+            reason: 'Initial credit',
+            bucket: 'data',
+            operation: 'credit',
+            amount: 1073741824,
+            beforeVersion: 3,
+            afterVersion: 4,
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 20,
+      });
+    }
+    if (url.pathname === '/api/ocs/balances') {
+      listReadCount++;
+      return json(route, {
+        ok: true,
+        records: [currentBalance],
+        total: 1,
+        page: 1,
+        limit: 10,
+        totalPages: 1,
+        summary: {
+          totalSubscribers: 1,
+          totalDataAllocated: currentBalance.data_total,
+          totalDataUsed: currentBalance.data_used,
+          totalDataReserved: currentBalance.data_reserved,
+          totalDataAvailable: currentBalance.data_available,
+        },
+      });
+    }
+    if (url.pathname === '/api/tariff-plans') {
+      return json(route, { plans: [{ id: 'default_plan', name: 'Standard 5G Plan' }] });
+    }
+    if (url.pathname === `/api/ocs/balances/${TEST_IMSI}/adjust` && method === 'POST') {
+      const payload = route.request().postDataJSON();
+      adjustPostLog.push({ payload, url: url.pathname });
+      if (postAdjustHandler) {
+        return postAdjustHandler(route, payload);
+      }
+      return json(route, { ok: true, outcome: 'success', message: 'Balance adjusted successfully' });
+    }
+
+    return json(route, {});
+  });
+
+  // =========================================================================
+  // Scenario 1: Normal Editing, Preview and Confirmation Lifecycle
+  // =========================================================================
+  console.log('\n--- Scenario 1: Normal Editing, Preview and Confirmation ---');
+  await page.goto(`${baseUrl}/ocs/balances/${TEST_IMSI}`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.locator('.ocs-detail-grid').waitFor({ state: 'visible', timeout: 15_000 });
+  check('S1-01', true, 'balance detail page loaded');
+
+  // Verify initial data available
+  const initialAvailText = await page.locator('.ocs-detail-value-strong').first().textContent();
+  check('S1-02', initialAvailText?.includes('8 GB'), `initial available shows 8 GB (saw ${initialAvailText})`);
+
+  // Open adjustment modal
+  const adjustTrigger = page.locator('button:has-text("Adjust Balance")').first();
+  await adjustTrigger.click();
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor({ state: 'visible' });
+  check('S1-03', true, 'adjust balance modal opened');
+
+  // Verify editing step title & controls
+  const dialogTitle = await dialog.locator('#balance-modal-title').textContent();
+  check('S1-04', dialogTitle === 'Governed Balance Adjustment', `dialog title in editing step is 'Governed Balance Adjustment' (saw ${dialogTitle})`);
+
+  // Modify amount: 1.5 GB
+  const amountInput = dialog.locator('#adjust-amount');
+  await amountInput.fill('1.5');
+  const reasonInput = dialog.locator('#adjust-reason');
+  await reasonInput.fill('Routine tier top-up');
+  const ticketInput = dialog.locator('#adjust-ticket');
+  await ticketInput.fill('TICK-1001');
+
+  // Assert 0 mutations dispatched during editing
+  check('S1-05', adjustPostLog.length === 0, `zero POST mutations dispatched during editing (${adjustPostLog.length})`);
+
+  // Proceed to review
+  const reviewButton = dialog.locator('button[type="submit"]');
+  await reviewButton.click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
+
+  // Verify review step title and preview details
+  const reviewTitle = await dialog.locator('#balance-modal-title').textContent();
+  check('S1-06', reviewTitle === 'Review Balance Adjustment', `dialog title in review step is 'Review Balance Adjustment' (saw ${reviewTitle})`);
+
+  // Verify Before / Delta / After projection
+  const deltaText = await dialog.locator('.ocs-delta-credit').first().textContent();
+  check('S1-07', deltaText?.includes('+1,610,612,736'), `projected signed delta is +1,610,612,736 (saw ${deltaText})`);
+
+  // Assert 0 mutations dispatched during preview
+  check('S1-08', adjustPostLog.length === 0, `zero POST mutations dispatched during preview (${adjustPostLog.length})`);
+
+  // Configure successful execution that updates server balance to version 5
+  postAdjustHandler = async (route) => {
+    currentBalance = makeBalanceRecordView({
+      version: 5,
+      data_total: 10737418240 + 1610612736,
+      data_used: 2147483648,
+      data_reserved: 0,
+      data_available: 8589934592 + 1610612736,
+    });
+    return json(route, { ok: true, outcome: 'success', message: 'Balance adjusted successfully' });
+  };
+
+  // Confirm adjustment
+  const confirmButton = dialog.locator('button:has-text("Confirm Adjustment")');
+  await confirmButton.scrollIntoViewIfNeeded();
+  await confirmButton.click();
+  await dialog.waitFor({ state: 'detached' });
+  check('S1-09', true, 'dialog closed after successful confirmation');
+
+  // Verify exact POST payload
+  check('S1-10', adjustPostLog.length === 1, `exactly 1 POST mutation dispatched (${adjustPostLog.length})`);
+  const post1 = adjustPostLog[0]?.payload;
+  check('S1-11', post1?.operation === 'credit' && post1?.bucket === 'data', 'mutation operation is credit data');
+  check('S1-12', post1?.amount === 1610612736, `canonical delta is 1610612736 (saw ${post1?.amount})`);
+  check('S1-13', post1?.version === 4, `expectedVersion is 4 (saw ${post1?.version})`);
+  check('S1-14', post1?.reason === 'Routine tier top-up' && post1?.ticketId === 'TICK-1001', 'audit reason and ticket match input');
+
+  // Verify page updated with new balance (9.5 GB available)
+  await page.waitForTimeout(300);
+  const updatedAvailText = await page.locator('.ocs-detail-value-strong').first().textContent();
+  check('S1-15', updatedAvailText?.includes('9.5 GB'), `refreshed available shows 9.5 GB (saw ${updatedAvailText})`);
+
+  // =========================================================================
+  // Scenario 2: Double-submission and In-flight Protection
+  // =========================================================================
+  console.log('\n--- Scenario 2: Double-submission and In-flight Protection ---');
+  adjustPostLog = [];
+  await adjustTrigger.click();
+  await dialog.waitFor({ state: 'visible' });
+
+  await dialog.locator('#adjust-amount').fill('0.5');
+  await dialog.locator('#adjust-reason').fill('In-flight lock verification');
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
+
+  // Setup delayed response
+  let releaseDelayedPost;
+  const delayPromise = new Promise((resolve) => {
+    releaseDelayedPost = resolve;
+  });
+  postAdjustHandler = async (route) => {
+    await delayPromise;
+    currentBalance = makeBalanceRecordView({ version: 6 });
+    return json(route, { ok: true, outcome: 'success', message: 'Delayed mutation done' });
+  };
+
+  const confirmBtn2 = dialog.locator('button:has-text("Confirm Adjustment")');
+  await confirmBtn2.scrollIntoViewIfNeeded();
+  await confirmBtn2.click();
+
+  // Rapidly attempt repeated clicks and keyboard triggers
+  await confirmBtn2.click({ force: true }).catch(() => {});
+  await confirmBtn2.click({ force: true }).catch(() => {});
+  await page.keyboard.press('Enter').catch(() => {});
+  await page.keyboard.press('Escape').catch(() => {});
+
+  // Assert dialog remains open and close button is disabled in-flight
+  const closeBtn = dialog.locator('button[aria-label="Close"]');
+  const closeDisabled = await closeBtn.isDisabled();
+  check('S2-01', closeDisabled === true, 'dialog close button is disabled while mutation is in flight');
+  check('S2-02', await dialog.isVisible(), 'dialog remains open while in-flight');
+
+  // Release post response
+  releaseDelayedPost();
+  await dialog.waitFor({ state: 'detached' });
+
+  // Assert EXACTLY ONE POST was dispatched across the whole burst
+  check('S2-03', adjustPostLog.length === 1, `synchronous latch ensured exactly 1 POST dispatched despite burst (${adjustPostLog.length})`);
+  check('S2-04', adjustPostLog[0]?.payload?.version === 5, `expectedVersion sent was 5 (saw ${adjustPostLog[0]?.payload?.version})`);
+
+  // =========================================================================
+  // Scenario 3: CAS Conflict Recovery & Stale Refresh Defense
+  // =========================================================================
+  console.log('\n--- Scenario 3: CAS Conflict Recovery & Stale Refresh Defense ---');
+  adjustPostLog = [];
+  await adjustTrigger.click();
+  await dialog.waitFor({ state: 'visible' });
+
+  await dialog.locator('#adjust-amount').fill('1');
+  await dialog.locator('#adjust-reason').fill('Precondition test');
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
+
+  // Return 412 CAS Precondition Changed
+  postAdjustHandler = async (route) => {
+    return json(route, { code: 'BALANCE_PRECONDITION_CHANGED', message: 'Precondition changed' }, 412);
+  };
+
+  const confirmBtn3 = dialog.locator('button:has-text("Confirm Adjustment")');
+  await confirmBtn3.scrollIntoViewIfNeeded();
+  await confirmBtn3.click();
+  await dialog.locator('button:has-text("Refresh & Re-review")').waitFor({ state: 'visible' });
+
+  // Assert confirm button is completely gone
+  const confirmGone = (await dialog.locator('button:has-text("Confirm Adjustment")').count()) === 0;
+  check('S3-01', confirmGone, 'Confirm button eliminated on CAS conflict');
+
+  // Verify conflict step alert
+  const conflictAlertText = await dialog.locator('.ocs-feedback-error').textContent();
+  check('S3-02', conflictAlertText?.includes('modified concurrently') || conflictAlertText?.includes('precondition'), `alert reports precondition change (saw ${conflictAlertText})`);
+
+  // Test Stale Read Defense: mock returns the SAME version 6
+  currentBalance = makeBalanceRecordView({ version: 6 });
+  const refreshRereviewBtn = dialog.locator('button:has-text("Refresh & Re-review")');
+  await refreshRereviewBtn.click();
+  await page.waitForTimeout(300);
+
+  // Assert unresolved conflict warning is shown and still in conflict step
+  const unresolvedWarning = await dialog.locator('.ocs-feedback-error').textContent();
+  check('S3-03', unresolvedWarning?.includes('conflicting version') || unresolvedWarning?.includes('conflicted version'), `stale read defense displayed unresolved warning (saw ${unresolvedWarning})`);
+  check('S3-04', (await dialog.locator('button:has-text("Refresh & Re-review")').count()) > 0, 'remained in conflict step without advancing to review with stale data');
+
+  // Test Fresh Read Progression: mock returns NEW version 7
+  currentBalance = makeBalanceRecordView({ version: 7 });
+  await refreshRereviewBtn.click();
+  await dialog.locator('#adjust-amount').waitFor({ state: 'visible' });
+  check('S3-05', true, 'fresh snapshot v7 cleanly unlocked editing step');
+
+  // Review and confirm with version 7
+  adjustPostLog = [];
+  postAdjustHandler = async (route) => {
+    currentBalance = makeBalanceRecordView({ version: 8 });
+    return json(route, { ok: true, outcome: 'success', message: 'Recovered mutation done' });
+  };
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
+  const reviewV7 = await dialog.locator('.ocs-review-item-value.ocs-mono').last().textContent();
+  check('S3-06', reviewV7?.includes('v7'), `review step reflects fresh version v7 (saw ${reviewV7})`);
+
+  await dialog.locator('button:has-text("Confirm Adjustment")').scrollIntoViewIfNeeded();
+  await dialog.locator('button:has-text("Confirm Adjustment")').click();
+  await dialog.waitFor({ state: 'detached' });
+  check('S3-07', adjustPostLog[0]?.payload?.version === 7, `mutation submitted with fresh version 7 (saw ${adjustPostLog[0]?.payload?.version})`);
+
+  // =========================================================================
+  // Scenario 4: Unknown Outcome & Truthful Reconciliation
+  // =========================================================================
+  console.log('\n--- Scenario 4: Unknown Outcome & Truthful Reconciliation ---');
+  // Part A: Detail Page
+  await adjustTrigger.click();
+  await dialog.waitFor({ state: 'visible' });
+  await dialog.locator('#adjust-amount').fill('1');
+  await dialog.locator('#adjust-reason').fill('Transport drop test');
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
+
+  // Simulate transport drop
+  postAdjustHandler = async (route) => {
+    await route.abort('failed');
+  };
+  await dialog.locator('button:has-text("Confirm Adjustment")').scrollIntoViewIfNeeded();
+  await dialog.locator('button:has-text("Confirm Adjustment")').click();
+  await dialog.locator('button:has-text("Refresh Balance & History")').waitFor({ state: 'visible' });
+
+  check('S4-01', (await dialog.locator('button:has-text("Confirm Adjustment")').count()) === 0, 'resubmission blocked on transport failure');
+
+  // Detail page reconcile: triggers both balance and history reads
+  detailBalanceReadCount = 0;
+  adjustmentsReadCount = 0;
+  await dialog.locator('button:has-text("Refresh Balance & History")').click();
+  await page.waitForTimeout(300);
+  check('S4-02', detailBalanceReadCount >= 1 && adjustmentsReadCount >= 1, `detail reconciliation triggered both balance (${detailBalanceReadCount}) and history (${adjustmentsReadCount}) reads`);
+  const statusMsg = await dialog.locator('.ocs-feedback-info').textContent();
+  check('S4-03', statusMsg?.includes('refreshed'), `reconciliation status confirms evidence refreshed (saw ${statusMsg})`);
+  await dialog.locator('button:has-text("Close")').click();
+  await dialog.waitFor({ state: 'detached' });
+
+  // Part B: List Page Reconciliation
+  await page.goto(`${baseUrl}/ocs/balances`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.locator('.ocs-table').waitFor({ state: 'visible', timeout: 15_000 });
+  const rowAdjustBtn = page.locator(`button[aria-label="Adjust Balance ${TEST_IMSI}"]`).first();
+  await rowAdjustBtn.click();
+  await dialog.waitFor({ state: 'visible' });
+
+  await dialog.locator('#adjust-amount').fill('1');
+  await dialog.locator('#adjust-reason').fill('List page unknown outcome');
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
+
+  postAdjustHandler = async (route) => {
+    await route.abort('failed');
+  };
+  await dialog.locator('button:has-text("Confirm Adjustment")').scrollIntoViewIfNeeded();
+  await dialog.locator('button:has-text("Confirm Adjustment")').click();
+  await dialog.locator('a:has-text("View Balance & History")').waitFor({ state: 'visible' });
+
+  check('S4-04', (await dialog.locator('button:has-text("Refresh Balance & History")').count()) === 0, 'list page does NOT falsely claim history refresh');
+  const viewHistoryLink = dialog.locator('a:has-text("View Balance & History")');
+  const historyHref = await viewHistoryLink.getAttribute('href');
+  check('S4-05', historyHref === `/ocs/balances/${TEST_IMSI}`, `view history link targets /ocs/balances/${TEST_IMSI} (saw ${historyHref})`);
+
+  listReadCount = 0;
+  const refreshListBtn = dialog.locator('button:has-text("Refresh List")');
+  check('S4-06', (await refreshListBtn.count()) === 1, 'Refresh List button available on list surface');
+  await refreshListBtn.click();
+  await dialog.waitFor({ state: 'detached' });
+  check('S4-07', listReadCount >= 1, `Refresh List triggered list read (${listReadCount}) and dismissed modal`);
+
+  // =========================================================================
+  // Scenario 5: Accessibility, Focus Trapping & Restoration
+  // =========================================================================
+  console.log('\n--- Scenario 5: Accessibility, Focus Trapping & Restoration ---');
+  await page.goto(`${baseUrl}/ocs/balances/${TEST_IMSI}`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.locator('.ocs-detail-grid').waitFor({ state: 'visible', timeout: 15_000 });
+
+  const adjustBtn5 = page.locator('button:has-text("Adjust Balance")').first();
+  await adjustBtn5.focus();
+  await page.keyboard.press('Enter');
+  await dialog.waitFor({ state: 'visible' });
+
+  const role = await dialog.getAttribute('role');
+  check('S5-01', role === 'dialog', `dialog role is 'dialog' (saw ${role})`);
+
+  const ariaModal = await dialog.getAttribute('aria-modal');
+  check('S5-02', ariaModal === 'true', `dialog aria-modal is 'true' (saw ${ariaModal})`);
+
+  const labelledBy = await dialog.getAttribute('aria-labelledby');
+  check('S5-03', labelledBy === 'balance-modal-title', `aria-labelledby points to 'balance-modal-title' (saw ${labelledBy})`);
+
+  // Focus trap: Tab cycling within dialog
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press('Tab');
+  }
+  const isInsideDialogTab = await page.evaluate(() => {
+    const active = document.activeElement;
+    const dlg = document.querySelector('[role="dialog"]');
+    return Boolean(dlg && dlg.contains(active));
+  });
+  check('S5-04', isInsideDialogTab === true, 'focus stays trapped inside dialog during forward Tab cycling');
+
+  // Focus trap: Shift+Tab backwards cycling
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press('Shift+Tab');
+  }
+  const isInsideDialogShiftTab = await page.evaluate(() => {
+    const active = document.activeElement;
+    const dlg = document.querySelector('[role="dialog"]');
+    return Boolean(dlg && dlg.contains(active));
+  });
+  check('S5-05', isInsideDialogShiftTab === true, 'focus stays trapped inside dialog during backward Shift+Tab cycling');
+
+  // Focus restoration on Escape
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
+  const restoredFocus = await page.evaluate(() => {
+    const active = document.activeElement;
+    return active?.tagName === 'BUTTON' && active?.textContent?.includes('Adjust Balance');
+  });
+  check('S5-06', restoredFocus === true, 'focus restored to trigger button on dialog dismissal');
+
+  // Check console / page errors
+  check('SYS-01', pageErrors.length === 0, `zero page runtime exceptions (${pageErrors.length})`);
+  check('SYS-02', consoleErrors.length === 0, `zero console error messages (${consoleErrors.length})`);
+
+  console.log(`\n=============================================================`);
+  console.log(`[acceptance:ocs-balance] passed ${checks.filter((c) => c.ok).length}/${checks.length} assertions`);
+  console.log(`=============================================================\n`);
+
+  if (failures.length > 0) {
+    console.error('Failures encountered:\n' + failures.join('\n'));
+    process.exit(1);
+  }
+} catch (err) {
+  console.error('[acceptance:ocs-balance] Unexpected test error:', err);
+  process.exit(1);
+} finally {
+  await browser?.close().catch(() => {});
+  ownedServer?.server.close();
+  if (temporaryBuildDirectory) {
+    await rm(temporaryBuildDirectory, { recursive: true, force: true }).catch(() => {});
+  }
+}

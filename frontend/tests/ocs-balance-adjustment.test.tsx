@@ -18,6 +18,7 @@ import {
   isNonNegativeSafeInteger,
   parseCanonicalAdjustmentAmount,
   projectBalanceAdjustment,
+  validateAuthoritativeBalance,
 } from '../src/features/ocs/ocs-balance-math';
 import type { OcsBalanceViewModel } from '../src/features/ocs/ocs-view-models';
 
@@ -543,4 +544,44 @@ test('modal disables review action when authoritative balance version is missing
   assert.match(markup, /(does not report a version|未提供版本)/);
   // Submit button must be disabled
   assert.match(markup, /<button[^>]*type="submit"[^>]*disabled[^>]*>/);
+});
+
+/* ---------------------------------------------------------------------------
+ * Task A: validateAuthoritativeBalance Tests
+ * ------------------------------------------------------------------------- */
+
+test('validateAuthoritativeBalance approves complete valid balance snapshot', () => {
+  const balance = createTestBalance();
+  const res = validateAuthoritativeBalance(balance, '460001234567890');
+  assert.equal(res.ok, true);
+});
+
+test('validateAuthoritativeBalance rejects null, undefined, or mismatched IMSI', () => {
+  assert.deepEqual(validateAuthoritativeBalance(null), { ok: false, errorKey: 'ocs_balance_unavailable' });
+  assert.deepEqual(validateAuthoritativeBalance(undefined), { ok: false, errorKey: 'ocs_balance_unavailable' });
+  const balance = createTestBalance({ imsi: '460001111111111' });
+  assert.deepEqual(validateAuthoritativeBalance(balance, '460002222222222'), {
+    ok: false,
+    errorKey: 'ocs_balance_refresh_mismatch',
+  });
+});
+
+test('validateAuthoritativeBalance rejects missing version or broken invariants', () => {
+  const noVer = createTestBalance({ version: null });
+  assert.deepEqual(validateAuthoritativeBalance(noVer), { ok: false, errorKey: 'ocs_balance_version_missing' });
+
+  const brokenInv = createTestBalance({ invariants: { data: false, voice: true, sms: true, all: false } });
+  assert.deepEqual(validateAuthoritativeBalance(brokenInv), { ok: false, errorKey: 'ocs_balance_invariants_broken' });
+});
+
+test('validateAuthoritativeBalance rejects missing metrics or unconserved totals', () => {
+  const missingMetric = createTestBalance({
+    data: { total: null, used: 100, reserved: 0, available: 100 },
+  });
+  assert.deepEqual(validateAuthoritativeBalance(missingMetric), { ok: false, errorKey: 'ocs_balance_fields_missing' });
+
+  const unconserved = createTestBalance({
+    data: { total: 5000, used: 1000, reserved: 1000, available: 2000 }, // sum is 4000 !== 5000
+  });
+  assert.deepEqual(validateAuthoritativeBalance(unconserved), { ok: false, errorKey: 'ocs_balance_invariants_broken' });
 });

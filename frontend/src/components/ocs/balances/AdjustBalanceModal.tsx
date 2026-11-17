@@ -9,19 +9,25 @@
  *      guaranteed by an immediate synchronous ref latch.
  *   4. Conflict state: on CAS precondition change, reviewed intent is permanently invalidated,
  *      execution button is eliminated, and authoritative refresh is required.
+ *      Refresh fetches fresh record directly from authoritative read endpoint without cache,
+ *      validates all fields and invariants, verifies IMSI, and checks that the version has indeed changed.
  *   5. OutcomeUnknown state: on network or transport failure, execution outcome is uncertain;
- *      resubmission is blocked to prevent duplicate credit/debit, requiring explicit refresh.
+ *      resubmission is blocked to prevent duplicate credit/debit.
+ *      Provides truthful reconciliation: refreshing balance + history on detail surface,
+ *      or explicit navigation to detail and truthful list refresh on list surface.
  */
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, RefreshCw, X } from 'lucide-react';
 import { useI18n } from '../../../providers/I18nProvider';
+import { getJson } from '../../../lib/api/read-client';
 import { postJson, MutationApiError } from '../../../lib/api/mutation-client';
 import { formatBytes } from '../../../lib/unitParser';
 import { formatOcsBytes } from '../../../features/ocs/ocs-format';
-import type { OcsBalanceViewModel } from '../../../features/ocs/ocs-view-models';
+import { toBalanceViewModel, type OcsBalanceViewModel } from '../../../features/ocs/ocs-view-models';
 import {
   parseCanonicalAdjustmentAmount,
   projectBalanceAdjustment,
+  validateAuthoritativeBalance,
   type BalanceAdjustmentProjection,
   type BalanceBucketType,
   type BalanceOperationType,
@@ -49,8 +55,14 @@ export interface AdjustBalanceModalProps {
   version?: number | null;
   /** Authoritative balance view model if available. */
   balance?: OcsBalanceViewModel | null;
-  /** Refetch the owning surface after a stale precondition or uncertain outcome. */
-  onRefresh?: () => void;
+  /** Refetch the owning surface (e.g. balance list or balance detail). */
+  onRefresh?: () => Promise<void> | void;
+  /** Refetch adjustment history on detail page. */
+  onRefreshHistory?: () => Promise<void> | void;
+  /** Notify caller when a fresh balance record is resolved. */
+  onBalanceUpdate?: (fresh: OcsBalanceViewModel) => void;
+  /** Whether the owning surface provides adjustment history on-screen (e.g. detail page). */
+  hasHistoryOnSurface?: boolean;
   onSuccess: (result: { outcome: string; message: string }) => void;
 }
 
@@ -79,6 +91,9 @@ export default function AdjustBalanceModal({
   imsi,
   balance,
   onRefresh,
+  onRefreshHistory,
+  onBalanceUpdate,
+  hasHistoryOnSurface,
   onSuccess,
 }: AdjustBalanceModalProps) {
   const { t } = useI18n();
@@ -95,15 +110,36 @@ export default function AdjustBalanceModal({
   const [projection, setProjection] = useState<BalanceAdjustmentProjection | null>(null);
   const [reviewedVersion, setReviewedVersion] = useState<number | null>(null);
 
+  // Authoritative balance snapshot managed in modal
+  const [currentBalance, setCurrentBalance] = useState<OcsBalanceViewModel | null>(balance ?? null);
+  const [lastConflictedVersion, setLastConflictedVersion] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  // Reconcile state for outcomeUnknown
+  const [reconciling, setReconciling] = useState<boolean>(false);
+  const [reconcileFeedback, setReconcileFeedback] = useState<{
+    type: 'info' | 'warning' | 'error';
+    message: string;
+  } | null>(null);
+
   // Synchronous submission latch to protect against rapid double-clicks or keypresses
   const isSubmittingRef = useRef<boolean>(false);
 
+  useEffect(() => {
+    if (balance && balance.imsi === imsi) {
+      setCurrentBalance(balance);
+    }
+  }, [balance, imsi]);
+
   if (!isOpen) return null;
+
+  const effectiveBalance = currentBalance ?? balance;
 
   // Task D: Remove Fabricated Balance Fallback.
   // If authoritative balance snapshot is missing, render safe unavailable alert;
   // never synthesize artificial metrics or assume invariant compliance.
-  if (!balance) {
+  if (!effectiveBalance) {
     return (
       <Dialog
         open={isOpen}
@@ -153,7 +189,7 @@ export default function AdjustBalanceModal({
               className="ocs-btn ocs-btn-primary"
               onClick={() => {
                 onClose();
-                onRefresh();
+                void onRefresh();
               }}
             >
               <RefreshCw size={14} aria-hidden="true" /> {t('refresh')}
@@ -174,15 +210,16 @@ export default function AdjustBalanceModal({
   const isSnapshotStale =
     (step === 'reviewing' || step === 'submitting') &&
     reviewedVersion !== null &&
-    typeof balance.version === 'number' &&
-    balance.version !== reviewedVersion;
+    typeof effectiveBalance.version === 'number' &&
+    effectiveBalance.version !== reviewedVersion;
 
   const isSubmitting = step === 'submitting';
 
   const handleProceedToReview = (event: React.FormEvent) => {
     event.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || refreshing) return;
     setError(null);
+    setRefreshError(null);
 
     if (!parseAttempt.ok) {
       setError(t(parseAttempt.errorKey));
@@ -195,7 +232,7 @@ export default function AdjustBalanceModal({
     }
 
     const projResult = projectBalanceAdjustment({
-      balance,
+      balance: effectiveBalance,
       bucket,
       operation,
       canonicalAmount: parseAttempt.canonicalAmount,
@@ -215,6 +252,7 @@ export default function AdjustBalanceModal({
     // Synchronously check and lock latch
     if (!projection || isSubmittingRef.current || isSubmitting) return;
     setError(null);
+    setRefreshError(null);
 
     if (isSnapshotStale) {
       setError(t('ocs_balance_snapshot_stale'));
@@ -257,12 +295,14 @@ export default function AdjustBalanceModal({
       onClose();
     } catch (failure) {
       // Invalidate reviewed projection on failure to prevent stale resubmission
+      const failedVersion = projection.version;
       setProjection(null);
       setReviewedVersion(null);
 
       if (failure instanceof MutationApiError) {
         if (failure.code && CAS_CODES.includes(failure.code)) {
-          // Task B: Fail closed on CAS precondition conflict
+          // Task A & B: Fail closed on CAS precondition conflict
+          setLastConflictedVersion(failedVersion);
           setStep('conflict');
           setError(t('ocs_balance_precondition_changed'));
         } else if (
@@ -286,10 +326,102 @@ export default function AdjustBalanceModal({
     }
   };
 
+  const handleRefreshAfterConflict = async () => {
+    setRefreshing(true);
+    setRefreshError(null);
+    setError(null);
+    try {
+      // 1. Authoritative direct read with cache: no-store
+      const raw = await getJson<unknown>(`/api/ocs/balances/${encodeURIComponent(imsi)}`);
+      const fresh = toBalanceViewModel(raw);
+
+      // 2. Validate against schema, IMSI, invariants, and conservation rules
+      const val = validateAuthoritativeBalance(fresh, imsi);
+      if (!val.ok || !fresh) {
+        setRefreshError(t(val.ok ? 'ocs_balance_refresh_failed' : val.errorKey));
+        return;
+      }
+
+      // 3. Verify that the refreshed version has actually progressed beyond the conflicted version
+      if (lastConflictedVersion !== null && fresh.version === lastConflictedVersion) {
+        setRefreshError(t('ocs_balance_conflict_unresolved'));
+        return;
+      }
+
+      // 4. Update local snapshot and inform caller
+      setCurrentBalance(fresh);
+      onBalanceUpdate?.(fresh);
+
+      // 5. Trigger parent surface refresh if available
+      if (onRefresh) {
+        try {
+          await onRefresh();
+        } catch {
+          // Parent refresh non-fatal if direct read succeeded
+        }
+      }
+
+      // 6. Transition to editing
+      setStep('editing');
+      setLastConflictedVersion(null);
+      setRefreshError(null);
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : t('ocs_balance_refresh_failed'));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleReconcileDetail = async () => {
+    setReconciling(true);
+    setReconcileFeedback(null);
+    let balanceFailed = false;
+    let historyFailed = false;
+
+    if (onRefresh) {
+      try {
+        await onRefresh();
+      } catch {
+        balanceFailed = true;
+      }
+    }
+    if (onRefreshHistory) {
+      try {
+        await onRefreshHistory();
+      } catch {
+        historyFailed = true;
+      }
+    }
+
+    setReconciling(false);
+    if (balanceFailed && historyFailed) {
+      setReconcileFeedback({
+        type: 'error',
+        message: t('ocs_balance_refresh_failed'),
+      });
+    } else if (balanceFailed) {
+      setReconcileFeedback({
+        type: 'warning',
+        message: t('ocs_balance_partial_balance_failed'),
+      });
+    } else if (historyFailed) {
+      setReconcileFeedback({
+        type: 'warning',
+        message: t('ocs_balance_partial_history_failed'),
+      });
+    } else {
+      setReconcileFeedback({
+        type: 'info',
+        message: t('ocs_balance_evidence_refreshed'),
+      });
+    }
+  };
+
   const handleBackToEdit = () => {
-    if (isSubmitting) return;
+    if (isSubmitting || refreshing) return;
     setStep('editing');
     setError(null);
+    setRefreshError(null);
   };
 
   const dialogTitle =
@@ -304,12 +436,12 @@ export default function AdjustBalanceModal({
   return (
     <Dialog
       open={isOpen}
-      onClose={isSubmitting ? () => {} : onClose}
+      onClose={isSubmitting || refreshing ? () => {} : onClose}
       className="ocs-dialog ocs-modal-dialog"
       overlayClassName="ocs-dialog-overlay"
       labelledBy="balance-modal-title"
       role="dialog"
-      closeOnOverlay={!isSubmitting}
+      closeOnOverlay={!isSubmitting && !refreshing}
     >
       <div className="ocs-dialog-header ocs-dialog-header-between">
         <div>
@@ -322,7 +454,7 @@ export default function AdjustBalanceModal({
           type="button"
           className="ocs-btn-icon"
           onClick={onClose}
-          disabled={isSubmitting}
+          disabled={isSubmitting || refreshing}
           aria-label={t('close')}
         >
           <X size={18} aria-hidden="true" />
@@ -334,15 +466,15 @@ export default function AdjustBalanceModal({
           IMSI: <strong className="ocs-mono">{imsi}</strong>
         </span>
         <div className="ocs-balance-modal-imsi-note">
-          {t('ocs_col_data_available')}: {formatOcsBytes(balance.data.available)} |{' '}
+          {t('ocs_col_data_available')}: {formatOcsBytes(effectiveBalance.data.available)} |{' '}
           {t('ocs_col_voice_avail')}:{' '}
-          {balance.voice.available === null ? '\u2014' : `${balance.voice.available}s`} |{' '}
+          {effectiveBalance.voice.available === null ? '\u2014' : `${effectiveBalance.voice.available}s`} |{' '}
           {t('ocs_col_sms_avail')}:{' '}
-          {balance.sms.available === null ? '\u2014' : balance.sms.available}
+          {effectiveBalance.sms.available === null ? '\u2014' : effectiveBalance.sms.available}
         </div>
       </div>
 
-      {step === 'editing' && typeof balance.version !== 'number' && (
+      {step === 'editing' && typeof effectiveBalance.version !== 'number' && (
         <div className="warning-text" role="alert">
           {t('ocs_balance_version_missing')}
         </div>
@@ -357,7 +489,7 @@ export default function AdjustBalanceModal({
               type="button"
               className="ocs-btn ocs-btn-secondary ocs-btn-compact-auto"
               onClick={() => {
-                onRefresh();
+                void onRefresh();
                 setStep('editing');
               }}
             >
@@ -378,30 +510,45 @@ export default function AdjustBalanceModal({
         <div className="ocs-review-workflow">
           <div className="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row" role="alert">
             <AlertCircle size={16} aria-hidden="true" />
-            <span>{error || t('ocs_balance_precondition_changed')}</span>
+            <span>{refreshError || error || t('ocs_balance_precondition_changed')}</span>
           </div>
+
+          {lastConflictedVersion !== null && (
+            <div className="ocs-review-summary-grid">
+              <div className="ocs-review-item" style={{ gridColumn: '1 / -1' }}>
+                <span className="ocs-review-item-label">{t('ocs_balance_account_status')}</span>
+                <span className="ocs-review-item-value">
+                  {t('ocs_balance_precondition_changed')} (v{lastConflictedVersion})
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="ocs-dialog-actions ocs-dialog-actions-spaced">
             <button
               type="button"
               className="ocs-btn ocs-btn-secondary"
               onClick={onClose}
+              disabled={refreshing}
             >
               {t('close')}
             </button>
-            {onRefresh && (
-              <button
-                type="button"
-                className="ocs-btn ocs-btn-primary"
-                onClick={() => {
-                  onRefresh();
-                  setStep('editing');
-                  setError(null);
-                }}
-              >
-                <RefreshCw size={14} aria-hidden="true" /> {t('ocs_balance_btn_refresh_rereview')}
-              </button>
-            )}
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-primary"
+              onClick={handleRefreshAfterConflict}
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <>
+                  <RefreshCw size={14} className="ocs-spin" aria-hidden="true" /> {t('ocs_balance_refreshing')}
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={14} aria-hidden="true" /> {t('ocs_balance_btn_refresh_rereview')}
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}
@@ -418,25 +565,65 @@ export default function AdjustBalanceModal({
             <span>{t('ocs_balance_outcome_unknown_desc')}</span>
           </div>
 
+          {reconcileFeedback && (
+            <div
+              className={`ocs-feedback-${reconcileFeedback.type === 'error' ? 'error' : 'info'} ocs-feedback-spaced ocs-feedback-row`}
+              role="status"
+            >
+              <AlertCircle size={16} aria-hidden="true" />
+              <span>{reconcileFeedback.message}</span>
+            </div>
+          )}
+
           <div className="ocs-dialog-actions ocs-dialog-actions-spaced">
             <button
               type="button"
               className="ocs-btn ocs-btn-secondary"
               onClick={onClose}
+              disabled={reconciling}
             >
               {t('close')}
             </button>
-            {onRefresh && (
+
+            {hasHistoryOnSurface ? (
               <button
                 type="button"
                 className="ocs-btn ocs-btn-primary"
-                onClick={() => {
-                  onRefresh();
-                  onClose();
-                }}
+                onClick={handleReconcileDetail}
+                disabled={reconciling}
               >
-                <RefreshCw size={14} aria-hidden="true" /> {t('ocs_balance_btn_refresh_history')}
+                {reconciling ? (
+                  <>
+                    <RefreshCw size={14} className="ocs-spin" aria-hidden="true" /> {t('refreshing')}
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={14} aria-hidden="true" /> {t('ocs_balance_btn_refresh_history')}
+                  </>
+                )}
               </button>
+            ) : (
+              <>
+                <a
+                  href={`/ocs/balances/${encodeURIComponent(imsi)}`}
+                  className="ocs-btn ocs-btn-primary"
+                  onClick={onClose}
+                >
+                  {t('ocs_balance_btn_view_history')}
+                </a>
+                {onRefresh && (
+                  <button
+                    type="button"
+                    className="ocs-btn ocs-btn-secondary"
+                    onClick={() => {
+                      void onRefresh();
+                      onClose();
+                    }}
+                  >
+                    <RefreshCw size={14} aria-hidden="true" /> {t('ocs_balance_btn_refresh_list')}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -453,6 +640,7 @@ export default function AdjustBalanceModal({
               className="ocs-select ocs-select-full"
               value={bucket}
               onChange={(event) => setBucket(event.target.value as BalanceBucketType)}
+              disabled={refreshing}
             >
               <option value="data">{t('ocs_balance_bucket_data')}</option>
               <option value="voice">{t('ocs_balance_bucket_voice')}</option>
@@ -469,6 +657,7 @@ export default function AdjustBalanceModal({
               className="ocs-select ocs-select-full"
               value={operation}
               onChange={(event) => setOperation(event.target.value as BalanceOperationType)}
+              disabled={refreshing}
             >
               <option value="credit">{t('ocs_balance_op_credit')}</option>
               <option value="debit">{t('ocs_balance_op_debit')}</option>
@@ -489,6 +678,7 @@ export default function AdjustBalanceModal({
                 value={amountInput}
                 onChange={(event) => setAmountInput(event.target.value)}
                 placeholder="1"
+                disabled={refreshing}
                 required
               />
               {bucket === 'data' && (
@@ -497,6 +687,7 @@ export default function AdjustBalanceModal({
                   value={dataUnit}
                   aria-label={t('ocs_balance_amount')}
                   onChange={(event) => setDataUnit(event.target.value as DataUnitType)}
+                  disabled={refreshing}
                 >
                   <option value="GB">GB</option>
                   <option value="MB">MB</option>
@@ -509,6 +700,7 @@ export default function AdjustBalanceModal({
                   value={voiceUnit}
                   aria-label={t('ocs_balance_amount')}
                   onChange={(event) => setVoiceUnit(event.target.value as VoiceUnitType)}
+                  disabled={refreshing}
                 >
                   <option value="Minutes">{t('minutes')}</option>
                   <option value="Seconds">{t('seconds')}</option>
@@ -541,6 +733,7 @@ export default function AdjustBalanceModal({
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               placeholder={t('ocs_balance_reason_ph')}
+              disabled={refreshing}
               required
             />
           </div>
@@ -557,6 +750,7 @@ export default function AdjustBalanceModal({
               value={ticketId}
               onChange={(event) => setTicketId(event.target.value)}
               placeholder={t('ocs_balance_ticket_ph')}
+              disabled={refreshing}
             />
           </div>
 
@@ -565,14 +759,14 @@ export default function AdjustBalanceModal({
               type="button"
               className="ocs-btn ocs-btn-secondary"
               onClick={onClose}
-              disabled={isSubmitting}
+              disabled={isSubmitting || refreshing}
             >
               {t('cancel')}
             </button>
             <button
               type="submit"
               className="ocs-btn ocs-btn-primary"
-              disabled={isSubmitting || typeof balance.version !== 'number'}
+              disabled={isSubmitting || refreshing || typeof effectiveBalance.version !== 'number'}
             >
               {t('ocs_balance_btn_review')}
             </button>

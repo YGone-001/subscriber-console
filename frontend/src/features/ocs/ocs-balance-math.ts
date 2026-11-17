@@ -80,6 +80,65 @@ export function isNonNegativeSafeInteger(val: unknown): val is number {
 }
 
 /**
+ * Validates an authoritative balance snapshot for complete metric integrity,
+ * correct IMSI ownership, valid CAS version, and conservation laws.
+ */
+export function validateAuthoritativeBalance(
+  balance: OcsBalanceViewModel | null | undefined,
+  expectedImsi?: string,
+): { ok: true } | { ok: false; errorKey: string } {
+  if (!balance) {
+    return { ok: false, errorKey: 'ocs_balance_unavailable' };
+  }
+  if (expectedImsi && balance.imsi !== expectedImsi) {
+    return { ok: false, errorKey: 'ocs_balance_refresh_mismatch' };
+  }
+  if (!isNonNegativeSafeInteger(balance.version)) {
+    return { ok: false, errorKey: 'ocs_balance_version_missing' };
+  }
+  if (
+    balance.invariants.all === false ||
+    balance.invariants.data === false ||
+    balance.invariants.voice === false ||
+    balance.invariants.sms === false
+  ) {
+    return { ok: false, errorKey: 'ocs_balance_invariants_broken' };
+  }
+  const data = balance.data;
+  const voice = balance.voice;
+  const sms = balance.sms;
+  if (!data || !voice || !sms) {
+    return { ok: false, errorKey: 'ocs_balance_fields_missing' };
+  }
+  if (
+    !isNonNegativeSafeInteger(data.total) ||
+    !isNonNegativeSafeInteger(data.available) ||
+    !isNonNegativeSafeInteger(data.used) ||
+    !isNonNegativeSafeInteger(data.reserved) ||
+    !isNonNegativeSafeInteger(voice.total) ||
+    !isNonNegativeSafeInteger(voice.available) ||
+    !isNonNegativeSafeInteger(voice.used) ||
+    !isNonNegativeSafeInteger(voice.reserved) ||
+    !isNonNegativeSafeInteger(sms.total) ||
+    !isNonNegativeSafeInteger(sms.available) ||
+    !isNonNegativeSafeInteger(sms.used)
+  ) {
+    return { ok: false, errorKey: 'ocs_balance_fields_missing' };
+  }
+  // Check conservation laws
+  if (data.total !== data.used + (data.reserved ?? 0) + data.available) {
+    return { ok: false, errorKey: 'ocs_balance_invariants_broken' };
+  }
+  if (voice.total !== voice.used + (voice.reserved ?? 0) + voice.available) {
+    return { ok: false, errorKey: 'ocs_balance_invariants_broken' };
+  }
+  if (sms.total !== sms.used + sms.available) {
+    return { ok: false, errorKey: 'ocs_balance_invariants_broken' };
+  }
+  return { ok: true };
+}
+
+/**
  * Parses a raw user-entered amount string into an exact canonical positive integer.
  *
  * Rules:

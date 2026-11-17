@@ -1710,6 +1710,15 @@ export const zh: Record<string, string> = {
     ocs_balance_btn_refresh_history: "刷新余额与历史记录",
     ocs_balance_outcome_unknown_title: "执行结果不确定",
     ocs_balance_outcome_unknown_desc: "提交过程中发生传输层故障。服务器可能已处理也可能未处理该调整。为防止重复调整，在核实状态前已禁止重新提交。",
+    ocs_balance_btn_refresh_list: "刷新列表",
+    ocs_balance_btn_view_history: "查看余额与历史记录",
+    ocs_balance_partial_history_failed: "余额已刷新，但调整历史记录更新失败",
+    ocs_balance_partial_balance_failed: "调整历史记录已刷新，但余额更新失败",
+    ocs_balance_evidence_refreshed: "余额与调整历史记录已用最新数据刷新",
+    ocs_balance_conflict_unresolved: "刷新后的余额版本仍与冲突版本相同，等待权威状态同步更新",
+    ocs_balance_refresh_mismatch: "刷新后的余额记录与用户 IMSI 不匹配",
+    ocs_balance_refresh_failed: "刷新权威余额快照失败",
+    ocs_balance_refreshing: "正在刷新权威余额...",
 
     // -- 页面面包屑标签 --
     eyebrow_imsi_hss: "IMSI / HSS",

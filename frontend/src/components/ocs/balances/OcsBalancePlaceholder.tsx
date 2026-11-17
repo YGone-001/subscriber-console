@@ -135,6 +135,16 @@ export default function OcsBalancePlaceholder() {
     window.setTimeout(() => setCopiedImsi((current) => (current === imsi ? null : current)), 1400);
   }, []);
 
+  const handleListRefresh = useCallback(async () => {
+    const freshPayload = await refresh();
+    setAdjustTarget((current) => {
+      if (!current) return null;
+      const freshList = toBalanceListViewModel(freshPayload);
+      const updated = freshList.records.find((r) => r.imsi === current.imsi);
+      return updated ?? current;
+    });
+  }, [refresh]);
+
   const toggleSort = (field: BalanceSortField) => {
     if (sort === field) update({ order: order === 'asc' ? 'desc' : 'asc', page: '1' });
     else update({ sort: field, order: field === 'imsi' ? 'asc' : 'desc', page: '1' });
@@ -340,14 +350,16 @@ export default function OcsBalancePlaceholder() {
           voiceAvailable={adjustTarget.voice.available}
           smsAvailable={adjustTarget.sms.available}
           version={adjustTarget.version}
-          onRefresh={() => { void refresh(); }}
+          hasHistoryOnSurface={false}
+          onBalanceUpdate={setAdjustTarget}
+          onRefresh={handleListRefresh}
           onClose={() => setAdjustTarget(null)}
           onSuccess={(result) => {
             setFeedback({
               type: result.outcome === 'executed_audit_warning' ? 'error' : 'success',
               message: result.message,
             });
-            void refresh();
+            void handleListRefresh();
           }}
         />
       )}
