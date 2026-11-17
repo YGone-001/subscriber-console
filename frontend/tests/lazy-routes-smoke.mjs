@@ -503,6 +503,20 @@ try {
   await page.waitForSelector('.ocs-container', { timeout: 20000 });
   check('L6-02', new URL(page.url()).pathname === '/ocs/balances', `forward navigation restored /ocs/balances (saw ${new URL(page.url()).pathname})`);
 
+  /* The breadcrumb trail must track the lazily rendered route, not the shell. */
+  const breadcrumbText = (await page.locator('.nav-breadcrumbs-bar').textContent()) ?? '';
+  check('L6-03', breadcrumbText.trim().length > 0 && !breadcrumbText.includes('404'), `breadcrumbs describe the active route (saw "${breadcrumbText.trim().slice(0, 60)}")`);
+
+  /* A query string survives a direct navigation and a client-side transition. */
+  await page.goto(`${baseUrl}/ocs/balances?page=2&sort=imsi`, { waitUntil: 'load' });
+  await page.waitForSelector('.ocs-container', { timeout: 20000 });
+  const queryUrl = new URL(page.url());
+  check(
+    'L6-04',
+    queryUrl.pathname === '/ocs/balances' && queryUrl.searchParams.get('page') === '2' && queryUrl.searchParams.get('sort') === 'imsi',
+    `the query string is preserved on a deep link (saw ${queryUrl.search}${queryUrl.pathname})`,
+  );
+
   /* --------------------------------------------------------------------- */
   /* L7: unauthenticated deep link                                         */
   /* --------------------------------------------------------------------- */
