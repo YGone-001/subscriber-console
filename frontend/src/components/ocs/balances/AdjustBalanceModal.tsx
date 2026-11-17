@@ -25,6 +25,7 @@ import { formatBytes } from '../../../lib/unitParser';
 import { formatOcsBytes } from '../../../features/ocs/ocs-format';
 import { toBalanceViewModel, type OcsBalanceViewModel } from '../../../features/ocs/ocs-view-models';
 import {
+  hasSnapshotConflict,
   parseCanonicalAdjustmentAmount,
   projectBalanceAdjustment,
   validateAuthoritativeBalance,
@@ -127,10 +128,40 @@ export default function AdjustBalanceModal({
   const isSubmittingRef = useRef<boolean>(false);
 
   useEffect(() => {
-    if (balance && balance.imsi === imsi) {
-      setCurrentBalance(balance);
-    }
-  }, [balance, imsi]);
+    if (!balance || balance.imsi !== imsi) return;
+
+    // Validate incoming balance snapshot integrity
+    const val = validateAuthoritativeBalance(balance, imsi);
+    if (!val.ok) return;
+
+    setCurrentBalance((prev) => {
+      if (!prev) return balance;
+      if (typeof prev.version !== 'number') return balance;
+      if (typeof balance.version !== 'number') return prev;
+
+      // Reject regression: incoming version is strictly less than what modal already holds
+      if (balance.version < prev.version) {
+        return prev;
+      }
+
+      // Conflict detection: same version but conflicting values
+      if (balance.version === prev.version) {
+        if (hasSnapshotConflict(prev, balance)) {
+          // Conflicting values for the same version: fail closed
+          setStep('conflict');
+          setLastConflictedVersion(prev.version);
+          setProjection(null);
+          setReviewedVersion(null);
+          setError(t('ocs_balance_snapshot_conflict'));
+          return prev;
+        }
+        return balance;
+      }
+
+      // Incoming version is newer (balance.version > prev.version)
+      return balance;
+    });
+  }, [balance, imsi, t]);
 
   if (!isOpen) return null;
 
@@ -342,9 +373,18 @@ export default function AdjustBalanceModal({
         return;
       }
 
-      // 3. Verify that the refreshed version has actually progressed beyond the conflicted version
-      if (lastConflictedVersion !== null && fresh.version === lastConflictedVersion) {
-        setRefreshError(t('ocs_balance_conflict_unresolved'));
+      // 3. Strict Monotonic CAS Version Validation:
+      // Reject any snapshot whose version has not strictly progressed beyond the conflicted version
+      if (
+        lastConflictedVersion !== null &&
+        (typeof fresh.version !== 'number' || fresh.version <= lastConflictedVersion)
+      ) {
+        setRefreshError(
+          t('ocs_balance_conflict_unresolved', {
+            freshVersion: `v${fresh.version ?? '\u2014'}`,
+            conflictedVersion: `v${lastConflictedVersion}`,
+          }),
+        );
         return;
       }
 
@@ -373,25 +413,17 @@ export default function AdjustBalanceModal({
   };
 
   const handleReconcileDetail = async () => {
+    if (reconciling) return;
     setReconciling(true);
     setReconcileFeedback(null);
-    let balanceFailed = false;
-    let historyFailed = false;
 
-    if (onRefresh) {
-      try {
-        await onRefresh();
-      } catch {
-        balanceFailed = true;
-      }
-    }
-    if (onRefreshHistory) {
-      try {
-        await onRefreshHistory();
-      } catch {
-        historyFailed = true;
-      }
-    }
+    const balancePromise = onRefresh ? Promise.resolve(onRefresh()) : Promise.resolve();
+    const historyPromise = onRefreshHistory ? Promise.resolve(onRefreshHistory()) : Promise.resolve();
+
+    const [balanceResult, historyResult] = await Promise.allSettled([balancePromise, historyPromise]);
+
+    const balanceFailed = onRefresh ? balanceResult.status === 'rejected' : false;
+    const historyFailed = onRefreshHistory ? historyResult.status === 'rejected' : false;
 
     setReconciling(false);
     if (balanceFailed && historyFailed) {
@@ -567,7 +599,7 @@ export default function AdjustBalanceModal({
 
           {reconcileFeedback && (
             <div
-              className={`ocs-feedback-${reconcileFeedback.type === 'error' ? 'error' : 'info'} ocs-feedback-spaced ocs-feedback-row`}
+              className={`ocs-feedback-${reconcileFeedback.type} ocs-feedback-spaced ocs-feedback-row`}
               role="status"
             >
               <AlertCircle size={16} aria-hidden="true" />

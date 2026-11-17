@@ -33,6 +33,8 @@ import OcsSortIcon from '../common/OcsSortIcon';
 import OcsInvariantBadge from '../common/OcsInvariantBadge';
 import { OcsFilterSelect, OcsResetFilters, OcsSearchField, OcsToolbar } from '../common/OcsToolbar';
 import AdjustBalanceModal from './AdjustBalanceModal';
+import { getJson } from '../../../lib/api/read-client';
+import { validateAuthoritativeBalance, hasSnapshotConflict } from '../../../features/ocs/ocs-balance-math';
 import { useRead } from '../../../lib/api/use-read';
 import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
@@ -136,14 +138,30 @@ export default function OcsBalancePlaceholder() {
   }, []);
 
   const handleListRefresh = useCallback(async () => {
-    const freshPayload = await refresh();
+    const freshPayload = await getJson<unknown>(url);
     setAdjustTarget((current) => {
       if (!current) return null;
       const freshList = toBalanceListViewModel(freshPayload);
       const updated = freshList.records.find((r) => r.imsi === current.imsi);
-      return updated ?? current;
+      if (!updated) return current;
+
+      // Validate updated snapshot
+      const val = validateAuthoritativeBalance(updated, current.imsi ?? undefined);
+      if (!val.ok) return current;
+
+      // Prevent regression: do not regress to an older version or conflicting snapshot
+      if (typeof updated.version === 'number' && typeof current.version === 'number') {
+        if (updated.version < current.version) {
+          return current;
+        }
+        if (updated.version === current.version && hasSnapshotConflict(current, updated)) {
+          return current;
+        }
+      }
+      return updated;
     });
-  }, [refresh]);
+    void refresh();
+  }, [refresh, url]);
 
   const toggleSort = (field: BalanceSortField) => {
     if (sort === field) update({ order: order === 'asc' ? 'desc' : 'asc', page: '1' });

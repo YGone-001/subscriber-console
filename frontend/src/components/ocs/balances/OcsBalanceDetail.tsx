@@ -14,7 +14,7 @@
  * hands the record version to the adjustment dialog so a concurrent write is
  * rejected instead of silently overwritten.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Database, History, MessageSquare, Phone, ShieldCheck, SlidersHorizontal, Wallet } from 'lucide-react';
 import PageHeader from '../../ui/PageHeader';
@@ -23,11 +23,17 @@ import OcsStatusBadge from '../common/OcsStatusBadge';
 import OcsInvariantBadge from '../common/OcsInvariantBadge';
 import OcsDetailState from '../common/OcsDetailState';
 import AdjustBalanceModal from './AdjustBalanceModal';
+import { getJson } from '../../../lib/api/read-client';
 import { useRead } from '../../../lib/api/use-read';
 import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
-import { toBalanceViewModel, toAdjustmentListViewModel, type OcsAdjustmentViewModel } from '../../../features/ocs/ocs-view-models';
+import {
+  toBalanceViewModel,
+  toAdjustmentListViewModel,
+  type OcsAdjustmentViewModel,
+  type OcsBalanceViewModel,
+} from '../../../features/ocs/ocs-view-models';
 import { formatOcsBytes, formatOcsNumber, formatOcsTime } from '../../../features/ocs/ocs-format';
 import { resolveReturnTo } from '../../../lib/return-to';
 
@@ -42,6 +48,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
 
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [overrideBalance, setOverrideBalance] = useState<OcsBalanceViewModel | null>(null);
 
   const encoded = encodeURIComponent(imsi);
   const { data, error, isLoading: loading, mutate: refresh } = useRead<unknown>(
@@ -53,7 +60,17 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
     `/api/ocs/balances/${encoded}/adjustments?limit=20`,
   );
 
-  const balance = toBalanceViewModel(data);
+  const rawBalance = toBalanceViewModel(data);
+  const balance = useMemo(() => {
+    if (!rawBalance) return overrideBalance;
+    if (!overrideBalance) return rawBalance;
+    if (typeof rawBalance.version === 'number' && typeof overrideBalance.version === 'number') {
+      if (rawBalance.version < overrideBalance.version) {
+        return overrideBalance;
+      }
+    }
+    return rawBalance;
+  }, [rawBalance, overrideBalance]);
   const adjustments = toAdjustmentListViewModel(adjustmentsData).records;
   const location = useLocation();
   const returnTo = resolveReturnTo(location.search, '/ocs/balances', ['/ocs/balances']);
@@ -336,10 +353,17 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
           version={balance.version}
           hasHistoryOnSurface={true}
           onRefresh={async () => {
-            await refresh();
+            const raw = await getJson<unknown>(`/api/ocs/balances/${encoded}`);
+            const fresh = toBalanceViewModel(raw);
+            if (fresh) setOverrideBalance(fresh);
+            void refresh();
           }}
           onRefreshHistory={async () => {
-            await refreshAdjustments();
+            await getJson<unknown>(`/api/ocs/balances/${encoded}/adjustments?limit=20`);
+            void refreshAdjustments();
+          }}
+          onBalanceUpdate={(fresh) => {
+            setOverrideBalance(fresh);
           }}
           onClose={() => setAdjustOpen(false)}
           onSuccess={(result) => {

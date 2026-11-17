@@ -15,6 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../src/providers/I18nProvider';
 import AdjustBalanceModal from '../src/components/ocs/balances/AdjustBalanceModal';
 import {
+  hasSnapshotConflict,
   isNonNegativeSafeInteger,
   parseCanonicalAdjustmentAmount,
   projectBalanceAdjustment,
@@ -584,4 +585,41 @@ test('validateAuthoritativeBalance rejects missing metrics or unconserved totals
     data: { total: 5000, used: 1000, reserved: 1000, available: 2000 }, // sum is 4000 !== 5000
   });
   assert.deepEqual(validateAuthoritativeBalance(unconserved), { ok: false, errorKey: 'ocs_balance_invariants_broken' });
+});
+
+test('validateAuthoritativeBalance enforces strictly monotonic CAS version progression', () => {
+  const balanceV5 = createTestBalance({ version: 5 });
+  // Reject when fresh version is strictly less than conflicted version
+  assert.deepEqual(validateAuthoritativeBalance(balanceV5, '460001234567890', 6), {
+    ok: false,
+    errorKey: 'ocs_balance_conflict_unresolved',
+  });
+  // Reject when fresh version equals conflicted version
+  assert.deepEqual(validateAuthoritativeBalance(balanceV5, '460001234567890', 5), {
+    ok: false,
+    errorKey: 'ocs_balance_conflict_unresolved',
+  });
+  // Accept when fresh version is strictly greater than conflicted version
+  assert.deepEqual(validateAuthoritativeBalance(balanceV5, '460001234567890', 4), {
+    ok: true,
+  });
+});
+
+test('hasSnapshotConflict detects value differences at identical version', () => {
+  const a = createTestBalance({ version: 5 });
+  const bSame = createTestBalance({ version: 5 });
+  assert.equal(hasSnapshotConflict(a, bSame), false);
+
+  const bDifferentData = createTestBalance({
+    version: 5,
+    data: { total: 5368709120, used: 2147483648, reserved: 1073741824, available: 2147483648 },
+  });
+  assert.equal(hasSnapshotConflict(a, bDifferentData), true);
+
+  const bDifferentVersion = createTestBalance({
+    version: 6,
+    data: { total: 5368709120, used: 2147483648, reserved: 1073741824, available: 2147483648 },
+  });
+  // Different versions do not count as a same-version snapshot value conflict
+  assert.equal(hasSnapshotConflict(a, bDifferentVersion), false);
 });

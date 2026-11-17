@@ -853,7 +853,9 @@
 /* ── Feedback messages ─────────────────────────────────────── */
 
 .ocs-feedback-success,
-.ocs-feedback-error {
+.ocs-feedback-error,
+.ocs-feedback-warning,
+.ocs-feedback-info {
   padding: 0.75rem 1rem;
   border-radius: var(--ref-radius-compact);
   font-size: var(--ref-font-size-body-small);
@@ -870,6 +872,18 @@
   background: var(--status-danger-soft);
   color: var(--status-danger);
   border: 1px solid var(--status-danger-border);
+}
+
+.ocs-feedback-warning {
+  background: var(--status-warning-soft);
+  color: var(--status-warning);
+  border: 1px solid var(--status-warning-border);
+}
+
+.ocs-feedback-info {
+  background: var(--status-info-soft);
+  color: var(--status-info);
+  border: 1px solid var(--status-info-border);
 }
 
 .ocs-feedback-link {
@@ -1346,11 +1360,15 @@
 /* ── Feedback spacing helpers ───────────────────────────────── */
 
 .ocs-feedback-success.ocs-feedback-spaced,
-.ocs-feedback-error.ocs-feedback-spaced {
+.ocs-feedback-error.ocs-feedback-spaced,
+.ocs-feedback-warning.ocs-feedback-spaced,
+.ocs-feedback-info.ocs-feedback-spaced {
   margin-bottom: 1rem;
 }
 
-.ocs-feedback-error.ocs-feedback-row {
+.ocs-feedback-error.ocs-feedback-row,
+.ocs-feedback-warning.ocs-feedback-row,
+.ocs-feedback-info.ocs-feedback-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1851,6 +1869,16 @@
 
 @media (max-width: 640px) {
   .ocs-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .ocs-modal-dialog {
+    width: calc(100vw - 1.5rem);
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 1rem;
+    box-sizing: border-box;
+  }
+  .ocs-review-summary-grid {
     grid-template-columns: 1fr;
   }
 }

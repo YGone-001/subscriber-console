@@ -236,6 +236,35 @@ jobs:
       - name: Build
         run: go build -o /dev/null ./...
 
+  ocs-balance-acceptance:
+    name: OCS balance adjustment acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+
+      - name: Install Chromium browser dependencies
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: OCS balance adjustment acceptance
+        working-directory: frontend
+        run: npm run acceptance:ocs-balance
+
   direct-operations:
     name: Direct operations integration
     if: github.event_name == 'workflow_dispatch'
@@ -942,6 +971,7 @@ jobs:
       - ui-restoration
       - go-spa-hosting
       - go
+      - ocs-balance-acceptance
       - direct-operations
       - user-management-e2e
       - authentication

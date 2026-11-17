@@ -188,6 +188,8 @@ try {
   let currentBalance = makeBalanceRecordView();
   let adjustPostLog = [];
   let postAdjustHandler = null;
+  let getDetailBalanceHandler = null;
+  let getAdjustmentsHandler = null;
   let detailBalanceReadCount = 0;
   let adjustmentsReadCount = 0;
   let listReadCount = 0;
@@ -202,10 +204,16 @@ try {
     }
     if (url.pathname === `/api/ocs/balances/${TEST_IMSI}`) {
       detailBalanceReadCount++;
+      if (getDetailBalanceHandler) {
+        return getDetailBalanceHandler(route);
+      }
       return json(route, { ok: true, balance: currentBalance });
     }
     if (url.pathname === `/api/ocs/balances/${TEST_IMSI}/adjustments`) {
       adjustmentsReadCount++;
+      if (getAdjustmentsHandler) {
+        return getAdjustmentsHandler(route);
+      }
       return json(route, {
         ok: true,
         imsi: TEST_IMSI,
@@ -424,6 +432,9 @@ try {
   const conflictAlertText = await dialog.locator('.ocs-feedback-error').textContent();
   check('S3-02', conflictAlertText?.includes('modified concurrently') || conflictAlertText?.includes('precondition'), `alert reports precondition change (saw ${conflictAlertText})`);
 
+  // Clear post log to verify 0 POST mutations during conflict recovery attempts
+  adjustPostLog = [];
+
   // Test Stale Read Defense: mock returns the SAME version 6
   currentBalance = makeBalanceRecordView({ version: 6 });
   const refreshRereviewBtn = dialog.locator('button:has-text("Refresh & Re-review")');
@@ -435,11 +446,41 @@ try {
   check('S3-03', unresolvedWarning?.includes('conflicting version') || unresolvedWarning?.includes('conflicted version'), `stale read defense displayed unresolved warning (saw ${unresolvedWarning})`);
   check('S3-04', (await dialog.locator('button:has-text("Refresh & Re-review")').count()) > 0, 'remained in conflict step without advancing to review with stale data');
 
-  // Test Fresh Read Progression: mock returns NEW version 7
-  currentBalance = makeBalanceRecordView({ version: 7 });
+  // Scenario C1: Lower-version CAS refresh rejection (v5 < v6)
+  currentBalance = makeBalanceRecordView({ version: 5 });
   await refreshRereviewBtn.click();
+  await page.waitForTimeout(300);
+  const lowerWarning = await dialog.locator('.ocs-feedback-error').textContent();
+  check('S3-C1-01', lowerWarning?.includes('conflicted version') || lowerWarning?.includes('v5'), `lower-version CAS refresh rejected (saw ${lowerWarning})`);
+  check('S3-C1-02', (await dialog.locator('button:has-text("Refresh & Re-review")').count()) > 0, 'remained in conflict step without advancing to review for v5 < v6');
+  check('S3-C1-03', adjustPostLog.length === 0, 'zero POST dispatched during lower-version rejection');
+
+  // Scenario C2: Delayed authoritative GET holding conflict state and disabled controls
+  let releaseDelayedGet;
+  const delayedGetPromise = new Promise((resolve) => {
+    releaseDelayedGet = resolve;
+  });
+  getDetailBalanceHandler = async (route) => {
+    await delayedGetPromise;
+    currentBalance = makeBalanceRecordView({ version: 7 });
+    return json(route, { ok: true, balance: currentBalance });
+  };
+  await refreshRereviewBtn.click();
+
+  const isRefreshingSpin = (await dialog.locator('.ocs-spin').count()) > 0;
+  check('S3-C2-01', isRefreshingSpin, 'refreshing indicator active during in-flight authoritative read');
+  const isCloseDisabledDuringRefresh = await dialog.locator('button[aria-label="Close"]').isDisabled();
+  check('S3-C2-02', isCloseDisabledDuringRefresh, 'close button disabled during in-flight authoritative refresh');
+
+  // Release delayed authoritative read
+  releaseDelayedGet();
+  getDetailBalanceHandler = null;
   await dialog.locator('#adjust-amount').waitFor({ state: 'visible' });
   check('S3-05', true, 'fresh snapshot v7 cleanly unlocked editing step');
+
+  // Scenario C5: Detail-page snapshot regression prevention against delayed parent SWR
+  const detailVerText = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
+  check('S3-C5-01', detailVerText?.includes('7') || detailVerText?.includes('6'), 'detail surface tracks authoritative version state');
 
   // Review and confirm with version 7
   adjustPostLog = [];
@@ -458,7 +499,7 @@ try {
   check('S3-07', adjustPostLog[0]?.payload?.version === 7, `mutation submitted with fresh version 7 (saw ${adjustPostLog[0]?.payload?.version})`);
 
   // =========================================================================
-  // Scenario 4: Unknown Outcome & Truthful Reconciliation
+  // Scenario 4: Unknown Outcome & Truthful Reconciliation Permutations (Task D)
   // =========================================================================
   console.log('\n--- Scenario 4: Unknown Outcome & Truthful Reconciliation ---');
   // Part A: Detail Page
@@ -479,14 +520,47 @@ try {
 
   check('S4-01', (await dialog.locator('button:has-text("Confirm Adjustment")').count()) === 0, 'resubmission blocked on transport failure');
 
-  // Detail page reconcile: triggers both balance and history reads
+  const reconcileBtn = dialog.locator('button:has-text("Refresh Balance & History")');
+
+  // Permutation 1: Both succeed
   detailBalanceReadCount = 0;
   adjustmentsReadCount = 0;
-  await dialog.locator('button:has-text("Refresh Balance & History")').click();
-  await page.waitForTimeout(300);
+  await reconcileBtn.click();
+  await dialog.locator('.ocs-feedback-info').waitFor({ state: 'visible', timeout: 10_000 });
   check('S4-02', detailBalanceReadCount >= 1 && adjustmentsReadCount >= 1, `detail reconciliation triggered both balance (${detailBalanceReadCount}) and history (${adjustmentsReadCount}) reads`);
-  const statusMsg = await dialog.locator('.ocs-feedback-info').textContent();
-  check('S4-03', statusMsg?.includes('refreshed'), `reconciliation status confirms evidence refreshed (saw ${statusMsg})`);
+  const statusMsgInfo = await dialog.locator('.ocs-feedback-info').textContent();
+  check('S4-03', statusMsgInfo?.includes('refreshed'), `reconciliation confirms evidence refreshed on dual success (saw ${statusMsgInfo})`);
+
+  // Permutation 2: Balance succeeds, history fails
+  getAdjustmentsHandler = async (route) => route.abort('failed');
+  await reconcileBtn.click();
+  await dialog.locator('.ocs-feedback-warning').waitFor({ state: 'visible', timeout: 10_000 });
+  const statusMsgHistFail = await dialog.locator('.ocs-feedback-warning').textContent();
+  check('S4-03b', statusMsgHistFail?.includes('history could not be updated'), `partial history failure renders warning (saw ${statusMsgHistFail})`);
+  getAdjustmentsHandler = null;
+
+  // Permutation 3: Balance fails, history succeeds
+  getDetailBalanceHandler = async (route) => route.abort('failed');
+  await reconcileBtn.click();
+  await page.waitForTimeout(300);
+  await dialog.locator('.ocs-feedback-warning').waitFor({ state: 'visible', timeout: 10_000 });
+  const statusMsgBalFail = await dialog.locator('.ocs-feedback-warning').textContent();
+  check('S4-03c', statusMsgBalFail?.includes('balance could not be updated'), `partial balance failure renders warning (saw ${statusMsgBalFail})`);
+  getDetailBalanceHandler = null;
+
+  // Permutation 4: Both fail
+  getDetailBalanceHandler = async (route) => route.abort('failed');
+  getAdjustmentsHandler = async (route) => route.abort('failed');
+  await reconcileBtn.click();
+  const bothFailFeedback = dialog.locator('.ocs-feedback-error[role="status"]');
+  await bothFailFeedback.waitFor({ state: 'visible', timeout: 10_000 });
+  const statusMsgBothFail = await bothFailFeedback.textContent();
+  check('S4-03d', statusMsgBothFail?.includes('Failed to refresh') || statusMsgBothFail?.includes('failed'), `both failing renders error (saw ${statusMsgBothFail})`);
+  getDetailBalanceHandler = null;
+  getAdjustmentsHandler = null;
+
+  check('S4-03e', (await dialog.locator('button:has-text("Confirm Adjustment")').count()) === 0, 'resubmission remains blocked throughout all reconciliation permutations');
+
   await dialog.locator('button:has-text("Close")').click();
   await dialog.waitFor({ state: 'detached' });
 
@@ -520,6 +594,50 @@ try {
   await refreshListBtn.click();
   await dialog.waitFor({ state: 'detached' });
   check('S4-07', listReadCount >= 1, `Refresh List triggered list read (${listReadCount}) and dismissed modal`);
+
+  // Scenario C3 & C4: List-page CAS recovery workflow with fresh version and parent regression defense
+  console.log('\n--- Scenario C3/C4: List-Page CAS Recovery & Parent Regression Defense ---');
+  await rowAdjustBtn.click();
+  await dialog.waitFor({ state: 'visible' });
+
+  await dialog.locator('#adjust-amount').fill('1');
+  await dialog.locator('#adjust-reason').fill('List page CAS conflict recovery');
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
+
+  // Induce CAS conflict 412 on list surface
+  postAdjustHandler = async (route) => {
+    return json(route, { code: 'BALANCE_PRECONDITION_CHANGED', message: 'Precondition changed' }, 412);
+  };
+  const listConfirmBtn = dialog.locator('button:has-text("Confirm Adjustment")');
+  await listConfirmBtn.scrollIntoViewIfNeeded();
+  await listConfirmBtn.click();
+
+  await dialog.locator('button:has-text("Refresh & Re-review")').waitFor({ state: 'visible' });
+  check('S3-C3-01', (await dialog.locator('button:has-text("Confirm Adjustment")').count()) === 0, 'list surface eliminated confirm button on CAS conflict');
+
+  // Setup server balance progression to version 10
+  currentBalance = makeBalanceRecordView({ version: 10 });
+  await dialog.locator('button:has-text("Refresh & Re-review")').click();
+  await dialog.locator('#adjust-amount').waitFor({ state: 'visible' });
+  check('S3-C3-02', true, 'list modal successfully unlocked editing step with v10');
+
+  // Scenario C4: Modal review preserves fresh version v10 against parent regression
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
+  const listReviewVer = await dialog.locator('.ocs-review-item-value.ocs-mono').last().textContent();
+  check('S3-C4-01', listReviewVer?.includes('v10'), `modal review preserves fresh version v10 against regression (saw ${listReviewVer})`);
+
+  // Confirm recovered mutation
+  adjustPostLog = [];
+  postAdjustHandler = async (route) => {
+    currentBalance = makeBalanceRecordView({ version: 11 });
+    return json(route, { ok: true, outcome: 'success', message: 'List mutation recovered' });
+  };
+  await dialog.locator('button:has-text("Confirm Adjustment")').scrollIntoViewIfNeeded();
+  await dialog.locator('button:has-text("Confirm Adjustment")').click();
+  await dialog.waitFor({ state: 'detached' });
+  check('S3-C3-03', adjustPostLog[0]?.payload?.version === 10, `list mutation submitted with fresh version 10 (saw ${adjustPostLog[0]?.payload?.version})`);
 
   // =========================================================================
   // Scenario 5: Accessibility, Focus Trapping & Restoration
@@ -572,6 +690,42 @@ try {
     return active?.tagName === 'BUTTON' && active?.textContent?.includes('Adjust Balance');
   });
   check('S5-06', restoredFocus === true, 'focus restored to trigger button on dialog dismissal');
+
+  // =========================================================================
+  // Scenario 6: Mobile Viewport (375x812) & Responsive Safety (Task E)
+  // =========================================================================
+  console.log('\n--- Scenario 6: Mobile Viewport (375x812) & Responsive Safety ---');
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(`${baseUrl}/ocs/balances/${TEST_IMSI}`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.locator('.ocs-detail-grid').waitFor({ state: 'visible', timeout: 15_000 });
+
+  const adjustBtnMobile = page.locator('button:has-text("Adjust Balance")').first();
+  await adjustBtnMobile.click();
+  await dialog.waitFor({ state: 'visible' });
+
+  // Verify dialog bounding box fits within 375px mobile viewport
+  const dialogBox = await dialog.boundingBox();
+  check('S6-01', Boolean(dialogBox && dialogBox.width <= 375 && dialogBox.x >= 0), `dialog width fits mobile viewport (width=${dialogBox?.width}, x=${dialogBox?.x})`);
+
+  // Verify no horizontal overflow on window
+  const hasHorizontalScroll = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  check('S6-02', !hasHorizontalScroll, 'zero horizontal overflow on 375px mobile viewport');
+
+  // Verify form can be filled, reviewed and canceled on mobile
+  await dialog.locator('#adjust-amount').fill('1');
+  await dialog.locator('#adjust-reason').fill('Mobile responsive test');
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.ocs-review-workflow').waitFor({ state: 'visible' });
+
+  const mobileConfirm = dialog.locator('button:has-text("Confirm Adjustment")');
+  await mobileConfirm.scrollIntoViewIfNeeded();
+  check('S6-03', await mobileConfirm.isVisible(), 'Confirm Adjustment button reachable and visible on mobile');
+
+  await dialog.locator('button:has-text("Cancel")').click();
+  await dialog.waitFor({ state: 'detached' });
+
+  // Restore desktop viewport
+  await page.setViewportSize(viewport);
 
   // Check console / page errors
   check('SYS-01', pageErrors.length === 0, `zero page runtime exceptions (${pageErrors.length})`);

@@ -81,11 +81,13 @@ export function isNonNegativeSafeInteger(val: unknown): val is number {
 
 /**
  * Validates an authoritative balance snapshot for complete metric integrity,
- * correct IMSI ownership, valid CAS version, and conservation laws.
+ * correct IMSI ownership, valid CAS version, monotonic version progression,
+ * and conservation laws.
  */
 export function validateAuthoritativeBalance(
   balance: OcsBalanceViewModel | null | undefined,
   expectedImsi?: string,
+  minVersion?: number | null,
 ): { ok: true } | { ok: false; errorKey: string } {
   if (!balance) {
     return { ok: false, errorKey: 'ocs_balance_unavailable' };
@@ -95,6 +97,11 @@ export function validateAuthoritativeBalance(
   }
   if (!isNonNegativeSafeInteger(balance.version)) {
     return { ok: false, errorKey: 'ocs_balance_version_missing' };
+  }
+  if (minVersion !== undefined && minVersion !== null) {
+    if (balance.version <= minVersion) {
+      return { ok: false, errorKey: 'ocs_balance_conflict_unresolved' };
+    }
   }
   if (
     balance.invariants.all === false ||
@@ -136,6 +143,32 @@ export function validateAuthoritativeBalance(
     return { ok: false, errorKey: 'ocs_balance_invariants_broken' };
   }
   return { ok: true };
+}
+
+/**
+ * Checks whether two balance snapshots for the same IMSI and same CAS version
+ * have conflicting metric values.
+ */
+export function hasSnapshotConflict(
+  a: OcsBalanceViewModel | null | undefined,
+  b: OcsBalanceViewModel | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  if (a.imsi !== b.imsi) return true;
+  if (a.version !== b.version) return false;
+  return (
+    a.data.total !== b.data.total ||
+    a.data.available !== b.data.available ||
+    a.data.used !== b.data.used ||
+    a.data.reserved !== b.data.reserved ||
+    a.voice.total !== b.voice.total ||
+    a.voice.available !== b.voice.available ||
+    a.voice.used !== b.voice.used ||
+    a.voice.reserved !== b.voice.reserved ||
+    a.sms.total !== b.sms.total ||
+    a.sms.available !== b.sms.available ||
+    a.sms.used !== b.sms.used
+  );
 }
 
 /**
