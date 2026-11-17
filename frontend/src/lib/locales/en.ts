@@ -1680,6 +1680,8 @@ export const en: Record<string, string> = {
     ocs_balance_success_executed: "Balance adjustment executed successfully",
     ocs_balance_precondition_changed: "Balance was modified concurrently; please refresh and retry",
     ocs_balance_version_missing: "This balance record does not report a version; refresh and reconcile it before adjusting",
+    ocs_balance_version_unavailable: "The latest balance refresh did not report a valid CAS version; balance adjustment stays disabled until a valid authoritative snapshot is recovered",
+    ocs_balance_version_watermark_retained: "The latest balance refresh did not report a valid CAS version; authoritative version {version} is retained and balance adjustment stays disabled until a valid snapshot is recovered",
     ocs_balance_backend_unreachable: "Go backend service is temporarily unavailable (GO_BACKEND_UNREACHABLE). No changes were made.",
     permission_denied: "Permission denied",
     ocs_balance_amount_invalid: "Adjustment amount must be greater than zero",

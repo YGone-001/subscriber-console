@@ -17,9 +17,13 @@ import AdjustBalanceModal from '../src/components/ocs/balances/AdjustBalanceModa
 import {
   hasSnapshotConflict,
   isNonNegativeSafeInteger,
+  isSnapshotCasEligible,
+  isValidCasVersion,
   parseCanonicalAdjustmentAmount,
   projectBalanceAdjustment,
+  resolveAuthoritativeSnapshot,
   validateAuthoritativeBalance,
+  type AuthoritativeSnapshotState,
 } from '../src/features/ocs/ocs-balance-math';
 import type { OcsBalanceViewModel } from '../src/features/ocs/ocs-view-models';
 
@@ -645,4 +649,189 @@ test('hasSnapshotConflict detects value differences across all buckets', () => {
     sms: { total: 200, used: 50, reserved: null, available: 150 },
   });
   assert.equal(hasSnapshotConflict(base, diffSms), true);
+});
+
+/* ---------------------------------------------------------------------------
+ * Task C: Missing / Invalid CAS Version Fail-Closed Regression Tests
+ * ------------------------------------------------------------------------- */
+
+const SNAPSHOT_IMSI = '460001234567890';
+
+/** An authoritative v9 snapshot with metrics that are easy to tell apart. */
+function createV9Snapshot(overrides: Partial<OcsBalanceViewModel> = {}): OcsBalanceViewModel {
+  return createTestBalance({
+    imsi: SNAPSHOT_IMSI,
+    version: 9,
+    data: { total: 10737418240, used: 2147483648, reserved: 0, available: 8589934592 },
+    voice: { total: 6000, used: 1200, reserved: 0, available: 4800 },
+    sms: { total: 100, used: 10, reserved: null, available: 90 },
+    ...overrides,
+  });
+}
+
+function resolveStep(
+  prev: AuthoritativeSnapshotState | null,
+  fresh: OcsBalanceViewModel,
+): AuthoritativeSnapshotState {
+  const next = resolveAuthoritativeSnapshot(prev, fresh, SNAPSHOT_IMSI);
+  assert.ok(next, 'resolver must return a state for a matching IMSI snapshot');
+  return next;
+}
+
+test('C-1: a missing version never overwrites an established v9 high-watermark', () => {
+  const v9 = createV9Snapshot();
+  const accepted = resolveStep(null, v9);
+  assert.equal(accepted.balance.version, 9);
+  assert.equal(accepted.hasConflict, false);
+  assert.equal(accepted.versionUnavailable, false);
+  assert.equal(isSnapshotCasEligible(accepted), true);
+
+  // The unversioned payload also carries different metrics, so accepting it
+  // would be observable both as a version loss and as a metric replacement.
+  const unversioned = createV9Snapshot({
+    version: null,
+    data: { total: 2147483648, used: 0, reserved: 0, available: 2147483648 },
+    voice: { total: 60, used: 0, reserved: 0, available: 60 },
+    sms: { total: 1, used: 0, reserved: null, available: 1 },
+  });
+
+  const afterNull = resolveStep(accepted, unversioned);
+  assert.equal(afterNull.balance.version, 9, 'high-watermark must be retained');
+  assert.deepEqual(afterNull.balance.data, v9.data, 'data metrics must not be replaced');
+  assert.deepEqual(afterNull.balance.voice, v9.voice, 'voice metrics must not be replaced');
+  assert.deepEqual(afterNull.balance.sms, v9.sms, 'sms metrics must not be replaced');
+  assert.equal(afterNull.balance.data.available, 8589934592);
+  assert.equal(afterNull.hasConflict, false, 'no conflict may be invented by a missing version');
+  assert.equal(afterNull.versionUnavailable, true, 'the surface must record that the version is unavailable');
+  assert.equal(
+    isSnapshotCasEligible(afterNull),
+    false,
+    'adjustment must be unavailable while the version-unavailable state is unresolved',
+  );
+
+  // Repeating the same unversioned response must not churn state (the detail
+  // page re-applies the snapshot on every render).
+  assert.equal(resolveStep(afterNull, unversioned), afterNull);
+});
+
+test('C-2: a missing version cannot clear an unresolved same-version conflict', () => {
+  const accepted = resolveStep(null, createV9Snapshot());
+  const conflictingV9 = createV9Snapshot({
+    data: { total: 10737418240, used: 5368709120, reserved: 0, available: 5368709120 },
+  });
+
+  const conflicted = resolveStep(accepted, conflictingV9);
+  assert.equal(conflicted.hasConflict, true);
+  assert.equal(conflicted.balance.data.available, 8589934592, 'the accepted v9 metrics stay authoritative');
+  assert.equal(isSnapshotCasEligible(conflicted), false);
+
+  const unversioned = createV9Snapshot({
+    version: null,
+    data: { total: 10737418240, used: 0, reserved: 0, available: 10737418240 },
+  });
+  const afterNull = resolveStep(conflicted, unversioned);
+
+  assert.equal(afterNull.hasConflict, true, 'conflict must remain active');
+  assert.equal(afterNull.versionUnavailable, true);
+  assert.equal(afterNull.balance.version, 9);
+  assert.equal(afterNull.balance.data.available, 8589934592, 'conflict must not be resolved by missing evidence');
+  assert.equal(isSnapshotCasEligible(afterNull), false, 'adjustment must stay disabled');
+});
+
+test('C-3: invalid numeric versions fail CAS validation and never advance the watermark', () => {
+  const invalidVersions: Array<{ label: string; value: unknown }> = [
+    { label: 'negative', value: -1 },
+    { label: 'fractional', value: 1.5 },
+    { label: 'NaN', value: Number.NaN },
+    { label: 'Infinity', value: Number.POSITIVE_INFINITY },
+    { label: 'unsafe integer', value: Number.MAX_SAFE_INTEGER + 1 },
+  ];
+
+  for (const entry of invalidVersions) {
+    assert.equal(isValidCasVersion(entry.value), false, `${entry.label} must not be a valid CAS version`);
+  }
+
+  const accepted = resolveStep(null, createV9Snapshot());
+  for (const entry of invalidVersions) {
+    const candidate = createV9Snapshot({
+      version: entry.value as number,
+      data: { total: 10737418240, used: 0, reserved: 0, available: 10737418240 },
+    });
+    const next = resolveStep(accepted, candidate);
+    assert.equal(next.balance.version, 9, `${entry.label} must not replace the v9 high-watermark`);
+    assert.equal(next.balance.data.available, 8589934592, `${entry.label} must not replace metrics`);
+    assert.equal(next.versionUnavailable, true, `${entry.label} must be treated as version-unavailable`);
+    assert.equal(isSnapshotCasEligible(next), false, `${entry.label} must block adjustment`);
+  }
+});
+
+test('C-4: a valid higher version recovers the surface and advances the high-watermark', () => {
+  const accepted = resolveStep(null, createV9Snapshot());
+  const conflicted = resolveStep(
+    accepted,
+    createV9Snapshot({
+      data: { total: 10737418240, used: 5368709120, reserved: 0, available: 5368709120 },
+    }),
+  );
+  assert.equal(conflicted.hasConflict, true);
+
+  const blocked = resolveStep(conflicted, createV9Snapshot({ version: null }));
+  assert.equal(blocked.hasConflict, true);
+  assert.equal(blocked.versionUnavailable, true);
+  assert.equal(isSnapshotCasEligible(blocked), false);
+
+  const v10 = createV9Snapshot({
+    version: 10,
+    data: { total: 10737418240, used: 3221225472, reserved: 0, available: 7516192768 },
+  });
+  const recovered = resolveStep(blocked, v10);
+
+  assert.equal(recovered.balance.version, 10, 'high-watermark must advance to v10');
+  assert.equal(recovered.balance.data.available, 7516192768);
+  assert.equal(recovered.hasConflict, false, 'conflict clears only on a valid higher version');
+  assert.equal(recovered.versionUnavailable, false);
+  assert.equal(isSnapshotCasEligible(recovered), true, 'adjustment becomes available again');
+
+  // Recovery must also be reachable from a pure version-unavailable state.
+  const onlyUnavailable = resolveStep(accepted, createV9Snapshot({ version: null }));
+  assert.equal(onlyUnavailable.versionUnavailable, true);
+  const recoveredFromUnavailable = resolveStep(onlyUnavailable, v10);
+  assert.equal(recoveredFromUnavailable.balance.version, 10);
+  assert.equal(recoveredFromUnavailable.versionUnavailable, false);
+  assert.equal(isSnapshotCasEligible(recoveredFromUnavailable), true);
+});
+
+test('C-5: accepted version is monotonically non-decreasing over an adversarial arrival order', () => {
+  const steps: Array<{ label: string; snapshot: OcsBalanceViewModel }> = [
+    { label: 'v9 accepted', snapshot: createV9Snapshot() },
+    { label: 'unversioned', snapshot: createV9Snapshot({ version: null }) },
+    { label: 'stale v8', snapshot: createV9Snapshot({ version: 8 }) },
+    { label: 'conflicting v9', snapshot: createV9Snapshot({ data: { total: 10737418240, used: 5368709120, reserved: 0, available: 5368709120 } }) },
+    { label: 'unversioned again', snapshot: createV9Snapshot({ version: null }) },
+    { label: 'v10', snapshot: createV9Snapshot({ version: 10, data: { total: 10737418240, used: 3221225472, reserved: 0, available: 7516192768 } }) },
+    { label: 'stale v7', snapshot: createV9Snapshot({ version: 7 }) },
+    { label: 'invalid version', snapshot: createV9Snapshot({ version: -1 }) },
+    { label: 'v11', snapshot: createV9Snapshot({ version: 11 }) },
+  ];
+
+  let state: AuthoritativeSnapshotState | null = null;
+  let acceptedVersion = -1;
+  for (const step of steps) {
+    state = resolveStep(state, step.snapshot);
+    if (state.versionUnavailable) {
+      assert.equal(
+        state.balance.version,
+        acceptedVersion,
+        `${step.label}: an unavailable version must not move the accepted version`,
+      );
+      continue;
+    }
+    assert.ok(
+      (state.balance.version as number) >= acceptedVersion,
+      `${step.label}: accepted version regressed from ${acceptedVersion} to ${state.balance.version}`,
+    );
+    acceptedVersion = state.balance.version as number;
+  }
+
+  assert.equal(acceptedVersion, 11, 'the final accepted version must be the highest one observed');
 });

@@ -172,6 +172,119 @@ export function hasSnapshotConflict(
 }
 
 /**
+ * Semantic alias for the CAS version contract.
+ *
+ * A CAS version is authoritative only when it is a JavaScript number, a finite
+ * integer, non-negative and inside the safe integer range. Anything else (null,
+ * undefined, negative, fractional, NaN, Infinity, unsafe integers) is treated as
+ * "version unavailable" rather than as a comparable value, because a missing
+ * version carries no ordering evidence at all.
+ */
+export function isValidCasVersion(value: unknown): value is number {
+  return isNonNegativeSafeInteger(value);
+}
+
+/**
+ * The accepted authoritative snapshot plus the two fail-closed flags the detail
+ * surface needs in order to decide whether a mutation may be dispatched.
+ *
+ * `balance` is always the last *accepted* snapshot. `versionUnavailable` records
+ * that the most recent response did not carry a valid CAS version, so the
+ * accepted snapshot cannot be proven current even though its own version is
+ * still the established high-watermark.
+ */
+export interface AuthoritativeSnapshotState {
+  imsi: string;
+  balance: OcsBalanceViewModel;
+  hasConflict: boolean;
+  versionUnavailable: boolean;
+}
+
+/**
+ * Resolves the next authoritative snapshot state.
+ *
+ * Invariant: `acceptedVersion(t + 1) >= acceptedVersion(t)`. Once a valid
+ * numeric high-watermark exists, no later response may lower it, and an
+ * unversioned response may neither replace the snapshot nor clear a conflict.
+ *
+ * Case 1  no snapshot + valid version      -> accept
+ * Case 2  no snapshot + invalid version    -> read-only snapshot, not CAS eligible
+ * Case 3  v9 established + valid v8        -> reject, retain v9
+ * Case 4  v9 established + valid v9 equal  -> retain, clear version-unavailable
+ * Case 5  v9 established + valid v9 differ -> conflict, retain v9
+ * Case 6  v9 established + valid v10       -> accept v10, advance high-watermark
+ * Case 7  v9 established + invalid version -> retain v9, never clear conflict
+ *
+ * Timestamps, arrival order and HTTP response order are never used as
+ * substitutes for CAS version authority.
+ */
+export function resolveAuthoritativeSnapshot(
+  prev: AuthoritativeSnapshotState | null,
+  fresh: OcsBalanceViewModel | null | undefined,
+  imsi: string,
+): AuthoritativeSnapshotState | null {
+  if (!fresh || fresh.imsi !== imsi) return prev;
+
+  const incomingVersionValid = isValidCasVersion(fresh.version);
+
+  if (!prev || prev.imsi !== imsi) {
+    /* Case 1 / Case 2: the first snapshot may be read-only when unversioned. */
+    return {
+      imsi,
+      balance: fresh,
+      hasConflict: false,
+      versionUnavailable: !incomingVersionValid,
+    };
+  }
+
+  if (!incomingVersionValid) {
+    /* Case 7: insufficient evidence to advance or resolve anything.
+     * The previous object is returned unchanged when the flag is already set so
+     * the caller keeps referential stability and cannot re-render in a loop. */
+    if (prev.versionUnavailable) return prev;
+    return { ...prev, versionUnavailable: true };
+  }
+
+  const incomingVersion = fresh.version as number;
+  const establishedVersion = prev.balance.version;
+
+  if (!isValidCasVersion(establishedVersion)) {
+    /* No high-watermark yet: the first valid version becomes authoritative. */
+    return { imsi, balance: fresh, hasConflict: false, versionUnavailable: false };
+  }
+
+  if (incomingVersion < establishedVersion) {
+    /* Case 3: stale lower version is rejected outright. */
+    return prev;
+  }
+
+  if (incomingVersion === establishedVersion) {
+    if (hasSnapshotConflict(prev.balance, fresh)) {
+      /* Case 5: same version, different metrics. Keep the accepted snapshot. */
+      if (prev.hasConflict && !prev.versionUnavailable) return prev;
+      return { ...prev, hasConflict: true, versionUnavailable: false };
+    }
+    /* Case 4: same version, identical metrics. Retain cleanly. */
+    if (!prev.versionUnavailable) return prev;
+    return { ...prev, versionUnavailable: false };
+  }
+
+  /* Case 6: strictly higher version advances the high-watermark. */
+  return { imsi, balance: fresh, hasConflict: false, versionUnavailable: false };
+}
+
+/**
+ * Single source of truth for "may a CAS mutation be dispatched from this
+ * snapshot?". Conflict and version-unavailable both fail closed.
+ */
+export function isSnapshotCasEligible(state: AuthoritativeSnapshotState | null): boolean {
+  if (!state) return false;
+  if (state.hasConflict) return false;
+  if (state.versionUnavailable) return false;
+  return isValidCasVersion(state.balance.version);
+}
+
+/**
  * Parses a raw user-entered amount string into an exact canonical positive integer.
  *
  * Rules:

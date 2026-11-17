@@ -26,6 +26,7 @@ import { formatOcsBytes } from '../../../features/ocs/ocs-format';
 import { toBalanceViewModel, type OcsBalanceViewModel } from '../../../features/ocs/ocs-view-models';
 import {
   hasSnapshotConflict,
+  isValidCasVersion,
   parseCanonicalAdjustmentAmount,
   projectBalanceAdjustment,
   validateAuthoritativeBalance,
@@ -64,6 +65,12 @@ export interface AdjustBalanceModalProps {
   onBalanceUpdate?: (fresh: OcsBalanceViewModel) => void;
   /** Whether the owning surface provides adjustment history on-screen (e.g. detail page). */
   hasHistoryOnSurface?: boolean;
+  /**
+   * Whether the owning surface currently holds a CAS-eligible snapshot. When
+   * false the dialog stays read-only: a missing or invalid version can never
+   * be promoted into a mutation precondition.
+   */
+  casEligible?: boolean;
   onSuccess: (result: { outcome: string; message: string }) => void;
 }
 
@@ -95,6 +102,7 @@ export default function AdjustBalanceModal({
   onRefreshHistory,
   onBalanceUpdate,
   hasHistoryOnSurface,
+  casEligible = true,
   onSuccess,
 }: AdjustBalanceModalProps) {
   const { t } = useI18n();
@@ -252,6 +260,11 @@ export default function AdjustBalanceModal({
     setError(null);
     setRefreshError(null);
 
+    if (!casEligible) {
+      setError(t('ocs_balance_version_unavailable'));
+      return;
+    }
+
     if (!parseAttempt.ok) {
       setError(t(parseAttempt.errorKey));
       return;
@@ -287,6 +300,15 @@ export default function AdjustBalanceModal({
 
     if (isSnapshotStale) {
       setError(t('ocs_balance_snapshot_stale'));
+      return;
+    }
+
+    /*
+     * Fail closed: no mutation may be dispatched without a valid CAS version,
+     * even if a projection somehow survived a snapshot change.
+     */
+    if (!casEligible || !isValidCasVersion(projection.version)) {
+      setError(t('ocs_balance_version_missing'));
       return;
     }
 
@@ -506,7 +528,13 @@ export default function AdjustBalanceModal({
         </div>
       </div>
 
-      {step === 'editing' && typeof effectiveBalance.version !== 'number' && (
+      {step === 'editing' && !casEligible && (
+        <div className="warning-text" role="alert">
+          {t('ocs_balance_version_unavailable')}
+        </div>
+      )}
+
+      {step === 'editing' && casEligible && !isValidCasVersion(effectiveBalance.version) && (
         <div className="warning-text" role="alert">
           {t('ocs_balance_version_missing')}
         </div>
@@ -798,7 +826,9 @@ export default function AdjustBalanceModal({
             <button
               type="submit"
               className="ocs-btn ocs-btn-primary"
-              disabled={isSubmitting || refreshing || typeof effectiveBalance.version !== 'number'}
+              disabled={
+                isSubmitting || refreshing || !casEligible || !isValidCasVersion(effectiveBalance.version)
+              }
             >
               {t('ocs_balance_btn_review')}
             </button>
@@ -977,7 +1007,7 @@ export default function AdjustBalanceModal({
               type="button"
               className={`ocs-btn ${operation === 'debit' ? 'ocs-btn-danger' : 'ocs-btn-primary'}`}
               onClick={handleConfirmAdjustment}
-              disabled={isSubmitting || isSnapshotStale || !projection}
+              disabled={isSubmitting || isSnapshotStale || !projection || !casEligible}
             >
               {isSubmitting ? (
                 <>

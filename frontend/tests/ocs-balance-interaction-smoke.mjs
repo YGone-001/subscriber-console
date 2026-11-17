@@ -278,6 +278,103 @@ try {
   });
 
   // =========================================================================
+  // Deterministic request/response synchronisation helpers
+  // =========================================================================
+  /*
+   * A detail-page refresh issues a direct authoritative GET (awaited by the
+   * refresh handler) and an SWR revalidation. Completion is therefore observed
+   * on the actual responses instead of on a fixed delay, and every scenario
+   * below states explicitly how many responses it waits for.
+   */
+  const balanceResponseLog = [];
+  const balanceResponseWaiters = [];
+
+  const drainBalanceResponseWaiters = () => {
+    for (let index = balanceResponseWaiters.length - 1; index >= 0; index -= 1) {
+      if (balanceResponseWaiters[index]()) balanceResponseWaiters.splice(index, 1);
+    }
+  };
+
+  page.on('response', (response) => {
+    const request = response.request();
+    if (request.method() !== 'GET') return;
+    const responseUrl = new URL(response.url());
+    if (!responseUrl.pathname.startsWith('/api/ocs/balances/')) return;
+    if (responseUrl.pathname.endsWith('/adjustments')) return;
+    balanceResponseLog.push({ path: responseUrl.pathname, status: response.status() });
+    drainBalanceResponseWaiters();
+  });
+
+  /** Resolves once `target` balance GET responses have been observed. */
+  const waitForBalanceResponseCount = (target, timeoutMs = 20_000) =>
+    new Promise((resolve, reject) => {
+      const attempt = () => {
+        if (balanceResponseLog.length < target) return false;
+        globalThis.clearTimeout(timer);
+        resolve(balanceResponseLog.length);
+        return true;
+      };
+      const timer = globalThis.setTimeout(() => {
+        const index = balanceResponseWaiters.indexOf(attempt);
+        if (index >= 0) balanceResponseWaiters.splice(index, 1);
+        reject(
+          new Error(
+            `timed out waiting for ${target} balance GET responses; observed ${balanceResponseLog.length}`,
+          ),
+        );
+      }, timeoutMs);
+      if (!attempt()) balanceResponseWaiters.push(attempt);
+    });
+
+  /*
+   * Flushes the React commit that follows a delivered response (two animation
+   * frames). This is a rendering flush, never a completion proof: request
+   * completion is proven by waitForBalanceResponseCount.
+   */
+  const settleUiAfterResponses = () =>
+    page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve(undefined)));
+        }),
+    );
+
+  /** Reads the version cell of the governance section. */
+  const readDetailVersion = async () => {
+    const value = await page
+      .locator('.ocs-detail-field:has-text("Version") .ocs-detail-value')
+      .first()
+      .textContent();
+    return value?.trim() ?? '';
+  };
+
+  /** Waits until the detail surface renders `expected` as its version. */
+  const waitForDetailVersion = (expected, timeout = 15_000) =>
+    page.waitForFunction(
+      (want) => {
+        const fields = Array.from(document.querySelectorAll('.ocs-detail-field'));
+        const versionField = fields.find((field) => (field.textContent || '').includes('Version'));
+        const value = versionField?.querySelector('.ocs-detail-value');
+        return Boolean(value) && (value.textContent || '').trim() === want;
+      },
+      expected,
+      { timeout },
+    );
+
+  /** Waits until the adjust trigger is enabled (CAS-eligible snapshot). */
+  const waitForAdjustEnabled = (timeout = 15_000) =>
+    page.waitForFunction(
+      () => {
+        const button = Array.from(document.querySelectorAll('button')).find((node) =>
+          (node.textContent || '').includes('Adjust Balance'),
+        );
+        return Boolean(button) && button.disabled === false;
+      },
+      undefined,
+      { timeout },
+    );
+
+  // =========================================================================
   // Scenario 1: Normal Editing, Preview and Confirmation Lifecycle
   // =========================================================================
   console.log('\n--- Scenario 1: Normal Editing, Preview and Confirmation ---');
@@ -498,20 +595,56 @@ try {
   await dialog.locator('button:has-text("Cancel")').click();
   await dialog.waitFor({ state: 'detached' });
 
-  // Step 4 of C5-1: Intercept next SWR balance fetch and return stale version 6
-  currentBalance = makeBalanceRecordView({ version: 6 });
+  // Step 4 of C5-1: Hold the next balance read behind a controlled gate, then
+  // release it with a stale version 6 payload once the request is in flight.
+  const staleV6Balance = makeBalanceRecordView({
+    version: 6,
+    data_used: 5368709120,
+    data_available: 5368709120,
+  });
+  let releaseStaleV6;
+  const staleV6Gate = new Promise((resolve) => {
+    releaseStaleV6 = resolve;
+  });
+  let resolveStaleV6Requested;
+  const staleV6Requested = new Promise((resolve) => {
+    resolveStaleV6Requested = resolve;
+  });
+  let staleV6Delivered = 0;
+
+  getDetailBalanceHandler = async (route, reqImsi) => {
+    if (reqImsi !== TEST_IMSI) {
+      return json(route, { ok: true, balance: makeBalanceRecordView({ imsi: reqImsi, version: 1 }) });
+    }
+    resolveStaleV6Requested();
+    await staleV6Gate;
+    await json(route, { ok: true, balance: staleV6Balance });
+    staleV6Delivered += 1;
+  };
+
+  currentBalance = staleV6Balance;
   const refreshBtnC5 = page.locator('button:has-text("Refresh")').first();
+  const c51Baseline = balanceResponseLog.length;
   await refreshBtnC5.click();
-  await page.waitForTimeout(300);
+  // The refresh really issued a balance read before the stale payload is released.
+  await staleV6Requested;
+  releaseStaleV6();
+  // Direct authoritative GET plus the SWR revalidation must both complete.
+  await waitForBalanceResponseCount(c51Baseline + 2);
+  await settleUiAfterResponses();
+  getDetailBalanceHandler = null;
+
+  check('S3-C5-1-00', staleV6Delivered >= 1, `delayed v6 response actually delivered to the page (${staleV6Delivered} deliveries)`);
 
   // Step 5 of C5-1: Assert detail page displays version 7 and retains v7 available metrics
-  const detailVerC51 = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
-  check('S3-C5-1-01', detailVerC51?.trim() === '7', `detail surface strictly retains authoritative version 7 against stale v6 (saw ${detailVerC51})`);
+  const detailVerC51 = await readDetailVersion();
+  check('S3-C5-1-01', detailVerC51 === '7', `detail surface strictly retains authoritative version 7 against stale v6 (saw ${detailVerC51})`);
   const detailAvailC51 = await page.locator('.ocs-detail-value-strong').first().textContent();
   check('S3-C5-1-02', detailAvailC51?.includes('8 GB'), `detail surface retains v7 available metrics (saw ${detailAvailC51})`);
 
   // Step 6 of C5-1: Assert version 6 is strictly rejected and never rendered
-  check('S3-C5-1-03', !detailVerC51?.includes('6'), 'stale version 6 strictly rejected from rendering');
+  check('S3-C5-1-03', !detailVerC51.includes('6'), 'stale version 6 strictly rejected from rendering');
+  check('S3-C5-1-04', (await page.locator('.ocs-feedback-error[role="alert"]').count()) === 0, 'stale lower version did not raise a conflict alert');
 
   // Submit recovered mutation with fresh version 7 to advance to v8 and verify S3-07
   adjustPostLog = [];
@@ -540,20 +673,26 @@ try {
   // Scenario C5-2: Monotonic progression to higher version
   // =========================================================================
   console.log('\n--- Scenario C5-2: Monotonic Progression to Higher Version ---');
-  // 1. Deliver valid version 8 balance snapshot via SWR
+  // 1. Deliver valid version 8 balance snapshot through the real refresh path
+  const c52Baseline = balanceResponseLog.length;
   await refreshBtnC5.click();
-  await page.waitForTimeout(300);
-  const detailVerC52 = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
-  check('S3-C5-2-01', detailVerC52?.trim() === '8', `detail page monotonically advanced to version 8 (saw ${detailVerC52})`);
+  await waitForBalanceResponseCount(c52Baseline + 2);
+  await waitForDetailVersion('8');
+  const detailVerC52 = await readDetailVersion();
+  check('S3-C5-2-01', detailVerC52 === '8', `detail page monotonically advanced to version 8 (saw ${detailVerC52})`);
   const detailAvailC52 = await page.locator('.ocs-detail-value-strong').first().textContent();
   check('S3-C5-2-02', detailAvailC52?.includes('7 GB'), `detail page displays v8 metrics 7 GB (saw ${detailAvailC52})`);
 
-  // 2. Deliver delayed version 7 snapshot
+  // 2. Deliver a stale version 7 snapshot through the same refresh path
   currentBalance = makeBalanceRecordView({ version: 7 });
+  const c52bBaseline = balanceResponseLog.length;
   await refreshBtnC5.click();
-  await page.waitForTimeout(300);
-  const detailVerAfterDelayed7 = await page.locator('.ocs-detail-field:has-text("Version") .ocs-detail-value').first().textContent();
-  check('S3-C5-2-03', detailVerAfterDelayed7?.trim() === '8', `detail page remains strictly at version 8 after delayed v7 arrival (saw ${detailVerAfterDelayed7})`);
+  await waitForBalanceResponseCount(c52bBaseline + 2);
+  await settleUiAfterResponses();
+  const detailVerAfterDelayed7 = await readDetailVersion();
+  check('S3-C5-2-03', detailVerAfterDelayed7 === '8', `detail page remains strictly at version 8 after delayed v7 arrival (saw ${detailVerAfterDelayed7})`);
+  const detailAvailAfterDelayed7 = await page.locator('.ocs-detail-value-strong').first().textContent();
+  check('S3-C5-2-04', detailAvailAfterDelayed7?.includes('7 GB'), `detail page retains v8 metrics after delayed v7 arrival (saw ${detailAvailAfterDelayed7})`);
 
   // =========================================================================
   // Scenario C5-3: Same-version conflicting snapshot handling
@@ -567,8 +706,9 @@ try {
     data_reserved: 0,
     data_available: 5368709120,
   });
+  const c53Baseline = balanceResponseLog.length;
   await refreshBtnC5.click();
-  await page.waitForTimeout(300);
+  await waitForBalanceResponseCount(c53Baseline + 2);
 
   // 2 & 3. Assert detail page identifies conflict and displays conflict warning
   const conflictAlert = page.locator('.ocs-feedback-error[role="alert"]');
@@ -587,17 +727,62 @@ try {
   check('S3-C5-3-03', !isModalOpenDuringConflict && adjustPostLog.length === 0, 'clicking disabled adjust button did not open modal and dispatched 0 POSTs');
 
   // Clear conflict state by advancing to valid higher version 9
-  currentBalance = makeBalanceRecordView({
+  const v9Balance = makeBalanceRecordView({
     version: 9,
     data_total: 10737418240,
     data_used: 2147483648,
     data_reserved: 0,
     data_available: 8589934592,
   });
+  currentBalance = v9Balance;
+  const c53bBaseline = balanceResponseLog.length;
   await refreshBtnC5.click();
-  await page.waitForTimeout(300);
+  await waitForBalanceResponseCount(c53bBaseline + 2);
+  await conflictAlert.waitFor({ state: 'detached', timeout: 10_000 });
+  await waitForDetailVersion('9');
   const conflictCleared = (await page.locator('.ocs-feedback-error[role="alert"]').count()) === 0;
   check('S3-C5-3-04', conflictCleared, 'higher version 9 cleared conflict state and warning alert');
+  check('S3-C5-3-05', (await readDetailVersion()) === '9', 'detail surface advanced to version 9 after conflict recovery');
+
+  // =========================================================================
+  // Scenario C5-5: Missing-version fail-closed protection on the detail surface
+  // =========================================================================
+  console.log('\n--- Scenario C5-5: Missing-Version Fail-Closed on the Detail Surface ---');
+  // 1. An unversioned response must never replace the established v9 watermark.
+  currentBalance = makeBalanceRecordView({
+    version: null,
+    data_total: 10737418240,
+    data_used: 0,
+    data_reserved: 0,
+    data_available: 10737418240,
+  });
+  const c55Baseline = balanceResponseLog.length;
+  await refreshBtnC5.click();
+  await waitForBalanceResponseCount(c55Baseline + 2);
+
+  const versionWarning = page.locator('.ocs-feedback-warning[role="alert"]');
+  await versionWarning.waitFor({ state: 'visible', timeout: 5000 });
+  const versionWarningText = await versionWarning.textContent();
+  check('S3-C5-5-01', Boolean(versionWarningText && versionWarningText.includes('v9')), `version-unavailable warning names the retained high-watermark v9 (saw ${versionWarningText})`);
+  check('S3-C5-5-02', (await readDetailVersion()) === '9', 'unversioned response did not replace the accepted v9 snapshot');
+  const availAfterMissingVersion = await page.locator('.ocs-detail-value-strong').first().textContent();
+  check('S3-C5-5-03', availAfterMissingVersion?.includes('8 GB'), `unversioned response did not replace v9 metrics (saw ${availAfterMissingVersion})`);
+
+  // 2. Mutation eligibility fails closed while the version is unavailable.
+  check('S3-C5-5-04', (await adjustTrigger.isDisabled()) === true, 'Adjust Balance button is disabled while the version is unavailable');
+  adjustPostLog = [];
+  await adjustTrigger.click({ force: true }).catch(() => {});
+  check('S3-C5-5-05', (await page.locator('[role="dialog"]').count()) === 0 && adjustPostLog.length === 0, 'no dialog opened and zero POSTs dispatched while the version is unavailable');
+
+  // 3. A valid authoritative snapshot restores CAS eligibility.
+  currentBalance = v9Balance;
+  const c55bBaseline = balanceResponseLog.length;
+  await refreshBtnC5.click();
+  await waitForBalanceResponseCount(c55bBaseline + 2);
+  await versionWarning.waitFor({ state: 'detached', timeout: 10_000 });
+  await waitForAdjustEnabled();
+  check('S3-C5-5-06', (await page.locator('.ocs-feedback-warning[role="alert"]').count()) === 0, 'valid authoritative snapshot cleared the version-unavailable warning');
+  check('S3-C5-5-07', (await adjustTrigger.isDisabled()) === false, 'adjustment became available again after a valid snapshot was recovered');
 
   // =========================================================================
   // Scenario C5-4: IMSI route transition isolation

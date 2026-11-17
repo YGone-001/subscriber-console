@@ -28,7 +28,12 @@ import { useRead } from '../../../lib/api/use-read';
 import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
-import { hasSnapshotConflict } from '../../../features/ocs/ocs-balance-math';
+import {
+  isSnapshotCasEligible,
+  isValidCasVersion,
+  resolveAuthoritativeSnapshot,
+  type AuthoritativeSnapshotState,
+} from '../../../features/ocs/ocs-balance-math';
 import {
   toBalanceViewModel,
   toAdjustmentListViewModel,
@@ -42,19 +47,13 @@ interface OcsBalanceDetailProps {
   imsi: string;
 }
 
-interface ActiveBalanceState {
-  imsi: string;
-  balance: OcsBalanceViewModel;
-  hasConflict: boolean;
-}
-
 export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
   const { t } = useI18n();
   const { user } = useAuth();
   const canAdjust = hasPermission(user, 'ocs.balance.adjust');
 
   const [prevImsi, setPrevImsi] = useState(imsi);
-  const [activeState, setActiveState] = useState<ActiveBalanceState | null>(null);
+  const [activeState, setActiveState] = useState<AuthoritativeSnapshotState | null>(null);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -79,35 +78,14 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
   const rawBalance = toBalanceViewModel(data);
   const isCurrentImsiData = rawBalance?.imsi === imsi;
 
+  /*
+   * All version arbitration lives in the shared resolver: a missing or invalid
+   * CAS version can never overwrite an established high-watermark, can never
+   * clear an unresolved conflict, and never advances the accepted snapshot.
+   */
   const applyAuthoritativeSnapshot = useCallback(
     (fresh: OcsBalanceViewModel) => {
-      if (!fresh || fresh.imsi !== imsi) return;
-
-      setActiveState((prev) => {
-        if (!prev || prev.imsi !== imsi) {
-          return { imsi, balance: fresh, hasConflict: false };
-        }
-        const prevVer = prev.balance.version;
-        const newVer = fresh.version;
-
-        if (typeof prevVer === 'number' && typeof newVer === 'number') {
-          if (newVer > prevVer) {
-            // Strictly higher version: advance watermark and clear conflict
-            return { imsi, balance: fresh, hasConflict: false };
-          }
-          if (newVer < prevVer) {
-            // Stale lower version: reject, retain authoritative watermark
-            return prev;
-          }
-          // Same version: check for value conflict
-          if (hasSnapshotConflict(prev.balance, fresh)) {
-            return { imsi, balance: prev.balance, hasConflict: true };
-          }
-          // Same version, matching values: retain cleanly
-          return prev;
-        }
-        return { imsi, balance: fresh, hasConflict: false };
-      });
+      setActiveState((prev) => resolveAuthoritativeSnapshot(prev, fresh, imsi));
     },
     [imsi],
   );
@@ -121,6 +99,15 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
   const currentScoped = activeState && activeState.imsi === imsi ? activeState : null;
   const balance = currentScoped?.balance ?? (isCurrentImsiData ? rawBalance : null);
   const hasConflict = currentScoped?.hasConflict ?? false;
+  /*
+   * A response without a usable CAS version is insufficient evidence: the
+   * accepted high-watermark is retained, but the surface fails closed and
+   * refuses to start a mutation until a valid authoritative snapshot returns.
+   */
+  const versionUnavailable = currentScoped
+    ? currentScoped.versionUnavailable
+    : !isValidCasVersion(balance?.version);
+  const casEligible = isSnapshotCasEligible(currentScoped);
 
   const handleManualRefresh = useCallback(async () => {
     try {
@@ -243,10 +230,10 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
               <button
                 type="button"
                 className="ocs-btn ocs-btn-primary"
-                disabled={hasConflict}
-                aria-disabled={hasConflict}
+                disabled={!casEligible}
+                aria-disabled={!casEligible}
                 onClick={() => {
-                  if (hasConflict) return;
+                  if (!casEligible) return;
                   setAdjustOpen(true);
                 }}
               >
@@ -261,6 +248,16 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
       {hasConflict && (
         <div className="ocs-feedback-error ocs-feedback-spaced" role="alert">
           <span>{t('ocs_balance_snapshot_conflict')}</span>
+        </div>
+      )}
+
+      {versionUnavailable && (
+        <div className="ocs-feedback-warning ocs-feedback-spaced" role="alert">
+          <span>
+            {isValidCasVersion(balance.version)
+              ? t('ocs_balance_version_watermark_retained', { version: `v${balance.version}` })
+              : t('ocs_balance_version_unavailable')}
+          </span>
         </div>
       )}
 
@@ -455,6 +452,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
           smsAvailable={balance.sms.available}
           version={balance.version}
           hasHistoryOnSurface={true}
+          casEligible={casEligible}
           onRefresh={async () => {
             const raw = await getJson<unknown>(`/api/ocs/balances/${encoded}`);
             const fresh = toBalanceViewModel(raw);

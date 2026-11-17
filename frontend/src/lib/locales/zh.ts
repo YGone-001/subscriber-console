@@ -1679,6 +1679,8 @@ export const zh: Record<string, string> = {
     ocs_balance_success_executed: "余额调整已直接执行",
     ocs_balance_precondition_changed: "余额已被并发修改，请刷新后重试 (CAS Precondition Changed)",
     ocs_balance_version_missing: "该余额记录未上报版本号，请刷新并核对后再调整",
+    ocs_balance_version_unavailable: "最近一次余额刷新未上报有效的 CAS 版本；在恢复有效权威快照前，余额调整保持禁用",
+    ocs_balance_version_watermark_retained: "最近一次余额刷新未上报有效的 CAS 版本；已保留权威版本 {version}，在恢复有效快照前余额调整保持禁用",
     ocs_balance_backend_unreachable: "Go 后端服务暂时不可用 (GO_BACKEND_UNREACHABLE)，未发生任何变更，请稍后重试",
     permission_denied: "无操作权限",
     ocs_balance_amount_invalid: "调整金额无效（必须大于0）",
