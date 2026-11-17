@@ -21,11 +21,16 @@ const walk = (directory, files = []) => {
 
 const sourceText = walk(source).filter((file) => /\.(ts|tsx)$/.test(file)).map((file) => readFileSync(file, 'utf8')).join('\n');
 const routerSource = readFileSync(resolve(source, 'router/router.tsx'), 'utf8');
+const routeTableSource = readFileSync(resolve(source, 'router/routes.tsx'), 'utf8');
 const navigationSource = readFileSync(resolve(source, 'lib/navigation.ts'), 'utf8');
 
 const routeCount = assertSpaRouteContract(routes);
-assert.match(routerSource, /APP_ROUTES\.filter/);
-assert.ok(!routerSource.includes('MigrationPendingPage'), 'router must not render MigrationPendingPage');
+/* Routes still derive from the navigation authority; the table moved into
+ * routes.tsx so it can be inspected without a DOM, and router.tsx only binds it
+ * to the browser history. */
+assert.match(routeTableSource, /APP_ROUTES\.filter/);
+assert.match(routerSource, /createBrowserRouter\(appRoutes\)/);
+assert.ok(!routeTableSource.includes('MigrationPendingPage'), 'router must not render MigrationPendingPage');
 assert.ok(!navigationSource.includes('migration-routes.json'), 'navigation source must not import migration-routes.json');
 
 for (const route of routes) {

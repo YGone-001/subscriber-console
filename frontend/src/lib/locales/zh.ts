@@ -108,6 +108,12 @@ export const zh: Record<string, string> = {
     // -- Common / Shared --
     search: "搜索...",
     loading: "加载中...",
+    route_loading: "正在加载页面...",
+    route_load_failed_title: "页面模块加载失败",
+    route_load_failed_desc: "页面模块下载失败。当前登录状态仍然有效，请重新加载页面后重试。",
+    route_error_title: "页面无法显示",
+    route_error_desc: "页面出现意外错误，请重新加载页面后重试。",
+    route_load_retry: "重新加载页面",
     refresh: "刷新",
     cancel: "取消",
     confirm: "确认",

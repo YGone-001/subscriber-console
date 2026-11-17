@@ -54,6 +54,49 @@ Route ownership is per method + path. Route authority is the Go registration set
 
 See `docs/operations/deployment.md` for the edge contract.
 
+### SPA Module Loading
+
+The SPA ships one shell and loads each business page on demand.
+
+| Element | Owner | Loading |
+|---|---|---|
+| Route table | `frontend/src/router/routes.tsx` | eager (data only, no page modules) |
+| Router instance | `frontend/src/router/router.tsx` | eager (`createBrowserRouter(appRoutes)`) |
+| Application shell | `frontend/src/app/AppShell.tsx` | eager |
+| Authentication boundary | `frontend/src/auth/AuthGate.tsx` | eager |
+| Login surface | `frontend/src/auth/LoginPage.tsx` | eager |
+| Not-found surface | `frontend/src/app/NotFoundPage.tsx` | eager |
+| Business pages | `frontend/src/features/**` | `route.lazy` per canonical route |
+
+Rules:
+
+- The route inventory stays owned by `APP_ROUTES` (`frontend/src/lib/navigation.ts`);
+  the table only maps an existing pattern to a module. A route that is absent from
+  `ROUTE_LAZY_PAGES` is a compatibility alias (renders `<Navigate>`) or `/login`.
+- Every loader uses a literal `import()` path so the bundler can derive the module
+  graph. Page modules never re-export one another: a static re-export would pull
+  that page back into the importing chunk.
+- Chunk granularity follows the bundler's default graph, with one narrow exception:
+  the icon library is consolidated into a single `vendor-icons` chunk because the
+  default graph produced one chunk per shared icon (52 chunks below 1 KiB). Broader
+  groups and inlining common chunks were measured and rejected: the first inflated
+  the entry, the second duplicated 151 modules.
+- A cold boot renders `InitialRouteFallback` while the first page module resolves; a
+  failed module renders `RouteLoadError` inside the shell, which offers one explicit
+  reload and never retries in a loop. In-app navigations announce progress through a
+  polite live region and keep the previous page mounted.
+- The Go SPA host serves every emitted chunk from the embedded `static` tree
+  (`//go:embed all:static`), returns hashed assets as `application/javascript` with
+  immutable caching, answers a missing chunk with 404 (never the SPA document), and
+  keeps the history fallback for application routes only.
+
+Verification:
+
+- `npm run acceptance:lazy-routes` — cold entry isolation, per-route chunk loading,
+  deep links, chunk-failure recovery, history navigation, unauthenticated redirect.
+- `node scripts/measure-spa-bundle.mjs` — entry/route byte, gzip and Brotli accounting
+  from an in-memory production build.
+
 ## Evolutionary Convergence
  
 Runtime consolidation and frontend canonicalization are complete:

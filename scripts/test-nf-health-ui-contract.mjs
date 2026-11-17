@@ -50,7 +50,7 @@ check(
   'nf_health_dynamic_parameter=targetId',
 );
 
-const routerSource = read('router/router.tsx');
+const routerSource = read('router/routes.tsx');
 check('NFH-UI-05', routerSource.includes('NfHealthPage') && routerSource.includes('NfHealthDetailPage'), 'router_registration=both_pages');
 check('NFH-UI-06', routerSource.includes("'/nf-health'") && routerSource.includes("'/nf-health/:targetId'"), 'router_paths=both');
 
@@ -362,7 +362,7 @@ check(
   /NetworkElementView/.test(inventoryPageSource) &&
     /data-density/.test(inventoryPageSource) &&
     /density/.test(inventoryPageSource) &&
-    /\/inventory\/assets/.test(readFileSync(resolve(root, 'frontend/src/router/router.tsx'), 'utf8')),
+    /\/inventory\/assets/.test(readFileSync(resolve(root, 'frontend/src/router/routes.tsx'), 'utf8')),
   'ops_network_view=integrated_into_inventory_route',
 );
 check(

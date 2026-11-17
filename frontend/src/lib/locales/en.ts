@@ -108,6 +108,12 @@ export const en: Record<string, string> = {
     // -- Common / Shared --
     search: "Search...",
     loading: "Loading...",
+    route_loading: "Loading page...",
+    route_load_failed_title: "This page could not be loaded",
+    route_load_failed_desc: "The page module could not be downloaded. Your session is still active; reload the page to try again.",
+    route_error_title: "This page could not be displayed",
+    route_error_desc: "The page reported an unexpected error. Reload the page to try again.",
+    route_load_retry: "Reload page",
     refresh: "Refresh",
     cancel: "Cancel",
     confirm: "Confirm",

@@ -12,6 +12,10 @@ import {
 } from '../src/lib/navigation';
 import { clearTabsMemoryCache, getStoredTabsSnapshot, getTabsStorageKey, writeTabs } from '../src/app/components/NavigationTabBar';
 import { clearRecentMemoryCache, getRecentPagesStorageKey, getStoredRecentSnapshot, writeRecentPages } from '../src/app/components/NavigationBreadcrumbs';
+import { isValidElement } from 'react';
+import { matchRoutes } from 'react-router-dom';
+import { AuthGate } from '../src/auth/AuthGate';
+import { appRoutes } from '../src/router/routes';
 
 const frontendRoot = resolve(import.meta.dirname, '..');
 const readSource = (relPath: string) => readFileSync(resolve(frontendRoot, relPath), 'utf8');
@@ -157,14 +161,27 @@ test('tab bar and breadcrumbs components store real normalized pathnames and pur
 });
 
 test('router binds authenticated 404 inside application shell without breaking unauthenticated redirects', () => {
-  const routerSource = readSource('src/router/router.tsx');
   const notFoundSource = readSource('src/app/NotFoundPage.tsx');
 
-  // The AuthGate-wrapped AppShell must contain a wildcard catch-all route child
-  assert.match(routerSource, /element:\s*<AuthGate><AppShell\s*\/><\/AuthGate>,\s*children:\s*\[[\s\S]*?\{\s*path:\s*'\*',\s*element:\s*<NotFoundPage\s*\/>\s*\}/);
+  /*
+   * Behavioural check against the real route table. Route implementations are
+   * lazy now, so the previous source-text pattern would only describe an
+   * implementation detail; matching an unknown path proves the actual
+   * structure: the shell route (AuthGate) plus a wildcard child that renders
+   * NotFoundPage.
+   */
+  const shellRoute = appRoutes.find((route) => isValidElement(route.element) && route.element.type === AuthGate);
+  assert.ok(shellRoute, 'the route table must mount the application shell behind AuthGate');
+
+  const unknownMatches = matchRoutes(appRoutes, '/no-such-page');
+  assert.ok(unknownMatches && unknownMatches.length >= 2, 'an unknown path must match the shell plus a wildcard child');
+  assert.equal(unknownMatches[unknownMatches.length - 1].route.path, '*', 'the unknown path must terminate at the wildcard route');
 
   // Top-level fallback wildcard route is also preserved
-  assert.match(routerSource, /\{\s*path:\s*'\*',\s*element:\s*<NotFoundPage\s*\/>\s*\}\s*,\s*\]\);/);
+  assert.ok(
+    appRoutes.some((route) => route.path === '*' && isValidElement(route.element)),
+    'the unauthenticated fallback wildcard must stay at the top level',
+  );
 
   // NotFoundPage renders location.pathname and safe link to home
   assert.match(notFoundSource, /useLocation/);

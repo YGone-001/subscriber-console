@@ -50,7 +50,7 @@ check(
   'discovery_dynamic_parameter=sourceId',
 );
 
-const routerSource = read('router/router.tsx');
+const routerSource = read('router/routes.tsx');
 check('DISC-UI-05', routerSource.includes('DiscoveryPage') && routerSource.includes('DiscoverySourceDetailPage'), 'router_registration=both_pages');
 check('DISC-UI-06', routerSource.includes("'/discovery'") && routerSource.includes("'/discovery/sources/:sourceId'"), 'router_paths=both');
 

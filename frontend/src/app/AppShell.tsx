@@ -7,6 +7,7 @@ import { AppHeader } from './components/AppHeader';
 import { AppSidebar } from './components/AppSidebar';
 import { NavigationBreadcrumbs, clearRecentMemoryCache } from './components/NavigationBreadcrumbs';
 import { NavigationTabBar, clearTabsMemoryCache } from './components/NavigationTabBar';
+import { RouteLoadingAnnouncer } from './RouteLoadState';
 
 const DESKTOP_SHELL_QUERY = '(min-width: 981px)';
 
@@ -102,6 +103,7 @@ export function AppShell() {
         <div className="layout-content-area">
           <NavigationTabBar />
           <NavigationBreadcrumbs />
+          <RouteLoadingAnnouncer />
           <main id="main-content" tabIndex={-1} className="layout-main">
             <Outlet />
           </main>

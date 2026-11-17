@@ -52,7 +52,7 @@ check(
   'topology_dynamic_parameter=resourceId',
 );
 
-const routerSource = read('router/router.tsx');
+const routerSource = read('router/routes.tsx');
 check('TOP-UI-05', routerSource.includes('TopologyPage') && routerSource.includes('ResourceTopologyPage'), 'router_registration=both_pages');
 check('TOP-UI-06', routerSource.includes("'/topology'") && routerSource.includes("'/topology/:resourceId'"), 'router_paths=both');
 

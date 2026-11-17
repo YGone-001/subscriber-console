@@ -5,10 +5,12 @@
  * (`features/operations/OperationsOverviewPage`). It owns the operations posture,
  * the unified network-status panel and the secondary business analytics view.
  *
- * The remaining exports are kept for backward compatibility with the earlier
- * module contract: the business pages are owned by their own feature modules and
- * re-exported here, and `ReadBarChart` / `text` remain available to any existing
- * caller.
+ * This module is a route entry point only. It must not import another page:
+ * every business page is loaded by its own `route.lazy` boundary, and a static
+ * re-export here would drag that page back into the dashboard chunk (the route
+ * table imports each page module directly).
+ *
+ * `ReadBarChart` and `text` stay available to existing callers.
  */
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { OperationsOverviewPage } from '../operations/OperationsOverviewPage';
@@ -25,21 +27,6 @@ import { text, toChartPoints, type UnknownRecord } from './dashboard-model';
 export function DashboardPage() {
   return <OperationsOverviewPage />;
 }
-
-/* Backward-compatible exports. These surfaces are owned by their feature modules;
- * the re-exports keep the historical module contract intact without duplicating
- * implementations. */
-
-export { SubscribersPage } from '../subscribers/SubscribersPage';
-export { ProfilesPage } from '../profiles/ProfilesPage';
-export { BalancesPage } from '../ocs/balances/BalancesPage';
-export { BalanceDetailPage } from '../ocs/balances/BalanceDetailPage';
-export { ContractsPage } from '../ocs/contracts/ContractsPage';
-export { ContractDetailPage } from '../ocs/contracts/ContractDetailPage';
-export { TariffsPage } from '../ocs/tariffs/TariffsPage';
-export { TariffDetailPage } from '../ocs/tariffs/TariffDetailPage';
-export { UsersPage } from '../users/UsersPage';
-export { UserDetailPage } from '../users/UserDetailPage';
 
 export function ReadBarChart({ rows }: { rows: UnknownRecord[] }) {
   const chartRows = toChartPoints(rows);
