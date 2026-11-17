@@ -652,11 +652,26 @@ func auditInt64(value any) int64 {
 }
 
 func auditStrings(value any) []string {
-	items, ok := value.([]any)
-	if !ok {
-		if values, ok := value.([]string); ok {
-			return values
+	var items []any
+	switch v := value.(type) {
+	case bson.A:
+		if v == nil {
+			return nil
 		}
+		items = v
+	case []any:
+		if v == nil {
+			return nil
+		}
+		items = v
+	case []string:
+		if v == nil {
+			return nil
+		}
+		out := make([]string, len(v))
+		copy(out, v)
+		return out
+	default:
 		return nil
 	}
 	out := make([]string, 0, len(items))

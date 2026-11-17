@@ -82,6 +82,17 @@ func TestStatsReportsTagLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
+
+	// Verify stats before soft delete: 3 active entries ("tagged one", "tagged two", "trashed"), 0 deleted.
+	repo.InvalidateMeta()
+	meta, err = repo.Stats(context.Background())
+	if err != nil {
+		t.Fatalf("stats before delete: %v", err)
+	}
+	if meta.Total != 3 || meta.DeletedTotal != 0 {
+		t.Fatalf("expected total=3 deletedTotal=0, got total=%d deletedTotal=%d", meta.Total, meta.DeletedTotal)
+	}
+
 	if _, err := repo.SoftDelete(context.Background(), entry.ID, entry.Revision); err != nil {
 		t.Fatalf("soft delete: %v", err)
 	}
@@ -90,8 +101,25 @@ func TestStatsReportsTagLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stats after delete: %v", err)
 	}
-	if meta.Total != 0 || meta.DeletedTotal != 1 {
-		t.Fatalf("expected total=0 deletedTotal=1, got total=%d deletedTotal=%d", meta.Total, meta.DeletedTotal)
+	// The 2 tagged entries remain active; the soft-deleted entry is excluded from Total and counted in DeletedTotal.
+	if meta.Total != 2 || meta.DeletedTotal != 1 {
+		t.Fatalf("expected total=2 deletedTotal=1, got total=%d deletedTotal=%d", meta.Total, meta.DeletedTotal)
+	}
+
+	active, totalActive, _, _, err := repo.List(context.Background(), ListFilter{Limit: 10})
+	if err != nil {
+		t.Fatalf("list active entries: %v", err)
+	}
+	if totalActive != 2 || len(active) != 2 {
+		t.Fatalf("expected 2 active entries after soft delete, got total=%d len=%d", totalActive, len(active))
+	}
+
+	deleted, totalDeleted, _, _, err := repo.List(context.Background(), ListFilter{Status: StatusDeleted, Limit: 10})
+	if err != nil {
+		t.Fatalf("list deleted entries: %v", err)
+	}
+	if totalDeleted != 1 || len(deleted) != 1 || deleted[0].Title != "trashed" {
+		t.Fatalf("expected 1 deleted entry 'trashed', got total=%d len=%d", totalDeleted, len(deleted))
 	}
 }
 
