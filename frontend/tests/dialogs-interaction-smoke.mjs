@@ -454,6 +454,15 @@ const NOTIFY_DELIVERIES = [
     'the modal is labelled by its title element',
   );
 
+  await page.waitForFunction(
+    () => {
+      const dialog = document.querySelector('.ocs-dialog');
+      return Boolean(dialog && dialog.contains(document.activeElement));
+    },
+    undefined,
+    { timeout: 5000 },
+  ).catch(() => {});
+
   const initialFocus = await page.evaluate(() => {
     const dialog = document.querySelector('.ocs-dialog');
     const active = document.activeElement;
@@ -856,6 +865,14 @@ const NOTIFY_DELIVERIES = [
   check('D8-05', nestingInspection.childInertAncestor === null, `topmost child confirmation has no inert ancestor (saw ${nestingInspection.childInertAncestor})`);
   check('D8-06', nestingInspection.parentInert, 'parent notification settings dialog is inert while child confirmation is open');
 
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('[role="alertdialog"]');
+      return Boolean(el && el.contains(document.activeElement));
+    },
+    undefined,
+    { timeout: 5000 },
+  ).catch(() => {});
   const initialChildFocus = await channelConfirm.evaluate((el) => el.contains(document.activeElement));
   check('D8-07', initialChildFocus, 'child confirmation dialog receives initial focus');
 
@@ -941,6 +958,16 @@ const NOTIFY_DELIVERIES = [
   });
   check('D10-03', escInertAncestor === null, 'escalation confirmation dialog has no inert ancestor');
 
+  await page.waitForFunction(
+    () => {
+      const el = Array.from(document.querySelectorAll('[role="alertdialog"]')).find((node) =>
+        (node.textContent ?? '').includes('Remove escalation rule'),
+      );
+      return Boolean(el && el.contains(document.activeElement));
+    },
+    undefined,
+    { timeout: 5000 },
+  ).catch(() => {});
   const escFocusInside = await escConfirm.evaluate((el) => el.contains(document.activeElement));
   check('D10-04', escFocusInside, 'initial focus enters escalation confirmation dialog');
 
@@ -974,6 +1001,16 @@ const NOTIFY_DELIVERIES = [
   });
   check('D10-08', retryInertAncestor === null, 'delivery retry confirmation dialog has no inert ancestor');
 
+  await page.waitForFunction(
+    () => {
+      const el = Array.from(document.querySelectorAll('[role="alertdialog"]')).find((node) =>
+        (node.textContent ?? '').includes('Retry notification delivery'),
+      );
+      return Boolean(el && el.contains(document.activeElement));
+    },
+    undefined,
+    { timeout: 5000 },
+  ).catch(() => {});
   const retryFocusInside = await retryConfirm.evaluate((el) => el.contains(document.activeElement));
   check('D10-09', retryFocusInside, 'initial focus enters delivery retry confirmation dialog');
 

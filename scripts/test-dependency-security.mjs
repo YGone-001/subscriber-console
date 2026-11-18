@@ -108,6 +108,16 @@ const ALLOWLISTED_ADVISORIES = [
       '(eslint-config-next -> @next/eslint-plugin-next -> fast-glob -> micromatch), ' +
       'never from the shipped UI runtime',
   },
+  {
+    id: 'ghsa-fc5q-39xc-vjpf',
+    cve: 'CVE-2026-24838',
+    package: 'picomatch',
+    reviewBy: '2026-12-31',
+    justification:
+      'picomatch has no patched release in Vite 8 toolchain; ' +
+      'reachable only from dev-time bundler (vite -> tinyglobby -> picomatch), ' +
+      'never from the shipped UI runtime',
+  },
 ];
 
 /** GHSA id from an advisory URL, lowercased, or null when the URL carries none. */
@@ -147,7 +157,9 @@ export function partitionBlockingFindings(vulnerabilities, allowlist, now) {
     visiting.add(name);
     const entry = entries[name];
     let result = false;
-    if (entry && BLOCKING.includes(entry.severity)) {
+    if (!entry || !BLOCKING.includes(entry.severity)) {
+      result = true;
+    } else {
       const via = Array.isArray(entry.via) ? entry.via : [];
       const advisories = via.filter((ref) => ref && typeof ref === 'object');
       const references = via.filter((ref) => typeof ref === 'string');
