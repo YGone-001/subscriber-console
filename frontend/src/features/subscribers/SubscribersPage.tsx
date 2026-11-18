@@ -192,6 +192,16 @@ export function SubscribersPage() {
     || profileDrillDown !== '';
   const canAdjustBalance = hasPermission(user, 'ocs.balance.adjust');
 
+  /* The toolbar clears the selection when the query changes. It must not
+   * allocate a new empty array on every keystroke: selectedImsis is a table
+   * prop, and a new identity defeated the memoized table while typing. */
+  const handleSelectionReset = useCallback<React.Dispatch<React.SetStateAction<string[]>>>((value) => {
+    setSelectedImsis((previous) => {
+      const next = typeof value === 'function' ? value(previous) : value;
+      return next.length === 0 && previous.length === 0 ? previous : next;
+    });
+  }, []);
+
   const handleOpenNew = useCallback(() => {
     router.push(withReturnTo('/subscribers/new', listLocation));
   }, [router, listLocation]);
@@ -444,7 +454,10 @@ export function SubscribersPage() {
   const totalPages = Math.max(1, Math.ceil(totalSubscribers / pageSize));
   const displayPage = Math.min(currentPage, totalPages);
   const paginatedSubscribers = subscribers;
-  const pageImsis = paginatedSubscribers.map((s) => s.imsi);
+  /* The table is memoized, so its props must stay referentially stable while
+   * the query state changes. Deriving this array on every page render rebuilt
+   * both pageImsis and toggleSelectAll and defeated the memo on every keystroke. */
+  const pageImsis = useMemo(() => paginatedSubscribers.map((s) => s.imsi), [paginatedSubscribers]);
   const selectedOnPageCount = pageImsis.filter((imsi) => selectedImsis.includes(imsi)).length;
   const isAllPageSelected = pageImsis.length > 0 && selectedOnPageCount === pageImsis.length;
 
@@ -570,7 +583,7 @@ export function SubscribersPage() {
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           setCurrentPage={setCurrentPage}
-          setSelectedImsis={setSelectedImsis}
+          setSelectedImsis={handleSelectionReset}
           selectedImsis={selectedImsis}
           canEditSubscribers={canEditSubscribers}
           setIsBatchUpdateModalOpen={setIsBatchUpdateModalOpen}
