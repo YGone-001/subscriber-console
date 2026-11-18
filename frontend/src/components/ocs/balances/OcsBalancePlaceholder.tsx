@@ -160,7 +160,7 @@ export default function OcsBalancePlaceholder() {
       }
       return updated;
     });
-    void refresh();
+    void refresh(freshPayload, { revalidate: false });
   }, [refresh, url]);
 
   const toggleSort = (field: BalanceSortField) => {

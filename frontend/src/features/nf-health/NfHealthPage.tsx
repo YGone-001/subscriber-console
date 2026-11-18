@@ -42,6 +42,7 @@ import { healthKpiFilter, type HealthKpiKey } from './nf-health-kpi';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { useRead } from '../../lib/api/use-read';
+import { isAbortError } from '../../lib/api/read-client';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import { OPERATIONAL_DOMAINS } from '../operations/operational-model';
 import type { RuntimeComponent, RuntimeObservations } from '../runtime/runtime-types';
@@ -49,7 +50,6 @@ import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-run
 import {
   collectNfHealthTarget,
   fetchNfHealthInterfaces,
-  fetchNfHealthMeta,
   fetchNfHealthTargets,
 } from './nf-health-api';
 import {
@@ -94,7 +94,8 @@ export function NfHealthPage() {
   const canRead = hasPermission(user, 'core.read');
   const canConfigure = hasPermission(user, 'core.configure');
 
-  const [meta, setMeta] = useState<NfHealthMeta | null>(null);
+  const metaRead = useRead<NfHealthMeta>(canRead ? '/api/nf-health/meta' : null);
+  const meta = metaRead.data ?? null;
   const [targets, setTargets] = useState<HealthTargetSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [targetsError, setTargetsError] = useState<string | null>(null);
@@ -108,6 +109,13 @@ export function NfHealthPage() {
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [collectingId, setCollectingId] = useState<string | null>(null);
+
+  const readTokenRef = useRef(0);
+  const readAbort = useRef<AbortController | null>(null);
+
+  useEffect(() => () => {
+    readAbort.current?.abort();
+  }, []);
 
   /* The view, every filter and the page cursor live in the URL. A filter change
    * drops the cursor through the shared contract, so page N of a discarded
@@ -134,6 +142,10 @@ export function NfHealthPage() {
   const runtimeData = resolveRuntimeObservations(runtimeStream, runtimeRead.data);
 
   const loadAll = useCallback(async (activeCursor?: string) => {
+    const token = ++readTokenRef.current;
+    readAbort.current?.abort();
+    const controller = new AbortController();
+    readAbort.current = controller;
     setLoading(true);
     setTargetsError(null);
     setMatrixError(null);
@@ -143,56 +155,72 @@ export function NfHealthPage() {
     // full-collection KPI strip, and a failed summary section only degrades the
     // KPI strip to explicit unavailable labels, never to page-scoped counts.
     const matrixView = view === 'interfaces';
-    const [metaRes, listRes, summaryRes] = await Promise.allSettled([
-      fetchNfHealthMeta(),
-      matrixView
-        ? fetchNfHealthInterfaces(healthInterfaceQuery(filters, activeCursor, PAGE_LIMIT))
-        : fetchNfHealthTargets(healthTargetQuery(filters, activeCursor, PAGE_LIMIT)),
-      fetchOperationsSummary(['health']),
-    ]);
-    setMeta(metaRes.status === 'fulfilled' ? metaRes.value : null);
-    if (matrixView) {
-      if (listRes.status === 'fulfilled') {
-        const payload = listRes.value as InterfaceMatrixResponse;
-        setMatrix(payload);
-        setMatrixPage(payload.page ?? null);
-      } else {
-        setMatrix(null);
-        setMatrixPage(null);
-        setMatrixError(describeLoadError(listRes.reason, t));
+    try {
+      const [listRes, summaryRes] = await Promise.allSettled([
+        matrixView
+          ? fetchNfHealthInterfaces(healthInterfaceQuery(filters, activeCursor, PAGE_LIMIT), controller.signal)
+          : fetchNfHealthTargets(healthTargetQuery(filters, activeCursor, PAGE_LIMIT), controller.signal),
+        fetchOperationsSummary(['health'], controller.signal),
+      ]);
+      if (token !== readTokenRef.current) return;
+      if (matrixView) {
+        if (listRes.status === 'fulfilled') {
+          const payload = listRes.value as InterfaceMatrixResponse;
+          setMatrix(payload);
+          setMatrixPage(payload.page ?? null);
+        } else if (!isAbortError(listRes.reason)) {
+          setMatrix(null);
+          setMatrixPage(null);
+          setMatrixError(describeLoadError(listRes.reason, t));
+        }
+      } else if (listRes.status === 'fulfilled') {
+        const payload = listRes.value as ListTargetsResponse;
+        setTargets(payload.targets ?? []);
+        setTargetsPage(payload.page ?? null);
+      } else if (!isAbortError(listRes.reason)) {
+        setTargets([]);
+        setTargetsPage(null);
+        setTargetsError(describeLoadError(listRes.reason, t));
       }
-    } else if (listRes.status === 'fulfilled') {
-      const payload = listRes.value as ListTargetsResponse;
-      setTargets(payload.targets ?? []);
-      setTargetsPage(payload.page ?? null);
-    } else {
-      setTargets([]);
-      setTargetsPage(null);
-      setTargetsError(describeLoadError(listRes.reason, t));
+      if (summaryRes.status === 'fulfilled') {
+        setSummary(summaryRes.value.health ?? null);
+      } else if (!isAbortError(summaryRes.reason)) {
+        setSummary(null);
+      }
+      setSummaryLoading(false);
+      setLoading(false);
+      setLastReadAt(new Date().toISOString());
+    } catch (err) {
+      if (token !== readTokenRef.current || isAbortError(err)) return;
+      setLoading(false);
+      setSummaryLoading(false);
     }
-    setSummary(summaryRes.status === 'fulfilled' ? (summaryRes.value.health ?? null) : null);
-    setSummaryLoading(false);
-    setLoading(false);
-    setLastReadAt(new Date().toISOString());
   }, [filters, view, t]);
 
   // Cursor pager loads refresh exactly one bounded list; the full-collection
   // summary stays untouched, so a page step never changes the KPI strip.
   const loadTargetsPage = useCallback(async (cursor: string | undefined) => {
+    const token = ++readTokenRef.current;
+    readAbort.current?.abort();
+    const controller = new AbortController();
+    readAbort.current = controller;
     setLoading(true);
     setTargetsError(null);
     setMatrixError(null);
     try {
       if (view === 'interfaces') {
-        const res = await fetchNfHealthInterfaces(healthInterfaceQuery(filters, cursor, PAGE_LIMIT));
+        const res = await fetchNfHealthInterfaces(healthInterfaceQuery(filters, cursor, PAGE_LIMIT), controller.signal);
+        if (token !== readTokenRef.current) return;
         setMatrix(res);
         setMatrixPage(res.page ?? null);
       } else {
-        const res = await fetchNfHealthTargets(healthTargetQuery(filters, cursor, PAGE_LIMIT));
+        const res = await fetchNfHealthTargets(healthTargetQuery(filters, cursor, PAGE_LIMIT), controller.signal);
+        if (token !== readTokenRef.current) return;
         setTargets(res.targets ?? []);
         setTargetsPage(res.page ?? null);
       }
     } catch (err) {
+      if (token !== readTokenRef.current || isAbortError(err)) return;
       if (view === 'interfaces') {
         setMatrix(null);
         setMatrixPage(null);
@@ -203,8 +231,10 @@ export function NfHealthPage() {
         setTargetsError(describeLoadError(err, t));
       }
     } finally {
-      setLoading(false);
-      setLastReadAt(new Date().toISOString());
+      if (token === readTokenRef.current) {
+        setLoading(false);
+        setLastReadAt(new Date().toISOString());
+      }
     }
   }, [filters, view, t]);
 
@@ -227,23 +257,28 @@ export function NfHealthPage() {
     void loadAll(url.cursor);
   }, [canRead, loadAll, url.cursor]);
 
+  const loadAllRef = useRef(loadAll);
+  useEffect(() => {
+    loadAllRef.current = loadAll;
+  }, [loadAll]);
+
   /* Duty pages must not silently age. Refresh the first page and the
    * full-collection KPI strip together, pause while the tab is hidden, and
    * never disturb a cursor walk: paging stays a deliberate operation. */
   useEffect(() => {
     if (!canRead) return undefined;
     const timer = window.setInterval(() => {
-      if (!document.hidden && !url.cursor) void loadAll();
+      if (!document.hidden && !url.cursor) void loadAllRef.current();
     }, 30000);
     const onVisibility = () => {
-      if (!document.hidden && !url.cursor) void loadAll();
+      if (!document.hidden && !url.cursor) void loadAllRef.current();
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [canRead, loadAll, url.cursor]);
+  }, [canRead, url.cursor]);
 
   const handleTargetsFirstPage = () => {
     setTargetsCursorHistory([]);

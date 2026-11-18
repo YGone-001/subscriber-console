@@ -1,4 +1,4 @@
-import { getJson } from '../../lib/api/read-client';
+import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
 
 // Types mirroring backend/internal/operationsview/model.go. The JSON field
 // names are the contract: verify against model.go before changing them.
@@ -92,12 +92,14 @@ function withQuery(path: string, params: Record<string, string | undefined>): st
 // not requested are neither queried nor returned by the backend.
 export async function fetchOperationsSummary(
   sections: SummarySectionName[],
+  signal?: AbortSignal,
 ): Promise<OperationsSummaryResponse> {
-  return getJson<OperationsSummaryResponse>(
-    withQuery('/api/operations/summary', {
-      sections: sections.length > 0 ? sections.join(',') : undefined,
-    }),
-  );
+  const path = withQuery('/api/operations/summary', {
+    sections: sections.length > 0 ? sections.join(',') : undefined,
+  });
+  return signal
+    ? getJsonWithSignal<OperationsSummaryResponse>(path, signal)
+    : getJson<OperationsSummaryResponse>(path);
 }
 
 // KPI projections below are pure functions so tests can assert that page KPIs

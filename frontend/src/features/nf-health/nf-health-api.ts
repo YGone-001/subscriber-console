@@ -34,21 +34,23 @@ export async function fetchNfHealthMeta(): Promise<NfHealthMeta> {
 
 export async function fetchNfHealthTargets(
   params: NfHealthTargetQueryParams = {},
+  signal?: AbortSignal,
 ): Promise<ListTargetsResponse> {
-  return getJson<ListTargetsResponse>(
-    withQuery('/api/nf-health/targets', {
-      q: params.q,
-      enabled: params.enabled,
-      domain: params.domain,
-      state: params.state,
-      layers: params.layers,
-      freshness: params.freshness,
-      collection: params.collection,
-      sort: params.sort,
-      cursor: params.cursor,
-      limit: params.limit,
-    }),
-  );
+  const path = withQuery('/api/nf-health/targets', {
+    q: params.q,
+    enabled: params.enabled,
+    domain: params.domain,
+    state: params.state,
+    layers: params.layers,
+    freshness: params.freshness,
+    collection: params.collection,
+    sort: params.sort,
+    cursor: params.cursor,
+    limit: params.limit,
+  });
+  return signal
+    ? getJsonWithSignal<ListTargetsResponse>(path, signal)
+    : getJson<ListTargetsResponse>(path);
 }
 
 /*
@@ -68,18 +70,20 @@ export async function fetchNfHealthTargetsByResources(
 
 export async function fetchNfHealthInterfaces(
   params: NfHealthInterfaceQueryParams = {},
+  signal?: AbortSignal,
 ): Promise<InterfaceMatrixResponse> {
-  return getJson<InterfaceMatrixResponse>(
-    withQuery('/api/nf-health/interfaces', {
-      q: params.q,
-      domain: params.domain,
-      freshness: params.freshness,
-      collection: params.collection,
-      sort: params.sort,
-      cursor: params.cursor,
-      limit: params.limit,
-    }),
-  );
+  const path = withQuery('/api/nf-health/interfaces', {
+    q: params.q,
+    domain: params.domain,
+    freshness: params.freshness,
+    collection: params.collection,
+    sort: params.sort,
+    cursor: params.cursor,
+    limit: params.limit,
+  });
+  return signal
+    ? getJsonWithSignal<InterfaceMatrixResponse>(path, signal)
+    : getJson<InterfaceMatrixResponse>(path);
 }
 
 export async function fetchNfHealthTarget(targetId: string): Promise<GetTargetResponse> {

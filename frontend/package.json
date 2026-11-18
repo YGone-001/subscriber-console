@@ -28,6 +28,7 @@
     "acceptance:dialogs": "node tests/dialogs-interaction-smoke.mjs",
     "acceptance:bounded-read": "node tests/bounded-read-development-smoke.mjs",
     "acceptance:lazy-routes": "node tests/lazy-routes-smoke.mjs",
+    "acceptance:performance": "node tests/performance-rendering-smoke.mjs",
     "measure:bundle": "node ../scripts/measure-spa-bundle.mjs"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
-import { getJsonWithSignal } from './read-client';
+import { getJsonWithSignal, isAbortError } from './read-client';
 
 type SharedRead = { consumers: Set<symbol>; controller?: AbortController };
 const cacheReads = new WeakMap<object, Map<string, SharedRead>>();
@@ -24,8 +24,14 @@ export function useBoundedRead<T>(path: string | null, refreshInterval = 0) {
     read.controller?.abort();
     const controller = new AbortController();
     read.controller = controller;
-    try { return await getJsonWithSignal<T>(key, controller.signal); }
-    finally {
+    try {
+      return await getJsonWithSignal<T>(key, controller.signal);
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
+        return new Promise<T>(() => {});
+      }
+      throw err;
+    } finally {
       if (read.controller === controller) {
         delete read.controller;
         if (!read.consumers.size && reads.get(key) === read) reads.delete(key);

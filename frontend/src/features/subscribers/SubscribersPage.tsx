@@ -18,7 +18,7 @@
  * Everything else — the PLMN longest-prefix resolver, the cross-page selection
  * model, the summary strip, the toolbar, the table and the modals — is unchanged.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ArrowUpDown, Layers } from 'lucide-react';
 import BatchCreateModal from '../../components/BatchCreateModal';
@@ -73,6 +73,12 @@ const DEFAULT_FILTERS: SubscriberFilterState = {
   balance: 'all',
 };
 
+function formatFullDate(dStr: string) {
+  if (!dStr) return '';
+  const d = new Date(dStr);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
 export function SubscribersPage() {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -113,7 +119,7 @@ export function SubscribersPage() {
   const listLocation = currentListLocation(location.pathname, location.search);
   const profileDrillDown = searchParams.get('profile') ?? '';
 
-  const timeAgo = (dateStr: string) => {
+  const timeAgo = useCallback((dateStr: string) => {
     if (!dateStr) return t('unknown');
     const time = new Date(dateStr).getTime();
     const now = new Date().getTime();
@@ -122,13 +128,7 @@ export function SubscribersPage() {
     if (diff < 3600) return `${Math.floor(diff / 60)} ${t('mins_ago')}`;
     if (diff < 86400) return `${Math.floor(diff / 3600)} ${t('hours_ago')}`;
     return `${Math.floor(diff / 86400)} ${t('days_ago')}`;
-  };
-
-  const formatFullDate = (dStr: string) => {
-    if (!dStr) return '';
-    const d = new Date(dStr);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-  };
+  }, [t]);
 
   const { data: mccMncDbData } = useRead<PlmnRecord[]>('/data/mcc-mnc-table.json');
   const mccMncDb = useMemo(() => (mccMncDbData || []) as PlmnRecord[], [mccMncDbData]);
@@ -192,33 +192,33 @@ export function SubscribersPage() {
     || profileDrillDown !== '';
   const canAdjustBalance = hasPermission(user, 'ocs.balance.adjust');
 
-  const handleOpenNew = () => {
+  const handleOpenNew = useCallback(() => {
     router.push(withReturnTo('/subscribers/new', listLocation));
-  };
+  }, [router, listLocation]);
 
-  const handleOpenView = (imsi: string, e?: React.MouseEvent) => {
+  const handleOpenView = useCallback((imsi: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     router.push(withReturnTo(`/subscribers/${encodeURIComponent(imsi)}`, listLocation));
-  };
+  }, [router, listLocation]);
 
-  const handleDelete = (imsi: string, e?: React.MouseEvent) => {
+  const handleDelete = useCallback((imsi: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setActiveDropdown(null);
     setPendingDelete({ mode: 'single', imsis: [imsi] });
-  };
+  }, []);
 
-  const handleOpenTrafficAdjustment = (sub: SubscriberRow, e?: React.MouseEvent) => {
+  const handleOpenTrafficAdjustment = useCallback((sub: SubscriberRow, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setActiveDropdown(null);
     setTrafficAdjustmentTarget(sub.imsi);
-  };
+  }, []);
 
-  const handleOpenProfileApply = (sub: SubscriberRow) => {
+  const handleOpenProfileApply = useCallback((sub: SubscriberRow) => {
     setProfileApplyTarget(sub);
     setApplyProfileName('');
     setApplyPreview(null);
     setApplyPreviewError('');
-  };
+  }, []);
 
   useEffect(() => {
     if (!profileApplyTarget || !applyProfileName) {
@@ -360,14 +360,6 @@ export function SubscribersPage() {
     }
   };
 
-  const toggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) {
-      setSelectedImsis((prev) => Array.from(new Set([...prev, ...pageImsis])));
-    } else {
-      setSelectedImsis((prev) => prev.filter((imsi) => !pageImsis.includes(imsi)));
-    }
-  };
-
   /* O(1) PLMN lookup: the catalog holds 20k+ records, so parsing is cached. */
   const plmnMap = useMemo(() => {
     const map = new Map<string, PlmnRecord>();
@@ -376,21 +368,27 @@ export function SubscribersPage() {
   }, [mccMncDb]);
 
   /* Longest-prefix match so both 2-digit and 3-digit MNC networks resolve. */
-  const resolveNetwork = (imsi: string) => {
+  const resolveNetwork = useCallback((imsi: string) => {
     if (!imsi || imsi.length < 5) return { plmn: 'N/A', network: 'Unknown', country: 'Unknown' };
     const prefix6 = imsi.substring(0, 6);
     if (plmnMap.has(prefix6)) return { plmn: prefix6, ...plmnMap.get(prefix6) };
     const prefix5 = imsi.substring(0, 5);
     if (plmnMap.has(prefix5)) return { plmn: prefix5, ...plmnMap.get(prefix5) };
     return { plmn: prefix5, network: 'Unknown', country: 'Unknown' };
-  };
+  }, [plmnMap]);
 
-  const handleSort = (field: string) => {
-    if (sortField === field) setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    else { setSortField(field); setSortDirection('asc'); }
+  const handleSort = useCallback((field: string) => {
+    setSortField((currentField) => {
+      if (currentField === field) {
+        setSortDirection((prevDir) => (prevDir === 'asc' ? 'desc' : 'asc'));
+      } else {
+        setSortDirection('asc');
+      }
+      return field;
+    });
     setCurrentPage(1);
     setSelectedImsis([]);
-  };
+  }, []);
 
   const handleFiltersChange = (next: SubscriberFilterState) => {
     setFilters(next);
@@ -449,6 +447,14 @@ export function SubscribersPage() {
   const pageImsis = paginatedSubscribers.map((s) => s.imsi);
   const selectedOnPageCount = pageImsis.filter((imsi) => selectedImsis.includes(imsi)).length;
   const isAllPageSelected = pageImsis.length > 0 && selectedOnPageCount === pageImsis.length;
+
+  const toggleSelectAll = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedImsis((prev) => Array.from(new Set([...prev, ...pageImsis])));
+    } else {
+      setSelectedImsis((prev) => prev.filter((imsi) => !pageImsis.includes(imsi)));
+    }
+  }, [pageImsis]);
   const pendingDeleteItems = pendingDelete?.imsis.slice(0, 3).join(', ') || '';
   const pendingDeleteOverflow = pendingDelete && pendingDelete.imsis.length > 3 ? ` +${pendingDelete.imsis.length - 3}` : '';
 
@@ -456,19 +462,19 @@ export function SubscribersPage() {
     if (subscribersData && currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, subscribersData, totalPages]);
 
-  const handleCopyImsi = async (imsi: string, e?: React.MouseEvent) => {
+  const handleCopyImsi = useCallback(async (imsi: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!(await copyText(imsi))) return;
     setCopiedImsi(imsi);
     window.setTimeout(() => setCopiedImsi((current) => (current === imsi ? null : current)), 1400);
-  };
+  }, []);
 
-  const renderSortIcon = (field: string) => {
+  const renderSortIcon = useCallback((field: string) => {
     if (sortField !== field) return <ArrowUpDown size={14} className="sort-icon muted" />;
     return sortDirection === 'asc'
       ? <ArrowUp size={14} className="sort-icon active" />
       : <ArrowDown size={14} className="sort-icon active" />;
-  };
+  }, [sortDirection, sortField]);
 
   return (
     <>

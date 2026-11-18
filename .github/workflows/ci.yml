@@ -330,6 +330,39 @@ jobs:
         working-directory: frontend
         run: npm run acceptance:dialogs
 
+  performance-acceptance:
+    name: Performance and data-loading acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+
+      - name: Install Chromium browser dependencies
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # Proves the performance and data-loading foundation against a real production build:
+      # deduplication of GET requests, single metadata fetch, in-flight request cancellation,
+      # stale response rejection, visibilitychange polling suspension, bounded JS chunk count,
+      # and zero uncaught page errors or unexpected console exceptions.
+      - name: Performance and data-loading acceptance
+        working-directory: frontend
+        run: npm run acceptance:performance
+
   direct-operations:
     name: Direct operations integration
     if: github.event_name == 'workflow_dispatch'
@@ -1039,6 +1072,7 @@ jobs:
       - ocs-balance-acceptance
       - lazy-route-acceptance
       - dialog-acceptance
+      - performance-acceptance
       - direct-operations
       - user-management-e2e
       - authentication

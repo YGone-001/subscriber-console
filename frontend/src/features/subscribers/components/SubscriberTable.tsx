@@ -110,7 +110,7 @@ function provisioningLabel(t: (key: string, params?: Record<string, string | num
   return missing.join(" · ");
 }
 
-export function SubscriberTable(props: SubscriberTableProps) {
+function SubscriberTableBase(props: SubscriberTableProps) {
   const { t } = useI18n();
   const router = useAppRouter();
   const actionMenuRef = useRef<HTMLDivElement>(null);
@@ -514,3 +514,5 @@ export function SubscriberTable(props: SubscriberTableProps) {
     </div>
   );
 }
+
+export const SubscriberTable = React.memo(SubscriberTableBase);
