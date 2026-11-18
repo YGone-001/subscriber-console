@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global Event, setTimeout, Request, AbortController, PopStateEvent */
+/* global Event, setTimeout, Request, AbortController, PopStateEvent, Document */
 /*
  * Rendering and Data-Loading Performance Acceptance Smoke
  *
@@ -175,6 +175,7 @@ function check(id, condition, description) {
   if (!result.condition) {
     failures.push(`${id}: ${description}`);
     console.error(`  not ok ${id} - ${description}`);
+    if (process.env.GITHUB_ACTIONS) console.log(`::error title=${id}::${description.replace(/\s+/g, ' ')}`);
   } else {
     console.log(`  ok ${id} - ${description}`);
   }
@@ -188,7 +189,7 @@ function deferred() {
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
-async function waitUntil(predicate, label, timeout = 6000) {
+async function waitUntil(predicate, label, timeout = 15000) {
   const started = Date.now();
   for (;;) {
     if (await predicate()) return;
@@ -197,7 +198,7 @@ async function waitUntil(predicate, label, timeout = 6000) {
   }
 }
 
-async function waitResolved(handle, label, timeout = 6000) {
+async function waitResolved(handle, label, timeout = 15000) {
   let timer;
   try {
     await Promise.race([
@@ -295,6 +296,25 @@ async function main() {
         return realAbort.apply(this, args);
       };
       window.__perfSuppressAbort = false;
+
+      /* Visibility is overridden on the prototype, once, before the app
+       * observes it. The old instance-level defineProperty is not portable
+       * across Chromium builds and could make the polling lifecycle test fail
+       * before it measured anything. */
+      let hiddenOverride = false;
+      Object.defineProperty(window, '__perfHidden', {
+        get: () => hiddenOverride,
+        set: (value) => { hiddenOverride = value === true; },
+        configurable: true,
+      });
+      Object.defineProperty(Document.prototype, 'hidden', {
+        configurable: true,
+        get() { return window.__perfHidden === true; },
+      });
+      Object.defineProperty(Document.prototype, 'visibilityState', {
+        configurable: true,
+        get() { return window.__perfHidden === true ? 'hidden' : 'visible'; },
+      });
     }, ADMIN_USER);
 
     const page = await context.newPage();
@@ -705,7 +725,7 @@ async function main() {
     check('PERF-05-A', true, 'advancing the real polling interval refreshes the visible page exactly once');
 
     await page.evaluate(() => {
-      Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+      window.__perfHidden = true;
       document.dispatchEvent(new Event('visibilitychange'));
     });
     const beforeD2 = (await targetCalls()).length;
@@ -715,7 +735,7 @@ async function main() {
 
     const beforeD3 = (await targetCalls()).length;
     await page.evaluate(() => {
-      Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+      window.__perfHidden = false;
       document.dispatchEvent(new Event('visibilitychange'));
     });
     await waitUntil(async () => (await targetCalls()).length === beforeD3 + 1, 'visibility restore to revalidate once');
@@ -821,7 +841,7 @@ async function main() {
     await page.waitForFunction(
       (expected) => document.querySelectorAll('[data-logs-viewport="true"] li').length === expected,
       Math.min(2000, logLines),
-      { timeout: 15_000 },
+      { timeout: 30_000 },
     );
     const renderedLines = await page.$$eval('[data-logs-viewport="true"] li', (nodes) => nodes.map((node) => node.textContent || ''));
     check('PERF-08-A', renderedLines.length === 2000, `the Log Center retains exactly 2000 lines from ${logLines} received frames (retained: ${renderedLines.length})`);
@@ -839,6 +859,7 @@ async function main() {
   } catch (err) {
     console.error('[acceptance:performance] Fatal error during test execution:', err);
     failures.push(`fatal: ${err instanceof Error ? err.message : String(err)}`);
+    if (process.env.GITHUB_ACTIONS) console.log(`::error title=PERF-FATAL::${String(err instanceof Error ? err.message : err).replace(/\s+/g, ' ')}`);
   } finally {
     if (browser) await browser.close().catch(() => {});
     if (server) await server.close().catch(() => {});

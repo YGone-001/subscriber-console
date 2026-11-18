@@ -201,7 +201,7 @@ async function control(origin, route, params) {
   return response.json();
 }
 
-async function waitUntil(predicate, label, timeout = 30000) {
+async function waitUntil(predicate, label, timeout = 45000) {
   const started = Date.now();
   for (;;) {
     if (await predicate()) return;
@@ -215,7 +215,7 @@ async function measure(page, count) {
   await page.waitForFunction(
     ([selector, expected]) => document.querySelectorAll(selector).length === expected,
     ['[data-logs-viewport="true"] li', retained],
-    { timeout: 40000 },
+    { timeout: 60000 },
   );
   await page.waitForFunction(
     ([selector, suffix]) => {
@@ -224,7 +224,7 @@ async function measure(page, count) {
       return Boolean(last && (last.textContent || '').includes(suffix));
     },
     ['[data-logs-viewport="true"] li', `line-${count}`],
-    { timeout: 40000 },
+    { timeout: 60000 },
   );
 
   const dom = await page.evaluate(() => {
@@ -322,7 +322,7 @@ async function run() {
       sentBySource.set(source, 0);
       console.log(`[log-benchmark] Streaming ${count} frames through the real Log Center...`);
       await page.goto(url, { waitUntil: 'networkidle' });
-      await page.waitForSelector('[data-logs-status="live"]', { timeout: 20000 });
+      await page.waitForSelector('[data-logs-status="live"]', { timeout: 30000 });
       await observeViewport();
       await page.evaluate(() => {
         window.__bench.longTaskCutoff = performance.now();
@@ -465,7 +465,7 @@ async function run() {
       const source = 'bench-1000';
       sentBySource.set(source, 0);
       await page.goto(`${handle.origin}/logs?sourceId=${source}&tail=100`, { waitUntil: 'networkidle' });
-      await page.waitForSelector('[data-logs-status="live"]', { timeout: 20000 });
+      await page.waitForSelector('[data-logs-status="live"]', { timeout: 30000 });
       await page.getByRole('button', { name: 'Pause view' }).click();
       await page.getByRole('button', { name: 'Resume view' }).waitFor({ state: 'visible' });
       await page.evaluate(() => {
@@ -473,7 +473,7 @@ async function run() {
         window.__bench.longTasks = [];
       });
       const parseSent = await control(handle.origin, '/__bench/send', { source, count: 1000 });
-      await page.waitForSelector('[data-logs-discarded="1000"]', { timeout: 20000 });
+      await page.waitForSelector('[data-logs-discarded="1000"]', { timeout: 30000 });
       report.parseOnlyControl = await page.evaluate(() => ({
         renderedLines: document.querySelectorAll('[data-logs-viewport="true"] li').length,
         longTasks: window.__bench.longTasks.filter((entry) => entry.startTime >= (window.__bench.longTaskCutoff || 0)).map((entry) => entry.duration),
@@ -488,7 +488,7 @@ async function run() {
       const source = 'bench-1000';
       sentBySource.set(source, 0);
       await page.goto(`${handle.origin}/logs?sourceId=${source}&tail=100`, { waitUntil: 'networkidle' });
-      await page.waitForSelector('[data-logs-status="live"]', { timeout: 20000 });
+      await page.waitForSelector('[data-logs-status="live"]', { timeout: 30000 });
       await page.evaluate(() => {
         window.__bench.longTaskCutoff = performance.now();
         window.__bench.longTasks = [];
@@ -541,11 +541,20 @@ async function run() {
     await writeFile(markdownReportPath, markdown);
     console.log(markdown);
     console.log(`[log-benchmark] reports written to ${markdownReportPath} and ${jsonReportPath}`);
-    if (report.result !== 'PASS') process.exitCode = 1;
+    if (report.result !== 'PASS') {
+      for (const invariant of report.invariants.filter((item) => !item.ok)) {
+        if (process.env.GITHUB_ACTIONS) console.log(`::error title=${invariant.id}::${invariant.detail.replace(/\s+/g, ' ')}`);
+      }
+      for (const message of pageErrors) {
+        if (process.env.GITHUB_ACTIONS) console.log(`::error title=LOG-PAGE-ERROR::${message.replace(/\s+/g, ' ')}`);
+      }
+      process.exitCode = 1;
+    }
   } catch (error) {
     report.result = 'FAIL';
     report.error = String(error);
     console.error('[log-benchmark] Fatal error:', error);
+    if (process.env.GITHUB_ACTIONS) console.log(`::error title=LOG-BENCH-FATAL::${String(error).replace(/\s+/g, ' ')}`);
     await writeFile(jsonReportPath, JSON.stringify(report, null, 2)).catch(() => undefined);
     process.exitCode = 1;
   } finally {

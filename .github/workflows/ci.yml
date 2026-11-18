@@ -359,14 +359,23 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      # Proves the performance and data-loading foundation against a real production build:
-      # deduplication of GET requests, single metadata fetch, in-flight request cancellation,
-      # deterministic stale-response ordering, the real 30s polling lifecycle, bounded log view
-      # retention and cleanup, render-commit containment against the accepted baseline, and zero
-      # uncaught page errors or unexpected console exceptions.
-      - name: Performance and data-loading acceptance
+      # Each suite reports its own outcome so a failure names the guarantee that
+      # broke, instead of hiding four suites behind one opaque step.
+      - name: Performance smoke and data-loading invariants
         working-directory: frontend
-        run: npm run acceptance:performance
+        run: node tests/performance-rendering-smoke.mjs
+
+      - name: Bounded read cancellation and remount acceptance
+        working-directory: frontend
+        run: node tests/bounded-read-development-smoke.mjs
+
+      - name: Subscribers render-commit benchmark
+        working-directory: frontend
+        run: node tests/subscribers-render-benchmark.mjs
+
+      - name: Log Center streaming benchmark
+        working-directory: frontend
+        run: node tests/log-center-stream-benchmark.mjs
 
   direct-operations:
     name: Direct operations integration

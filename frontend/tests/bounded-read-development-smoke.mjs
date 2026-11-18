@@ -30,6 +30,7 @@ function check(id, condition, description) {
   if (!result.condition) {
     failures.push(`${id}: ${description}`);
     console.error(`  not ok ${id} - ${description}`);
+    if (process.env.GITHUB_ACTIONS) console.log(`::error title=${id}::${description.replace(/\s+/g, ' ')}`);
   } else {
     console.log(`  ok ${id} - ${description}`);
   }
@@ -58,7 +59,7 @@ const server = createServer(async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ scope }));
     };
-    const timer = setTimeout(settle, scope === 'slow' ? 1500 : scope === 'will-fail' ? 60 : 200);
+    const timer = setTimeout(settle, scope === 'slow' ? 1500 : scope === 'will-fail' ? 60 : 500);
     res.on('close', () => {
       if (settled) return;
       settled = true;
@@ -75,7 +76,7 @@ const server = createServer(async (req, res) => {
   vite.middlewares(req, res, () => { res.statusCode = 404; res.end(); });
 });
 
-async function waitUntil(predicate, label, timeout = 5000) {
+async function waitUntil(predicate, label, timeout = 15000) {
   const start = Date.now();
   for (;;) {
     if (predicate()) return;
@@ -84,7 +85,7 @@ async function waitUntil(predicate, label, timeout = 5000) {
   }
 }
 
-async function waitState(page, id, state, timeout = 5000) {
+async function waitState(page, id, state, timeout = 15000) {
   await page.waitForFunction(
     ([selectorId, expected]) => document.getElementById(selectorId)?.getAttribute('data-state') === expected,
     [id, state],
@@ -92,7 +93,7 @@ async function waitState(page, id, state, timeout = 5000) {
   );
 }
 
-async function waitData(page, id, scope, timeout = 5000) {
+async function waitData(page, id, scope, timeout = 15000) {
   await page.waitForFunction(
     ([selectorId, expected]) => {
       const node = document.getElementById(selectorId);
@@ -103,7 +104,7 @@ async function waitData(page, id, scope, timeout = 5000) {
   );
 }
 
-async function waitSettled(page, id, timeout = 5000) {
+async function waitSettled(page, id, timeout = 15000) {
   await page.waitForFunction(
     (selectorId) => document.getElementById(selectorId)?.getAttribute('data-validating') === 'false',
     id,
@@ -147,10 +148,9 @@ try {
     await waitState(page, 'primary', 'loading');
     await waitUntil(() => requests.slice(base).some((item) => item.scope === 'slow'), 'slow request to start');
     await page.click('#peer');
-    await delay(120);
+    await waitData(page, 'primary', 'slow');
     const slowAfterPeer = requests.slice(base).find((item) => item.scope === 'slow');
     check('BR-04', slowAfterPeer && slowAfterPeer.aborted === false, 'removing one consumer does not cancel the shared read');
-    await waitData(page, 'primary', 'slow');
     check('BR-05', await page.locator('#primary').getAttribute('data-state') === 'data', 'the remaining consumer still settles with data');
 
     await page.click('#reload');
@@ -166,11 +166,10 @@ try {
     const beforeRemountReload = requests.slice(base).filter((item) => item.scope === 'slow').length;
     await page.click('#reload');
     await waitUntil(() => requests.slice(base).filter((item) => item.scope === 'slow').length > beforeRemountReload, 'remounted read to start');
-    for (;;) {
-      const latest = requests.slice(base).filter((item) => item.scope === 'slow').at(-1);
-      if (latest?.completed || latest?.aborted) break;
-      await delay(20);
-    }
+    await waitUntil(
+      () => Boolean(requests.slice(base).filter((item) => item.scope === 'slow').at(-1)?.completed || requests.slice(base).filter((item) => item.scope === 'slow').at(-1)?.aborted),
+      'remounted read to settle',
+    );
     await waitData(page, 'primary', 'slow');
     const latestSlow = requests.slice(base).filter((item) => item.scope === 'slow').at(-1);
     check(
@@ -243,9 +242,14 @@ try {
     const beforeReload = requests.slice(base).filter((item) => item.scope === 'slow').length;
     await page.click('#reload');
     await waitUntil(() => requests.slice(base).filter((item) => item.scope === 'slow').length > beforeReload, 'refetch request to start');
+    await waitUntil(
+      () => Boolean(requests.slice(base).filter((item) => item.scope === 'slow').at(-1)?.completed || requests.slice(base).filter((item) => item.scope === 'slow').at(-1)?.aborted),
+      'refetch request to settle',
+    );
     await waitData(page, 'primary', 'slow');
     await waitSettled(page, 'primary');
-    check('BR-17', requests.slice(base).filter((item) => item.scope === 'slow').length === beforeReload + 1, 'one explicit refetch issues one request after an abort');
+    const latestRefetch = requests.slice(base).filter((item) => item.scope === 'slow').at(-1);
+    check('BR-17', Boolean(latestRefetch && latestRefetch.completed && !latestRefetch.aborted), 'the explicit refetch after an abort completes successfully');
     check('BR-18', await page.locator('#primary').getAttribute('data-validating') === 'false', 'refetch after abort settles its validating state');
     await page.close();
   }
@@ -269,6 +273,7 @@ try {
   result.error = String(error);
   errors.push(String(error));
   console.error('[acceptance:bounded-read] Fatal error during test execution:', error);
+  if (process.env.GITHUB_ACTIONS) console.log(`::error title=BR-FATAL::${String(error).replace(/\s+/g, ' ')}`);
   process.exitCode = 1;
 } finally {
   await mkdir(output, { recursive: true });

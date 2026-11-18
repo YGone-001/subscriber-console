@@ -385,12 +385,35 @@ async function main() {
       }),
       note: 'Page-level commits remain; only the unchanged table subtree is contained. Sort, pagination, selection and modal interactions still commit the table.',
     };
+    const failures = [];
+    if (report.conclusion.tableCommitReductionOnTyping <= 0) {
+      failures.push('search typing did not reduce table commits against the accepted baseline');
+    }
+    if (!report.conclusion.pageStillCommitsOnTyping) {
+      failures.push('page-level commits disappeared; containment must not be claimed as page elimination');
+    }
+    if (!report.conclusion.semanticsPreserved) {
+      failures.push('sort, pagination or row selection no longer commits the table');
+    }
+    const modal = report.comparison.find((entry) => entry.key === 'modalInteraction');
+    if (!modal || modal.afterTableCommits >= modal.beforeTableCommits) {
+      failures.push('modal interaction did not reduce table commits against the accepted baseline');
+    }
+    report.failures = failures;
+    report.result = failures.length === 0 ? 'PASS' : 'FAIL';
 
     await writeFile(jsonReportPath, JSON.stringify(report, null, 2));
     const markdown = renderMarkdown(report);
     await writeFile(markdownReportPath, markdown);
     console.log(markdown);
     console.log(`[render-bench] reports written to ${markdownReportPath} and ${jsonReportPath}`);
+    if (failures.length > 0) {
+      for (const failure of failures) {
+        console.error(`[render-bench] ${failure}`);
+        if (process.env.GITHUB_ACTIONS) console.log(`::error title=RENDER-BENCH::${failure.replace(/\s+/g, ' ')}`);
+      }
+      process.exitCode = 1;
+    }
   } finally {
     if (prepared) {
       execFileSync('git', ['worktree', 'remove', '--force', baselineRoot], { cwd: repoRoot, stdio: 'inherit' });
@@ -434,5 +457,6 @@ Development-mode React is faster/slower than production in absolute terms, but b
 
 main().catch((error) => {
   console.error('[render-bench] Fatal error:', error);
+  if (process.env.GITHUB_ACTIONS) console.log(`::error title=RENDER-FATAL::${String(error).replace(/\s+/g, ' ')}`);
   process.exit(1);
 });
