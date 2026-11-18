@@ -408,7 +408,7 @@ function renderMarkdown(report) {
 Generated: ${report.generatedAt}
 
 Baseline: \`${report.baselineSha}\` (accepted baseline). Current: working tree.
-Harness: development-mode React with the commit hook installed before React loads; \`PerformedWork\` counts committed component work, not function invocations. Both variants use the same fixture data and interactions.
+Harness: development-mode React. A test-only build transform counts component function invocations (render) and post-commit effect runs (commit); the DevTools hook records total tree commits. Both variants use the same fixture data and interactions. Composition counts (invocations) are shown next to committed updates so a memo bail-out is distinguishable from an unchanged DOM.
 
 ## Commit comparison
 
