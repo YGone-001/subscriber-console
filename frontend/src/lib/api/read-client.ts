@@ -8,6 +8,19 @@ async function request(path: string, signal?: AbortSignal): Promise<Response> {
   return response;
 }
 
+/* Parsing the body is part of the read, not a separate concern. A cancellation
+ * delivered while the body is being consumed must stay an AbortError; a
+ * malformed body in a completed response keeps the historical `undefined`
+ * projection, and that projection is never used to explain an HTTP failure. */
+async function readBody(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch (err: unknown) {
+    if (isAbortError(err)) throw err;
+    return undefined;
+  }
+}
+
 export async function getJson<T>(path: string, requester: (path: string) => Promise<Response> = request): Promise<T> {
   let response: Response;
   try {
@@ -16,7 +29,7 @@ export async function getJson<T>(path: string, requester: (path: string) => Prom
     if (isAbortError(err)) throw err;
     throw new ReadApiError(0, 'The service could not be reached.');
   }
-  const body: unknown = await response.json().catch(() => undefined);
+  const body: unknown = await readBody(response);
   if (!response.ok) throw new ReadApiError(response.status, readErrorMessage(response.status, body), body);
   return body as T;
 }
@@ -34,7 +47,7 @@ export async function getBlob(path: string, signal?: AbortSignal): Promise<Blob>
     throw new ReadApiError(0, 'The service could not be reached.');
   }
   if (!response.ok) {
-    const body: unknown = await response.json().catch(() => undefined);
+    const body: unknown = await readBody(response);
     throw new ReadApiError(response.status, readErrorMessage(response.status, body), body);
   }
   return response.blob();

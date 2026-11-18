@@ -122,11 +122,19 @@ SWR fetcher. It uses the existing signal-aware read client and scopes shared
 request ownership to the SWR cache and key. StrictMode effect replays and other
 active consumers preserve a deduplicated request; leaving the last consumer
 cancels it after a microtask. A replacement read cancels its earlier request.
-`npm --prefix frontend run acceptance:bounded-read` verifies these behaviors
-against an owned Vite development fixture. Previous-key data, focus revalidation
-and automatic error retries are disabled;
-polling is explicit per caller. `features/investigations/use-investigation-read.ts`
-keeps `useInvestigationRead` as a compatibility re-export of this hook.
+Cancellation must settle: an aborted fetcher resolves to the cache value already
+held for that key (or no value when the cache is empty), never to a retained
+never-settling Promise and never to an error. The hook disables the SWR dedupe
+window so a remount can fetch a key whose cancelled read settled without data.
+The cancellation itself is preserved by the read client, including cancellation
+while the response body is being parsed.
+`npm --prefix frontend run acceptance:bounded-read` verifies single-consumer,
+shared-key, last-consumer, remount, refetch, rapid key transition, and
+abort-then-HTTP-failure states against an owned Vite development fixture.
+Previous-key data, focus revalidation and automatic error retries are disabled;
+polling is explicit per caller.
+`features/investigations/use-investigation-read.ts` keeps
+`useInvestigationRead` as a compatibility re-export of this hook.
 Drift presentations suppress cached scope evidence on failed reads; the policy
 editor preserves its draft and requires an explicit current-revision retry
 after a conflict.

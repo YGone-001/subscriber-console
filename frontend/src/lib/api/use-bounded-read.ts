@@ -15,6 +15,16 @@ function readFor(reads: Map<string, SharedRead>, path: string) {
   return read;
 }
 
+/* A cancelled read is not a failure and not a value: SWR must settle the request
+ * without inventing data or an error. Resolving with whatever the cache already
+ * holds keeps valid data intact, and resolving for the first time leaves the
+ * consumer idle rather than permanently loading. The cancellation itself never
+ * becomes a retained pending Promise. */
+function abortFallback<T>(cache: object, key: string): T | undefined {
+  const cached = (cache as { get?: (key: string) => { data?: T } | undefined }).get?.(key);
+  return cached?.data;
+}
+
 export function useBoundedRead<T>(path: string | null, refreshInterval = 0) {
   const { cache } = useSWRConfig();
   const reads = readsFor(cache);
@@ -27,9 +37,7 @@ export function useBoundedRead<T>(path: string | null, refreshInterval = 0) {
     try {
       return await getJsonWithSignal<T>(key, controller.signal);
     } catch (err: unknown) {
-      if (isAbortError(err)) {
-        return new Promise<T>(() => {});
-      }
+      if (isAbortError(err)) return abortFallback<T>(cache, key) as T;
       throw err;
     } finally {
       if (read.controller === controller) {
@@ -37,7 +45,7 @@ export function useBoundedRead<T>(path: string | null, refreshInterval = 0) {
         if (!read.consumers.size && reads.get(key) === read) reads.delete(key);
       }
     }
-  }, [reads]);
+  }, [reads, cache]);
   useEffect(() => {
     if (!path) return;
     const read = readFor(reads, path);
@@ -52,5 +60,14 @@ export function useBoundedRead<T>(path: string | null, refreshInterval = 0) {
       });
     };
   }, [consumer, path, reads]);
-  return useSWR<T>(path, fetcher, { refreshInterval, keepPreviousData: false, revalidateOnFocus: false, shouldRetryOnError: false });
+  return useSWR<T>(path, fetcher, {
+    refreshInterval,
+    keepPreviousData: false,
+    revalidateOnFocus: false,
+    shouldRetryOnError: false,
+    // A read cancelled for its last consumer settled without data; the next
+    // mount must be allowed to fetch it again instead of inheriting that empty
+    // result for the default dedupe window.
+    dedupingInterval: 0,
+  });
 }
