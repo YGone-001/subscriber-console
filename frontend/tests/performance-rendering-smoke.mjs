@@ -190,6 +190,8 @@ async function main() {
     const context = await browser.newContext({ viewport });
 
     await context.addInitScript((user) => {
+      localStorage.setItem('XCLOUD_LANGUAGE_PREFERENCE', 'en');
+      localStorage.setItem('XCLOUD_THEME_PREFERENCE', 'light');
       localStorage.setItem('xcloud_auth_token', 'perf-smoke-token');
       localStorage.setItem('xcloud_user', JSON.stringify(user));
     }, ADMIN_USER);
@@ -481,24 +483,24 @@ async function main() {
     /* Test 7: Local modal interaction causes no full-page reloads       */
     /* ------------------------------------------------------------------ */
     await page.goto(`${server.origin}/subscribers`, { waitUntil: 'networkidle' });
-    let pageNavigated = false;
-    page.on('framenavigated', (frame) => {
-      if (frame === page.mainFrame()) pageNavigated = true;
+    await page.waitForSelector('table, [data-subscribers-list], main');
+    await page.evaluate(() => {
+      window.__perf_page_token = 8848;
     });
 
-    const importBtn = page.locator('button:has-text("Import"), button:has-text("Batch"), button:has-text("New")').first();
-    if (await importBtn.isVisible()) {
-      await importBtn.click();
-      await page.waitForTimeout(100);
-      const closeBtn = page.locator('[role="dialog"] button[aria-label="Close"], [role="dialog"] button:has-text("Cancel")').first();
-      if (await closeBtn.isVisible()) {
-        await closeBtn.click();
-      } else {
-        await page.keyboard.press('Escape');
-      }
-      await page.waitForTimeout(100);
-      check('PERF-06-A', !pageNavigated, 'modal interaction did not trigger full-page navigation or reload');
+    const modalBtn = page.locator('button[title="Import subscribers"], button:has-text("Import subscribers"), button:has-text("Batch Create")').first();
+    await modalBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await modalBtn.click();
+    await page.waitForSelector('[role="dialog"]', { state: 'visible', timeout: 5000 });
+    const closeBtn = page.locator('[role="dialog"] button.btn-icon, [role="dialog"] button[aria-label="Close"], [role="dialog"] button:has-text("Cancel")').first();
+    if (await closeBtn.isVisible()) {
+      await closeBtn.click();
+    } else {
+      await page.keyboard.press('Escape');
     }
+    await page.waitForSelector('[role="dialog"]', { state: 'detached', timeout: 5000 });
+    const token = await page.evaluate(() => window.__perf_page_token);
+    check('PERF-06-A', token === 8848, 'modal interaction did not trigger full-page navigation or reload');
 
     /* ------------------------------------------------------------------ */
     /* Global error checks                                                */
