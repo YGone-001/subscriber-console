@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global Event */
+/* global Event, setTimeout, Request, AbortController, PopStateEvent */
 /*
  * Rendering and Data-Loading Performance Acceptance Smoke
  *
@@ -7,11 +7,17 @@
  * Verifies the performance invariants established for data loading:
  *   PERF-01: Zero duplicate GET requests on initial stable page load across core routes
  *   PERF-02: Metadata endpoints are deduplicated and cached across component lifecycles
- *   PERF-03: Stale asynchronous read responses do not overwrite newer state
- *   PERF-04: Aborted superseded read requests do not emit service failure toasts or errors
- *   PERF-05: Duty page polling lifecycle is stable and pauses when page is hidden
+ *   PERF-03: A superseded response cannot overwrite newer NF Health state
+ *   PERF-04: Aborted/superseded reads emit no service-unreachable error and can be read again
+ *   PERF-05: The real 30s NF Health polling lifecycle is driven by a deterministic timer fixture
  *   PERF-06: Local modal interaction causes no full-page reloads or spurious re-queries
  *   PERF-07: Bundle size and chunk count remain strictly bounded within baseline limits
+ *   PERF-08: The Log Center keeps its real bounded view window
+ *
+ * Every asynchronous completion is proven by an observed request record, a
+ * delivered response barrier, or a rendered business element. The NF Health
+ * timer fixture captures the interval the page actually registers and fires it
+ * on demand; it never waits wall-clock time to prove a 30s policy.
  *
  * Usage: node frontend/tests/performance-rendering-smoke.mjs
  */
@@ -20,6 +26,9 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
+import { clearTimeout as clearNodeTimeout } from 'node:timers';
+
 import { chromium } from 'playwright';
 import { build } from 'vite';
 
@@ -121,6 +130,15 @@ function makeTarget(targetId, name, domain = '5gc', overallState = 'healthy') {
   };
 }
 
+const STALE_C1 = makeTarget('target-stale', 'STALE-TARGET-SHOULD-NOT-OVERWRITE', 'epc', 'unknown');
+const NEWER_C1 = makeTarget('target-newer', 'NEWER-VALID-TARGET');
+const OLDER_C2 = makeTarget('target-c2-old', 'OLDER-C2-TARGET', 'epc', 'unknown');
+const NEWER_C2 = makeTarget('target-c2-new', 'NEWER-C2-TARGET');
+const STALE_C3 = makeTarget('target-c3-stale', 'CURSOR-STALE-TARGET', 'epc', 'unknown');
+const NEWER_C3 = makeTarget('target-c3-new', 'FILTERED-TARGET');
+const STALE_D6 = makeTarget('target-d6-stale', 'POLL-STALE-TARGET', 'epc', 'unknown');
+const NEWER_D6 = makeTarget('target-d6-new', 'REFRESH-NEW-TARGET');
+
 const ADMIN_USER = {
   username: 'admin',
   role: 'admin',
@@ -162,6 +180,35 @@ function check(id, condition, description) {
   }
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+async function waitUntil(predicate, label, timeout = 6000) {
+  const started = Date.now();
+  for (;;) {
+    if (await predicate()) return;
+    if (Date.now() - started > timeout) throw new Error(`Timed out waiting for ${label}`);
+    await sleep(20);
+  }
+}
+
+async function waitResolved(handle, label, timeout = 6000) {
+  let timer;
+  try {
+    await Promise.race([
+      handle.promise,
+      new Promise((_resolve, reject) => { timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), timeout); }),
+    ]);
+  } finally {
+    if (timer) clearNodeTimeout(timer);
+  }
+}
+
 async function main() {
   console.log('[acceptance:performance] Starting rendering and data-loading performance regression suite...');
   const tmpDist = await mkdtemp(path.join(tmpdir(), 'xcloud-perf-smoke-'));
@@ -194,6 +241,60 @@ async function main() {
       localStorage.setItem('XCLOUD_THEME_PREFERENCE', 'light');
       localStorage.setItem('xcloud_auth_token', 'perf-smoke-token');
       localStorage.setItem('xcloud_user', JSON.stringify(user));
+
+      /* Request recorder: proves which reads started and which ones the read
+       * client cancelled, independently of what the server eventually writes. */
+      const recorder = { calls: [] };
+      const realFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        const call = { url, start: Date.now(), aborted: false };
+        recorder.calls.push(call);
+        const signal = init && init.signal;
+        if (signal) signal.addEventListener('abort', () => { call.aborted = true; }, { once: true });
+        return realFetch(input, init);
+      };
+      window.__perfFetch = recorder;
+
+      /* Deterministic timer fixture. Long-lived intervals (the 30s NF Health
+       * poll and slower) are captured instead of scheduled; they fire only when
+       * the suite asks, and clearInterval removes them exactly like the browser
+       * would. Short UI timers keep their real behaviour. */
+      const longTimers = [];
+      let nextTimerId = 1;
+      const realSetInterval = window.setInterval.bind(window);
+      const realClearInterval = window.clearInterval.bind(window);
+      window.setInterval = (callback, interval, ...args) => {
+        if (typeof interval === 'number' && interval >= 1000) {
+          const entry = { id: nextTimerId++, delay: interval, callback, args, active: true };
+          longTimers.push(entry);
+          return entry.id;
+        }
+        return realSetInterval(callback, interval, ...args);
+      };
+      window.clearInterval = (id) => {
+        const index = longTimers.findIndex((entry) => entry.id === id);
+        if (index >= 0) {
+          longTimers[index].active = false;
+          longTimers.splice(index, 1);
+          return;
+        }
+        realClearInterval(id);
+      };
+      window.__perfTimers = {
+        list: () => longTimers.map((entry) => ({ id: entry.id, delay: entry.delay, active: entry.active })),
+        fireAll: () => { [...longTimers].forEach((entry) => entry.callback(...entry.args)); },
+      };
+
+      /* Negative-control hook for stale-result rejection: making abort a no-op
+       * lets an out-of-order older response reach the page, which is the only
+       * way to separate cancellation protection from request-token rejection. */
+      const realAbort = AbortController.prototype.abort;
+      AbortController.prototype.abort = function abort(...args) {
+        if (window.__perfSuppressAbort) return;
+        return realAbort.apply(this, args);
+      };
+      window.__perfSuppressAbort = false;
     }, ADMIN_USER);
 
     const page = await context.newPage();
@@ -210,10 +311,35 @@ async function main() {
       }
     });
 
-    // Request tracking map: url -> count
+    const holds = new Map();
+    let defaultTargetsVariant = 'normal';
+
+    function hold(id) {
+      const started = deferred();
+      const released = deferred();
+      const record = { id, started, released, delivered: false, cancelled: false, consumed: false };
+      holds.set(id, record);
+      return record;
+    }
+
+    async function held(record, route, data, status = 200) {
+      record.consumed = true;
+      record.started.resolve();
+      await record.released.promise;
+      try {
+        await json(route, data, status);
+        record.delivered = true;
+      } catch {
+        record.cancelled = true;
+      }
+    }
+
+    function release(id) {
+      holds.get(id)?.released.resolve();
+    }
+
     const getRequestCounts = new Map();
-    let delayFirstNfSearch = false;
-    let delayedSearchResolve = null;
+    const logLines = 2500;
 
     await page.route('**/api/**', async (route) => {
       const request = route.request();
@@ -242,6 +368,7 @@ async function main() {
       // Static and metadata
       if (pathname === '/api/tariff-plans') return json(route, { plans: [{ planId: 'p1', name: 'Standard Plan' }] });
       if (pathname === '/api/profiles') return json(route, { profiles: [{ name: 'Default', title: 'Default Template' }] });
+      if (pathname === '/data/mcc-mnc-table.json') return json(route, [{ mcc: '460', mnc: '00', network: 'Test Network', country: 'Test' }]);
 
       // Subscribers
       if (pathname === '/api/subscribers') {
@@ -251,6 +378,7 @@ async function main() {
               imsi: '460001234567890',
               msisdn: '8613800000000',
               status: 'active',
+              contractStatus: 'active',
               createdAt: '2026-11-01T00:00:00Z',
               updatedAt: '2026-11-01T00:00:00Z',
             },
@@ -309,28 +437,48 @@ async function main() {
           overallStates: ['healthy', 'warning', 'danger', 'unknown'],
         });
       }
+      if (pathname === '/api/nf-health/interfaces') {
+        return json(route, { columns: ['n2'], rows: [], page: { hasMore: false, nextCursor: null } });
+      }
       if (pathname === '/api/nf-health/targets') {
         const q = url.searchParams.get('q');
-        if (q === 'stale-delay' && delayFirstNfSearch) {
-          // Hold this request until released
-          await new Promise((res) => { delayedSearchResolve = res; });
-          return json(route, {
-            targets: [makeTarget('target-stale', 'STALE-TARGET-SHOULD-NOT-OVERWRITE', 'epc', 'unknown')],
-            page: { hasMore: false, nextCursor: null },
-          });
+        const cursor = url.searchParams.get('cursor');
+        if (q === 'stale-delay' && holds.has('c1-stale') && !holds.get('c1-stale').consumed) {
+          return held(holds.get('c1-stale'), route, { targets: [STALE_C1], page: { hasMore: false, nextCursor: null } });
+        }
+        if (q === 'fast-newer' && holds.has('c1-newer') && !holds.get('c1-newer').consumed) {
+          return held(holds.get('c1-newer'), route, { targets: [NEWER_C1], page: { hasMore: false, nextCursor: null } });
         }
         if (q === 'fast-newer') {
-          return json(route, {
-            targets: [makeTarget('target-newer', 'NEWER-VALID-TARGET', '5gc', 'healthy')],
-            page: { hasMore: false, nextCursor: null },
-          });
+          return json(route, { targets: [NEWER_C1], page: { hasMore: false, nextCursor: null } });
+        }
+        if (q === 'older-c2' && holds.has('c2-old') && !holds.get('c2-old').consumed) {
+          return held(holds.get('c2-old'), route, { targets: [OLDER_C2], page: { hasMore: false, nextCursor: null } });
+        }
+        if (q === 'c2-newer' && holds.has('c2-newer') && !holds.get('c2-newer').consumed) {
+          return held(holds.get('c2-newer'), route, { targets: [NEWER_C2], page: { hasMore: false, nextCursor: null } });
+        }
+        if (q && q.startsWith('d4-')) {
+          return json(route, { targets: [makeTarget(`target-${q}`, 'D4-TARGET')], page: { hasMore: false, nextCursor: null } });
+        }
+        if (cursor === 'cursor-old' && holds.has('c3-cursor') && !holds.get('c3-cursor').consumed) {
+          return held(holds.get('c3-cursor'), route, { targets: [STALE_C3], page: { hasMore: false, nextCursor: null } });
+        }
+        if (url.searchParams.get('state') === 'unhealthy') {
+          return json(route, { targets: [NEWER_C3], page: { hasMore: false, nextCursor: null } });
+        }
+        if (holds.has('d6-poll') && !holds.get('d6-poll').consumed) {
+          return held(holds.get('d6-poll'), route, { targets: [STALE_D6], page: { hasMore: false, nextCursor: null } });
+        }
+        if (defaultTargetsVariant === 'refresh') {
+          return json(route, { targets: [NEWER_D6], page: { hasMore: false, nextCursor: null } });
         }
         return json(route, {
           targets: [
             makeTarget('target-1', 'AMF-Core-01', '5gc', 'healthy'),
             makeTarget('target-2', 'SMF-Core-01', '5gc', 'healthy'),
           ],
-          page: { hasMore: false, nextCursor: null },
+          page: { hasMore: true, nextCursor: 'cursor-old' },
         });
       }
       if (pathname === '/api/runtime/observations') {
@@ -348,15 +496,51 @@ async function main() {
         return json(route, { edges: [], page: { hasMore: false, nextCursor: null } });
       }
 
+      // Logs
+      if (pathname === '/api/nf-logs/sources') {
+        return json(route, {
+          generatedAt: '2026-11-01T00:00:00Z',
+          sources: [{ sourceId: 'bench', name: 'bench.log', kind: 'file', sizeBytes: 4096, readable: true }],
+          capabilities: {
+            defaultTailLines: 100,
+            maxTailLines: 500,
+            levels: ['debug', 'info', 'warn', 'error'],
+            maxLineBytes: 4096,
+            follow: true,
+            keywordIsLiteral: true,
+            concurrencyPerSession: 2,
+          },
+        });
+      }
+      if (pathname === '/api/nf-logs/stream') {
+        const frames = [];
+        for (let index = 1; index <= logLines; index += 1) {
+          frames.push(`event: line\ndata: ${JSON.stringify({ seq: index, level: 'info', text: `line-${index}` })}\n\n`);
+        }
+        return route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          headers: { 'Cache-Control': 'no-cache', Connection: 'close' },
+          body: `retry: 600000\n\n${frames.join('')}`,
+        });
+      }
+
       return json(route, {});
     });
+
+    const fetchCalls = () => page.evaluate(() => window.__perfFetch.calls.map((call) => ({ url: call.url, aborted: call.aborted })));
+    const targetCalls = async () => (await fetchCalls()).filter((call) => call.url.includes('/api/nf-health/targets'));
+    const timerList = () => page.evaluate(() => window.__perfTimers.list());
+    const fireTimers = () => page.evaluate(() => window.__perfTimers.fireAll());
+    const bodyHasUnreachable = async () => (await page.evaluate(() => document.body.innerText)).includes('The service could not be reached.');
+    const visibleTarget = (targetId) => page.locator(`[data-nf-health-card="${targetId}"]`).first();
 
     /* ------------------------------------------------------------------ */
     /* Test 1: Zero duplicate GET requests on stable /subscribers load    */
     /* ------------------------------------------------------------------ */
     getRequestCounts.clear();
     await page.goto(`${server.origin}/subscribers`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('table tbody tr, .empty-state, .dash-card');
+    await page.waitForSelector('table.subscribers-table tbody tr');
 
     let duplicateGetCount = 0;
     for (const [urlPath, count] of getRequestCounts.entries()) {
@@ -372,7 +556,7 @@ async function main() {
     /* ------------------------------------------------------------------ */
     getRequestCounts.clear();
     await page.goto(`${server.origin}/ocs/balances`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('.dash-card, table, form[role="search"]');
+    await page.waitForSelector('table tbody tr');
 
     duplicateGetCount = 0;
     for (const [urlPath, count] of getRequestCounts.entries()) {
@@ -388,7 +572,8 @@ async function main() {
     /* ------------------------------------------------------------------ */
     getRequestCounts.clear();
     await page.goto(`${server.origin}/nf-health`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('[data-nf-health-view], [data-health-kpi-bar="true"], main, header');
+    await page.waitForSelector('[data-nf-health-panel="cards"]');
+    await visibleTarget('target-1').waitFor({ state: 'visible' });
 
     duplicateGetCount = 0;
     for (const [urlPath, count] of getRequestCounts.entries()) {
@@ -399,67 +584,196 @@ async function main() {
     }
     check('PERF-01-C', duplicateGetCount === 0, `zero duplicate GET requests on stable /nf-health (duplicates: ${duplicateGetCount})`);
 
-    // Verify /api/nf-health/meta is fetched exactly once
     const metaRequestCount = getRequestCounts.get('/api/nf-health/meta') || 0;
     check('PERF-02-A', metaRequestCount === 1, `/api/nf-health/meta is fetched exactly once and cached (count: ${metaRequestCount})`);
 
+    const initialTimers = await timerList();
+    check(
+      'PERF-05-A0',
+      initialTimers.length === 1 && initialTimers[0].delay === 30000,
+      `NF Health registers one real 30s poll and no wall-clock wait is used (timers: ${JSON.stringify(initialTimers)})`,
+    );
+
     /* ------------------------------------------------------------------ */
-    /* Test 4: Stale response protection & request cancellation in NF Health*/
+    /* PERF-03 / PERF-04 C1 — superseded response is cancelled            */
     /* ------------------------------------------------------------------ */
     const searchInput = page.locator('form[role="search"] input, input[type="search"]').first();
-    if (await searchInput.isVisible()) {
-      delayFirstNfSearch = true;
-      // Step 1: Type query that triggers delayed slow response
-      await searchInput.fill('stale-delay');
-      await searchInput.press('Enter');
-      // Step 2: Quickly type query that resolves immediately
-      await page.waitForTimeout(50);
-      await searchInput.fill('fast-newer');
-      await searchInput.press('Enter');
+    await searchInput.waitFor({ state: 'visible' });
+    const c1StaleHold = hold('c1-stale');
+    const c1NewerHold = hold('c1-newer');
 
-      // Wait for fast response to render
-      await page.waitForFunction(() => {
-        return document.body.innerText.includes('NEWER-VALID-TARGET') || document.body.innerText.includes('fast-newer');
-      }, { timeout: 3000 }).catch(() => {});
+    await searchInput.fill('stale-delay');
+    await searchInput.press('Enter');
+    await waitResolved(c1StaleHold.started, 'older stale-delay GET to start');
+    check('PERF-03-A', true, 'the superseded GET provably reached the request boundary before it was replaced');
 
-      // Release the delayed slow response
-      if (delayedSearchResolve) {
-        delayedSearchResolve();
-      }
-      await page.waitForTimeout(200);
+    await searchInput.fill('fast-newer');
+    await searchInput.press('Enter');
+    await waitResolved(c1NewerHold.started, 'newer fast-newer GET to start');
+    release('c1-newer');
+    await visibleTarget('target-newer').waitFor({ state: 'visible', timeout: 6000 });
+    check('PERF-03-B', await visibleTarget('target-newer').innerText().then((text) => text.includes('NEWER-VALID-TARGET')), 'the newer result is rendered as business data');
 
-      // Verify newer data is still present and stale data was dropped
-      const bodyText = await page.evaluate(() => document.body.innerText);
-      check('PERF-03-A', !bodyText.includes('STALE-TARGET-SHOULD-NOT-OVERWRITE'), 'slow stale read response did not overwrite newer response');
-      check('PERF-04-A', !bodyText.includes('The service could not be reached.'), 'aborted/superseded request did not show false service unreachable error');
-    }
+    release('c1-stale');
+    await waitUntil(() => c1StaleHold.delivered || c1StaleHold.cancelled, 'older request cancellation or delivery');
+    const c1Calls = await targetCalls();
+    const c1StaleCall = c1Calls.find((call) => call.url.includes('q=stale-delay'));
+    check(
+      'PERF-03-C',
+      Boolean(c1StaleCall && c1StaleCall.aborted),
+      'the older read was actually cancelled by the read pipeline (not merely ignored)',
+    );
+    check(
+      'PERF-03-D',
+      await visibleTarget('target-stale').count() === 0,
+      'the older result cannot replace the newer business result',
+    );
+    check('PERF-04-A', !(await bodyHasUnreachable()), 'aborted/superseded read did not show a false service-unreachable error');
+    check('PERF-03-E', await searchInput.inputValue() === 'fast-newer', 'the latest filter remains selected after the race');
+
+    /* Same-key recovery after cancellation: submitting the live filter again
+     * must complete and keep the newest data. */
+    const beforeRecovery = (await targetCalls()).length;
+    await searchInput.press('Enter');
+    await waitUntil(async () => (await targetCalls()).length > beforeRecovery, 'same-key re-read after cancellation');
+    await visibleTarget('target-newer').waitFor({ state: 'visible', timeout: 6000 });
+    check('PERF-04-B', !(await bodyHasUnreachable()), 'same-key SWR recovery after cancellation renders without an error');
 
     /* ------------------------------------------------------------------ */
-    /* Test 5: Duty page polling lifecycle is stable                      */
+    /* PERF-03 C2 — out-of-order completion without successful cancel     */
     /* ------------------------------------------------------------------ */
-    const pollingInitialCount = getRequestCounts.get('/api/nf-health/targets?limit=20&sort=risk') || 1;
-    // Simulate tab hidden via visibilitychange event
+    await page.goto(`${server.origin}/nf-health`, { waitUntil: 'networkidle' });
+    await visibleTarget('target-1').waitFor({ state: 'visible' });
+    await page.evaluate(() => { window.__perfSuppressAbort = true; });
+    const c2OldHold = hold('c2-old');
+    const c2NewerHold = hold('c2-newer');
+    const c2Search = page.locator('form[role="search"] input, input[type="search"]').first();
+
+    await c2Search.fill('older-c2');
+    await c2Search.press('Enter');
+    await waitResolved(c2OldHold.started, 'older C2 GET to start');
+    await c2Search.fill('c2-newer');
+    await c2Search.press('Enter');
+    await waitResolved(c2NewerHold.started, 'newer C2 GET to start');
+    release('c2-newer');
+    await visibleTarget('target-c2-new').waitFor({ state: 'visible', timeout: 6000 });
+    release('c2-old');
+    await waitUntil(() => c2OldHold.delivered || c2OldHold.cancelled, 'older C2 completion');
+    check('PERF-03-F', c2OldHold.delivered === true, 'the older response completed after the newer one (cancellation was not available)');
+    const c2Calls = await targetCalls();
+    const c2OldCall = c2Calls.find((call) => call.url.includes('q=older-c2'));
+    check('PERF-03-G', Boolean(c2OldCall && c2OldCall.aborted === false), 'the older fetch itself was not cancelled in the C2 harness');
+    check('PERF-03-H', await visibleTarget('target-c2-old').count() === 0, 'the monotonic request token rejects the stale completed response');
+    check('PERF-03-I', await visibleTarget('target-c2-new').count() === 1, 'the newer C2 result remains visible after the stale completion');
+    check('PERF-04-C', !(await bodyHasUnreachable()), 'an out-of-order stale response did not produce a service-unreachable error');
+    await page.evaluate(() => { window.__perfSuppressAbort = false; });
+
+    /* ------------------------------------------------------------------ */
+    /* PERF-03 J/K/L C3 — filter and cursor consistency                   */
+    /* ------------------------------------------------------------------ */
+    await page.goto(`${server.origin}/nf-health`, { waitUntil: 'networkidle' });
+    await visibleTarget('target-1').waitFor({ state: 'visible' });
+    const c3Hold = hold('c3-cursor');
+    const nextPage = page.locator('nav[aria-label] button', { hasText: 'Next' }).first();
+    await nextPage.waitFor({ state: 'visible' });
+    await nextPage.click();
+    await waitResolved(c3Hold.started, 'cursor page GET to start');
+    await page.locator('select[aria-label="Overall state"]').selectOption('unhealthy');
+    await visibleTarget('target-c3-new').waitFor({ state: 'visible', timeout: 6000 });
+    release('c3-cursor');
+    await waitUntil(() => c3Hold.delivered || c3Hold.cancelled, 'cursor page response settlement');
+    check('PERF-03-J', await visibleTarget('target-c3-stale').count() === 0, 'an old cursor response cannot populate the new filter view');
+    check('PERF-03-K', await visibleTarget('target-c3-new').count() === 1, 'the new filtered view renders its own business data');
+    check('PERF-03-L', new URL(page.url()).searchParams.get('cursor') === null, 'the filter change dropped the obsolete cursor from the URL contract');
+    check(
+      'PERF-03-M',
+      await page.locator('select[aria-label="Overall state"]').inputValue() === 'unhealthy',
+      'the latest state filter remains selected after the cursor race',
+    );
+
+    /* ------------------------------------------------------------------ */
+    /* PERF-05 D — real 30s polling lifecycle with controlled time         */
+    /* ------------------------------------------------------------------ */
+    await page.goto(`${server.origin}/nf-health`, { waitUntil: 'networkidle' });
+    await visibleTarget('target-1').waitFor({ state: 'visible' });
+    const d1Timers = await timerList();
+    check('PERF-05-A1', d1Timers.length === 1 && d1Timers[0].delay === 30000, `visible page registers exactly one 30s poll (timers: ${JSON.stringify(d1Timers)})`);
+
+    const beforeD1 = (await targetCalls()).length;
+    await fireTimers();
+    await waitUntil(async () => (await targetCalls()).length === beforeD1 + 1, 'visible-page poll to emit one request');
+    check('PERF-05-A', true, 'advancing the real polling interval refreshes the visible page exactly once');
+
     await page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { value: true, configurable: true });
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    // Wait briefly and verify no runaway polling while hidden
-    await page.waitForTimeout(300);
-    const hiddenCount = getRequestCounts.get('/api/nf-health/targets?limit=20&sort=risk') || pollingInitialCount;
-    check('PERF-05-A', hiddenCount === pollingInitialCount, 'polling does not dispatch extra requests when document is hidden');
+    const beforeD2 = (await targetCalls()).length;
+    await fireTimers();
+    await delay(80);
+    check('PERF-05-B', (await targetCalls()).length === beforeD2, 'a hidden document emits no polling request even when the 30s timer fires');
 
-    // Restore visibility
+    const beforeD3 = (await targetCalls()).length;
     await page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { value: false, configurable: true });
       document.dispatchEvent(new Event('visibilitychange'));
     });
+    await waitUntil(async () => (await targetCalls()).length === beforeD3 + 1, 'visibility restore to revalidate once');
+    const afterD3 = (await targetCalls()).length;
+    await fireTimers();
+    await waitUntil(async () => (await targetCalls()).length === afterD3 + 1, 'one poll after visibility restore');
+    check('PERF-05-C', (await targetCalls()).length === beforeD3 + 2, 'restoring visibility revalidates once, not as a burst of duplicate requests');
+
+    const d4Search = page.locator('form[role="search"] input, input[type="search"]').first();
+    for (const term of ['d4-a', 'd4-b', 'd4-c', 'd4-final']) {
+      await d4Search.fill(term);
+      await d4Search.press('Enter');
+    }
+    await visibleTarget('target-d4-final').waitFor({ state: 'visible', timeout: 6000 });
+    const d4Timers = await timerList();
+    check('PERF-05-D1', d4Timers.length === 1 && d4Timers[0].delay === 30000, 'rapid search changes leave exactly one polling interval registered');
+    const beforeD4 = (await targetCalls()).length;
+    await fireTimers();
+    await waitUntil(async () => (await targetCalls()).length === beforeD4 + 1, 'single poll after rapid search');
+    check('PERF-05-D', true, 'one polling interval remains active across rapid search changes');
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/logs');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await page.waitForSelector('[data-logs-source="true"]');
+    const d5Timers = await timerList();
+    const beforeD5 = (await targetCalls()).length;
+    await fireTimers();
+    await delay(80);
+    check('PERF-05-E1', d5Timers.length === 0, 'route unmount clears the NF Health polling interval');
+    check('PERF-05-E', (await targetCalls()).length === beforeD5, 'no NF Health polling request continues after route unmount');
+
+    /* ------------------------------------------------------------------ */
+    /* PERF-05 F — in-flight polling overlap                              */
+    /* ------------------------------------------------------------------ */
+    await page.goto(`${server.origin}/nf-health`, { waitUntil: 'networkidle' });
+    await visibleTarget('target-1').waitFor({ state: 'visible' });
+    const d6Hold = hold('d6-poll');
+    await fireTimers();
+    await waitResolved(d6Hold.started, 'held polling request to start');
+    defaultTargetsVariant = 'refresh';
+    await page.locator('[data-operations-refresh="page"]').click();
+    await visibleTarget('target-d6-new').waitFor({ state: 'visible', timeout: 6000 });
+    release('d6-poll');
+    await waitUntil(() => d6Hold.delivered || d6Hold.cancelled, 'held polling response settlement');
+    check('PERF-05-F1', await visibleTarget('target-d6-stale').count() === 0, 'an in-flight polling response cannot commit after a newer refresh');
+    check('PERF-05-F2', await visibleTarget('target-d6-new').count() === 1, 'the newer refresh result remains authoritative');
+    check('PERF-05-F3', !(await bodyHasUnreachable()), 'the replaced in-flight poll did not surface a false failure');
+    defaultTargetsVariant = 'normal';
+    holds.delete('d6-poll');
 
     /* ------------------------------------------------------------------ */
     /* Test 6: Zero duplicate GET requests on /topology and /inventory    */
     /* ------------------------------------------------------------------ */
     getRequestCounts.clear();
     await page.goto(`${server.origin}/topology`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('.dash-card, .canvas-container, table, nav, main');
+    await page.waitForSelector('[data-topology-view]');
     duplicateGetCount = 0;
     for (const [urlPath, count] of getRequestCounts.entries()) {
       if (count > 1 && !urlPath.includes('/stream')) {
@@ -470,7 +784,7 @@ async function main() {
 
     getRequestCounts.clear();
     await page.goto(`${server.origin}/inventory`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('form[role="search"], nav[aria-label], .dash-card, main');
+    await page.waitForSelector('[data-inventory-view]');
     duplicateGetCount = 0;
     for (const [urlPath, count] of getRequestCounts.entries()) {
       if (count > 1 && !urlPath.includes('/stream')) {
@@ -483,7 +797,7 @@ async function main() {
     /* Test 7: Local modal interaction causes no full-page reloads       */
     /* ------------------------------------------------------------------ */
     await page.goto(`${server.origin}/subscribers`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('table, [data-subscribers-list], main');
+    await page.waitForSelector('table.subscribers-table tbody tr');
     await page.evaluate(() => {
       window.__perf_page_token = 8848;
     });
@@ -492,15 +806,29 @@ async function main() {
     await modalBtn.waitFor({ state: 'visible', timeout: 15_000 });
     await modalBtn.click();
     await page.waitForSelector('[role="dialog"]', { state: 'visible', timeout: 5000 });
-    const closeBtn = page.locator('[role="dialog"] button.btn-icon, [role="dialog"] button[aria-label="Close"], [role="dialog"] button:has-text("Cancel")').first();
-    if (await closeBtn.isVisible()) {
-      await closeBtn.click();
-    } else {
-      await page.keyboard.press('Escape');
-    }
+    const closeBtn = page.locator('[role="dialog"] button[aria-label="Close"]').first();
+    await closeBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await closeBtn.click();
     await page.waitForSelector('[role="dialog"]', { state: 'detached', timeout: 5000 });
     const token = await page.evaluate(() => window.__perf_page_token);
     check('PERF-06-A', token === 8848, 'modal interaction did not trigger full-page navigation or reload');
+
+    /* ------------------------------------------------------------------ */
+    /* PERF-08: The real Log Center keeps its bounded view window        */
+    /* ------------------------------------------------------------------ */
+    await page.goto(`${server.origin}/logs?sourceId=bench&tail=100`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('[data-logs-viewport="true"]');
+    await page.waitForFunction(
+      (expected) => document.querySelectorAll('[data-logs-viewport="true"] li').length === expected,
+      Math.min(2000, logLines),
+      { timeout: 15_000 },
+    );
+    const renderedLines = await page.$$eval('[data-logs-viewport="true"] li', (nodes) => nodes.map((node) => node.textContent || ''));
+    check('PERF-08-A', renderedLines.length === 2000, `the Log Center retains exactly 2000 lines from ${logLines} received frames (retained: ${renderedLines.length})`);
+    check('PERF-08-B', renderedLines[0].includes(`line-${logLines - 1999}`), 'the oldest retained line is the ring buffer boundary, not the stream head');
+    check('PERF-08-C', renderedLines[renderedLines.length - 1].includes(`line-${logLines}`), 'the newest received line is retained in order');
+    const boundedBadge = page.locator('text=Keeping the newest 2000 lines');
+    check('PERF-08-D', await boundedBadge.count() > 0, 'the bounded view ceiling is stated in the real UI');
 
     /* ------------------------------------------------------------------ */
     /* Global error checks                                                */

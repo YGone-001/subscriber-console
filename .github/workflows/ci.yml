@@ -334,8 +334,12 @@ jobs:
     name: Performance and data-loading acceptance
     runs-on: ubuntu-latest
     steps:
+      # The render benchmark rebuilds the accepted baseline, so the
+      # job needs the history that names that commit, not a shallow checkout.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -357,8 +361,9 @@ jobs:
 
       # Proves the performance and data-loading foundation against a real production build:
       # deduplication of GET requests, single metadata fetch, in-flight request cancellation,
-      # stale response rejection, visibilitychange polling suspension, bounded JS chunk count,
-      # and zero uncaught page errors or unexpected console exceptions.
+      # deterministic stale-response ordering, the real 30s polling lifecycle, bounded log view
+      # retention and cleanup, render-commit containment against the accepted baseline, and zero
+      # uncaught page errors or unexpected console exceptions.
       - name: Performance and data-loading acceptance
         working-directory: frontend
         run: npm run acceptance:performance
