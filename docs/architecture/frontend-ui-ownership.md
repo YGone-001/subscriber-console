@@ -148,13 +148,16 @@ compatibility adapter over the same contract; it is not a second authority.
 | Dismissal | `closeOnOverlay` and `closeOnEscape` are independent policies. A blocked topmost overlay consumes Escape without invoking `onClose` and never passes it to an underlying dialog. |
 | Focus | Initial focus enters the topmost dialog (explicit ref, then the first eligible control, then the dialog surface). Tab and Shift+Tab wrap inside the topmost dialog; keyboard focus that drifted behind it is pulled back. Disabled, hidden, inert and non-rendered controls are excluded. |
 | Restoration | Closing restores focus to the trigger while it is still valid; a removed trigger (route transition, refreshed list) falls back to the remaining topmost dialog instead of focusing a detached node. |
-| Background isolation | Sibling isolation is reference counted per element, and every overlay also locks the layers below it in the overlay stack. Nested dialogs therefore inert the parent even when the child renders inside the parent's layer. The final release restores the original `inert`, `aria-hidden` and body `overflow` exactly once. |
+| Background isolation | Sibling isolation is reference counted per element, and every overlay also locks the layers below it in the overlay stack. When a nested child dialog mounts, the layers below it are made inert. Child overlays triggered from within an existing overlay MUST use `portal={true}` so the child mounts into an independent body-level host; rendering a child dialog directly inside an inert parent layer would cause the active child to inherit `inert` from its ancestor. The final release restores the original `inert`, `aria-hidden` and body `overflow` exactly once. |
 | Stacking | Inline overlays keep their existing CSS `z-index`. Opt-in portals mount into a per-dialog body-level host (`data-xcloud-overlay-portal`) with a deterministic monotonic level, so a child always paints above its parent. React context, theme and localisation are preserved by `createPortal`. |
 | Portal hosts | One host per portal dialog, removed with that dialog. There is no parallel application root or second provider tree. |
 
-Portal use is opt-in (`portal` on `Dialog` / `Modal`). The governed runtime
-bootstrap dialog is the current portal consumer; the remaining overlays keep
-their inline position until they have equivalent browser evidence.
+Portal use is opt-in (`portal` on `Dialog` / `Modal`), and is required for nested
+overlays / child confirmation dialogs (such as governed runtime bootstrap and
+notification channel/escalation/delivery confirmations) to guarantee that the
+topmost active dialog never inherits `inert` from an underlying parent layer.
+Remaining standalone overlays keep their inline position unless they require
+body-level breakout.
 
 ## Rules for new UI work
 

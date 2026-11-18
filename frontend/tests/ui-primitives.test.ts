@@ -206,3 +206,24 @@ test('ocs.css remains one shared business stylesheet with consumers outside the 
     assert.match(read(consumer), /ocs-/, `${consumer} is an ocs.css consumer; a piecemeal module split would break it`);
   }
 });
+
+test('nested confirmation dialogs opt into portal so children never inherit inert', () => {
+  const notifySource = read('features/nf-alerts/NotificationSettingsDialog.tsx');
+  assert.match(
+    notifySource,
+    /function RemoveConfirmDialog[\s\S]*?<Dialog[^>]*\bportal\b[\s\S]*?<\/Dialog>/,
+    'RemoveConfirmDialog must specify portal on Dialog',
+  );
+  assert.match(
+    notifySource,
+    /function RetryConfirmDialog[\s\S]*?<Dialog[^>]*\bportal\b[\s\S]*?<\/Dialog>/,
+    'RetryConfirmDialog must specify portal on Dialog',
+  );
+
+  const doc = readFileSync(resolve(SRC, '../../docs/architecture/frontend-ui-ownership.md'), 'utf8');
+  assert.match(
+    doc,
+    /Child overlays triggered from within an existing overlay MUST use `portal=\{true\}`/,
+    'frontend-ui-ownership.md must document the portal invariant for nested child overlays',
+  );
+});

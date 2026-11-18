@@ -204,6 +204,7 @@ function RemoveConfirmDialog({
   return (
     <Dialog
       open={open}
+      portal
       onClose={() => {
         if (!busy) onCancel();
       }}
@@ -791,6 +792,7 @@ function RetryConfirmDialog({
   return (
     <Dialog
       open={delivery !== null}
+      portal
       onClose={() => {
         if (!busy) onCancel();
       }}

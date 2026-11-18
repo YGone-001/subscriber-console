@@ -53,6 +53,7 @@ export function SubscriberImportModal({ isOpen, onClose, onImported }: {
   const [precheck, setPrecheck] = useState<PrecheckResponse | null>(null);
   const [isPrechecking, setIsPrechecking] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const isImportingRef = useRef(false);
   const [result, setResult] = useState<ImportResponse['result'] | null>(null);
 
   const reset = () => {
@@ -65,6 +66,7 @@ export function SubscriberImportModal({ isOpen, onClose, onImported }: {
   };
 
   const close = () => {
+    if (isImportingRef.current || isImporting) return;
     const imported = Boolean(result && (result.imported ?? 0) > 0);
     reset();
     onClose();
@@ -117,7 +119,8 @@ export function SubscriberImportModal({ isOpen, onClose, onImported }: {
   };
 
   const runImport = async () => {
-    if (!parsed || parsed.records.length === 0) return;
+    if (isImportingRef.current || isImporting || !parsed || parsed.records.length === 0) return;
+    isImportingRef.current = true;
     setIsImporting(true);
     setError('');
     try {
@@ -144,6 +147,7 @@ export function SubscriberImportModal({ isOpen, onClose, onImported }: {
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
     } finally {
+      isImportingRef.current = false;
       setIsImporting(false);
     }
   };
@@ -165,7 +169,7 @@ export function SubscriberImportModal({ isOpen, onClose, onImported }: {
     >
       <div className="workflow-header">
         <h2 id="subscriber-import-title" className="sub-modal-new-title">{t('sub_import_title')}</h2>
-        <button type="button" className="btn-icon" onClick={close} aria-label={t('close')}><X size={22} /></button>
+        <button type="button" className="btn-icon" onClick={close} disabled={isImporting} aria-label={t('close')}><X size={22} /></button>
       </div>
 
       <div className="workflow-body">
@@ -180,7 +184,7 @@ export function SubscriberImportModal({ isOpen, onClose, onImported }: {
             {!result && (
               <>
                 <div className="page-action-buttons" style={{ marginTop: 'var(--space-3, 12px)' }}>
-                  <label className="btn btn-outline" htmlFor="subscriber-import-file">
+                  <label className={`btn btn-outline ${isImporting ? 'disabled' : ''}`} htmlFor={isImporting ? undefined : 'subscriber-import-file'}>
                     <Upload size={15} /> {t('sub_import_pick')}
                   </label>
                   <input
@@ -189,15 +193,17 @@ export function SubscriberImportModal({ isOpen, onClose, onImported }: {
                     type="file"
                     accept=".csv,.json,text/csv,application/json"
                     className="sr-only"
+                    disabled={isImporting}
                     onChange={(event) => {
+                      if (isImporting) return;
                       const file = event.target.files?.[0];
                       if (file) void readFile(file);
                     }}
                   />
-                  <button type="button" className="btn btn-outline" onClick={() => downloadTemplate('csv')}>
+                  <button type="button" className="btn btn-outline" onClick={() => downloadTemplate('csv')} disabled={isImporting}>
                     <Download size={15} /> {t('sub_import_template_csv')}
                   </button>
-                  <button type="button" className="btn btn-outline" onClick={() => downloadTemplate('json')}>
+                  <button type="button" className="btn btn-outline" onClick={() => downloadTemplate('json')} disabled={isImporting}>
                     <Download size={15} /> {t('sub_import_template_json')}
                   </button>
                 </div>
@@ -263,7 +269,7 @@ export function SubscriberImportModal({ isOpen, onClose, onImported }: {
       <div className="workflow-footer">
         <div className="sub-modal-footer-msg">{t('sub_import_footer')}</div>
         <div className="workflow-footer-actions">
-          <button type="button" className="btn btn-outline" onClick={close}>{result ? t('close') : t('cancel')}</button>
+          <button type="button" className="btn btn-outline" onClick={close} disabled={isImporting}>{result ? t('close') : t('cancel')}</button>
           {!result && (
             <>
               <button
