@@ -25,6 +25,7 @@ import (
 	"subscriber/internal/discovery"
 	"subscriber/internal/handler"
 	"subscriber/internal/imsreg"
+	"subscriber/internal/inspections"
 	"subscriber/internal/inventory"
 	"subscriber/internal/investigation"
 	"subscriber/internal/knowledge"
@@ -509,6 +510,13 @@ func main() {
 		return page.Summary, nil
 	})
 	opsReportHandler := opsreports.NewHandler(opsReportService, limiter)
+	inspectionEvidence := inspections.NewEvidenceReader(mc.Ops, groupService, operationsview.NewGroupRepository(mc.Ops), nfHealthRepo, configSnapshotService)
+	inspectionService := inspections.NewService(inspections.NewRepository(mc.Ops), inspectionEvidence, userRepo, auditWriter, jwtSecretBytes)
+	inspectionHandler := inspections.NewHandler(inspectionService, limiter)
+	inspectionContext, stopInspections := context.WithCancel(context.Background())
+	inspectionDone := make(chan struct{})
+	go func() { defer close(inspectionDone); inspectionService.Run(inspectionContext) }()
+	defer func() { stopInspections(); <-inspectionDone }()
 
 	runtimeInventoryGateway := runtimewire.NewInventoryGateway(inventoryRepo)
 	runtimeTargetGateway := runtimewire.NewTargetGateway(nfHealthRepo, nfHealthDest, nfHealthUnits, nfHealthBindings, nfHealthResolvers)
@@ -852,6 +860,17 @@ func main() {
 	mux.Handle("GET /api/ops-reports/alerts", authMiddleware(http.HandlerFunc(opsReportHandler.Handle)))
 	mux.Handle("GET /api/ops-reports/metrics", authMiddleware(http.HandlerFunc(opsReportHandler.Handle)))
 	mux.Handle("GET /api/ops-reports/export", authMiddleware(http.HandlerFunc(opsReportHandler.Handle)))
+	mux.Handle("GET /api/inspections/meta", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("GET /api/inspection-plans", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("POST /api/inspection-plans/preview", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("POST /api/inspection-plans", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("GET /api/inspection-plans/{planId}", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("PUT /api/inspection-plans/{planId}", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("POST /api/inspection-plans/{planId}/runs", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("GET /api/inspection-runs", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("GET /api/inspection-runs/{runId}", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("GET /api/inspection-runs/{runId}/items", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
+	mux.Handle("GET /api/inspection-runs/{runId}/export", authMiddleware(http.HandlerFunc(inspectionHandler.Handle)))
 
 	containmentHandler := operationsview.NewContainmentHandler(
 		operationsview.NewContainmentService(inventoryRepo, topologyRepo, nil), limiter, auditWriter)
