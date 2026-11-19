@@ -219,6 +219,17 @@ const EXPECTED_AGENT_ROUTES = new Set([
 ]);
 
 const ALLOWED_ADDED_ROUTES = new Set([
+  'GET /api/inspections/meta',
+  'GET /api/inspection-plans',
+  'POST /api/inspection-plans/preview',
+  'POST /api/inspection-plans',
+  'GET /api/inspection-plans/{planId}',
+  'PUT /api/inspection-plans/{planId}',
+  'POST /api/inspection-plans/{planId}/runs',
+  'GET /api/inspection-runs',
+  'GET /api/inspection-runs/{runId}',
+  'GET /api/inspection-runs/{runId}/items',
+  'GET /api/inspection-runs/{runId}/export',
   "GET /api/config-drift/meta",
   "GET /api/config-drift/sources/{sourceId}/policy",
   "PUT /api/config-drift/sources/{sourceId}/policy",

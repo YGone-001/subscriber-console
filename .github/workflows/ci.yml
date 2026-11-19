@@ -79,6 +79,9 @@ jobs:
       - name: Frontend operational contract
         run: node scripts/test-frontend-operational-contract.mjs
 
+      - name: Scheduled inspection contract
+        run: node scripts/test-inspections-contract.mjs
+
       - name: Inventory contract and security evidence
         run: node scripts/test-inventory-contract.mjs
 

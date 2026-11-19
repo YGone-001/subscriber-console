@@ -43,6 +43,7 @@ Canonical frontend SPA source     -> frontend/src/
 
 - [Configuration drift alerts](architecture/configuration-drift.md) / [操作说明](operations/configuration-drift.md) - ordered baseline evaluation, independent episode lifecycle, explicit notifications and manual investigations.
 - [Configuration observations](architecture/configuration-snapshots.md) - approved local sources, safe projections, immutable observations, baseline comparison and retention.
+- [Scheduled inspections](architecture/scheduled-inspections.md) / [Operation guide](operations/scheduled-inspections.md) - governed schedules, fixed evidence reports, explicit gaps and compatible comparisons.
 - [Operations reports](architecture/operations-reports.md) - windowed alert/measurement evidence, scope completeness and bounded CSV exports.
 
 - [System architecture](architecture/system-architecture.md)

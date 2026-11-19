@@ -71,6 +71,7 @@ export function deriveGoRegistrations(rootDir = REPO_ROOT) {
 /** Go operations that are semantic reads even though they use POST. */
 export const SEMANTIC_READ_POST = new Set([
   'POST /api/subscribers/batch/precheck',
+  'POST /api/inspection-plans/preview',
   'POST /api/system/audit/scan',
   'POST /api/analytics/init',
 ]);
@@ -95,7 +96,7 @@ export function toInventoryPath(pattern) {
  * together with the AGENTS.md / CLAUDE.md totals that `test-agent-docs-parity`
  * cross-checks.
  */
-export const EXPECTED_GO_REGISTRATIONS = 213;
+export const EXPECTED_GO_REGISTRATIONS = 224;
 
 /**
  * The frozen business mutation census: unique METHOD+PATH mutation endpoints declared by

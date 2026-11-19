@@ -59,6 +59,7 @@ pnpm-debug.log*
 
 # Local runtime state (managed PID registry, logs, built binaries)
 .runtime/local/
+.impeccable/review/
 
 # IDE and editor files
 .idea/

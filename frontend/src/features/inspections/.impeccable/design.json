@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-19T07:21:00.437923+00:00",
+  "title": "Design System: xCloud scheduled inspections",
+  "extensions": {
+    "breakpoints": [
+      {
+        "name": "stack-columns",
+        "value": "767px"
+      },
+      {
+        "name": "stack-filters",
+        "value": "440px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "html": "<button class=\"ds-control ds-primary\">Run inspection</button>",
+      "css": ".ds-control{font:inherit;border:1px solid var(--surface-border);border-radius:var(--ref-radius-control);padding:8px 16px;color:var(--text);background:var(--surface)}.ds-control:hover{border-color:var(--primary)}.ds-control:focus-visible{outline:2px solid var(--primary);outline-offset:2px}.ds-primary{background:var(--primary);color:var(--on-accent)}.ds-primary:hover{background:var(--primary-hover)}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "html": "<button class=\"ds-control\">Preview scope and schedule</button>",
+      "css": ".ds-control{font:inherit;border:1px solid var(--surface-border);border-radius:var(--ref-radius-control);padding:8px 16px;color:var(--text);background:var(--surface)}.ds-control:hover{border-color:var(--primary)}.ds-control:focus-visible{outline:2px solid var(--primary);outline-offset:2px}"
+    },
+    {
+      "name": "Plan input",
+      "kind": "input",
+      "html": "<label class=\"ds-field\">Plan name<input class=\"ds-control\" value=\"Site inspection\"></label>",
+      "css": ".ds-control{font:inherit;border:1px solid var(--surface-border);border-radius:var(--ref-radius-control);padding:8px 16px;color:var(--text);background:var(--surface)}.ds-control:hover{border-color:var(--primary)}.ds-control:focus-visible{outline:2px solid var(--primary);outline-offset:2px}.ds-field{display:grid;gap:8px;font:inherit}"
+    },
+    {
+      "name": "Execution status",
+      "kind": "chip",
+      "html": "<span class=\"ds-status\">Unknown</span>",
+      "css": ".ds-status{color:var(--warning);font-size:0.75rem;font-weight:600;white-space:nowrap}"
+    },
+    {
+      "name": "Evidence table",
+      "kind": "custom",
+      "html": "<table class=\"ds-table\"><caption>Source completeness</caption><tr><th>Checks</th><th>Read status</th></tr><tr><td>Configuration</td><td>Complete</td></tr></table>",
+      "css": ".ds-table{width:100%;border:1px solid var(--surface-border);border-radius:8px;border-spacing:0;background:var(--surface);color:var(--text);font-size:0.75rem;text-align:left}.ds-table caption{padding:12px 16px;color:var(--text-secondary);text-align:left}.ds-table th,.ds-table td{padding:12px 16px;border-bottom:1px solid var(--surface-border)}.ds-table th{background:var(--surface-subtle)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Existing xCloud operations workbench",
+    "overview": "This records the built inspection feature, not a replacement product identity.",
+    "keyCharacteristics": [
+      "Compact operational tables with progressive evidence disclosure.",
+      "Existing page frame, controls, navigation and bilingual copy.",
+      "Textual execution and evidence states that remain readable independently of color."
+    ],
+    "rules": [],
+    "dos": [
+      "Do reuse shared tokens and the established shell.",
+      "Do keep state labels readable and expose secondary evidence on narrow screens.",
+      "Do distinguish stored historical evidence from the current source page."
+    ],
+    "donts": [
+      "Don't introduce local colors, fonts or an alternative page frame.",
+      "Don't imply that an unknown result passed, or that report refresh repeats collection."
+    ]
+  }
+}

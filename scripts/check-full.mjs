@@ -36,6 +36,7 @@ const REPOSITORY_GATES = [
   'scripts/test-frontend-mutation-contract.mjs',
   'scripts/test-frontend-operational-contract.mjs',
   'scripts/test-inventory-contract.mjs',
+  'scripts/test-inspections-contract.mjs',
   'scripts/test-runtime-discovery-contract.mjs',
   'scripts/test-api-ownership-invariants.mjs',
   'scripts/test-frontend-runtime-boundary.mjs',

@@ -189,3 +189,15 @@ own styles to CSS modules, `ocs.css` can be split in the same pass. That split
 must preserve the current class vocabulary during the migration and delete the
 global sheet only after every consumer has moved. It is not a prerequisite for
 the business console's functional acceptance.
+
+## Scheduled inspection workspace
+
+The inspection domain reuses OperationsPageFrame, the shared navigation, fields,
+status feedback, pagination and unsaved-draft guards. It reuses the existing
+Inventory resource picker rather than interpreting names as resource identities.
+Its fixed evidence and scope components live in features/inspections; presentation
+lives in styles/modules/inspections.module.css and consumes existing semantic
+tokens. The shared bounded-read hook accepts a data-dependent refresh interval so
+active run polling stops at a terminal state, preserving its existing cancellation
+and StrictMode ownership. Inspection alert links extend investigation return
+context only to the inspection run route; existing alert anchors are unchanged.
