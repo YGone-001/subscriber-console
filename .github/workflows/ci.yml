@@ -361,24 +361,30 @@ jobs:
           cd frontend && npm ci
 
       - name: Install Chromium browser dependencies
+        id: browser
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
       # Each suite reports its own outcome so a failure names the guarantee that
-      # broke, instead of hiding four suites behind one opaque step.
+      # broke, instead of hiding four suites behind one opaque step. Downstream
+      # suites still execute after the smoke fails, so one failure cannot hide
+      # the evidence the other benchmarks provide. The job stays failed.
       - name: Performance smoke and data-loading invariants
         working-directory: frontend
         run: node tests/performance-rendering-smoke.mjs
 
       - name: Bounded read cancellation and remount acceptance
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
         working-directory: frontend
         run: node tests/bounded-read-development-smoke.mjs
 
       - name: Subscribers render-commit benchmark
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
         working-directory: frontend
         run: node tests/subscribers-render-benchmark.mjs
 
       - name: Log Center streaming benchmark
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
         working-directory: frontend
         run: node tests/log-center-stream-benchmark.mjs
 

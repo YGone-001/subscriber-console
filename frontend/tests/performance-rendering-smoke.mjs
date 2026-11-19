@@ -9,7 +9,8 @@
  *   PERF-02: Metadata endpoints are deduplicated and cached across component lifecycles
  *   PERF-03: A superseded response cannot overwrite newer NF Health state
  *   PERF-04: Aborted/superseded reads emit no service-unreachable error and can be read again
- *   PERF-05: The real 30s NF Health polling lifecycle is driven by a deterministic timer fixture
+ *   PERF-05: The real 30s NF Health polling lifecycle is driven by a deterministic
+ *            timer fixture; rapid searches are gated by request/URL/draft barriers
  *   PERF-06: Local modal interaction causes no full-page reloads or spurious re-queries
  *   PERF-07: Bundle size and chunk count remain strictly bounded within baseline limits
  *   PERF-08: The Log Center keeps its real bounded view window
@@ -19,6 +20,9 @@
  * timer fixture captures the interval the page actually registers and fires it
  * on demand; it never waits wall-clock time to prove a 30s policy.
  *
+ * PERF_CPU_THROTTLE=N is a diagnostic-only CDP CPU emulation knob used to
+ * reproduce CI-class scheduling; the default run is not throttled.
+ *
  * Usage: node frontend/tests/performance-rendering-smoke.mjs
  */
 import { createServer } from 'node:http';
@@ -26,7 +30,6 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setTimeout as delay } from 'node:timers/promises';
 import { clearTimeout as clearNodeTimeout } from 'node:timers';
 
 import { chromium } from 'playwright';
@@ -244,18 +247,59 @@ async function main() {
       localStorage.setItem('xcloud_user', JSON.stringify(user));
 
       /* Request recorder: proves which reads started and which ones the read
-       * client cancelled, independently of what the server eventually writes. */
+       * client cancelled, independently of what the server eventually writes.
+       * Response settlement is recorded too, so a diagnostic can distinguish
+       * "never requested" from "requested then cancelled" from "fulfilled but
+       * not rendered" without logging any response body. */
       const recorder = { calls: [] };
       const realFetch = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-        const call = { url, start: Date.now(), aborted: false };
+        const call = {
+          url,
+          order: recorder.calls.length + 1,
+          start: Date.now(),
+          aborted: false,
+          settled: false,
+          status: null,
+          failure: null,
+        };
         recorder.calls.push(call);
         const signal = init && init.signal;
         if (signal) signal.addEventListener('abort', () => { call.aborted = true; }, { once: true });
-        return realFetch(input, init);
+        const result = realFetch(input, init);
+        result.then(
+          (response) => { call.settled = true; call.status = response.status; },
+          (error) => { call.settled = true; call.failure = (error && error.name) || 'error'; },
+        );
+        return result;
       };
+      recorder.reset = () => { recorder.calls.length = 0; };
       window.__perfFetch = recorder;
+
+      /* URL transition log: React Router writes through the History API, so
+       * every filter/cursor/query transition is recorded in order. */
+      const urlLog = [];
+      for (const method of ['pushState', 'replaceState']) {
+        const real = window.history[method].bind(window.history);
+        window.history[method] = (...args) => {
+          const result = real(...args);
+          urlLog.push({ method, at: Date.now(), search: window.location.search });
+          return result;
+        };
+      }
+      window.__perfUrlLog = urlLog;
+
+      /* Input log: records what the operator actually typed before each
+       * submission, independent of what React later renders. */
+      const inputLog = [];
+      document.addEventListener('input', (event) => {
+        const target = event.target;
+        if (target && (target.type === 'search' || target.type === 'text')) {
+          inputLog.push({ at: Date.now(), value: target.value });
+        }
+      }, true);
+      window.__perfInputLog = inputLog;
 
       /* Deterministic timer fixture. Long-lived intervals (the 30s NF Health
        * poll and slower) are captured instead of scheduled; they fire only when
@@ -320,6 +364,16 @@ async function main() {
     const page = await context.newPage();
     const pageErrors = [];
     const consoleErrors = [];
+
+    /* Diagnostic-only CPU emulation. CI runners are slower than a developer
+     * workstation; throttling lets the rapid-search race be reproduced and
+     * diagnosed deterministically without weakening the default run. */
+    const cpuThrottle = Number.parseInt(process.env.PERF_CPU_THROTTLE || '1', 10);
+    if (Number.isFinite(cpuThrottle) && cpuThrottle > 1) {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuThrottle });
+      console.log(`[acceptance:performance] CPU throttling enabled at rate ${cpuThrottle} (diagnostic mode)`);
+    }
 
     page.on('pageerror', (err) => pageErrors.push(err.message));
     page.on('console', (msg) => {
@@ -555,6 +609,48 @@ async function main() {
     const bodyHasUnreachable = async () => (await page.evaluate(() => document.body.innerText)).includes('The service could not be reached.');
     const visibleTarget = (targetId) => page.locator(`[data-nf-health-card="${targetId}"]`).first();
 
+    async function collectRapidSearchDiagnostics(steps) {
+      const calls = (await targetCalls())
+        .slice(-20)
+        .map((call) => ({
+          url: call.url.includes('?') ? call.url.slice(call.url.indexOf('?')) : call.url,
+          aborted: call.aborted,
+        }));
+      const cards = await page.evaluate(() => Array.from(document.querySelectorAll('[data-nf-health-card]'))
+        .map((node) => node.getAttribute('data-nf-health-card'))
+        .slice(0, 20));
+      const timers = await timerList();
+      const snapshot = await page.evaluate(() => {
+        const input = document.querySelector('form[role="search"] input, input[type="search"]');
+        const text = document.body.innerText;
+        return {
+          inputValue: input && 'value' in input ? input.value : null,
+          unreachable: text.includes('The service could not be reached.'),
+          loading: /loading|loading…/i.test(text),
+          urlLog: window.__perfUrlLog.slice(-20),
+          inputLog: window.__perfInputLog.slice(-20),
+        };
+      });
+      const diagnostics = {
+        currentUrl: page.url(),
+        query: new URL(page.url()).search,
+        inputValue: snapshot.inputValue,
+        visibleCards: cards,
+        timers,
+        unreachable: snapshot.unreachable,
+        loading: snapshot.loading,
+        recentTargetCalls: calls,
+        urlLog: snapshot.urlLog,
+        inputLog: snapshot.inputLog,
+        steps,
+      };
+      console.error(`[PERF-05-D-DIAG] ${JSON.stringify(diagnostics)}`);
+      if (process.env.GITHUB_ACTIONS) {
+        console.log(`::error title=PERF-05-D-DIAG::${JSON.stringify(diagnostics).replace(/\s+/g, ' ')}`);
+      }
+      return diagnostics;
+    }
+
     /* ------------------------------------------------------------------ */
     /* Test 1: Zero duplicate GET requests on stable /subscribers load    */
     /* ------------------------------------------------------------------ */
@@ -730,7 +826,6 @@ async function main() {
     });
     const beforeD2 = (await targetCalls()).length;
     await fireTimers();
-    await delay(80);
     check('PERF-05-B', (await targetCalls()).length === beforeD2, 'a hidden document emits no polling request even when the 30s timer fires');
 
     const beforeD3 = (await targetCalls()).length;
@@ -744,17 +839,81 @@ async function main() {
     await waitUntil(async () => (await targetCalls()).length === afterD3 + 1, 'one poll after visibility restore');
     check('PERF-05-C', (await targetCalls()).length === beforeD3 + 2, 'restoring visibility revalidates once, not as a burst of duplicate requests');
 
+    /* Task C: D4 starts from an explicitly reset, canonical NF Health state.
+     * Earlier scenarios own request holds, abort suppression and visibility
+     * overrides; none may leak into the rapid-search scenario. */
+    holds.clear();
+    defaultTargetsVariant = 'normal';
+    await page.evaluate(() => {
+      window.__perfSuppressAbort = false;
+      window.__perfHidden = false;
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.goto(`${server.origin}/nf-health`, { waitUntil: 'networkidle' });
+    await visibleTarget('target-1').waitFor({ state: 'visible', timeout: 15_000 });
+    await waitUntil(async () => {
+      const current = await timerList();
+      return current.length === 1 && current[0].delay === 30000;
+    }, 'canonical single 30s poll before rapid search');
+    const d4StartTimers = await timerList();
+    check('PERF-05-D0', d4StartTimers.length === 1 && d4StartTimers[0].delay === 30000, 'rapid search starts from exactly one canonical 30s polling interval');
+
     const d4Search = page.locator('form[role="search"] input, input[type="search"]').first();
-    for (const term of ['d4-a', 'd4-b', 'd4-c', 'd4-final']) {
+    const d4Baseline = (await targetCalls()).length;
+    const d4Steps = [];
+    const d4Queries = ['d4-a', 'd4-b', 'd4-c', 'd4-final'];
+
+    /* The operator types and submits all four terms without waiting for a
+     * response. A slower browser can commit the previous URL transition after
+     * the next term is already typed; that echo must never replace the draft. */
+    for (const term of d4Queries) {
       await d4Search.fill(term);
       await d4Search.press('Enter');
+      d4Steps.push({ intended: term });
     }
-    await visibleTarget('target-d4-final').waitFor({ state: 'visible', timeout: 6000 });
+
+    /* Deterministic request barrier: the final intended term must provably
+     * reach the fetch boundary. A test that never proves this must fail. */
+    try {
+      await waitUntil(async () => {
+        const calls = (await targetCalls()).slice(d4Baseline);
+        return calls.some((call) => new URL(call.url, server.origin).searchParams.get('q') === 'd4-final');
+      }, 'rapid-search request for d4-final');
+    } catch (err) {
+      await collectRapidSearchDiagnostics(d4Steps);
+      throw err;
+    }
+
+    const d4FinalRequests = (await targetCalls()).slice(d4Baseline);
+    check(
+      'PERF-05-D1',
+      d4FinalRequests.some((call) => new URL(call.url, server.origin).searchParams.get('q') === 'd4-final'),
+      'the final rapid-search query reaches the request boundary',
+    );
+    check('PERF-05-D2', await d4Search.inputValue() === 'd4-final', 'the final search draft is not replaced by a late URL echo');
+
+    await visibleTarget('target-d4-final').waitFor({ state: 'visible', timeout: 15_000 });
+    check('PERF-05-D3', new URL(page.url()).searchParams.get('q') === 'd4-final', 'the URL filter is the final submitted query');
+    check(
+      'PERF-05-D4',
+      (await visibleTarget('target-d4-a').count()) === 0
+        && (await visibleTarget('target-d4-b').count()) === 0
+        && (await visibleTarget('target-d4-c').count()) === 0,
+      'superseded rapid-search results cannot replace the final dataset',
+    );
+
     const d4Timers = await timerList();
-    check('PERF-05-D1', d4Timers.length === 1 && d4Timers[0].delay === 30000, 'rapid search changes leave exactly one polling interval registered');
+    check('PERF-05-D5', d4Timers.length === 1 && d4Timers[0].delay === 30000, 'rapid search changes leave exactly one polling interval registered');
     const beforeD4 = (await targetCalls()).length;
     await fireTimers();
     await waitUntil(async () => (await targetCalls()).length === beforeD4 + 1, 'single poll after rapid search');
+    const d4CallsAfterPoll = await targetCalls();
+    const d4PollCall = d4CallsAfterPoll[d4CallsAfterPoll.length - 1];
+    check(
+      'PERF-05-D6',
+      new URL(d4PollCall.url, server.origin).searchParams.get('q') === 'd4-final',
+      'a poll uses the latest committed query instead of restoring an obsolete filter',
+    );
     check('PERF-05-D', true, 'one polling interval remains active across rapid search changes');
 
     await page.evaluate(() => {
@@ -765,7 +924,6 @@ async function main() {
     const d5Timers = await timerList();
     const beforeD5 = (await targetCalls()).length;
     await fireTimers();
-    await delay(80);
     check('PERF-05-E1', d5Timers.length === 0, 'route unmount clears the NF Health polling interval');
     check('PERF-05-E', (await targetCalls()).length === beforeD5, 'no NF Health polling request continues after route unmount');
 
