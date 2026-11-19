@@ -7,14 +7,14 @@ in an already running server.
 
 ## Prepare
 
-1. Review `deploy/examples/config-snapshots.json`. It is a current-environment
-   example containing 23 EPC/5GC sources and 38 IMS sources, with fixed intervals
-   disabled. EPC/5GC currently uses `/usr/local/src/xcloud-5gs/install/etc`;
-   IMS uses `/etc/xCloud/gcc/<NE>`, with explicitly listed files under the actual
-   `icscf`, `pcscf`, `scscf` and `smsc` directories. Adjust these roots and each
-   source path for the target installation. The paths are not product defaults.
-   The example excludes OCS, TLS private keys/certificates, scripts, schemas,
-   database directories and Git data.
+1. Review `deploy/examples/config-snapshots.json`. It contains 54 explicitly
+   declared package-layout candidates under `/etc/xCloud`, with fixed collection
+   intervals disabled. EPC/5GC package paths use `gnc/gdm/gdg/gpc/gsp`; IMS CSCF
+   and SMSC paths use `gcc/<NE>`. The separately selected older source-tree
+   layout is `deploy/examples/config-snapshots-source-tree.json`; it is never
+   an automatic fallback. Verify each path against the actual deployment before
+   activating a local declaration. The examples are environment inputs, not
+   product defaults, and exclude private keys, certificates and database files.
 2. Verify paths and read permission using the server's actual nonprivileged user.
    Do not grant root or broaden permissions merely to fill a dashboard.
 3. Preserve the collector/source UUIDs across restarts of this controller; use new

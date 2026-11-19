@@ -22,9 +22,35 @@ verdict and documenter handoffs hit the session usage limit; the primary agent
 completed the bounded verdict/documentation fallback rather than claiming a
 second independent approval.
 
-Runtime inspection found existing root-owned Go/Vite processes that agent-dev
-could not inspect through the ownership tooling. Source validation does not
-assert live activation or permission to stop unverified listeners. Activation
-requires the environment owner's managed restart. The explicit inspection-only
-index initializer completed against the repository environment's loopback MongoDB
-and xcloud_ops database; it created no plans and enabled no jobs.
+The environment owner subsequently handed managed Go/Vite processes to agent-dev.
+Ownership checks, managed stop/start and full-stack access diagnostics passed.
+The inspection-only initializer created the module indexes without enabling jobs.
+
+Live acceptance on 2026-11-19 found missing health evidence indexes on histories
+of roughly 324,000 records each. The focused index-only repair changed the latest
+sample/run query plans from collection scans and blocking sorts to DISTINCT_SCAN;
+observed query times fell from about 1.8 seconds / timeout to 12 / 3 milliseconds.
+This observation is not a latency guarantee. Existing evidence was preserved.
+
+The reviewed package paths under /etc/xCloud supply 54 readable configuration
+sources: 46 explicitly bound sources cover the 21 existing Inventory resources;
+eight remain unassociated rather than creating inferred resources. All 54 passed
+read-only publication, and 46 bound sources reached in_sync against the accepted
+deployment reference. The user selected hourly read-only collection for those 46;
+the eight unassociated sources remain manual. Private declarations and the
+fingerprint key remain deployment state outside Git.
+
+The full-scope manual report read every selected source completely and recorded
+134 passed checks, nine health findings and 21 unmeasured-layer gaps. Report
+refresh/export did not change after a new source observation. A separate approved
+file test verified all 54 files through isolated MongoDB with source_writes=0.
+These results do not establish that a running NF loaded every observed file.
+
+Live restart acceptance preserved the enabled interval plan, its next execution
+and a fixed exported report. A paused daily acceptance plan remained without runs
+after its real due time and was archived. The separate 15-minute interval plan
+then produced a completed scheduled report at its real due time and was paused;
+no synthetic clock or manual trigger substituted for that occurrence. Its IMS
+scope retained 56 passed checks and four unmeasured-layer gaps. Original operator
+plan definitions were preserved. Native browser zoom and keyboard acceptance
+were handed to the user at their request; they are not reported as automated passes.
