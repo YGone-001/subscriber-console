@@ -129,8 +129,15 @@ export function NfHealthPage() {
   const filters = useMemo(() => readHealthFilters(url.filters), [url.filters]);
   const [searchInput, setSearchInput] = useState(filters.q);
 
-  // Keep the visible query in step with the URL (back/forward, shared link).
+  /* The last term this page itself committed to the URL. A self-initiated
+   * navigation can commit after the operator has already typed the next term;
+   * that late echo must not replace the newer draft. External URL changes
+   * (back/forward, shared link, clear filters) still flow into the input. */
+  const committedSearchRef = useRef(filters.q);
+
   useEffect(() => {
+    if (filters.q === committedSearchRef.current) return;
+    committedSearchRef.current = filters.q;
     setSearchInput(filters.q);
   }, [filters.q]);
 
@@ -319,6 +326,7 @@ export function NfHealthPage() {
   const handleSearchSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const next = searchInput.trim();
+    committedSearchRef.current = next;
     if (next === filters.q) {
       void loadAll(url.cursor);
       return;
@@ -327,6 +335,7 @@ export function NfHealthPage() {
   };
 
   const handleClearFilters = () => {
+    committedSearchRef.current = '';
     setSearchInput('');
     url.setFilters({ q: null, enabled: null, domain: null, state: null, layers: null, sort: null });
   };
