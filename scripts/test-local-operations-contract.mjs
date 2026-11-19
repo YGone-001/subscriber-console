@@ -591,7 +591,11 @@ async function testPartialStartupRollback() {
   evidence.goOrphaned = goOrphaned;
   evidence.frontendOrphaned = frontendOrphaned;
 
-  const unmanaged = await countUnmanagedLiveProcesses({ repoRoot: ROOT, env });
+  // This helper inspects canonical ports, whereas this fixture uses ephemeral ports.
+  // Resolve the real canonical registry so an already running managed stack is not
+  // mistaken for an orphan in the fixture's deliberately isolated registry.
+  // The exact fixture children and their records are independently checked above.
+  const unmanaged = await countUnmanagedLiveProcesses({ repoRoot: ROOT, env: process.env });
   evidence.unmanagedLiveProcesses = unmanaged.length;
   check('O7-no-unmanaged-live-process', unmanaged.length === 0, `count=${unmanaged.length}`);
 
