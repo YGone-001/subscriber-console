@@ -21,11 +21,11 @@ export type InvestigationList = {items: RecordSummary[]; nextCursor: string | nu
 export type RecordDraft = Pick<InvestigationRecord,'title'|'status'|'notes'|'conclusion'|'knowledgeIds'>;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export function investigationEntry(alertId: string, alertList = '/nf-alerts',anchorKind='nf_alert'): string {
-  const safe = resolveReturnTo(`?returnTo=${encodeURIComponent(alertList)}`, '/nf-alerts', ['/nf-alerts']);
+  const safe = resolveReturnTo(`?returnTo=${encodeURIComponent(alertList)}`, '/nf-alerts', ['/nf-alerts', '/inspections/runs']);
   return `/investigations?${new URLSearchParams({view:'context',...(anchorKind==='config_drift'?{anchorKind,anchorId:alertId}:{alertId}),alertReturnTo:safe})}`;
 }
 export function investigationReturn(search: string): string { return resolveReturnTo(search, '/investigations', ['/investigations']); }
-export function alertReturn(search: string): string { const params = new URLSearchParams(search); return resolveReturnTo(`?returnTo=${encodeURIComponent(params.get('alertReturnTo') || '')}`, '/nf-alerts', ['/nf-alerts']); }
+export function alertReturn(search: string): string { const params = new URLSearchParams(search); return resolveReturnTo(`?returnTo=${encodeURIComponent(params.get('alertReturnTo') || '')}`, '/nf-alerts', ['/nf-alerts', '/inspections/runs']); }
 export function recordLink(id: string, current: string): string { return withReturnTo(`/investigations/${encodeURIComponent(id)}`, current); }
 export function contextPath(alertId: string, from = '', to = '', investigationId = '',anchorKind='nf_alert',anchorId=''): string | null {
   if (!uuid.test(anchorKind==='config_drift'?anchorId:alertId)) return null;

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
+import { APP_ROUTES } from '../src/lib/navigation';
 import { COMPATIBILITY_REDIRECTS } from '../src/router/redirects';
 
 type RouteEntry = {
@@ -11,11 +12,12 @@ type RouteEntry = {
 
 const routes = JSON.parse(readFileSync(resolve(import.meta.dirname, '../route-contract.json'), 'utf8')) as RouteEntry[];
 
-test('route contract inventory contains all 55 canonical routes', () => {
-  assert.equal(routes.length, 55);
+test('route contract inventory contains the declared canonical routes', () => {
+  assert.equal(routes.length, new Set(APP_ROUTES.map(route => route.route)).size);
   const routePaths = routes.map((r) => r.route);
   assert.ok(routePaths.includes('/'));
   assert.ok(routePaths.includes('/login'));
+  for (const route of ['/inspections', '/inspections/new', '/inspections/plans/:planId', '/inspections/runs/:runId']) assert.ok(routePaths.includes(route));
   assert.ok(routePaths.includes('/agents'));
   assert.ok(routePaths.includes('/agents/:agentId'));
   assert.ok(routePaths.includes('/inventory'));

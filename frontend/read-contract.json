@@ -514,5 +514,43 @@
       "GET /api/investigations/context",
       "GET /api/knowledge/entries"
     ]
+  },
+  {
+    "route": "/inspections",
+    "mode": "read",
+    "source": "frontend/src/features/inspections/InspectionsPages.tsx",
+    "readEndpoints": [
+      "GET /api/inspections/meta",
+      "GET /api/inspection-plans",
+      "GET /api/inspection-runs"
+    ]
+  },
+  {
+    "route": "/inspections/new",
+    "mode": "read",
+    "source": "frontend/src/features/inspections/InspectionsPages.tsx",
+    "readEndpoints": [
+      "GET /api/inventory/resources"
+    ]
+  },
+  {
+    "route": "/inspections/plans/:planId",
+    "mode": "read",
+    "source": "frontend/src/features/inspections/InspectionsPages.tsx",
+    "readEndpoints": [
+      "GET /api/inspection-plans/{planId}",
+      "GET /api/inspection-runs",
+      "GET /api/inventory/resources"
+    ]
+  },
+  {
+    "route": "/inspections/runs/:runId",
+    "mode": "read",
+    "source": "frontend/src/features/inspections/InspectionsPages.tsx",
+    "readEndpoints": [
+      "GET /api/inspection-runs/{runId}",
+      "GET /api/inspection-runs/{runId}/items",
+      "GET /api/inspection-runs/{runId}/export"
+    ]
   }
 ]

@@ -23,6 +23,7 @@ const TABS = [
   { to: '/nf-health', labelKey: 'nav_nf_health', icon: HeartPulse },
   { to: '/nf-alerts', labelKey: 'nav_nf_alerts', icon: BellRing },
   { to: '/investigations', labelKey: 'inv_title', icon: SearchCheck },
+  { to: '/inspections', labelKey: 'inspection_title', icon: SearchCheck },
   { to: '/ue-info', labelKey: 'nav_ue_info', icon: Users },
 ];
 

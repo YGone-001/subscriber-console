@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/inspections/meta",
+      "permission": "core.read",
+      "freshActor": false,
+      "semanticRead": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inspection-plans",
+      "permission": "core.read",
+      "freshActor": false,
+      "semanticRead": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/inspection-plans/preview",
+      "permission": "core.configure",
+      "freshActor": false,
+      "semanticRead": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/inspection-plans",
+      "permission": "core.configure",
+      "freshActor": true,
+      "semanticRead": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/inspection-plans/{planId}",
+      "permission": "core.read",
+      "freshActor": false,
+      "semanticRead": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/inspection-plans/{planId}",
+      "permission": "core.configure",
+      "freshActor": true,
+      "semanticRead": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/inspection-plans/{planId}/runs",
+      "permission": "core.configure",
+      "freshActor": true,
+      "semanticRead": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/inspection-runs",
+      "permission": "core.read",
+      "freshActor": false,
+      "semanticRead": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inspection-runs/{runId}",
+      "permission": "core.read",
+      "freshActor": false,
+      "semanticRead": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inspection-runs/{runId}/items",
+      "permission": "core.read",
+      "freshActor": false,
+      "semanticRead": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inspection-runs/{runId}/export",
+      "permission": "core.read",
+      "freshActor": false,
+      "semanticRead": true
+    }
+  ],
+  "spaRoutes": [
+    "/inspections",
+    "/inspections/new",
+    "/inspections/plans/:planId",
+    "/inspections/runs/:runId"
+  ],
+  "sourceCollectionWrites": false,
+  "domainWriteCollections": [
+    "xcloud_ops.app_inspection_plans",
+    "xcloud_ops.app_inspection_runs"
+  ],
+  "collectionMode": "existing_evidence_only",
+  "rawConfigurationStored": false,
+  "previewBody": [
+    "name",
+    "description",
+    "scope",
+    "checks",
+    "configMaxAgeSeconds",
+    "schedule"
+  ],
+  "createBody": [
+    "name",
+    "description",
+    "scope",
+    "checks",
+    "configMaxAgeSeconds",
+    "schedule",
+    "requestId"
+  ],
+  "updateBody": [
+    "name",
+    "description",
+    "scope",
+    "checks",
+    "configMaxAgeSeconds",
+    "schedule",
+    "expectedRevision",
+    "enabled",
+    "archived"
+  ],
+  "runBody": [
+    "expectedRevision",
+    "requestId"
+  ],
+  "maximumRunBytes": 2097152,
+  "maximumItems": 2000,
+  "maximumRetainedRuns": 512,
+  "retentionDays": 90,
+  "backgroundAuthorizerRevalidation": true,
+  "notificationsAdded": false
+}

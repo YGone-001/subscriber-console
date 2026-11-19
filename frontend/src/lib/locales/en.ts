@@ -3,6 +3,7 @@ import { evidenceEn } from './operations-evidence';
 import { groupsEn } from './site-network';
 import { imsEn } from './ims-registration';
 import { investigationsEn } from './investigations';
+import { inspectionsEn } from './inspections';
 
 export const en: Record<string, string> = {
     ...driftEn,
@@ -10,6 +11,7 @@ export const en: Record<string, string> = {
     ...groupsEn,
     ...imsEn,
     ...investigationsEn,
+    ...inspectionsEn,
     nav_agents: "Agent management",
     agents_title: "Agent management",
     agents_description: "One controller, multiple read-only collectors. Track node connectivity and the source of each observation.",

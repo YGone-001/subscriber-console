@@ -62,7 +62,7 @@ function shellRoute(): RouteObject {
 }
 
 test('every canonical route pattern resolves to its own route entry', () => {
-  assert.equal(contract.length, 55, 'the canonical route inventory is 55 patterns');
+  assert.equal(contract.length, new Set(APP_ROUTES.map(route => route.route)).size, 'the route contract preserves every declared pattern');
 
   for (const entry of contract) {
     const url = concretePath(entry.route);

@@ -248,5 +248,25 @@
     "dynamicParameters": [
       "investigationId"
     ]
+  },
+  {
+    "route": "/inspections",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/inspections/new",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/inspections/plans/:planId",
+    "dynamicParameters": [
+      "planId"
+    ]
+  },
+  {
+    "route": "/inspections/runs/:runId",
+    "dynamicParameters": [
+      "runId"
+    ]
   }
 ]

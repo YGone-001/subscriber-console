@@ -15,6 +15,10 @@ export type NavigationRoute = {
 };
 
 export const APP_ROUTES: NavigationRoute[] = [
+  { route: '/inspections', targetRoute: '/inspections', dynamicParameters: [], labelKey: 'inspection_title', icon: SearchCheck, group: 'network', visible: true },
+  { route: '/inspections/new', targetRoute: '/inspections/new', dynamicParameters: [], labelKey: 'inspection_create', icon: SearchCheck },
+  { route: '/inspections/plans/:planId', targetRoute: '/inspections/plans/:planId', dynamicParameters: ['planId'], labelKey: 'inspection_plan_detail', icon: SearchCheck },
+  { route: '/inspections/runs/:runId', targetRoute: '/inspections/runs/:runId', dynamicParameters: ['runId'], labelKey: 'inspection_run_detail', icon: SearchCheck },
   { route: '/', targetRoute: '/', dynamicParameters: [], labelKey: 'nav_dashboard', icon: LayoutDashboard, visible: true },
   { route: '/agents', targetRoute: '/agents', dynamicParameters: [], labelKey: 'nav_agents', icon: Cpu, group: 'platform', visible: true },
   { route: '/config-snapshots', targetRoute: '/config-snapshots', dynamicParameters: [], labelKey: 'nav_config_snapshots', icon: FileText, group: 'platform', visible: true },

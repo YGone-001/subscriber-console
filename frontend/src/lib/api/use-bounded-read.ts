@@ -25,7 +25,7 @@ function abortFallback<T>(cache: object, key: string): T | undefined {
   return cached?.data;
 }
 
-export function useBoundedRead<T>(path: string | null, refreshInterval = 0) {
+export function useBoundedRead<T>(path: string | null, refreshInterval: number | ((data: T | undefined) => number) = 0) {
   const { cache } = useSWRConfig();
   const reads = readsFor(cache);
   const consumer = useRef(Symbol('bounded-read')).current;

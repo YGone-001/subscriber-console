@@ -76,7 +76,7 @@ test('sidebar groups expose the restored navigation hierarchy for an administrat
   assert.ok(network);
   assert.deepEqual(
     network.children.map((child) => child.targetRoute),
-    ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/investigations', '/ue-info'],
+    ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/investigations', '/ue-info', '/inspections'],
   );
 
   const platform = groups.find((group) => group.key === 'nav_platform');
