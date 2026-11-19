@@ -21,7 +21,7 @@
  * locally excluded from Git tracking).
  */
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -537,6 +537,9 @@ async function run() {
     report.result = allInvariants && pageErrors.length === 0 ? 'PASS' : 'FAIL';
 
     const markdown = renderMarkdown(report);
+    /* reports/ is intentionally excluded from Git; a clean CI checkout has no
+     * such directory, so the benchmark owns its creation. */
+    await mkdir(path.dirname(jsonReportPath), { recursive: true });
     await writeFile(jsonReportPath, JSON.stringify(report, null, 2));
     await writeFile(markdownReportPath, markdown);
     console.log(markdown);
@@ -555,6 +558,7 @@ async function run() {
     report.error = String(error);
     console.error('[log-benchmark] Fatal error:', error);
     if (process.env.GITHUB_ACTIONS) console.log(`::error title=LOG-BENCH-FATAL::${String(error).replace(/\s+/g, ' ')}`);
+    await mkdir(path.dirname(jsonReportPath), { recursive: true }).catch(() => undefined);
     await writeFile(jsonReportPath, JSON.stringify(report, null, 2)).catch(() => undefined);
     process.exitCode = 1;
   } finally {

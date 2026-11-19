@@ -402,6 +402,9 @@ async function main() {
     report.failures = failures;
     report.result = failures.length === 0 ? 'PASS' : 'FAIL';
 
+    /* reports/ is intentionally excluded from Git; a clean CI checkout has no
+     * such directory, so the benchmark owns its creation. */
+    await mkdir(path.dirname(jsonReportPath), { recursive: true });
     await writeFile(jsonReportPath, JSON.stringify(report, null, 2));
     const markdown = renderMarkdown(report);
     await writeFile(markdownReportPath, markdown);
