@@ -42,6 +42,7 @@ const REPOSITORY_GATES = [
   'scripts/test-frontend-runtime-boundary.mjs',
   'scripts/test-frontend-runtime-dependencies.mjs',
   'scripts/test-mongo-index-migration.mjs',
+  'scripts/test-nf-health-read-indexes.mjs',
   'scripts/test-ui-restoration-contract.mjs',
   'scripts/test-local-operations-contract.mjs',
   'scripts/test-current-architecture-docs.mjs',

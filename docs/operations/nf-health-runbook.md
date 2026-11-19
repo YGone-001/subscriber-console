@@ -182,3 +182,30 @@ Telemetry samples expire via MongoDB TTL (`expiresAt` + `nf_health_samples_ttl`)
 Default retention is 7 days, maximum 30 days. Runs and targets are retained so
 operators can explain collection failures and configuration changes. Audit
 records are never purged by NF Health.
+
+
+## Latest-evidence query indexes
+
+The bounded latest-sample and latest-run aggregations sort by target identity,
+measurement/attempt time and a descending document-ID tie-break. On a large
+history, the default ID index alone forces collection scans and a blocking sort.
+The required compound indexes are defined once in
+scripts/lib/nf-health-read-indexes.mjs and shared by the full initializer and
+the focused repair command.
+
+Run from the repository root:
+
+```sh
+node scripts/migrate-nf-health-read-indexes.mjs
+node scripts/migrate-nf-health-read-indexes.mjs --apply
+```
+
+The first command makes no database connection. Apply creates only two
+non-unique read indexes in the configured Ops database; it does not provision
+accounts, rewrite evidence, drop indexes, add TTL or change NFs. Existing indexes
+remain. The full bootstrap has other maintenance effects and is not a substitute
+for this focused repair.
+
+After repair, inspect the latest-evidence query plan and run a fresh inspection.
+A successful read can still contain unhealthy or unmeasured layers. Do not relax
+timeouts or convert those states into passes to mask an index problem.

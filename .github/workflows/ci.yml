@@ -99,6 +99,8 @@ jobs:
 
       - name: Mongo index migration contract
         run: node scripts/test-mongo-index-migration.mjs
+      - name: NF Health evidence read index contract
+        run: node scripts/test-nf-health-read-indexes.mjs
 
   ui-restoration:
     name: Frontend UI restoration contract

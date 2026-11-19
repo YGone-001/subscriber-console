@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { loadEnv } from './lib/load-env.mjs';
 import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
 import { BUSINESS_INDEX_SPECS } from './lib/mongo-business-indexes.mjs';
+import { NF_HEALTH_READ_INDEX_SPECS } from './lib/nf-health-read-indexes.mjs';
 
 loadEnv(process.cwd());
 
@@ -599,6 +600,11 @@ async function ensureIndexes() {
       name: 'nf_health_samples_ttl',
     },
   ])).map((name) => ({ database: appDbName, collection: 'app_nf_health_samples', name })));
+
+  for (const spec of NF_HEALTH_READ_INDEX_SPECS) {
+    createdIndexes.push(...(await appDb.collection(spec.collection).createIndexes(spec.indexes))
+      .map((name) => ({ database: appDbName, collection: spec.collection, name })));
+  }
 
   // ── xcloud_ops.app_nf_health_bindings ──
   // Bootstrap-installed local process bindings. `_id` is the canonical
