@@ -19,7 +19,7 @@
  * model, the summary strip, the toolbar, the table and the modals — is unchanged.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ArrowUpDown, Layers } from 'lucide-react';
 import BatchCreateModal from '../../components/BatchCreateModal';
 import SubscriberBatchUpdateModal from '../../components/SubscriberBatchUpdateModal';
@@ -44,6 +44,17 @@ import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { buildProfileApplyPreviewRequest, buildProfileApplyRequest } from './mutation-contract';
 import { ProfileApplyPreviewNotice } from '../profiles/components/ProfileApplyPreviewNotice';
 import type { ProfileApplyPreview } from '../profiles/profile-apply-preview';
+import {
+  DEFAULT_SUBSCRIBER_FILTERS,
+  SUBSCRIBER_PAGE_SIZES,
+  buildSubscriberListApiUrl,
+  clampSubscriberPage,
+  isValidSubscriberSearchTerm,
+  subscriberSelectionScopeKey,
+  type SubscriberSortField,
+} from './subscriber-list-query';
+import { useSubscriberListQuery } from './use-subscriber-list-query';
+import { useSubscriberSelection } from './use-subscriber-selection';
 import type {
   FeedbackState,
   PendingDelete,
@@ -54,24 +65,6 @@ import type {
   SubscriberSummaryKey,
   SubscribersResponse,
 } from './types';
-
-const SUBSCRIBER_PAGE_SIZES = [10, 20, 50] as const;
-
-/* The service addresses subscribers by a numeric IMSI prefix or a full MSISDN
- * (at most 15 digits). A term that can never match is not sent at all: the list
- * would answer with an empty page and every counter would read zero, which
- * describes an empty platform rather than an unanswered question. */
-const SEARCH_TERM_PATTERN = /^\d{1,15}$/;
-
-const isValidSearchTerm = (term: string) => term === '' || SEARCH_TERM_PATTERN.test(term);
-
-const DEFAULT_FILTERS: SubscriberFilterState = {
-  access: 'all',
-  contract: 'all',
-  provisioning: 'all',
-  planId: '',
-  balance: 'all',
-};
 
 function formatFullDate(dStr: string) {
   if (!dStr) return '';
@@ -86,7 +79,6 @@ export function SubscribersPage() {
   const canEditSubscribers = hasPermission(user, 'subscribers.write');
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedImsis, setSelectedImsis] = useState<string[]>([]);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
@@ -96,11 +88,26 @@ export function SubscribersPage() {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [isDeletingSingle, setIsDeletingSingle] = useState<string | null>(null);
 
-  const [sortField, setSortField] = useState<string>('imsi');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [filters, setFilters] = useState<SubscriberFilterState>(DEFAULT_FILTERS);
+  /* Persistent list state (page, size, sort, filters, profile drill-down) is
+   * owned by the URL. Search is intentionally memory-only: a search term can be
+   * an IMSI, so it is never written into browser history or shared links. */
+  const {
+    query: listQuery,
+    setPage: setQueryPage,
+    setSize: setQuerySize,
+    setSort: setQuerySort,
+    setFilters: setQueryFilters,
+    clearProfile,
+  } = useSubscriberListQuery();
+  const {
+    filters,
+    page: currentPage,
+    size: pageSize,
+    sort: sortField,
+    order: sortDirection,
+    profile: profileDrillDown,
+  } = listQuery;
+
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
 
   const [isBatchOpen, setIsBatchOpen] = useState(false);
@@ -113,11 +120,8 @@ export function SubscribersPage() {
   const [applyPreviewError, setApplyPreviewError] = useState('');
   const applyPreviewToken = useRef(0);
 
-  /* Template drill-down arrives as ?profile=<name> from the template detail page. */
-  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const listLocation = currentListLocation(location.pathname, location.search);
-  const profileDrillDown = searchParams.get('profile') ?? '';
 
   const timeAgo = useCallback((dateStr: string) => {
     if (!dateStr) return t('unknown');
@@ -142,29 +146,40 @@ export function SubscribersPage() {
    * effect: the table keeps the rows it was showing and the toolbar says why. */
   const lastValidSearchRef = useRef('');
   useEffect(() => {
-    if (isValidSearchTerm(debouncedSearchQuery)) lastValidSearchRef.current = debouncedSearchQuery;
+    if (isValidSubscriberSearchTerm(debouncedSearchQuery)) lastValidSearchRef.current = debouncedSearchQuery;
   }, [debouncedSearchQuery]);
-  const searchTermInvalid = !isValidSearchTerm(searchQuery.trim());
-  const subscriberQuery = isValidSearchTerm(debouncedSearchQuery)
+  const searchTermInvalid = !isValidSubscriberSearchTerm(searchQuery.trim());
+  const subscriberQuery = isValidSubscriberSearchTerm(debouncedSearchQuery)
     ? debouncedSearchQuery
     : lastValidSearchRef.current;
-  const filterParams = new URLSearchParams({
-    detail: 'true',
-    page: String(currentPage),
-    limit: String(pageSize),
-    searchBy: 'auto',
-    sortField,
-    sortDirection,
-  });
-  if (subscriberQuery) filterParams.set('q', subscriberQuery);
-  if (filters.access !== 'all') filterParams.set('status', filters.access);
-  if (filters.contract !== 'all') filterParams.set('contractStatus', filters.contract);
-  if (filters.provisioning !== 'all') filterParams.set('provisioning', filters.provisioning);
-  if (filters.planId) filterParams.set('planId', filters.planId);
-  if (filters.balance !== 'all') filterParams.set('balanceStatus', filters.balance);
-  if (profileDrillDown) filterParams.set('profile', profileDrillDown);
-  const subscribersUrl = `/api/subscribers?${filterParams.toString()}`;
-  const { data: subscribersData, isLoading, error: subscribersError, mutate: mutateSubscribers } = useRead<SubscribersResponse>(subscribersUrl);
+
+  const selectionScope = useMemo(
+    () => subscriberSelectionScopeKey(listQuery, searchQuery),
+    [listQuery, searchQuery],
+  );
+  const { selectedImsis, setSelectedImsis } = useSubscriberSelection(selectionScope);
+  const selectionScopeRef = useRef(selectionScope);
+  selectionScopeRef.current = selectionScope;
+  const listStaleRef = useRef(false);
+
+  const subscribersUrl = buildSubscriberListApiUrl(listQuery, subscriberQuery);
+  const { data: subscribersData, isLoading, error: subscribersError, isValidating, mutate: mutateSubscribers } = useRead<SubscribersResponse>(subscribersUrl);
+
+  /* Query-to-data identity: `keepPreviousData` may display the previous page
+   * while a new key loads. Only a successful settle of the active URL confirms
+   * the rows; until then they are explicitly stale and cannot authorize
+   * selection or destructive actions. */
+  const [confirmedListUrl, setConfirmedListUrl] = useState(subscribersUrl);
+  useEffect(() => {
+    if (isValidating || subscribersError || !subscribersData) return;
+    setConfirmedListUrl(subscribersUrl);
+  }, [isValidating, subscribersData, subscribersError, subscribersUrl]);
+  const listStale = Boolean(subscribersData) && confirmedListUrl !== subscribersUrl;
+  listStaleRef.current = listStale;
+  /* SWR reports `isLoading` for a new key even when previous data is retained.
+   * The table can still render those rows when they exist; the stale banner
+   * distinguishes them and every action callback refuses stale input. */
+  const listLoading = isLoading && !subscribersData;
 
   /* A failed read is not an empty list. Without a previous page there is nothing
    * truthful to render, so the table states the failure; with a previous page the
@@ -192,15 +207,26 @@ export function SubscribersPage() {
     || profileDrillDown !== '';
   const canAdjustBalance = hasPermission(user, 'ocs.balance.adjust');
 
-  /* The toolbar clears the selection when the query changes. It must not
-   * allocate a new empty array on every keystroke: selectedImsis is a table
-   * prop, and a new identity defeated the memoized table while typing. */
-  const handleSelectionReset = useCallback<React.Dispatch<React.SetStateAction<string[]>>>((value) => {
-    setSelectedImsis((previous) => {
-      const next = typeof value === 'function' ? value(previous) : value;
-      return next.length === 0 && previous.length === 0 ? previous : next;
-    });
-  }, []);
+  /* The draft is memory-only and is never written into the URL. A search change
+   * still resets pagination, using `replace` so typing cannot fill history. */
+  const handleSearchDraftChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    if (currentPage !== 1) setQueryPage(1, { replace: true });
+  }, [currentPage, setQueryPage]);
+
+  /* A filter, sort, size, profile or search change invalidates every workflow
+   * target that was chosen under the previous query. Page navigation is excluded
+   * from this scope and therefore preserves the established selection. */
+  useEffect(() => {
+    setPendingDelete(null);
+    setIsBatchUpdateModalOpen(false);
+    setProfileApplyTarget(null);
+    setApplyProfileName('');
+    setApplyPreview(null);
+    setApplyPreviewError('');
+    setTrafficAdjustmentTarget(null);
+    setActiveDropdown(null);
+  }, [selectionScope]);
 
   const handleOpenNew = useCallback(() => {
     router.push(withReturnTo('/subscribers/new', listLocation));
@@ -213,22 +239,32 @@ export function SubscribersPage() {
 
   const handleDelete = useCallback((imsi: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (listStaleRef.current) return;
     setActiveDropdown(null);
-    setPendingDelete({ mode: 'single', imsis: [imsi] });
+    setPendingDelete({ mode: 'single', imsis: [imsi], scope: selectionScopeRef.current });
   }, []);
 
   const handleOpenTrafficAdjustment = useCallback((sub: SubscriberRow, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (listStaleRef.current) return;
     setActiveDropdown(null);
     setTrafficAdjustmentTarget(sub.imsi);
   }, []);
 
   const handleOpenProfileApply = useCallback((sub: SubscriberRow) => {
+    if (listStaleRef.current) return;
     setProfileApplyTarget(sub);
     setApplyProfileName('');
     setApplyPreview(null);
     setApplyPreviewError('');
   }, []);
+
+  /* The memoized table must keep a stable selection setter even while a query
+   * transition makes the currently visible rows provisional. */
+  const handleSelectedImsisChange = useCallback<React.Dispatch<React.SetStateAction<string[]>>>((value) => {
+    if (listStaleRef.current) return;
+    setSelectedImsis(value);
+  }, [setSelectedImsis]);
 
   useEffect(() => {
     if (!profileApplyTarget || !applyProfileName) {
@@ -300,18 +336,22 @@ export function SubscribersPage() {
   };
 
   const clearProfileDrillDown = () => {
-    const params = new URLSearchParams(searchParams);
-    params.delete('profile');
-    setSearchParams(params, { replace: true });
+    clearProfile();
   };
 
   const handleBulkDelete = () => {
-    if (selectedImsis.length === 0) return;
-    setPendingDelete({ mode: 'bulk', imsis: [...selectedImsis] });
+    if (selectedImsis.length === 0 || listStale || !subscribersData) return;
+    setPendingDelete({ mode: 'bulk', imsis: [...selectedImsis], scope: selectionScope });
   };
 
   const executePendingDelete = async () => {
     if (!pendingDelete || pendingDelete.imsis.length === 0) return;
+    /* A queued destructive action belongs to the query that produced it. If the
+     * query changed after confirmation opened, the target set is obsolete. */
+    if (pendingDelete.scope !== selectionScope || listStale) {
+      setPendingDelete(null);
+      return;
+    }
 
     const { mode, imsis } = pendingDelete;
     const singleImsi = imsis[0] || '';
@@ -388,28 +428,15 @@ export function SubscribersPage() {
   }, [plmnMap]);
 
   const handleSort = useCallback((field: string) => {
-    setSortField((currentField) => {
-      if (currentField === field) {
-        setSortDirection((prevDir) => (prevDir === 'asc' ? 'desc' : 'asc'));
-      } else {
-        setSortDirection('asc');
-      }
-      return field;
-    });
-    setCurrentPage(1);
-    setSelectedImsis([]);
-  }, []);
+    setQuerySort(field as SubscriberSortField);
+  }, [setQuerySort]);
 
   const handleFiltersChange = (next: SubscriberFilterState) => {
-    setFilters(next);
-    setCurrentPage(1);
-    setSelectedImsis([]);
+    setQueryFilters(next);
   };
 
   const resetFilters = () => {
-    setFilters(DEFAULT_FILTERS);
-    setCurrentPage(1);
-    setSelectedImsis([]);
+    setQueryFilters(DEFAULT_SUBSCRIBER_FILTERS);
   };
 
   const handleSummarySelect = (key: SubscriberSummaryKey) => {
@@ -418,14 +445,14 @@ export function SubscribersPage() {
       return;
     }
     if (key === 'unprovisioned') {
-      handleFiltersChange({ ...DEFAULT_FILTERS, provisioning: 'incomplete' });
+      handleFiltersChange({ ...DEFAULT_SUBSCRIBER_FILTERS, provisioning: 'incomplete' });
       return;
     }
     if (key === 'lowBalance') {
-      handleFiltersChange({ ...DEFAULT_FILTERS, balance: 'low' });
+      handleFiltersChange({ ...DEFAULT_SUBSCRIBER_FILTERS, balance: 'low' });
       return;
     }
-    handleFiltersChange({ ...DEFAULT_FILTERS, access: key });
+    handleFiltersChange({ ...DEFAULT_SUBSCRIBER_FILTERS, access: key });
   };
 
   const activeCard: SubscriberSummaryKey | null = (() => {
@@ -462,6 +489,7 @@ export function SubscribersPage() {
   const isAllPageSelected = pageImsis.length > 0 && selectedOnPageCount === pageImsis.length;
 
   const toggleSelectAll = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (listStaleRef.current) return;
     if (e.target.checked) {
       setSelectedImsis((prev) => Array.from(new Set([...prev, ...pageImsis])));
     } else {
@@ -471,9 +499,14 @@ export function SubscribersPage() {
   const pendingDeleteItems = pendingDelete?.imsis.slice(0, 3).join(', ') || '';
   const pendingDeleteOverflow = pendingDelete && pendingDelete.imsis.length > 3 ? ` +${pendingDelete.imsis.length - 3}` : '';
 
+  /* A successful read may prove the URL page is past the end (for example after
+   * deletion). Correct it with `replace`, and never derive a clamp from rows that
+   * are still marked stale for a newer query. */
   useEffect(() => {
-    if (subscribersData && currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, subscribersData, totalPages]);
+    if (!subscribersData || listStale) return;
+    const clamped = clampSubscriberPage(listQuery, totalSubscribers, pageSize);
+    if (clamped !== listQuery.page) setQueryPage(clamped, { replace: true });
+  }, [listQuery, listStale, pageSize, setQueryPage, subscribersData, totalSubscribers]);
 
   const handleCopyImsi = useCallback(async (imsi: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -501,7 +534,7 @@ export function SubscribersPage() {
 
         {/* A failed read explains itself; five zeroed counters would describe an
           * empty platform instead of an unanswered request. */}
-        {!listUnavailable && (
+        {!listUnavailable && !listStale && (
           <SubscriberSummaryPanel
             summaryCards={summaryCards}
             activeCard={activeCard}
@@ -581,11 +614,10 @@ export function SubscribersPage() {
 
         <SubscriberToolbar
           searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          setCurrentPage={setCurrentPage}
-          setSelectedImsis={handleSelectionReset}
+          onSearchChange={handleSearchDraftChange}
           selectedImsis={selectedImsis}
           canEditSubscribers={canEditSubscribers}
+          bulkActionsDisabled={listStale || !subscribersData}
           setIsBatchUpdateModalOpen={setIsBatchUpdateModalOpen}
           handleBulkDelete={handleBulkDelete}
           isDeletingBulk={isDeletingBulk}
@@ -616,6 +648,9 @@ export function SubscribersPage() {
         )}
 
         <div className="dash-card shadow table-card">
+          {listStale && (
+            <p className="warning-text" role="status" data-subscriber-list-stale="true">{t('sub_list_updating')}</p>
+          )}
           {listReloadFailed && (
             <p className="warning-text" role="alert">{t('sub_err_list_load')} {listErrorMessage}</p>
           )}
@@ -629,7 +664,7 @@ export function SubscribersPage() {
           ) : (
             <>
               <SubscriberTable
-                isLoading={isLoading}
+                isLoading={listLoading}
                 totalSubscribers={totalSubscribers}
                 searchQuery={subscriberQuery}
                 hasActiveFilters={hasActiveFilters}
@@ -646,7 +681,7 @@ export function SubscribersPage() {
                 renderSortIcon={renderSortIcon}
                 paginatedSubscribers={paginatedSubscribers}
                 selectedImsis={selectedImsis}
-                setSelectedImsis={setSelectedImsis}
+                setSelectedImsis={handleSelectedImsisChange}
                 copiedImsi={copiedImsi}
                 handleCopyImsi={handleCopyImsi}
                 resolveNetwork={resolveNetwork}
@@ -663,7 +698,7 @@ export function SubscribersPage() {
                 profiles={profileList}
                 profilesReady={Boolean(profileData)}
               />
-              {!isLoading && (
+              {!isLoading && !listStale && (
                 <DataTablePagination
                   page={displayPage}
                   pageSize={pageSize}
@@ -680,8 +715,8 @@ export function SubscribersPage() {
                     next: t('next'),
                     perPage: t('per_page'),
                   }}
-                  onPageChange={(next) => setCurrentPage(next)}
-                  onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                  onPageChange={(next) => setQueryPage(next)}
+                  onPageSizeChange={(size) => setQuerySize(size as (typeof SUBSCRIBER_PAGE_SIZES)[number])}
                 />
               )}
             </>

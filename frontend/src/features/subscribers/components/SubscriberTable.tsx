@@ -282,7 +282,7 @@ function SubscriberTableBase(props: SubscriberTableProps) {
             const isContractActive = sub.contractStatus === "active";
 
             return (
-              <tr key={sub.imsi} className={isSelected ? "selected-row" : ""}>
+              <tr key={sub.imsi} className={isSelected ? "selected-row" : ""} data-subscriber-imsi={sub.imsi}>
                 <td className="mobile-select-cell" data-column-priority="essential">
                   <input type="checkbox" className="checkbox-custom" aria-label={t("table_select_subscriber", { imsi: sub.imsi })} checked={isSelected} onChange={() => setSelectedImsis((prev) => prev.includes(sub.imsi) ? prev.filter(i => i !== sub.imsi) : [...prev, sub.imsi])} />
                 </td>

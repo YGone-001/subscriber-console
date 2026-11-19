@@ -366,9 +366,9 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # Each suite reports its own outcome so a failure names the guarantee that
-      # broke, instead of hiding four suites behind one opaque step. Downstream
-      # suites still execute after the smoke fails, so one failure cannot hide
-      # the evidence the other benchmarks provide. The job stays failed.
+      # broke, instead of hiding browser suites behind one opaque step. Downstream
+      # suites still execute after a failure, so one failure cannot hide the
+      # evidence the other suites provide. The job stays failed.
       - name: Performance smoke and data-loading invariants
         working-directory: frontend
         run: node tests/performance-rendering-smoke.mjs
@@ -377,6 +377,11 @@ jobs:
         if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
         working-directory: frontend
         run: node tests/bounded-read-development-smoke.mjs
+
+      - name: Subscribers state and navigation acceptance
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+        working-directory: frontend
+        run: node tests/subscribers-state-smoke.mjs
 
       - name: Subscribers render-commit benchmark
         if: ${{ !cancelled() && steps.browser.outcome == 'success' }}

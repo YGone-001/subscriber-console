@@ -5,17 +5,17 @@
  * analytics endpoint, was visible to read-only users, and had no effect on the
  * subscriber list.
  */
-import React from "react";
 import { Trash2, Plus, Layers, ClipboardPenLine, Upload } from "lucide-react";
 import { useI18n } from '../../../providers/I18nProvider';
 
 export interface SubscriberToolbarProps {
   searchQuery: string;
-  setSearchQuery: (value: string) => void;
-  setCurrentPage: (page: number) => void;
-  setSelectedImsis: React.Dispatch<React.SetStateAction<string[]>>;
+  onSearchChange: (value: string) => void;
   selectedImsis: string[];
   canEditSubscribers: boolean;
+  /* True while the visible rows belong to a previous query or no confirmed
+   * dataset exists. Bulk workflows must not target that provisional set. */
+  bulkActionsDisabled: boolean;
   setIsBatchUpdateModalOpen: (open: boolean) => void;
   handleBulkDelete: () => void;
   isDeletingBulk: boolean;
@@ -28,8 +28,8 @@ export interface SubscriberToolbarProps {
 export function SubscriberToolbar(props: SubscriberToolbarProps) {
   const { t } = useI18n();
   const {
-    searchQuery, setSearchQuery, setCurrentPage, setSelectedImsis,
-    selectedImsis, canEditSubscribers, setIsBatchUpdateModalOpen,
+    searchQuery, onSearchChange, selectedImsis, canEditSubscribers,
+    bulkActionsDisabled, setIsBatchUpdateModalOpen,
     handleBulkDelete, isDeletingBulk, pendingDelete,
     handleOpenNew, setIsBatchOpen, onOpenImport,
   } = props;
@@ -43,19 +43,19 @@ export function SubscriberToolbar(props: SubscriberToolbarProps) {
           aria-label={t("subscriber_search_placeholder")}
           placeholder={t("subscriber_search_placeholder")}
           value={searchQuery}
-          onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); setSelectedImsis([]); }}
+          onChange={e => onSearchChange(e.target.value)}
         />
         {selectedImsis.length > 0 && (
           <div className="bulk-actions-container animate-fade-in">
             <span className="bulk-actions-count">{selectedImsis.length} {t("selected")}</span>
             <div className="bulk-actions-buttons">
               {canEditSubscribers && (
-                <button className="btn btn-bulk-outline" onClick={() => setIsBatchUpdateModalOpen(true)}>
+                <button className="btn btn-bulk-outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={bulkActionsDisabled}>
                   <ClipboardPenLine size={14}/> {t('sub_batch_update_action')}
                 </button>
               )}
               {canEditSubscribers && (
-                <button className="btn-bulk-danger" onClick={handleBulkDelete} disabled={isDeletingBulk || Boolean(pendingDelete)}>
+                <button className="btn-bulk-danger" onClick={handleBulkDelete} disabled={bulkActionsDisabled || isDeletingBulk || Boolean(pendingDelete)}>
                   {isDeletingBulk ? <span className="spinner spinner-sm"/> : <Trash2 size={14}/>}
                   {t("delete")}
                 </button>

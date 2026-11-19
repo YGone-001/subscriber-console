@@ -1423,6 +1423,7 @@ export const zh: Record<string, string> = {
     sub_filter_all: "\u5168\u90e8",
     sub_filter_access: "\u63a5\u5165\u72b6\u6001",
     sub_filter_reset: "\u6e05\u9664\u7b5b\u9009",
+    sub_list_updating: "\u65b0\u67e5\u8be2\u52a0\u8f7d\u4e2d\uff0c\u5f53\u524d\u663e\u793a\u4e0a\u4e00\u6b21\u7684\u7ed3\u679c\u3002",
     sub_filters_label: "\u8ba2\u9605\u7528\u6237\u7b5b\u9009",
     sub_config_check: "\u914d\u7f6e\u5b8c\u6574\u6027",
     sub_check_contract: "OCS \u5408\u7ea6",

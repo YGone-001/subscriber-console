@@ -1423,6 +1423,7 @@ export const en: Record<string, string> = {
     sub_filter_all: "All",
     sub_filter_access: "Access Status",
     sub_filter_reset: "Clear Filters",
+    sub_list_updating: "Showing the previous results while the new query loads.",
     sub_filters_label: "Subscriber filters",
     sub_config_check: "Configuration Checks",
     sub_check_contract: "OCS Contract",

@@ -68,6 +68,72 @@ Domain-specific OCS components are intentional:
 - The table markup stays local because the shared layer owns sorting,
   pagination and state rows, not a generic table renderer.
 
+## Subscribers list state and navigation
+
+`SubscribersPage` separates four state classes and does not let them leak into
+each other:
+
+| Class | Owner | Examples |
+|---|---|---|
+| Persistent list query | Browser URL through `useSubscriberListQuery` | page, size, sort, filters, profile drill-down |
+| Transient interaction | Page-local state | search draft, invalid-input warning, open menu, copied IMSI, feedback |
+| Selection | `useSubscriberSelection`, memory only | selected IMSIs, select-all, partial count |
+| Mutation workflow | The owning dialog/action | delete confirmation, import, batch update, profile preview/apply, traffic adjustment |
+
+The canonical Subscribers list URL is explicit and stable:
+
+| Query parameter | Default | Accepted values / rule |
+|---|---|---|
+| `page` | `1` | Positive integer up to 1,000,000; zero, negatives, fractions and oversized values degrade to 1 |
+| `size` | `10` | `10`, `20` or `50`; anything else degrades to 10 |
+| `sort` | `imsi` | `status`, `imsi`, `policy`, `usage`, `lastActive` |
+| `order` | `asc` | `asc` or `desc` |
+| `access` | absent (`all`) | `active`, `restricted` |
+| `contract` | absent (`all`) | `active`, `suspended`, `terminated`, `none` |
+| `provisioning` | absent (`all`) | `complete`, `incomplete`, `missing_contract`, `missing_balance`, `missing_plan` |
+| `plan` | absent | Trimmed plan id, at most 128 characters, no whitespace or control characters |
+| `balance` | absent (`all`) | `exhausted`, `low`, `normal`, `available`, `missing` |
+| `profile` | absent | Trimmed template name, at most 200 characters, no control characters |
+
+Default values are omitted, so equivalent states serialize to the same URL.
+Parsing never throws: unsupported values degrade to the documented default,
+unknown parameters are dropped, and the canonical state is installed with
+`replaceState` so a hand-edited link does not add history. A real filter, sort,
+page-size or page transition is one `pushState` update. Any non-page change
+resets `page` to 1 inside that same transition; the UI never navigates to page N
+of a new filter and then corrects itself. `profile` is an ordinary list filter:
+the template drill-down, its filter meaning, the clear action and `returnTo`
+navigation all survive Back/Forward.
+
+The search draft is deliberately **not** in the URL. A search term can be an
+IMSI or MSISDN, so persisting it would place a subscriber identifier in browser
+history, shared links and diagnostics. The editable draft, the debounced
+committed term, the last valid term and the effective API query are distinct:
+
+- invalid drafts show the existing warning and issue no API search;
+- the last valid term stays effective until a valid term replaces it;
+- a search change resets pagination with `replaceState`, never one history entry
+  per keystroke;
+- the URL never echoes search back into the input, so a late navigation cannot
+  overwrite a newer draft.
+
+The API mapping is owned by `buildSubscriberListApiUrl`: `size` → `limit`,
+`sort` → `sortField`, `order` → `sortDirection`, `access` → `status`,
+`contract` → `contractStatus`, `plan` → `planId`, `balance` → `balanceStatus`;
+the row projection keeps `detail=true` and `searchBy=auto`. No URL value is
+forwarded without validation.
+
+Selection belongs to a query scope containing the raw search draft, filters,
+sort, order, size and profile, but not page. Filter/sort/size/profile/search
+changes therefore invalidate selection immediately, while pagination preserves
+the established selection behavior. Selection is never serialized. While
+`keepPreviousData` displays rows from a previous query, the page states that
+they are provisional, refuses new selections and refuses row, toolbar and
+queued workflow actions until the active URL is confirmed by a successful read.
+Pending delete, batch update, profile apply and traffic adjustment targets are
+closed when the query scope changes, and a queued destructive action carries the
+scope it was created under.
+
 ## Why `ocs.css` is not split piecemeal
 
 `styles/ocs.css` is a **shared business stylesheet**, not an OCS-page-only

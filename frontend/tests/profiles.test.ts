@@ -699,8 +699,11 @@ test('template detail drills down into linked subscribers through the profile fi
   assert.match(detailPage, /\/subscribers\?profile=\$\{encodeURIComponent\(profileName\)\}/);
 
   const subscribersPage = read('../src/features/subscribers/SubscribersPage.tsx');
-  assert.match(subscribersPage, /searchParams\.get\('profile'\)/);
-  assert.match(subscribersPage, /filterParams\.set\('profile', profileDrillDown\)/);
+  const queryContract = read('../src/features/subscribers/subscriber-list-query.ts');
+  assert.match(subscribersPage, /profile: profileDrillDown/);
+  assert.match(subscribersPage, /buildSubscriberListApiUrl\(listQuery, subscriberQuery\)/);
+  assert.match(queryContract, /profile: 'profile'/);
+  assert.match(queryContract, /params\.set\('profile', normalized\.profile\)/);
 });
 
 /* A read that failed is not an empty platform. The page states the failure, and
@@ -718,9 +721,12 @@ test('the subscriber list separates a failed read from an empty page', () => {
   assert.match(page, /const listReloadFailed = Boolean\(subscribersError\) && Boolean\(subscribersData\)/);
   assert.ok(!/<EmptyState/.test(page), 'the page must not answer a failed read with its own empty state');
 
-  /* Digits only, bounded to the 15-digit address space. */
-  assert.match(page, /const SEARCH_TERM_PATTERN = \/\^\\d\{1,15\}\$\//);
-  assert.match(page, /const subscriberQuery = isValidSearchTerm\(debouncedSearchQuery\)/);
+  /* Digits only, bounded to the 15-digit address space. The contract module owns
+   * the pattern; the page can only apply it to the effective query. */
+  const queryContract = read('../src/features/subscribers/subscriber-list-query.ts');
+  assert.match(queryContract, /const SEARCH_TERM_PATTERN = \/\^\\d\{1,15\}\$\//);
+  assert.match(queryContract, /export function isValidSubscriberSearchTerm/);
+  assert.match(page, /const subscriberQuery = isValidSubscriberSearchTerm\(debouncedSearchQuery\)/);
   assert.match(page, /lastValidSearchRef\.current = debouncedSearchQuery/);
   assert.match(page, /t\('sub_search_invalid_hint'\)/);
 });

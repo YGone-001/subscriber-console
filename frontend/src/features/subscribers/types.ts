@@ -65,6 +65,9 @@ export type FeedbackState = {
 export type PendingDelete = {
   mode: "single" | "bulk";
   imsis: string[];
+  /* Query identity the target set belongs to. A mismatch after navigation
+   * invalidates the queued destructive action. */
+  scope: string;
 };
 
 export type SubscriberAccessStatus = "all" | "active" | "restricted";
