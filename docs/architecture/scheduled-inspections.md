@@ -121,6 +121,17 @@ new pass can mark a prior finding not redetected; unknown, removed or incompatib
 items never become recoveries. Existing alert anchors may enter investigations;
 unanchored findings do not create alerts or new investigation anchor kinds.
 
+New compatible reports save additive `comparison.scopeChanges` with individual
+added/removed resource and Agent facts from the two captured populations. Resource
+and Agent completeness are checked independently: each pair of arrays is `null`
+when either population is incomplete, and `[]` means a complete, empty difference.
+Canonical UUIDs determine membership; renames and Agent assignment revisions do
+not create additions/removals. Removed names come from the previous fixed report.
+Legacy reports omit the field and retain unavailable detail; reads never backfill
+history. JSON and the existing CSV `comparison` column carry the same saved delta,
+within the existing atomic report budget. Existing comparison counters count check
+items, not distinct resource/Agent members.
+
 ## Initialization, bounds and retention
 
 `backend/cmd/inspections-init` is an explicit, dry-run-default index initializer.

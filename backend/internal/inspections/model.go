@@ -162,13 +162,23 @@ type Item struct {
 	Change        string            `json:"change,omitempty" bson:"change,omitempty"`
 }
 type Comparison struct {
-	PreviousRunID string `json:"previousRunId" bson:"previousRunId"`
-	State         string `json:"state" bson:"state"`
-	Added         int    `json:"added" bson:"added"`
-	Removed       int    `json:"removed" bson:"removed"`
-	NewFindings   int    `json:"newFindings" bson:"newFindings"`
-	NotRedetected int    `json:"notRedetected" bson:"notRedetected"`
-	Incomparable  int    `json:"incomparable" bson:"incomparable"`
+	PreviousRunID string        `json:"previousRunId" bson:"previousRunId"`
+	State         string        `json:"state" bson:"state"`
+	Added         int           `json:"added" bson:"added"`
+	Removed       int           `json:"removed" bson:"removed"`
+	NewFindings   int           `json:"newFindings" bson:"newFindings"`
+	NotRedetected int           `json:"notRedetected" bson:"notRedetected"`
+	Incomparable  int           `json:"incomparable" bson:"incomparable"`
+	ScopeChanges  *ScopeChanges `json:"scopeChanges,omitempty" bson:"scopeChanges,omitempty"`
+}
+
+// ScopeChanges preserves membership differences using captured report identities.
+// Omission on older reports means unavailable, rather than an empty difference.
+type ScopeChanges struct {
+	AddedResources   []ResourceFact `json:"addedResources" bson:"addedResources"`
+	RemovedResources []ResourceFact `json:"removedResources" bson:"removedResources"`
+	AddedAgents      []AgentFact    `json:"addedAgents" bson:"addedAgents"`
+	RemovedAgents    []AgentFact    `json:"removedAgents" bson:"removedAgents"`
 }
 type Run struct {
 	ID            string              `json:"runId" bson:"_id"`

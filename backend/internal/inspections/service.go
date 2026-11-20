@@ -420,6 +420,9 @@ func compare(v, old *Run) {
 		return
 	}
 	v.Comparison.State = "compatible"
+	// Only complete captured populations establish membership differences. A
+	// failed scope read must not turn absent data into removed members.
+	v.Comparison.ScopeChanges = scopeChanges(v.Scope, old.Scope)
 	if v.Scope.MembershipDigest != old.Scope.MembershipDigest {
 		v.Comparison.State = "scope_changed"
 	}
@@ -451,6 +454,51 @@ func compare(v, old *Run) {
 		}
 	}
 	v.Comparison.Removed = len(previous)
+}
+
+func scopeChanges(current, previous ResolvedScope) *ScopeChanges {
+	changes := &ScopeChanges{}
+	currentResources, previousResources := map[string]bool{}, map[string]bool{}
+	currentAgents, previousAgents := map[string]bool{}, map[string]bool{}
+	for _, resource := range current.Resources {
+		currentResources[resource.ID] = true
+	}
+	for _, resource := range previous.Resources {
+		previousResources[resource.ID] = true
+	}
+	for _, agent := range current.Agents {
+		currentAgents[agent.ID] = true
+	}
+	for _, agent := range previous.Agents {
+		previousAgents[agent.ID] = true
+	}
+	if current.Coverage.State == "complete" && previous.Coverage.State == "complete" {
+		changes.AddedResources, changes.RemovedResources = []ResourceFact{}, []ResourceFact{}
+		for _, resource := range current.Resources {
+			if !previousResources[resource.ID] {
+				changes.AddedResources = append(changes.AddedResources, resource)
+			}
+		}
+		for _, resource := range previous.Resources {
+			if !currentResources[resource.ID] {
+				changes.RemovedResources = append(changes.RemovedResources, resource)
+			}
+		}
+	}
+	if current.AgentCoverage.State == "complete" && previous.AgentCoverage.State == "complete" {
+		changes.AddedAgents, changes.RemovedAgents = []AgentFact{}, []AgentFact{}
+		for _, agent := range current.Agents {
+			if !previousAgents[agent.ID] {
+				changes.AddedAgents = append(changes.AddedAgents, agent)
+			}
+		}
+		for _, agent := range previous.Agents {
+			if !currentAgents[agent.ID] {
+				changes.RemovedAgents = append(changes.RemovedAgents, agent)
+			}
+		}
+	}
+	return changes
 }
 func (s *Service) runOne(ctx context.Context, id string) {
 	readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)

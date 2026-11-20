@@ -117,6 +117,13 @@ Updates preserve unowned attributes. New/changed controlled declarations are
 validated and normalized; unchanged malformed legacy attributes can survive an
 unrelated update and are reported invalid during projection.
 
+Runtime-adopted resources currently retain top-level dotted attributes such as
+`runtime.componentId` and `runtime.hostId`, while the generic Inventory update
+validator rejects dotted attribute keys. Reposting those resources to add network
+declarations therefore fails validation. Do not remove their runtime metadata to
+work around this mismatch. Site/host containment remains independently usable;
+NF network declarations require a compatibility fix in the governed update path.
+
 Containment add and retire are independent operations, not an atomic move or a
 single-parent constraint. Each result is shown explicitly. Partial changes are
 re-read and never advertised as a completed migration. Site retirement retains

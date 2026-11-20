@@ -1,7 +1,9 @@
 package inspections
 
 import (
+	"encoding/csv"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -101,6 +103,88 @@ func TestComparisonRequiresIdentityAndNewValidEvidence(t *testing.T) {
 		t.Fatal("valid new pass was not compared")
 	}
 }
+func TestComparisonCapturesMembershipChangesAndExports(t *testing.T) {
+	complete := Coverage{State: "complete"}
+	old := &Run{ID: newID(), Version: Version, Definition: fixtureDefinition(), Scope: ResolvedScope{
+		Coverage: complete, AgentCoverage: complete, MembershipDigest: "old",
+		Resources: []ResourceFact{{ID: "removed", Name: "Captured old name"}, {ID: "same", Name: "Old name"}},
+		Agents:    []AgentFact{{ID: "agent-removed", Name: "Old agent", Revision: 1}, {ID: "agent-same", Revision: 1}},
+	}}
+	v := &Run{ID: newID(), State: "completed", Version: Version, Definition: fixtureDefinition(), Scope: ResolvedScope{
+		Coverage: complete, AgentCoverage: complete, MembershipDigest: "new",
+		Resources: []ResourceFact{{ID: "same", Name: "Renamed"}, {ID: "added", Name: "New resource"}},
+		Agents:    []AgentFact{{ID: "agent-same", Revision: 2}, {ID: "agent-added", Name: "New agent", Revision: 1}},
+	}}
+	compare(v, old)
+	changes := v.Comparison.ScopeChanges
+	if v.Comparison.State != "scope_changed" || changes == nil ||
+		!reflect.DeepEqual(changes.AddedResources, v.Scope.Resources[1:]) ||
+		!reflect.DeepEqual(changes.RemovedResources, old.Scope.Resources[:1]) ||
+		!reflect.DeepEqual(changes.AddedAgents, v.Scope.Agents[1:]) ||
+		!reflect.DeepEqual(changes.RemovedAgents, old.Scope.Agents[:1]) || v.Comparison.NotRedetected != 0 {
+		t.Fatalf("incorrect membership comparison: %+v", v.Comparison)
+	}
+	for _, format := range []string{"json", "csv"} {
+		data, _, err := exportRun(v, format)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var exported Comparison
+		if format == "json" {
+			var report Run
+			if err := json.Unmarshal(data, &report); err != nil {
+				t.Fatal(err)
+			}
+			exported = report.Comparison
+		} else {
+			rows, err := csv.NewReader(strings.NewReader(strings.TrimPrefix(string(data), "\ufeff"))).ReadAll()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for index, header := range rows[0] {
+				if header == "comparison" {
+					if err := json.Unmarshal([]byte(rows[1][index]), &exported); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+		}
+		if !reflect.DeepEqual(exported, v.Comparison) {
+			t.Fatalf("%s lost captured membership changes", format)
+		}
+	}
+	// Partial Agent reads cannot hide an independently complete resource delta.
+	v.Scope.AgentCoverage.State = "unavailable"
+	compare(v, old)
+	if v.Comparison.ScopeChanges.AddedAgents != nil || len(v.Comparison.ScopeChanges.RemovedResources) != 1 {
+		t.Fatal("unavailable Agent population was treated as removed or hid resource changes")
+	}
+	old.Scope.Coverage.State = "partial"
+	compare(v, old)
+	if v.Comparison.ScopeChanges.RemovedResources != nil {
+		t.Fatal("partial previous scope invented membership changes")
+	}
+	// A policy change still prevents all comparison conclusions.
+	v.Version++
+	compare(v, old)
+	if v.Comparison.ScopeChanges != nil {
+		t.Fatal("incompatible report produced membership changes")
+	}
+	// Legacy reports omit the additive field; no history is regenerated on read.
+	var legacy Comparison
+	if err := json.Unmarshal([]byte(`{"state":"scope_changed","added":1}`), &legacy); err != nil || legacy.ScopeChanges != nil {
+		t.Fatal("legacy comparison did not preserve unavailable membership details")
+	}
+}
+
+func TestMembershipChangesRetainKnownEmptyPopulations(t *testing.T) {
+	scope := ResolvedScope{Coverage: Coverage{State: "complete"}, AgentCoverage: Coverage{State: "complete"}}
+	data, err := json.Marshal(scopeChanges(scope, scope))
+	if err != nil || strings.Contains(string(data), "null") {
+		t.Fatalf("known empty populations must remain arrays: %s, %v", data, err)
+	}
+}
+
 func TestCursorBindingAndExportPrivacy(t *testing.T) {
 	s := NewService(nil, nil, nil, nil, []byte("synthetic cursor secret"))
 	q := Query{PlanID: newID(), Limit: 50}
