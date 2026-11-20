@@ -630,7 +630,7 @@ func resourceName(component Component, hostID string) string {
 	if len(suffix) > 6 {
 		suffix = suffix[len(suffix)-6:]
 	}
-	return component.DisplayName + "-" + suffix
+	return strings.ReplaceAll(component.DisplayName, " ", "-") + "-" + suffix
 }
 
 func bindingKey(hostID string, component Component) string {

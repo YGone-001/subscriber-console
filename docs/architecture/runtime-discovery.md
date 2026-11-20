@@ -211,6 +211,12 @@ withhold measurement alone: the Java IMS HSS has a launch-identifier identity th
 cannot scope a process binding, so it is adopted as an `ims/hss` resource while
 staying unmeasured.
 
+New bootstrap machine names replace display-name spaces with hyphens before
+appending the host suffix, so IMS HSS is created as `IMS-HSS-<suffix>`. Display
+labels and runtime external identity keys are unchanged. Existing resources are
+reused by identity rather than automatically renamed; a legacy invalid machine
+name can be corrected through the governed Inventory update API.
+
 Decision order per component:
 
 1. not adoptable (DRA) -> `skip_monitoring_unsupported`;

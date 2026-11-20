@@ -7,7 +7,24 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	"subscriber/internal/inventory"
 )
+
+func TestBootstrapNamesSatisfyInventoryMachineNameContract(t *testing.T) {
+	for _, component := range DefaultRegistry().Components() {
+		name := resourceName(component, "host-f5f8382ed61db58e")
+		if err := inventory.ValidateResourceName(name); err != nil {
+			t.Errorf("%s cannot be maintained through Inventory: %v", component.ID, err)
+		}
+		if component.ID == "imsHss" && name != "IMS-HSS-1db58e" {
+			t.Errorf("unexpected IMS HSS machine name %q", name)
+		}
+	}
+	if name := resourceName(Component{DisplayName: "AMF"}, "host-f5f8382ed61db58e"); name != "AMF-1db58e" {
+		t.Fatalf("changed existing valid machine name: %s", name)
+	}
+}
 
 // ---------------------------------------------------------------- fakes
 
