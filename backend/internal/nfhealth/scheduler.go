@@ -53,7 +53,10 @@ func NewScheduler(repo SchedulerRepository, collector *Collector) *Scheduler {
 		repo:      repo,
 		collector: collector,
 		clock:     SystemClock{},
-		interval:  time.Duration(DefaultIntervalSeconds) * time.Second,
+		// Polling is independent of each target's collection period. Using a
+		// 120-second poll as a two-target admission batch makes four 120-second
+		// network targets stale even when every probe is fast and successful.
+		interval: 15 * time.Second,
 	}
 }
 

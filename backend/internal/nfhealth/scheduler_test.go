@@ -56,6 +56,54 @@ func scheduledTarget(id string, interval int, lastAttempt string) HealthTarget {
 	}
 }
 
+type cadenceSchedulerRepo struct {
+	*fakeSchedulerRepo
+	clock *FixedClock
+}
+
+func (r *cadenceSchedulerRepo) RecordCollection(ctx context.Context, target *HealthTarget, result *CollectionResult) error {
+	if err := r.fakeSchedulerRepo.RecordCollection(ctx, target, result); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.targets {
+		if r.targets[i].TargetID == target.TargetID {
+			r.targets[i].LastAttemptAt = r.clock.Now().Format(time.RFC3339Nano)
+		}
+	}
+	return nil
+}
+
+func TestSchedulerPollingServesFourNetworkTargetsWithinMinimumPeriod(t *testing.T) {
+	clock := &FixedClock{T: time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)}
+	repo := &cadenceSchedulerRepo{fakeSchedulerRepo: &fakeSchedulerRepo{}, clock: clock}
+	for i := 0; i < 4; i++ {
+		target := scheduledTarget(newUUID(), MinIntervalSeconds, clock.Now().Add(-time.Minute).Format(time.RFC3339))
+		target.CollectorProfile = CollectorHTTPMetrics
+		repo.targets = append(repo.targets, target)
+	}
+	collector := NewCollector(nil, nil, NewDestinationAllowlist(""), NewServiceUnitAllowlist(""))
+	collector.SetClock(clock)
+	scheduler := NewSchedulerWithClock(repo, collector, clock)
+	if scheduler.interval*2 > time.Duration(MinIntervalSeconds)*time.Second {
+		t.Fatal("polling cannot admit four targets within the minimum supported period")
+	}
+	scheduler.Tick(context.Background())
+	if len(repo.recordedIDs()) != MaxGlobalConcurrent {
+		t.Fatal("network admission bound changed")
+	}
+	clock.T = clock.T.Add(scheduler.interval)
+	scheduler.Tick(context.Background())
+	seen := map[string]bool{}
+	for _, id := range repo.recordedIDs() {
+		seen[id] = true
+	}
+	if len(seen) != 4 || len(repo.recordedIDs()) != 4 {
+		t.Fatal("targets starved or collected before their own period")
+	}
+}
+
 func TestIsDueHonorsPerTargetInterval(t *testing.T) {
 	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 

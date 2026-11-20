@@ -202,6 +202,12 @@ global concurrent  2
 per-target         1
 ```
 
+The scheduler checks due work every 15 seconds, independently of target periods.
+It still admits at most two network collections and 32 process-only collections
+per pass, with shared manual/scheduled concurrency gates. A target is never
+collected before its own interval. Large populations still require capacity
+review; a configured interval is not proof that every target was sampled on time.
+
 If scheduled samples stop arriving:
 
 1. Confirm the target is still `enabled` and `collectionMode=scheduled`.
