@@ -4,8 +4,10 @@ import { groupsZh } from './site-network';
 import { imsZh } from './ims-registration';
 import { investigationsZh } from './investigations';
 import { inspectionsZh } from './inspections';
+import { healthWindowZh } from './nf-health-window';
 
 export const zh: Record<string, string> = {
+    ...healthWindowZh,
     ...driftZh,
     ...evidenceZh,
     ...groupsZh,

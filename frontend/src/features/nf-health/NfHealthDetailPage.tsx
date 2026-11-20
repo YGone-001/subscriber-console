@@ -60,6 +60,7 @@ import type {
   NfHealthMeta,
 } from './nf-health-types';
 import { NfHealthTargetDialog } from './NfHealthTargetDialog';
+import { ServiceWindowPanel } from './ServiceWindowPanel';
 import styles from '../../styles/modules/nf-health.module.css';
 
 const PAGE_LIMIT = 20;
@@ -412,6 +413,8 @@ export function NfHealthDetailPage() {
               <p className={styles.semanticNote}>{t('nf_health_profile_process_only_note')}</p>
             ) : null}
           </section>
+
+          {target.collectorProfile === 'http_metrics' ? <ServiceWindowPanel report={detail?.serviceWindows} /> : null}
 
           <section className="dash-card">
             <div className={styles.sectionHead}>

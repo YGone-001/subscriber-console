@@ -4,8 +4,10 @@ import { groupsEn } from './site-network';
 import { imsEn } from './ims-registration';
 import { investigationsEn } from './investigations';
 import { inspectionsEn } from './inspections';
+import { healthWindowEn } from './nf-health-window';
 
 export const en: Record<string, string> = {
+    ...healthWindowEn,
     ...driftEn,
     ...evidenceEn,
     ...groupsEn,

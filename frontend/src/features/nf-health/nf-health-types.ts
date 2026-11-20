@@ -56,6 +56,7 @@ export interface MetricSample {
   // Category is additive: samples stored before it existed decode as undefined
   // and are presented as resource evidence, never as a service-health claim.
   category?: MetricCategory;
+  scopeVerified?: boolean;
 }
 
 export interface LayerSet {
@@ -158,6 +159,7 @@ export interface HealthSample {
   expiresAt?: string;
   layers: LayerSet;
   metrics: MetricSample[];
+  serviceWindows?: ServiceWindowReport;
 }
 
 export interface MetricDefinition {
@@ -178,6 +180,8 @@ export interface MetricDefinition {
 }
 
 export interface NfHealthMeta {
+  serviceWindowVersion?: string;
+  serviceWindowMode?: 'observation_only';
   collectorProfileTransitions?: boolean;
   processSnapshotConfigured?: boolean;
   schemaVersion: number;
@@ -267,6 +271,56 @@ export interface GetTargetResponse {
   lastRun?: HealthRun;
   overallState: LayerState;
   freshness: FreshnessProjection;
+  serviceWindows?: ServiceWindowReport;
+}
+
+export interface WindowInterval {
+  fromSampleId: string;
+  toSampleId: string;
+  from: string;
+  to: string;
+  seconds: number;
+  delta: number | null;
+  reason?: string;
+}
+
+export interface ServiceWindowRow {
+  metric: string;
+  scope: string;
+  type: 'counter' | 'gauge';
+  unit: string;
+  quality: 'ready' | 'insufficient' | 'unavailable' | 'stale';
+  reason: string;
+  points: number;
+  intervals: number;
+  coveredSeconds: number;
+  coveragePercent: number;
+  delta: number | null;
+  rate: number | null;
+  latestValue: number | null;
+  excluded: Record<string, number>;
+  evidence: WindowInterval[];
+  pairMetric?: string;
+  pairDelta?: number;
+  completionRatioPercent?: number;
+  pairReason?: string;
+  businessJudgement: 'not_evaluated';
+}
+
+export interface ServiceWindowReport {
+  version: string;
+  mode: 'observation_only';
+  evaluatedAt: string;
+  complete: boolean;
+  reason?: string;
+  windows: {
+    seconds: number;
+    from: string;
+    to: string;
+    freshnessSeconds: number;
+    maxGapSeconds: number;
+    rows: ServiceWindowRow[];
+  }[];
 }
 
 export interface ListSamplesResponse {

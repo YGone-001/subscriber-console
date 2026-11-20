@@ -1015,3 +1015,37 @@
 .collectSummary dd {
   margin: 0.15rem 0 0;
 }
+.windowTableWrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.windowMetric {
+  min-width: 16rem;
+  max-width: 26rem;
+  overflow-wrap: anywhere;
+  text-align: start;
+  font-weight: var(--font-weight-normal, 400);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.windowMetric code,
+.windowMetric small {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.windowMetric details {
+  margin-top: 0.5rem;
+}
+
+.windowEvidence {
+  max-height: 18rem;
+  overflow-y: auto;
+  padding-inline-start: 1.25rem;
+}
+
+.windowEvidence li {
+  margin-block: 0.5rem;
+}
