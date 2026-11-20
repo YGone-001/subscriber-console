@@ -178,6 +178,8 @@ export interface MetricDefinition {
 }
 
 export interface NfHealthMeta {
+  collectorProfileTransitions?: boolean;
+  processSnapshotConfigured?: boolean;
   schemaVersion: number;
   collectorProfiles: string[];
   collectionModes: CollectionMode[];
@@ -299,6 +301,7 @@ export interface CreateNfHealthTargetRequest {
 export interface UpdateNfHealthTargetRequest {
   expectedRevision: number;
   target: {
+    collectorProfile?: CollectorProfile;
     name: string;
     metricsEndpoint?: string;
     probes?: InterfaceProbe[];

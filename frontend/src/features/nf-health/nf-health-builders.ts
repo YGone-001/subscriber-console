@@ -111,14 +111,17 @@ export function buildCreateTargetRequest(form: NfHealthTargetForm): CreateNfHeal
 export function buildUpdateTargetRequest(
   expectedRevision: number,
   form: NfHealthTargetForm,
+  storedProfile?: NfHealthTargetForm['collectorProfile'],
 ): UpdateNfHealthTargetRequest {
-  const metricsEndpoint = buildMetricsEndpoint(form.metricsDestination, form.metricsPath);
+  const processOnly = form.collectorProfile === 'process_only';
+  const metricsEndpoint = processOnly ? undefined : buildMetricsEndpoint(form.metricsDestination, form.metricsPath);
   return {
     expectedRevision,
     target: {
+      ...(storedProfile === form.collectorProfile ? {} : { collectorProfile: form.collectorProfile }),
       name: form.name.trim(),
       metricsEndpoint,
-      probes: buildProbes(form.probes),
+      probes: processOnly ? [] : buildProbes(form.probes),
       serviceUnit: form.serviceUnit.trim() || undefined,
       serviceKind: form.serviceKind,
       collectionMode: form.collectionMode,

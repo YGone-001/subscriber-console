@@ -17,6 +17,17 @@ import type { HealthSample } from '../src/features/nf-health/nf-health-types';
 const RESOURCE_ID = '1a2b3c40-0005-4a05-8c05-00000000f005';
 const CANDIDATE_ID = '9b2d3c40-0011-4b11-9d11-000000000011';
 
+test('profile transition explicitly selects collection and drops hidden HTTP probes for process-only', () => {
+  const form = { ...createEmptyTargetForm(120), collectorProfile: 'process_only' as const,
+    metricsDestination: '127.0.0.2:9090', metricsPath: '/metrics',
+    probes: [{ family: 'health', destination: '127.0.0.2:9090', path: '/health' }] };
+  const request = buildUpdateTargetRequest(7, form);
+  assert.equal(request.expectedRevision, 7);
+  assert.equal(request.target.collectorProfile, 'process_only');
+  assert.equal(request.target.metricsEndpoint, undefined);
+  assert.deepEqual(request.target.probes, []);
+});
+
 test('nf health target form: Inventory resource is required for new targets', () => {
   const form = {
     ...createEmptyTargetForm(120),

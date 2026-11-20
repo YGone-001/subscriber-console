@@ -177,6 +177,9 @@ export function NfHealthTargetDialog({
   );
 
   const isProcessOnly = form.collectorProfile === 'process_only';
+  const changingProfile = mode === 'edit' && existing?.collectorProfile !== form.collectorProfile;
+  const profileLocked = mode === 'edit' && (!meta?.collectorProfileTransitions || !existing?.resourceId || !existing.serviceUnit
+    || (existing.serviceKind !== 'process' && existing.serviceKind !== 'systemd'));
 
   const patch = (next: Partial<NfHealthTargetForm>) => {
     setForm((current) => ({ ...current, ...next }));
@@ -229,7 +232,7 @@ export function NfHealthTargetDialog({
     setSubmitting(true);
     try {
       if (mode === 'edit' && existing) {
-        const payload = buildUpdateTargetRequest(existing.revision, form);
+        const payload = buildUpdateTargetRequest(existing.revision, form, existing.collectorProfile);
         await updateNfHealthTarget(existing.targetId, payload);
         onSaved(t('nf_health_feedback_updated'));
       } else {
@@ -410,14 +413,17 @@ export function NfHealthTargetDialog({
           <Field
             htmlFor="nf-health-profile"
             label={t('nf_health_field_profile')}
-            description={t('nf_health_field_profile_hint')}
+            description={t(mode === 'edit' ? 'nf_health_profile_transition_hint' : 'nf_health_field_profile_hint')}
           >
             <select
               id="nf-health-profile"
               className="form-input"
               value={form.collectorProfile}
-              onChange={(event) => patch({ collectorProfile: event.target.value as typeof form.collectorProfile })}
-              disabled={submitting || mode === 'edit'}
+              onChange={(event) => patch({
+                collectorProfile: event.target.value as typeof form.collectorProfile,
+                ...(mode === 'edit' && existing ? { serviceUnit: existing.serviceUnit ?? '', serviceKind: existing.serviceKind } : {}),
+              })}
+              disabled={submitting || profileLocked}
             >
               {(meta?.collectorProfiles ?? ['http_metrics']).map((value) => (
                 <option key={value} value={value}>
@@ -580,7 +586,7 @@ export function NfHealthTargetDialog({
               className="form-input"
               value={form.serviceUnit}
               onChange={(event) => patch({ serviceUnit: event.target.value })}
-              disabled={submitting}
+              disabled={submitting || changingProfile}
             >
               <option value="">{t('nf_health_field_service_unit_placeholder')}</option>
               {(meta?.allowedServiceUnits ?? []).map((value) => (
@@ -604,7 +610,7 @@ export function NfHealthTargetDialog({
                 const value = event.target.value;
                 if (isServiceKind(value)) patch({ serviceKind: value as ServiceKind });
               }}
-              disabled={submitting}
+              disabled={submitting || changingProfile}
             >
               <option value="process">process</option>
               <option value="systemd">systemd</option>
