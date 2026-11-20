@@ -1225,3 +1225,13 @@ test parity
 commit small
 keep rollback possible
 ```
+
+### Local process evidence boundary
+
+`NF_HEALTH_PROCESS_SNAPSHOT` optionally reads a root-owned, non-writable local
+snapshot published by the independent `process-evidence` timer. The web process
+never invokes the publisher or gains process-control privileges. Only fresh
+same-boot/same-PID-start evidence may resolve an otherwise unverified local
+process. Optional `target.collectorProfile` transitions retain canonical resource
+identity and the authorized local source, enforce destination allowlists and CAS,
+and preserve historical samples. Omitted profiles retain the stored value.

@@ -792,12 +792,13 @@ and legacy migration, independently of client behaviour:
   target that also configures local L1 process evidence must hold a matching,
   NF-type-compatible server binding.
 - **Update**: the stored target is loaded first and the *effective*
-  configuration is validated — immutable identity (`resourceId`, `candidateId`,
-  `collectorProfile`) comes from storage, mutable fields from the request, and
-  the stored collector profile governs the rules. An existing `process_only`
-  target can never lose, disable, repoint or mis-type its authorized inspection
-  source, and can never gain a metrics endpoint. A rejected update performs
-  zero writes.
+  configuration is validated. Immutable identity (`resourceId`, `candidateId`)
+  comes from storage. Optional `target.collectorProfile` explicitly transitions
+  a resource-native target while retaining its local process and service kind;
+  omitted profiles retain the stored value. An HTTP transition requires an
+  allowlisted metrics endpoint. Process-only configuration rejects HTTP probes.
+  Both paths enforce the canonical binding and NF type, and writes retain CAS.
+  A rejected update performs zero writes and histories are never rewritten.
 - **Collection**: the stored target's identity is revalidated against the
   current authoritative Inventory resource before any measurement, on both the
   manual and scheduled paths. Missing, retired, unsupported, re-domained,

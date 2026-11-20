@@ -100,7 +100,7 @@ auto-retry failed collections.
 ```text
 L1 healthy     process/unit is running. Not a service-delivery claim.
 L2 healthy     the probed HTTP metrics endpoint answered with valid data.
-L3 healthy     at least one registry-supported metric was sampled.
+L3 evidence    registered service metrics were sampled; activity alone is not health.
 not_configured that layer is not configured for this target.
 unknown        evidence exists but cannot be interpreted (for example permission denial).
 stale          retained evidence that is no longer fresh.
@@ -108,6 +108,76 @@ stale          retained evidence that is no longer fresh.
 
 Never read L2 healthy as PFCP/NGAP/Diameter/SIP health. Never read L1 healthy
 as UE registration success. Never convert a missing metric into zero.
+
+## Root-owned local process evidence
+
+When the console runs as an unprivileged user, Linux may deny access to a
+root-owned NF's `/proc/<pid>/exe`. A matching process name then remains
+`unverified` / `unknown`. Do not run the web service as root or relax procfs
+protections to turn that result green.
+
+The optional `process-evidence` executable is a one-shot procfs reader. A root
+operator installs it independently with the supplied service and timer. It reads
+only process identity (name, PID, start ticks, executable and boot ID), accepts a
+root-owned list of at most 64 exact names, and atomically publishes
+`/run/xcloud-process-evidence/latest.json` every 20 seconds. It has no network
+server, network client, shell, NF configuration writer or process-control API.
+The bounded scan emits only positive identities; absence never proves downtime.
+
+Build as the development user, then review the artifact before installation:
+
+```sh
+cd backend
+go build -o /absolute/staging/path/process-evidence ./cmd/process-evidence
+```
+
+Run only the installation step from an existing root terminal:
+
+```sh
+sh deploy/process-evidence/install.sh /absolute/staging/path/process-evidence
+```
+
+The installer backs up replaced files, retains an existing operator policy, and
+starts only `xcloud-process-evidence.service` and its timer. It does not restart
+any NF or console process. Configure the console deployment with
+`NF_HEALTH_PROCESS_SNAPSHOT=/run/xcloud-process-evidence/latest.json` and apply
+that environment through the existing console runtime procedure.
+
+The console consults the file only after its own exact-name inspection found a
+process whose executable was unreadable. Every parent directory and the file
+must be root-owned, not group/world writable and not a symlink. The reader rejects
+files above 1 MiB, evidence older than 60 seconds, future timestamps, different
+boot IDs, exited/reused PIDs and changed names. Failed checks preserve the local
+`unverified` result. Accepted L1 evidence includes additive `processObservedAt`
+and `processSource=root_owned_snapshot` provenance. Existing histories are not
+rewritten. The app cannot invoke the writer or change its policy.
+
+To disable this path, remove the environment variable and apply the ordinary
+console update procedure; then an operator can disable only the evidence timer.
+Local process checks continue and report any remaining permission gap honestly.
+
+## Enable metrics on an existing process target
+
+The target editor allows an explicit collector transition for resource-native
+targets that already have an authorized local inspection source. A transition
+retains `resourceId`, `candidateId`, service kind and process binding. The API
+accepts optional `target.collectorProfile` in the existing revision-bound PUT;
+omitting it retains the stored profile. A transition to `http_metrics` requires
+an allowlisted metrics endpoint. A transition to `process_only` removes HTTP
+endpoints/probes and still requires the authorized local source. Rejected or
+stale-revision writes do not change the target.
+
+Metadata advertises `collectorProfileTransitions` so an older backend keeps the
+editor's profile selector locked during a rolling update. The separate
+`processSnapshotConfigured` flag means a path is configured, not that its file
+has passed trust/freshness validation.
+
+Confirm which running resource owns an endpoint before declaring the association,
+especially where SMF/PGW-C or UPF/PGW-U configurations share an address. Start with
+manual collection, inspect L1/L2 and accepted metric families, then restore the
+approved schedule. Preserve the original target and its history. Historical
+counters and active-session gauges remain observations, not current service
+success; the interval evaluator is still not implemented.
 
 ## 7. Freshness Troubleshooting
 
