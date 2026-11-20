@@ -25,7 +25,7 @@ import type {
   SoftwareMetadata,
 } from './inventory-types';
 import {
-  validateAttributes,
+  validateUpdateAttributes,
   validateMachineName,
   validateManagementEndpoints,
 } from './inventory-validation';
@@ -138,7 +138,7 @@ export function InventoryDetailPage() {
         setEditError('Attributes must be valid JSON.');
         return;
       }
-      const attrErr = validateAttributes(parsedAttributes);
+      const attrErr = validateUpdateAttributes(parsedAttributes);
       if (attrErr) {
         setEditError(attrErr);
         return;

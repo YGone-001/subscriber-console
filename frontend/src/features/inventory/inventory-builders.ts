@@ -7,6 +7,7 @@ import type {
 import {
   FORBIDDEN_SERVER_FIELDS,
   validateAttributes,
+  validateUpdateAttributes,
   validateLabels,
   validateMachineName,
   validateManagementEndpoints,
@@ -109,7 +110,7 @@ export function buildUpdateResourceRequest(
   }
 
   if (input.attributes) {
-    const attrError = validateAttributes(input.attributes);
+    const attrError = validateUpdateAttributes(input.attributes);
     if (attrError) {
       throw new Error(attrError);
     }

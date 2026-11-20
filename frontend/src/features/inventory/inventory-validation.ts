@@ -99,6 +99,14 @@ export function findSensitiveAttributeKey(obj: unknown, prefix = ''): string | n
 }
 
 export function validateAttributes(attrs: unknown): string | null {
+  return validateAttributeObject(attrs, false);
+}
+
+export function validateUpdateAttributes(attrs: unknown): string | null {
+  return validateAttributeObject(attrs, true);
+}
+
+function validateAttributeObject(attrs: unknown, allowRuntimeMetadata: boolean): string | null {
   if (attrs === undefined || attrs === null) {
     return null;
   }
@@ -142,7 +150,8 @@ export function validateAttributes(attrs: unknown): string | null {
       return null;
     }
     for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
-      if (k.includes('.') || k.startsWith('$')) {
+      const runtimeMetadata = allowRuntimeMetadata && depth === 1 && typeof v === 'string' && ['runtime.componentId', 'runtime.processName', 'runtime.hostId', 'runtime.source'].includes(k);
+      if ((k.includes('.') || k.startsWith('$')) && !runtimeMetadata) {
         return `Attribute key "${k}" cannot contain dots or start with $.`;
       }
       const err = checkKeys(v, depth + 1);

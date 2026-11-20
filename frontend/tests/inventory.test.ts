@@ -14,6 +14,7 @@ import {
 import {
   findSensitiveAttributeKey,
   validateAttributes,
+  validateUpdateAttributes,
   validateLabelKey,
   validateLabels,
   validateLabelValue,
@@ -212,6 +213,18 @@ test('inventory builders: buildUpdateResourceRequest enforces expectedRevision a
       labels: { Region: 'cn' },
     });
   }, /Label key/);
+});
+
+test('runtime metadata roundtrips only through update validation and preserves scope declarations', () => {
+  const attributes = { 'runtime.componentId': 'amf', 'runtime.processName': 'amfd', 'runtime.hostId': 'host-test', 'runtime.source': 'xcloud-runtime', xcloudOperationalScopes: [{ networkKey: 'lab-a', operatorName: '', plmns: [] }] };
+  const resource = { kind: 'network_function', name: 'amf-test', domain: '5gc', lifecycleState: 'planned', attributes };
+  assert.equal(validateUpdateAttributes(attributes), null);
+  assert.deepEqual(buildUpdateResourceRequest(1, resource).resource.attributes, attributes);
+  assert.throws(() => buildCreateResourceRequest(resource), /cannot contain dots/);
+  for (const invalid of [{ 'runtime.command': 'bad' }, { nested: attributes }, { 'runtime.hostId': 12 }, { 'runtime.hostId': 'x'.repeat(40000) }, { $where: 'bad' }, { password: 'bad' }]) {
+    assert.ok(validateUpdateAttributes(invalid));
+    assert.throws(() => buildUpdateResourceRequest(1, { ...resource, attributes: invalid }));
+  }
 });
 
 test('inventory builders: buildRetireResourceRequest enforces expectedRevision and reason', () => {
