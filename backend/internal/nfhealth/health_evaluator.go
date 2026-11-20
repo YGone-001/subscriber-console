@@ -73,10 +73,12 @@ func EvaluateProcessLayer(ev ProcessEvidence) LayerEvidence {
 		}
 	}
 	out := LayerEvidence{
-		State:          MapProcessEvidenceToState(ev),
-		EvidenceKind:   ev.EvidenceKind,
-		ProcessOutcome: ev.Outcome,
-		Measured:       true,
+		State:             MapProcessEvidenceToState(ev),
+		EvidenceKind:      ev.EvidenceKind,
+		ProcessOutcome:    ev.Outcome,
+		ProcessObservedAt: ev.ObservedAt,
+		ProcessSource:     ev.Source,
+		Measured:          true,
 	}
 	if ev.MainPID > 0 {
 		out.MainPID = ev.MainPID

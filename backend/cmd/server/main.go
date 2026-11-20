@@ -253,6 +253,7 @@ func main() {
 	nfHealthBindings := nfhealth.NewProcessBindingRegistry(cfg.NFHealthLocalProcessBindings)
 	nfHealthProber := nfhealth.NewHTTPProber(nfhealth.RequestTimeoutSeconds * time.Second)
 	nfHealthInspector := nfhealth.NewUnitInspector(nfHealthUnits, "/usr/bin/systemctl")
+	nfHealthInspector.SetProcessSnapshot(cfg.NFHealthProcessSnapshot)
 	nfHealthCollector := nfhealth.NewCollector(nfHealthProber, nfHealthInspector, nfHealthDest, nfHealthUnits)
 	nfHealthRepo := nfhealth.NewRepository(
 		mc.Ops.Collection("app_nf_health_targets"),

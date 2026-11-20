@@ -460,11 +460,9 @@ func ValidateUpdateTargetRequest(req *UpdateTargetRequest, dest *DestinationAllo
 // ValidateEffectiveTargetUpdate validates the proposed configuration of an
 // existing monitoring target.
 //
-// Immutable identity (resourceId, candidateId, collectorProfile) comes from the
-// stored target; the mutable fields come from the request. The stored collector
-// profile governs which rules apply, so an update can never escape the
-// validation that creation enforced — in particular an existing process_only
-// target cannot lose, disable or repoint its authorized inspection source.
+// Resource and candidate identity come from storage. An optional profile
+// transition preserves the authorized local source and applies all destination,
+// binding and domain checks before the revision-bound write.
 //
 // All checks run before any write, so a rejected update performs zero database
 // mutations.
@@ -485,7 +483,22 @@ func ValidateEffectiveTargetUpdate(
 		return err
 	}
 	mut := req.Target
-	switch existing.CollectorProfile {
+	profile := EffectiveCollectorProfile(existing, req)
+	if err := ValidateCollectorProfile(profile); err != nil {
+		return err
+	}
+	if profile != existing.CollectorProfile {
+		if existing.ResourceID == "" {
+			return validationError("INVALID_TARGET", "profile transitions require a resource-native target")
+		}
+		if strings.TrimSpace(mut.ServiceUnit) != strings.TrimSpace(existing.ServiceUnit) || mut.ServiceKind != existing.ServiceKind || !requiresLocalProcessInspection(mut.ServiceKind, mut.ServiceUnit) {
+			return validationError("INVALID_TARGET", "profile transitions must retain the authorized local inspection source")
+		}
+		if profile == CollectorHTTPMetrics && strings.TrimSpace(mut.MetricsEndpoint) == "" {
+			return validationError("INVALID_TARGET", "HTTP profile transition requires metricsEndpoint")
+		}
+	}
+	switch profile {
 	case CollectorProcessOnly:
 		if strings.TrimSpace(mut.MetricsEndpoint) != "" {
 			return validationError("INVALID_TARGET", "process_only must not configure an HTTP metrics endpoint")
@@ -523,6 +536,14 @@ func ValidateEffectiveTargetUpdate(
 	default:
 		return nil
 	}
+}
+
+// EffectiveCollectorProfile preserves the historical update contract when omitted.
+func EffectiveCollectorProfile(existing *HealthTarget, req *UpdateTargetRequest) string {
+	if req.Target.CollectorProfile != "" {
+		return req.Target.CollectorProfile
+	}
+	return existing.CollectorProfile
 }
 
 // ValidateLimit bounds a pagination limit query value.

@@ -222,38 +222,40 @@ func (h *Handler) auditWrite(p *auth.Principal, action, targetID string, revisio
 
 // MetaResponse is the GET /api/nf-health/meta payload.
 type MetaResponse struct {
-	SchemaVersion            int                `json:"schemaVersion"`
-	CollectorProfiles        []string           `json:"collectorProfiles"`
-	CollectionModes          []string           `json:"collectionModes"`
-	RunStatuses              []string           `json:"runStatuses"`
-	LayerStates              []string           `json:"layerStates"`
-	FreshnessStates          []string           `json:"freshnessStates"`
-	CollectionOutcomes       []string           `json:"collectionOutcomes"`
-	EvidenceKinds            []string           `json:"evidenceKinds"`
-	ProcessOutcomes          []string           `json:"processOutcomes"`
-	InterfaceOutcomes        []string           `json:"interfaceOutcomes"`
-	ProbeFamilies            []string           `json:"probeFamilies"`
-	MaxInterfaceProbes       int                `json:"maxInterfaceProbes"`
-	ServiceKinds             []string           `json:"serviceKinds"`
-	IdentityStates           []string           `json:"identityStates"`
-	SupportedResourceDomains []string           `json:"supportedResourceDomains"`
-	MetricCategories         []string           `json:"metricCategories"`
-	MetricEvidenceClasses    []string           `json:"metricEvidenceClasses"`
-	ServiceReasons           []string           `json:"serviceReasons"`
-	MinIntervalSeconds       int                `json:"minIntervalSeconds"`
-	MaxIntervalSeconds       int                `json:"maxIntervalSeconds"`
-	DefaultIntervalSeconds   int                `json:"defaultIntervalSeconds"`
-	RequestTimeoutSeconds    int                `json:"requestTimeoutSeconds"`
-	TotalDeadlineSeconds     int                `json:"totalDeadlineSeconds"`
-	MaxGlobalConcurrent      int                `json:"maxGlobalConcurrent"`
-	MaxLocalConcurrent       int                `json:"maxLocalConcurrent"`
-	StalenessGraceSeconds    int                `json:"stalenessGraceSeconds"`
-	ManualFreshnessSeconds   int                `json:"manualFreshnessWindowSeconds"`
-	RetentionDays            int                `json:"retentionDays"`
-	MaxRetentionDays         int                `json:"maxRetentionDays"`
-	SupportedMetrics         []MetricDefinition `json:"supportedMetrics"`
-	AllowedDestinations      []string           `json:"allowedDestinations"`
-	AllowedServiceUnits      []string           `json:"allowedServiceUnits"`
+	CollectorProfileTransitions bool               `json:"collectorProfileTransitions"`
+	ProcessSnapshotConfigured   bool               `json:"processSnapshotConfigured"`
+	SchemaVersion               int                `json:"schemaVersion"`
+	CollectorProfiles           []string           `json:"collectorProfiles"`
+	CollectionModes             []string           `json:"collectionModes"`
+	RunStatuses                 []string           `json:"runStatuses"`
+	LayerStates                 []string           `json:"layerStates"`
+	FreshnessStates             []string           `json:"freshnessStates"`
+	CollectionOutcomes          []string           `json:"collectionOutcomes"`
+	EvidenceKinds               []string           `json:"evidenceKinds"`
+	ProcessOutcomes             []string           `json:"processOutcomes"`
+	InterfaceOutcomes           []string           `json:"interfaceOutcomes"`
+	ProbeFamilies               []string           `json:"probeFamilies"`
+	MaxInterfaceProbes          int                `json:"maxInterfaceProbes"`
+	ServiceKinds                []string           `json:"serviceKinds"`
+	IdentityStates              []string           `json:"identityStates"`
+	SupportedResourceDomains    []string           `json:"supportedResourceDomains"`
+	MetricCategories            []string           `json:"metricCategories"`
+	MetricEvidenceClasses       []string           `json:"metricEvidenceClasses"`
+	ServiceReasons              []string           `json:"serviceReasons"`
+	MinIntervalSeconds          int                `json:"minIntervalSeconds"`
+	MaxIntervalSeconds          int                `json:"maxIntervalSeconds"`
+	DefaultIntervalSeconds      int                `json:"defaultIntervalSeconds"`
+	RequestTimeoutSeconds       int                `json:"requestTimeoutSeconds"`
+	TotalDeadlineSeconds        int                `json:"totalDeadlineSeconds"`
+	MaxGlobalConcurrent         int                `json:"maxGlobalConcurrent"`
+	MaxLocalConcurrent          int                `json:"maxLocalConcurrent"`
+	StalenessGraceSeconds       int                `json:"stalenessGraceSeconds"`
+	ManualFreshnessSeconds      int                `json:"manualFreshnessWindowSeconds"`
+	RetentionDays               int                `json:"retentionDays"`
+	MaxRetentionDays            int                `json:"maxRetentionDays"`
+	SupportedMetrics            []MetricDefinition `json:"supportedMetrics"`
+	AllowedDestinations         []string           `json:"allowedDestinations"`
+	AllowedServiceUnits         []string           `json:"allowedServiceUnits"`
 }
 
 // Meta handles GET /api/nf-health/meta.
@@ -266,38 +268,40 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, MetaResponse{
-		SchemaVersion:            SchemaVersion,
-		CollectorProfiles:        CanonicalCollectorProfiles,
-		CollectionModes:          CanonicalCollectionModes,
-		RunStatuses:              CanonicalRunStatuses,
-		LayerStates:              CanonicalLayerStates,
-		FreshnessStates:          CanonicalFreshnessStates,
-		CollectionOutcomes:       CanonicalCollectionOutcomes,
-		EvidenceKinds:            CanonicalEvidenceKinds,
-		ProcessOutcomes:          CanonicalProcessOutcomes,
-		InterfaceOutcomes:        CanonicalInterfaceOutcomes,
-		ProbeFamilies:            CanonicalProbeFamilies,
-		MaxInterfaceProbes:       MaxExtraProbes,
-		ServiceKinds:             []string{"systemd", "process", "none"},
-		IdentityStates:           CanonicalIdentityStates,
-		SupportedResourceDomains: SupportedResourceDomains,
-		MetricCategories:         CanonicalMetricCategories,
-		MetricEvidenceClasses:    CanonicalMetricEvidenceClasses,
-		ServiceReasons:           CanonicalServiceReasons,
-		MinIntervalSeconds:       MinIntervalSeconds,
-		MaxIntervalSeconds:       MaxIntervalSeconds,
-		DefaultIntervalSeconds:   DefaultIntervalSeconds,
-		RequestTimeoutSeconds:    RequestTimeoutSeconds,
-		TotalDeadlineSeconds:     TotalDeadlineSeconds,
-		MaxGlobalConcurrent:      MaxGlobalConcurrent,
-		MaxLocalConcurrent:       MaxLocalConcurrent,
-		StalenessGraceSeconds:    StalenessGraceSeconds,
-		ManualFreshnessSeconds:   ManualFreshnessWindowSeconds,
-		RetentionDays:            DefaultRetentionDays,
-		MaxRetentionDays:         MaxRetentionDays,
-		SupportedMetrics:         SupportedMetrics(),
-		AllowedDestinations:      h.destEntries(),
-		AllowedServiceUnits:      h.unitEntries(),
+		CollectorProfileTransitions: true,
+		ProcessSnapshotConfigured:   h.collector != nil && h.collector.inspector != nil && h.collector.inspector.processSnapshot != "",
+		SchemaVersion:               SchemaVersion,
+		CollectorProfiles:           CanonicalCollectorProfiles,
+		CollectionModes:             CanonicalCollectionModes,
+		RunStatuses:                 CanonicalRunStatuses,
+		LayerStates:                 CanonicalLayerStates,
+		FreshnessStates:             CanonicalFreshnessStates,
+		CollectionOutcomes:          CanonicalCollectionOutcomes,
+		EvidenceKinds:               CanonicalEvidenceKinds,
+		ProcessOutcomes:             CanonicalProcessOutcomes,
+		InterfaceOutcomes:           CanonicalInterfaceOutcomes,
+		ProbeFamilies:               CanonicalProbeFamilies,
+		MaxInterfaceProbes:          MaxExtraProbes,
+		ServiceKinds:                []string{"systemd", "process", "none"},
+		IdentityStates:              CanonicalIdentityStates,
+		SupportedResourceDomains:    SupportedResourceDomains,
+		MetricCategories:            CanonicalMetricCategories,
+		MetricEvidenceClasses:       CanonicalMetricEvidenceClasses,
+		ServiceReasons:              CanonicalServiceReasons,
+		MinIntervalSeconds:          MinIntervalSeconds,
+		MaxIntervalSeconds:          MaxIntervalSeconds,
+		DefaultIntervalSeconds:      DefaultIntervalSeconds,
+		RequestTimeoutSeconds:       RequestTimeoutSeconds,
+		TotalDeadlineSeconds:        TotalDeadlineSeconds,
+		MaxGlobalConcurrent:         MaxGlobalConcurrent,
+		MaxLocalConcurrent:          MaxLocalConcurrent,
+		StalenessGraceSeconds:       StalenessGraceSeconds,
+		ManualFreshnessSeconds:      ManualFreshnessWindowSeconds,
+		RetentionDays:               DefaultRetentionDays,
+		MaxRetentionDays:            MaxRetentionDays,
+		SupportedMetrics:            SupportedMetrics(),
+		AllowedDestinations:         h.destEntries(),
+		AllowedServiceUnits:         h.unitEntries(),
 	})
 }
 
@@ -1097,9 +1101,8 @@ func (h *Handler) UpdateTarget(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, err.Error(), "INVALID_REQUEST")
 		return
 	}
-	// The effective configuration is validated against the stored target: the
-	// immutable identity comes from storage and the stored collector profile
-	// governs which rules apply. A rejected update performs no write.
+	// Identity comes from storage. An explicit collector-profile transition is
+	// checked against the same local binding before any revision-bound write.
 	existing, err := h.repo.GetTarget(r.Context(), targetID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -1127,11 +1130,13 @@ func (h *Handler) UpdateTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	rev := updated.Revision
 	h.auditWrite(p, "nf_health.target.update", targetID, &rev, map[string]any{
-		"resourceId":     updated.ResourceID,
-		"name":           updated.Name,
-		"previousName":   before.Name,
-		"collectionMode": updated.CollectionMode,
-		"enabled":        updated.Enabled,
+		"collectorProfile":         updated.CollectorProfile,
+		"previousCollectorProfile": before.CollectorProfile,
+		"resourceId":               updated.ResourceID,
+		"name":                     updated.Name,
+		"previousName":             before.Name,
+		"collectionMode":           updated.CollectionMode,
+		"enabled":                  updated.Enabled,
 	})
 	response.JSON(w, http.StatusOK, updated)
 }

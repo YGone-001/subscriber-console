@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"subscriber/internal/processevidence"
 )
 
 // ProcessEvidence is the read-only L1 inspection result for one service unit
@@ -21,18 +23,25 @@ type ProcessEvidence struct {
 	Found        bool
 	ErrorMessage string
 	EvidenceKind string
+	ObservedAt   string
+	Source       string
 }
 
 // UnitInspector performs read-only L1 inspection. It never starts, stops or
 // reloads any service.
 type UnitInspector struct {
-	systemdBinary string
-	timeout       time.Duration
-	procRoot      string
-	allowlist     *ServiceUnitAllowlist
+	systemdBinary   string
+	timeout         time.Duration
+	procRoot        string
+	allowlist       *ServiceUnitAllowlist
+	processSnapshot string
 	// runner is overridable for tests. Production uses exec of a fixed command.
 	runner func(ctx context.Context, name string, args ...string) (string, error)
 }
+
+// SetProcessSnapshot enables an optional root-owned, fresh procfs snapshot.
+// The web process only reads evidence; it never invokes the privileged writer.
+func (u *UnitInspector) SetProcessSnapshot(path string) { u.processSnapshot = path }
 
 // NewUnitInspector constructs a read-only inspector.
 func NewUnitInspector(allowlist *ServiceUnitAllowlist, systemdBinary string) *UnitInspector {
@@ -84,7 +93,19 @@ func (u *UnitInspector) Inspect(ctx context.Context, serviceUnit, serviceKind st
 	case "systemd":
 		return u.inspectSystemd(ctx, unit)
 	case "process":
-		return u.inspectProcess(unit)
+		ev := u.inspectProcess(unit)
+		if ev.Outcome == ProcessUnverified && u.processSnapshot != "" {
+			name := strings.TrimSuffix(unit, ".service")
+			verified, observedAt, err := (processevidence.Reader{Path: u.processSnapshot, ProcRoot: u.procRoot}).Verify(name, ev.MainPID, time.Now())
+			if err == nil {
+				ev.Outcome = ProcessRunning
+				ev.ExePath = verified.Executable
+				ev.ErrorMessage = ""
+				ev.ObservedAt = observedAt.Format(time.RFC3339Nano)
+				ev.Source = "root_owned_snapshot"
+			}
+		}
+		return ev
 	default:
 		return ProcessEvidence{
 			Outcome:      ProcessNotConfigured,

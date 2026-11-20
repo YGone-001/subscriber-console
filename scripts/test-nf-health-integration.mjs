@@ -1084,6 +1084,36 @@ async function main() {
       assert.equal(after.json.target.collectorProfile, 'process_only');
     });
 
+    await verifyAsync('explicit profile transitions preserve identity, history and CAS', async () => {
+      const before = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      const target = before.json.target;
+      const history = await samplesColl.find({ targetId: processOnlyTargetId }).toArray();
+      const mutable = {
+        collectorProfile: 'http_metrics', name: target.name,
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceUnit: target.serviceUnit, serviceKind: target.serviceKind,
+        collectionMode: target.collectionMode, intervalSeconds: target.intervalSeconds, enabled: target.enabled,
+      };
+      const promoted = await api(base, 'PUT', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken, {
+        expectedRevision: target.revision, target: mutable,
+      });
+      assert.equal(promoted.status, 200, promoted.text);
+      assert.equal(promoted.json.collectorProfile, 'http_metrics');
+      assert.equal(promoted.json.resourceId, target.resourceId);
+      assert.equal(promoted.json.serviceUnit, target.serviceUnit);
+      const stale = await api(base, 'PUT', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken, {
+        expectedRevision: target.revision, target: mutable,
+      });
+      assert.equal(stale.status, 409, stale.text);
+      const reverted = await api(base, 'PUT', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken, {
+        expectedRevision: promoted.json.revision,
+        target: { ...mutable, collectorProfile: 'process_only', metricsEndpoint: '', probes: [] },
+      });
+      assert.equal(reverted.status, 200, reverted.text);
+      assert.equal(reverted.json.collectorProfile, 'process_only');
+      assert.deepEqual(await samplesColl.find({ targetId: processOnlyTargetId }).toArray(), history);
+    });
+
     await verifyAsync('collection rejects a deleted Inventory resource', async () => {
       await client.db(appDbName).collection('app_inventory_resources').deleteOne({ _id: RESOURCE_5GC });
       const res = await api(base, 'POST', `/api/nf-health/targets/${fiveGcTargetId}/collect`, operatorToken);

@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh xCloud read-only process identity evidence
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=20s
+AccuracySec=2s
+Unit=xcloud-process-evidence.service
+
+[Install]
+WantedBy=timers.target

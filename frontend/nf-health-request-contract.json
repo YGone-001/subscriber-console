@@ -70,8 +70,8 @@
     "nestedContracts": {
       "target": {
         "requiredKeys": ["name", "serviceKind", "collectionMode", "intervalSeconds", "enabled"],
-        "allowedKeys": ["name", "metricsEndpoint", "serviceUnit", "serviceKind", "collectionMode", "intervalSeconds", "enabled"],
-        "forbiddenKeys": ["targetId", "candidateId", "resourceId", "collectorProfile", "schemaVersion", "revision", "domain", "nfType", "identityState"]
+        "allowedKeys": ["name", "collectorProfile", "metricsEndpoint", "probes", "serviceUnit", "serviceKind", "collectionMode", "intervalSeconds", "enabled"],
+        "forbiddenKeys": ["targetId", "candidateId", "resourceId", "schemaVersion", "revision", "domain", "nfType", "identityState"]
       }
     },
     "responseSemantics": "mutation-result"

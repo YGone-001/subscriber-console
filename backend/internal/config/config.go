@@ -31,6 +31,7 @@ type Config struct {
 	NFHealthServiceUnits         string // comma-separated approved service units / process names
 	NFHealthTLSCAFile            string // optional CA bundle for https metrics endpoints
 	NFHealthLocalProcessBindings string // comma-separated resourceId=unit local bindings
+	NFHealthProcessSnapshot      string // optional root-owned local process evidence snapshot
 
 	// Log workspace (read-only file and systemd unit sources)
 	NFLogDir            string // directory scanned for *.log sources
@@ -96,6 +97,7 @@ func Load() (*Config, error) {
 		NFHealthTLSCAFile:      os.Getenv("NF_HEALTH_TLS_CA_FILE"),
 
 		NFHealthLocalProcessBindings: os.Getenv("NF_HEALTH_LOCAL_PROCESS_BINDINGS"),
+		NFHealthProcessSnapshot:      os.Getenv("NF_HEALTH_PROCESS_SNAPSHOT"),
 
 		NFLogDir:            envOrDefault("NF_LOG_DIR", "/var/log/xcloud"),
 		NFLogSources:        os.Getenv("NF_LOG_SOURCES"),

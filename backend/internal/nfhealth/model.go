@@ -227,8 +227,10 @@ type LayerEvidence struct {
 	HTTPStatus *int   `json:"httpStatus,omitempty" bson:"httpStatus,omitempty"`
 	ResponseMs *int64 `json:"responseMs,omitempty" bson:"responseMs,omitempty"`
 	// Process fields, present only for process evidence.
-	ProcessOutcome string `json:"processOutcome,omitempty" bson:"processOutcome,omitempty"`
-	MainPID        int    `json:"mainPid,omitempty" bson:"mainPid,omitempty"`
+	ProcessOutcome    string `json:"processOutcome,omitempty" bson:"processOutcome,omitempty"`
+	MainPID           int    `json:"mainPid,omitempty" bson:"mainPid,omitempty"`
+	ProcessObservedAt string `json:"processObservedAt,omitempty" bson:"processObservedAt,omitempty"`
+	ProcessSource     string `json:"processSource,omitempty" bson:"processSource,omitempty"`
 	// Coverage marks the layer as explicitly measured versus unsupported.
 	Measured bool `json:"measured" bson:"measured"`
 }
@@ -392,14 +394,16 @@ type UpdateTargetRequest struct {
 
 // MutableTarget is the operator-mutable projection of a monitoring target.
 type MutableTarget struct {
-	Name            string           `json:"name"`
-	MetricsEndpoint string           `json:"metricsEndpoint,omitempty"`
-	Probes          []InterfaceProbe `json:"probes,omitempty"`
-	ServiceUnit     string           `json:"serviceUnit,omitempty"`
-	ServiceKind     string           `json:"serviceKind"`
-	CollectionMode  string           `json:"collectionMode"`
-	IntervalSeconds int              `json:"intervalSeconds"`
-	Enabled         bool             `json:"enabled"`
+	// Empty preserves the stored profile. Transitions retain canonical identity.
+	CollectorProfile string           `json:"collectorProfile,omitempty"`
+	Name             string           `json:"name"`
+	MetricsEndpoint  string           `json:"metricsEndpoint,omitempty"`
+	Probes           []InterfaceProbe `json:"probes,omitempty"`
+	ServiceUnit      string           `json:"serviceUnit,omitempty"`
+	ServiceKind      string           `json:"serviceKind"`
+	CollectionMode   string           `json:"collectionMode"`
+	IntervalSeconds  int              `json:"intervalSeconds"`
+	Enabled          bool             `json:"enabled"`
 }
 
 // TargetListFilter filters monitoring target listings.
