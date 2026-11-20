@@ -180,6 +180,8 @@ export interface MetricDefinition {
 }
 
 export interface NfHealthMeta {
+  businessRulesVersion?: string;
+  businessRules?: BusinessRuleDefinition[];
   serviceWindowVersion?: string;
   serviceWindowMode?: 'observation_only';
   collectorProfileTransitions?: boolean;
@@ -309,6 +311,7 @@ export interface ServiceWindowRow {
 
 export interface ServiceWindowReport {
   version: string;
+  rulesVersion?: string;
   mode: 'observation_only';
   evaluatedAt: string;
   complete: boolean;
@@ -320,7 +323,41 @@ export interface ServiceWindowReport {
     freshnessSeconds: number;
     maxGapSeconds: number;
     rows: ServiceWindowRow[];
+    businessRules?: BusinessRuleObservation[];
   }[];
+}
+
+export interface BusinessRuleDefinition {
+  ruleId: string;
+  version: string;
+  nfType: string;
+  domain: string;
+  kind: 'request_completion' | 'activity' | 'reconciliation';
+  metrics: string[];
+  minimumRequests?: number;
+  semantics: string;
+  sourceReview: 'source_reviewed' | 'registry_documented';
+  binaryAttestation: 'not_attested';
+  references: { path: string; line: number }[];
+  missingSignals: string[];
+}
+
+export interface BusinessRuleObservation extends BusinessRuleDefinition {
+  scope: string;
+  status: string;
+  reason: string;
+  quality: string;
+  coveragePercent: number;
+  validPoints: number;
+  validIntervals: number;
+  missingMetrics: string[];
+  observed: { metric: string; latestValue: number | null; delta: number | null; rate: number | null; quality: string; reason: string }[];
+  requestDelta: number | null;
+  completionDelta: number | null;
+  difference: number | null;
+  completionRatioPercent: number | null;
+  decisionEligible: boolean;
+  healthEffect: 'none';
 }
 
 export interface ListSamplesResponse {

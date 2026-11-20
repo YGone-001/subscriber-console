@@ -1247,3 +1247,15 @@ metrics, duplicate time, scope ambiguity and gaps remain explicit. Completion /
 request ratios are observation-only with unverified transaction outcome semantics.
 No L3 health, alerts, notifications or inspection verdicts change automatically.
 The authority is `docs/architecture/nf-health-telemetry.md`.
+
+### Business process observation boundary
+
+`business-observation-v1` adds eight server-owned, domain/NF-type scoped process
+observations to the existing interval report and meta API. Required values,
+quality, scope and accepted intervals are verified before comparison. No traffic,
+low volume, aligned counts, completion gaps, occupancy and reconciliation events
+remain distinct. The 100-request floor is descriptive, not an SLO/fault threshold.
+Reviewed source is not attestation of the running exporter build; every rule
+retains `decisionEligible=false` and `healthEffect=none`. Existing health, alert,
+notification and inspection authorities are unchanged. Details are owned by
+`docs/architecture/nf-health-telemetry.md`.

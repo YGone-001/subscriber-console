@@ -216,6 +216,39 @@ historical document, and no new collection or index is created. Detail reads and
 collection use bounded historical reads through the existing target/time index;
 GET never writes or recollects. Raw sample/history contracts stay compatible.
 
+The additive `business-observation-v1` registry interprets windows as process
+observations, with eight definitions: SMF/UPF N4 Report, AMF initial registration,
+PCF AM/SM association, MME occupancy, OCS CCR activity and OCS reconciliation.
+Each definition is restricted to its canonical Inventory domain/NF type and lists
+required metrics, semantic class, source-review references and evidence gaps.
+The meta response advertises these definitions; each window adds `businessRules`.
+
+The paired rules require every necessary metric in one verified scope and exactly
+matching accepted intervals. They distinguish no traffic, volume below a
+100-request descriptive floor, aligned increments, a completion gap and
+completions exceeding requests. The floor is neither a fault threshold nor an
+SLO. A completion gap is never a failure count; alignment is never a healthy
+verdict. Missing values remain missing even when the HTTP endpoint is healthy.
+
+Reviewed SMF source increments requests at handler entry and completions after
+sending an acceptance response; this does not prove later charging/paging work.
+Reviewed UPF source increments requests before transmission and completions after
+an accepted response; timeout/rejection outcomes are not independently exported.
+AMF request and completion events occur in separate NAS processing steps. PCF
+association counters are per PLMN/S-NSSAI, so filtered scopes stay unverified.
+The review is evidence about inspected source, not attestation of the running
+binary. Every definition explicitly carries `binaryAttestation=not_attested`.
+MME/OCS descriptions are registry-documented, not a new running-source proof.
+
+OCS reconciliation checks execution and anomaly increments separately. No
+execution is not a successful scan; execution without new anomalies does not
+prove scan completion/coverage. Anomaly counters are retained separately because
+their event populations may overlap. Occupancy/CCR activity cannot establish
+attach/authentication/charging outcomes. Every rule remains
+`decisionEligible=false` and `healthEffect=none`: no alert, notification,
+inspection verdict or authoritative L3 state changes. Read-time staleness also
+ages the business observations without mutating their historical evidence.
+
 Activity is not complete service health. A positive activity gauge (active
 sessions, registered subscribers, active PFCP sessions, connected access nodes)
 establishes that service objects exist; it is reported as `activity_observed`

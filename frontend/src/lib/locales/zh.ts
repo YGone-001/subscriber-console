@@ -5,9 +5,11 @@ import { imsZh } from './ims-registration';
 import { investigationsZh } from './investigations';
 import { inspectionsZh } from './inspections';
 import { healthWindowZh } from './nf-health-window';
+import { healthRulesZh } from './nf-health-rules';
 
 export const zh: Record<string, string> = {
     ...healthWindowZh,
+    ...healthRulesZh,
     ...driftZh,
     ...evidenceZh,
     ...groupsZh,

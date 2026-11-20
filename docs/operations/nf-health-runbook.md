@@ -305,3 +305,25 @@ no observed activity; missing metrics and zero requests never become successful
 business operations. A restart, PID reuse, counter reset, configuration change,
 privacy-filtered scope or read failure is reported explicitly. Historical data
 remains visible; this module does not automatically change alert rules or reports.
+
+## Business process observations
+
+Select a 10/30-minute window in an HTTP-metrics target detail. Process observations
+appear above the raw interval table. They show required input values, requests,
+completions, their difference, window quality and a suggested diagnostic check.
+Expand **metric semantics and evidence gaps** to inspect the rule version,
+statistical scope, source references and remaining requirements for a verdict.
+
+The request/completion difference is not a failure count. The 100-request floor
+is only a minimum for descriptive comparison; it is not an alert threshold.
+Low volume, no traffic, missing business values and stale evidence are distinct.
+An HTTP 200 endpoint exposing process-only metrics still has unavailable service
+rules. PCF additionally needs safely comparable PLMN/S-NSSAI scopes; the privacy
+policy is not relaxed to make its indicators appear complete.
+
+Source-reviewed descriptions do not attest the running binary. No rule enables
+fault notifications or changes existing health/inspection outcomes. To advance
+a rule toward a real verdict, obtain compatible outcome counters, cohort/pending
+and timeout/retry semantics, running-build provenance, expected business volume
+and meaningful success/failure validation. Do not simulate a pass by zero-filling
+missing counters or treating an accepted protocol response as end-to-end success.

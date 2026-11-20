@@ -1049,3 +1049,54 @@
 .windowEvidence li {
   margin-block: 0.5rem;
 }
+
+.ruleList {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.ruleObservation {
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel, 0.5rem);
+  padding: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ruleHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ruleHeading h3 {
+  margin: 0;
+  font-size: var(--ref-font-size-body, 1rem);
+}
+
+.ruleExplanation {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.ruleFacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 0.75rem;
+}
+
+.ruleFacts dt {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-support);
+}
+
+.ruleFacts dd {
+  margin: 0.25rem 0 0;
+}
+
+.ruleMissing {
+  color: var(--text-muted);
+}

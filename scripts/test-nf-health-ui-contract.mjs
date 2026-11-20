@@ -64,7 +64,7 @@ const tabBarSource = read('app/components/NavigationTabBar.tsx');
 const breadcrumbSource = read('app/components/NavigationBreadcrumbs.tsx');
 const paletteSource = read('app/components/CommandPalette.tsx');
 check('NFH-UI-09', sidebarSource.includes('getSidebarGroups'), 'sidebar=shared_authority');
-check('NFH-UI-10', /getVisibleNavigation|canAccessNavigationRoute/.test(tabBarSource), 'tab_bar=shared_authority');
+check('NFH-UI-10', /isNavigableDestination/.test(tabBarSource) && /resolveNavigationRoute/.test(tabBarSource) && /from '..\/..\/lib\/navigation'/.test(tabBarSource), 'tab_bar=shared_authority');
 check('NFH-UI-11', breadcrumbSource.includes('getBreadcrumbs'), 'breadcrumbs=shared_authority');
 check('NFH-UI-12', /getVisibleNavigation|filterNavigation/.test(paletteSource), 'command_palette=shared_authority');
 
@@ -334,7 +334,8 @@ const overviewSource = [
   readFileSync(resolve(root, 'frontend/src/features/operations/use-operational-overview-data.ts'), 'utf8'),
 ].join('\n');
 const networkSource = readFileSync(resolve(root, 'frontend/src/features/inventory/NetworkElementView.tsx'), 'utf8');
-const boundedEdgesSource = readFileSync(resolve(root, 'frontend/src/features/operations/use-bounded-edges.ts'), 'utf8');
+const containmentSource = read('features/operations/use-containment.ts');
+const containmentBackend = readFileSync(resolve(root, 'backend/internal/operationsview/containment.go'), 'utf8');
 const urlStateSource = readFileSync(resolve(root, 'frontend/src/features/operations/operations-url-state.ts'), 'utf8');
 const resourceProjectionSource = readFileSync(resolve(root, 'frontend/src/features/operations/operations-resources.ts'), 'utf8');
 const modelSource = readFileSync(resolve(root, 'frontend/src/features/operations/operational-model.ts'), 'utf8');
@@ -477,17 +478,17 @@ check(
 );
 check(
   'OPS-UI-14',
-  // The network view requests declared containment; the shared edge reader
-  // owns bounded cursor pagination and cancellation for every consumer.
-  /useBoundedEdges\(\{ relationshipType: 'contains' \}\)/.test(networkSource) &&
-    /maxPages = 3/.test(boundedEdgesSource) &&
-    /getJsonWithSignal/.test(boundedEdgesSource) &&
-    /virtual_no_containment/.test(modelSource) &&
-    /virtual_partial/.test(modelSource) &&
-    /virtual_unavailable/.test(modelSource) &&
-    /ops_tree_mode_virtual_partial/.test(localeEn) &&
-    /ops_tree_mode_virtual_unavailable/.test(localeZh),
-  'ops_topology=bounded_pagination_with_distinct_modes',
+  // Inventory now consumes the bounded server-owned containment projection,
+  // loading one level on expansion. The old client edge join is not its owner.
+  /useContainmentTree\(\)/.test(networkSource) &&
+    /loadChildren/.test(networkSource) &&
+    /parentId=\$\{encodeURIComponent\(resourceId\)\}/.test(containmentSource) &&
+    /ContainmentMaxResources/.test(containmentBackend) &&
+    /ContainmentMaxEdges/.test(containmentBackend) &&
+    /Truncated/.test(containmentBackend) &&
+    /containmentTree\.coverage/.test(networkSource) &&
+    /virtual_page_scope/.test(networkSource),
+  'ops_topology=bounded_server_containment_with_explicit_fallback',
 );
 check(
   'OPS-UI-15',
@@ -497,8 +498,8 @@ check(
   /applyOperationsPatch/.test(urlStateSource) &&
     /cursorReset/.test(urlStateSource) &&
     /setFilterNode\('node', ''\)/.test(networkSource) &&
-    /useBoundedEdges/.test(networkSource) &&
-    /getJsonWithSignal/.test(boundedEdgesSource),
+    /url\.setFilters\(\{ \[key\]: value, node: null \}\)/.test(networkSource) &&
+    /setCursorTrail\(\[\]\)/.test(networkSource),
   'ops_filter_state=cursor_and_selection_reset',
 );
 

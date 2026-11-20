@@ -13,21 +13,23 @@ const maxWindowHistory = 200
 // Reports are observation-only: no threshold, health state, alert, notification
 // or inspection finding is derived from an unverified outcome population.
 type ServiceWindowReport struct {
-	Version     string          `json:"version" bson:"version"`
-	Mode        string          `json:"mode" bson:"mode"`
-	EvaluatedAt string          `json:"evaluatedAt" bson:"evaluatedAt"`
-	Complete    bool            `json:"complete" bson:"complete"`
-	Reason      string          `json:"reason,omitempty" bson:"reason,omitempty"`
-	Windows     []ServiceWindow `json:"windows" bson:"windows"`
+	RulesVersion string          `json:"rulesVersion,omitempty" bson:"rulesVersion,omitempty"`
+	Version      string          `json:"version" bson:"version"`
+	Mode         string          `json:"mode" bson:"mode"`
+	EvaluatedAt  string          `json:"evaluatedAt" bson:"evaluatedAt"`
+	Complete     bool            `json:"complete" bson:"complete"`
+	Reason       string          `json:"reason,omitempty" bson:"reason,omitempty"`
+	Windows      []ServiceWindow `json:"windows" bson:"windows"`
 }
 
 type ServiceWindow struct {
-	Seconds          int                `json:"seconds" bson:"seconds"`
-	From             string             `json:"from" bson:"from"`
-	To               string             `json:"to" bson:"to"`
-	FreshnessSeconds int                `json:"freshnessSeconds" bson:"freshnessSeconds"`
-	MaxGapSeconds    int                `json:"maxGapSeconds" bson:"maxGapSeconds"`
-	Rows             []ServiceWindowRow `json:"rows" bson:"rows"`
+	Seconds          int                       `json:"seconds" bson:"seconds"`
+	From             string                    `json:"from" bson:"from"`
+	To               string                    `json:"to" bson:"to"`
+	FreshnessSeconds int                       `json:"freshnessSeconds" bson:"freshnessSeconds"`
+	MaxGapSeconds    int                       `json:"maxGapSeconds" bson:"maxGapSeconds"`
+	Rows             []ServiceWindowRow        `json:"rows" bson:"rows"`
+	BusinessRules    []BusinessRuleObservation `json:"businessRules,omitempty" bson:"businessRules,omitempty"`
 }
 
 type ServiceWindowRow struct {
@@ -76,7 +78,7 @@ func windowLimits(target *HealthTarget) (int, int) {
 
 func unavailableWindows(now time.Time, reason string) *ServiceWindowReport {
 	return &ServiceWindowReport{Version: ServiceWindowVersion, Mode: "observation_only",
-		EvaluatedAt: now.UTC().Format(time.RFC3339Nano), Reason: reason, Windows: []ServiceWindow{}}
+		RulesVersion: BusinessRulesVersion, EvaluatedAt: now.UTC().Format(time.RFC3339Nano), Reason: reason, Windows: []ServiceWindow{}}
 }
 
 // EvaluateServiceWindows is pure, bounded and deterministic. Failed interface
@@ -140,6 +142,7 @@ func EvaluateServiceWindows(target *HealthTarget, samples []HealthSample, now ti
 			window.Rows = append(window.Rows, row)
 		}
 		pairWindowRows(&window)
+		window.BusinessRules = EvaluateBusinessRules(target, window)
 		report.Windows = append(report.Windows, window)
 	}
 	if len(report.Windows[0].Rows) == 0 {
@@ -375,6 +378,12 @@ func ProjectServiceWindows(target *HealthTarget, sample *HealthSample, now time.
 			for j := range report.Windows[i].Rows {
 				report.Windows[i].Rows[j].Quality = "stale"
 				report.Windows[i].Rows[j].Reason = "sample_stale"
+			}
+			report.Windows[i].BusinessRules = append([]BusinessRuleObservation(nil), report.Windows[i].BusinessRules...)
+			for j := range report.Windows[i].BusinessRules {
+				report.Windows[i].BusinessRules[j].Status = "stale"
+				report.Windows[i].BusinessRules[j].Reason = "sample_stale"
+				report.Windows[i].BusinessRules[j].Quality = "stale"
 			}
 		}
 	}

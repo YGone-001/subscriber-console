@@ -222,42 +222,44 @@ func (h *Handler) auditWrite(p *auth.Principal, action, targetID string, revisio
 
 // MetaResponse is the GET /api/nf-health/meta payload.
 type MetaResponse struct {
-	ServiceWindowVersion        string             `json:"serviceWindowVersion"`
-	ServiceWindowMode           string             `json:"serviceWindowMode"`
-	CollectorProfileTransitions bool               `json:"collectorProfileTransitions"`
-	ProcessSnapshotConfigured   bool               `json:"processSnapshotConfigured"`
-	SchemaVersion               int                `json:"schemaVersion"`
-	CollectorProfiles           []string           `json:"collectorProfiles"`
-	CollectionModes             []string           `json:"collectionModes"`
-	RunStatuses                 []string           `json:"runStatuses"`
-	LayerStates                 []string           `json:"layerStates"`
-	FreshnessStates             []string           `json:"freshnessStates"`
-	CollectionOutcomes          []string           `json:"collectionOutcomes"`
-	EvidenceKinds               []string           `json:"evidenceKinds"`
-	ProcessOutcomes             []string           `json:"processOutcomes"`
-	InterfaceOutcomes           []string           `json:"interfaceOutcomes"`
-	ProbeFamilies               []string           `json:"probeFamilies"`
-	MaxInterfaceProbes          int                `json:"maxInterfaceProbes"`
-	ServiceKinds                []string           `json:"serviceKinds"`
-	IdentityStates              []string           `json:"identityStates"`
-	SupportedResourceDomains    []string           `json:"supportedResourceDomains"`
-	MetricCategories            []string           `json:"metricCategories"`
-	MetricEvidenceClasses       []string           `json:"metricEvidenceClasses"`
-	ServiceReasons              []string           `json:"serviceReasons"`
-	MinIntervalSeconds          int                `json:"minIntervalSeconds"`
-	MaxIntervalSeconds          int                `json:"maxIntervalSeconds"`
-	DefaultIntervalSeconds      int                `json:"defaultIntervalSeconds"`
-	RequestTimeoutSeconds       int                `json:"requestTimeoutSeconds"`
-	TotalDeadlineSeconds        int                `json:"totalDeadlineSeconds"`
-	MaxGlobalConcurrent         int                `json:"maxGlobalConcurrent"`
-	MaxLocalConcurrent          int                `json:"maxLocalConcurrent"`
-	StalenessGraceSeconds       int                `json:"stalenessGraceSeconds"`
-	ManualFreshnessSeconds      int                `json:"manualFreshnessWindowSeconds"`
-	RetentionDays               int                `json:"retentionDays"`
-	MaxRetentionDays            int                `json:"maxRetentionDays"`
-	SupportedMetrics            []MetricDefinition `json:"supportedMetrics"`
-	AllowedDestinations         []string           `json:"allowedDestinations"`
-	AllowedServiceUnits         []string           `json:"allowedServiceUnits"`
+	BusinessRulesVersion        string                   `json:"businessRulesVersion"`
+	BusinessRules               []BusinessRuleDefinition `json:"businessRules"`
+	ServiceWindowVersion        string                   `json:"serviceWindowVersion"`
+	ServiceWindowMode           string                   `json:"serviceWindowMode"`
+	CollectorProfileTransitions bool                     `json:"collectorProfileTransitions"`
+	ProcessSnapshotConfigured   bool                     `json:"processSnapshotConfigured"`
+	SchemaVersion               int                      `json:"schemaVersion"`
+	CollectorProfiles           []string                 `json:"collectorProfiles"`
+	CollectionModes             []string                 `json:"collectionModes"`
+	RunStatuses                 []string                 `json:"runStatuses"`
+	LayerStates                 []string                 `json:"layerStates"`
+	FreshnessStates             []string                 `json:"freshnessStates"`
+	CollectionOutcomes          []string                 `json:"collectionOutcomes"`
+	EvidenceKinds               []string                 `json:"evidenceKinds"`
+	ProcessOutcomes             []string                 `json:"processOutcomes"`
+	InterfaceOutcomes           []string                 `json:"interfaceOutcomes"`
+	ProbeFamilies               []string                 `json:"probeFamilies"`
+	MaxInterfaceProbes          int                      `json:"maxInterfaceProbes"`
+	ServiceKinds                []string                 `json:"serviceKinds"`
+	IdentityStates              []string                 `json:"identityStates"`
+	SupportedResourceDomains    []string                 `json:"supportedResourceDomains"`
+	MetricCategories            []string                 `json:"metricCategories"`
+	MetricEvidenceClasses       []string                 `json:"metricEvidenceClasses"`
+	ServiceReasons              []string                 `json:"serviceReasons"`
+	MinIntervalSeconds          int                      `json:"minIntervalSeconds"`
+	MaxIntervalSeconds          int                      `json:"maxIntervalSeconds"`
+	DefaultIntervalSeconds      int                      `json:"defaultIntervalSeconds"`
+	RequestTimeoutSeconds       int                      `json:"requestTimeoutSeconds"`
+	TotalDeadlineSeconds        int                      `json:"totalDeadlineSeconds"`
+	MaxGlobalConcurrent         int                      `json:"maxGlobalConcurrent"`
+	MaxLocalConcurrent          int                      `json:"maxLocalConcurrent"`
+	StalenessGraceSeconds       int                      `json:"stalenessGraceSeconds"`
+	ManualFreshnessSeconds      int                      `json:"manualFreshnessWindowSeconds"`
+	RetentionDays               int                      `json:"retentionDays"`
+	MaxRetentionDays            int                      `json:"maxRetentionDays"`
+	SupportedMetrics            []MetricDefinition       `json:"supportedMetrics"`
+	AllowedDestinations         []string                 `json:"allowedDestinations"`
+	AllowedServiceUnits         []string                 `json:"allowedServiceUnits"`
 }
 
 // Meta handles GET /api/nf-health/meta.
@@ -270,6 +272,8 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, MetaResponse{
+		BusinessRulesVersion:        BusinessRulesVersion,
+		BusinessRules:               BusinessRuleDefinitions(),
 		ServiceWindowVersion:        ServiceWindowVersion,
 		ServiceWindowMode:           "observation_only",
 		CollectorProfileTransitions: true,

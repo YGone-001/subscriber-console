@@ -1652,6 +1652,37 @@ async function main() {
 
     // ---- Correction evidence: freshness projection ----
 
+    await verifyAsync('business observation registry exposes scoped definitions and unproven build provenance', async () => {
+      const res = await api(base, 'GET', '/api/nf-health/meta', operatorToken);
+      assert.equal(res.status, 200, res.text);
+      assert.equal(res.json.businessRulesVersion, 'business-observation-v1');
+      assert.equal(res.json.businessRules.length, 8);
+      assert.equal(new Set(res.json.businessRules.map((rule) => rule.ruleId)).size, 8);
+      for (const rule of res.json.businessRules) {
+        assert.equal(rule.binaryAttestation, 'not_attested');
+        assert.ok(rule.metrics.length > 0 && rule.missingSignals.length > 0);
+        assert.ok(['epc', '5gc', 'charging'].includes(rule.domain));
+      }
+    });
+
+    await verifyAsync('business observations remain read-only with server-owned rules and hidden incarnation tokens', async () => {
+      const beforeSamples = await samplesColl.countDocuments({});
+      const beforeRuns = await runsColl.countDocuments({});
+      const res = await api(base, 'GET', `/api/nf-health/targets/${targetId}`, operatorToken);
+      assert.equal(res.status, 200, res.text);
+      assert.equal(res.json.serviceWindows.rulesVersion, 'business-observation-v1');
+      assert.equal(res.json.serviceWindows.mode, 'observation_only');
+      assert.equal(JSON.stringify(res.json).includes('windowIdentity'), false);
+      for (const window of res.json.serviceWindows.windows) {
+        for (const rule of window.businessRules ?? []) {
+          assert.equal(rule.decisionEligible, false);
+          assert.equal(rule.healthEffect, 'none');
+        }
+      }
+      assert.equal(await samplesColl.countDocuments({}), beforeSamples);
+      assert.equal(await runsColl.countDocuments({}), beforeRuns);
+    });
+
     await verifyAsync('meta exposes the freshness vocabulary and policy bounds', async () => {
       const res = await api(base, 'GET', '/api/nf-health/meta', operatorToken);
       assert.equal(res.status, 200, res.text);

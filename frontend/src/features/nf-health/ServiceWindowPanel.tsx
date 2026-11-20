@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useI18n } from '../../providers/I18nProvider';
 import type { ServiceWindowReport } from './nf-health-types';
+import { BusinessRulePanel } from './BusinessRulePanel';
 import styles from '../../styles/modules/nf-health.module.css';
 
 const numeric = (value: number | null | undefined, digits = 2) =>
@@ -30,6 +31,7 @@ export function ServiceWindowPanel({ report }: { report?: ServiceWindowReport })
           </button>
         ))}
       </div>
+      <BusinessRulePanel rules={window?.businessRules ?? []} />
       {report?.reason && window?.rows.length ? <p role="status" className={styles.semanticNote}>{reason(report.reason)}</p> : null}
       {!window || window.rows.length === 0 ? (
         <p className={styles.semanticNote}>{reason(report?.reason || 'warming_up')}</p>
