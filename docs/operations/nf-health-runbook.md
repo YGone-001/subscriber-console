@@ -285,3 +285,23 @@ for this focused repair.
 After repair, inspect the latest-evidence query plan and run a fresh inspection.
 A successful read can still contain unhealthy or unmeasured layers. Do not relax
 timeouts or convert those states into passes to mask an index problem.
+
+## L3 interval observation
+
+Open an HTTP-metrics target detail and inspect **L3 interval evidence**. Choose
+10 minutes or 30 minutes; data quality, actual time coverage, accepted increments,
+rates and interval exclusions are shown separately from L3 health. Expand a metric
+to inspect included/excluded intervals and sample IDs. A data-ready label is not a
+service-health verdict. Completion/request increment ratios are observation-only;
+transaction outcome semantics must be validated before adding business thresholds.
+
+At the default 120-second cadence, freshness/gap limits are 180 seconds. Five
+valid points, four intervals and at least 80 percent time coverage are required.
+After deploying this version, old samples have no verified incarnation: allow new
+scheduled samples to accumulate (about 8-10 minutes for the short window and
+24-30 minutes for the long window). Do not generate traffic, change cadence or
+restart a network function just to make a window ready. No counter growth means
+no observed activity; missing metrics and zero requests never become successful
+business operations. A restart, PID reuse, counter reset, configuration change,
+privacy-filtered scope or read failure is reported explicitly. Historical data
+remains visible; this module does not automatically change alert rules or reports.

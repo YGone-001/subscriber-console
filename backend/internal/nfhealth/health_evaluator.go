@@ -288,9 +288,9 @@ func EvaluateServiceLayer(samples []MetricSample, parseErr error) LayerEvidence 
 // Cumulative counters (request/success pairs and failure counters) require
 // verified interval evidence: two valid observations of the same series with a
 // consistent exporter identity, increasing timestamps, no unsupported counter
-// reset and compatible numerator/denominator semantics. That interval evaluator
-// is not implemented, so those rules report outcomeIntervalRequired instead of
-// manufacturing a current outcome from historical totals.
+// reset and compatible numerator/denominator semantics. The separate window
+// observer computes increments but does not establish transaction outcomes, so
+// these health rules retain outcomeIntervalRequired rather than invent a verdict.
 func SummarizeServiceEvidence(samples []MetricSample) ServiceEvidenceSummary {
 	summary := ServiceEvidenceSummary{}
 	scopes := map[string]map[string]seriesObservation{}

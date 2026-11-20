@@ -619,6 +619,20 @@ func (r *Repository) RecordCollection(ctx context.Context, target *HealthTarget,
 	if result == nil {
 		return nil
 	}
+	if result.Sample != nil && target.CollectorProfile == CollectorHTTPMetrics {
+		at, err := time.Parse(time.RFC3339Nano, result.Sample.CollectedAt)
+		if err == nil {
+			history, _, more, readErr := r.ListSamples(ctx, SampleListFilter{TargetID: target.TargetID,
+				From: at.Add(-30 * time.Minute).UTC().Format(time.RFC3339Nano),
+				To:   result.Sample.CollectedAt, Limit: maxWindowHistory - 1})
+			if readErr != nil {
+				result.Sample.ServiceWindows = unavailableWindows(at, "history_unavailable")
+			} else {
+				history = append(history, *result.Sample)
+				result.Sample.ServiceWindows = EvaluateServiceWindows(target, history, at, !more)
+			}
+		}
+	}
 	if err := r.InsertRun(ctx, &result.Run); err != nil {
 		return err
 	}

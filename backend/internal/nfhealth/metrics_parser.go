@@ -144,6 +144,7 @@ func ParsePrometheusText(body []byte, collectedAt string, previous map[string]fl
 			Interpretation: def.Interpretation,
 			Labels:         safe,
 			Category:       def.Category,
+			ScopeVerified:  verifiedWindowScope(name, line, labels, safe),
 		})
 		if len(out.Samples) >= MaxMetricSamples {
 			break

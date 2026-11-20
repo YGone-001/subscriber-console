@@ -249,6 +249,9 @@ type MetricSample struct {
 	// this field existed decode with an empty category and are read as resource
 	// evidence, which is the conservative reading (no service-health claim).
 	Category string `json:"category,omitempty" bson:"category,omitempty"`
+	// ScopeVerified is false for legacy samples or any scope changed by privacy
+	// filtering. Such series remain visible but cannot be joined over time.
+	ScopeVerified bool `json:"scopeVerified,omitempty" bson:"scopeVerified,omitempty"`
 }
 
 // LayerSet is the three-layer observation carried by every sample.
@@ -349,6 +352,13 @@ type HealthSample struct {
 	// rather than healthy.
 	Probes  []ProbeEvidence `json:"probes,omitempty" bson:"probes,omitempty"`
 	Metrics []MetricSample  `json:"metrics" bson:"metrics"`
+	// Window identity is server-owned evidence, never client input or a credential.
+	WindowIdentity string `json:"-" bson:"windowIdentity,omitempty"`
+	WindowBinding  string `json:"-" bson:"windowBinding,omitempty"`
+	// Derived reports are not copied into every historical document. Reads
+	// reconstruct them from bounded raw evidence; collection responses include
+	// the same result without multiplying retention storage.
+	ServiceWindows *ServiceWindowReport `json:"serviceWindows,omitempty" bson:"-"`
 }
 
 // FreshnessProjection is the server-derived measurement freshness for a target.

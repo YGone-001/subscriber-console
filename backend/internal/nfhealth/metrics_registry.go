@@ -20,14 +20,12 @@ const (
 	// HealthRuleNone: resource metrics and families without a defensible
 	// service-health interpretation.
 	HealthRuleNone = "none"
-	// HealthRuleFailureCounterZero: a registered failure/error counter. Zero (or
-	// absent) means no failure was observed; a positive value is observed
-	// failure evidence.
+	// HealthRuleFailureCounterZero identifies a cumulative failure counter.
+	// Current outcomes require verified intervals and business semantics.
 	HealthRuleFailureCounterZero = "failure_counter_zero"
 	// HealthRuleSuccessRatioPair: a success counter paired with its request
-	// counter on the same event population. Equality with a non-zero request
-	// count is positive evidence; a shortfall is degraded evidence; a zero
-	// request count yields no evidence.
+	// counter. A windowed completion/request ratio is observation only until
+	// event-population and cross-window completion semantics are verified.
 	HealthRuleSuccessRatioPair = "success_ratio_pair"
 	// HealthRuleActivityGauge: a gauge counting currently active service
 	// objects. A positive value is evidence of live service activity; zero

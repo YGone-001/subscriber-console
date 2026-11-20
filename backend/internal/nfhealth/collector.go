@@ -197,6 +197,13 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 		}
 	}
 
+	// Capture a local incarnation before the probe, then recheck it afterwards.
+	procRoot := "/proc"
+	if c.inspector != nil {
+		procRoot = c.inspector.procRoot
+	}
+	processBefore := windowProcessToken(procRoot, target, layers.Process)
+
 	// L2 interface + L3 service evidence through the bounded metrics probe.
 	//
 	// The process_only collector profile never initiates an HTTP request: L2
@@ -318,6 +325,11 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 		}
 		if sample.Metrics == nil {
 			sample.Metrics = []MetricSample{}
+		}
+		if target.CollectorProfile == CollectorHTTPMetrics {
+			sample.WindowBinding = windowBinding(target)
+			sample.WindowIdentity = windowExporterIdentity(target, metrics, processBefore,
+				windowProcessToken(procRoot, target, layers.Process))
 		}
 		run.SampleID = sample.SampleID
 	}

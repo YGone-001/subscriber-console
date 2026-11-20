@@ -1235,3 +1235,15 @@ same-boot/same-PID-start evidence may resolve an otherwise unverified local
 process. Optional `target.collectorProfile` transitions retain canonical resource
 identity and the authorized local source, enforce destination allowlists and CAS,
 and preserve historical samples. Omitted profiles retain the stored value.
+
+### L3 interval observation boundary
+
+`interval-observation-v1` derives bounded 10/30-minute windows from raw NF Health
+samples. Collection stores configuration/exporter incarnation and verified safe
+scope metadata; derived reports are not duplicated into retained sample documents.
+Detail GET is read-only and ages evidence without recollection. Counters produce
+increments/rates only across compatible valid intervals; restart, reset, missing
+metrics, duplicate time, scope ambiguity and gaps remain explicit. Completion /
+request ratios are observation-only with unverified transaction outcome semantics.
+No L3 health, alerts, notifications or inspection verdicts change automatically.
+The authority is `docs/architecture/nf-health-telemetry.md`.

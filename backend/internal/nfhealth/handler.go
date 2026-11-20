@@ -222,6 +222,8 @@ func (h *Handler) auditWrite(p *auth.Principal, action, targetID string, revisio
 
 // MetaResponse is the GET /api/nf-health/meta payload.
 type MetaResponse struct {
+	ServiceWindowVersion        string             `json:"serviceWindowVersion"`
+	ServiceWindowMode           string             `json:"serviceWindowMode"`
 	CollectorProfileTransitions bool               `json:"collectorProfileTransitions"`
 	ProcessSnapshotConfigured   bool               `json:"processSnapshotConfigured"`
 	SchemaVersion               int                `json:"schemaVersion"`
@@ -268,6 +270,8 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, MetaResponse{
+		ServiceWindowVersion:        ServiceWindowVersion,
+		ServiceWindowMode:           "observation_only",
 		CollectorProfileTransitions: true,
 		ProcessSnapshotConfigured:   h.collector != nil && h.collector.inspector != nil && h.collector.inspector.processSnapshot != "",
 		SchemaVersion:               SchemaVersion,
@@ -765,11 +769,12 @@ func resourceCategoryMetrics(samples []MetricSample) []MetricSample {
 // freshness. A stale or unknown measurement never presents as healthy, and the
 // latest sample is retained as historical evidence rather than current proof.
 type GetTargetResponse struct {
-	Target    HealthTargetSummary `json:"target"`
-	Latest    *HealthSample       `json:"latestSample,omitempty"`
-	LastRun   *HealthRun          `json:"lastRun,omitempty"`
-	Overall   string              `json:"overallState"`
-	Freshness FreshnessProjection `json:"freshness"`
+	Target         HealthTargetSummary  `json:"target"`
+	Latest         *HealthSample        `json:"latestSample,omitempty"`
+	LastRun        *HealthRun           `json:"lastRun,omitempty"`
+	Overall        string               `json:"overallState"`
+	Freshness      FreshnessProjection  `json:"freshness"`
+	ServiceWindows *ServiceWindowReport `json:"serviceWindows,omitempty"`
 }
 
 // GetTarget handles GET /api/nf-health/targets/{targetId}.
@@ -821,6 +826,25 @@ func (h *Handler) GetTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	// The summary carries the same overall projection the list projection uses.
 	resp.Target.OverallState = resp.Overall
+	if target.CollectorProfile == CollectorHTTPMetrics {
+		if resp.Latest != nil {
+			at, parseErr := time.Parse(time.RFC3339Nano, resp.Latest.CollectedAt)
+			if parseErr == nil {
+				history, _, more, readErr := h.repo.ListSamples(r.Context(), SampleListFilter{TargetID: targetID,
+					From: at.Add(-30 * time.Minute).UTC().Format(time.RFC3339Nano), To: resp.Latest.CollectedAt, Limit: maxWindowHistory})
+				copy := *resp.Latest
+				if readErr != nil {
+					copy.ServiceWindows = unavailableWindows(at, "history_unavailable")
+				} else {
+					copy.ServiceWindows = EvaluateServiceWindows(target, history, at, !more)
+				}
+				resp.ServiceWindows = ProjectServiceWindows(target, &copy, time.Now().UTC())
+			}
+		}
+		if resp.ServiceWindows == nil {
+			resp.ServiceWindows = unavailableWindows(time.Now().UTC(), "warming_up")
+		}
+	}
 	runs, _, _, rerr := h.repo.ListRuns(r.Context(), RunListFilter{TargetID: targetID, Limit: 1})
 	if rerr == nil && len(runs) > 0 {
 		last := runs[0]
