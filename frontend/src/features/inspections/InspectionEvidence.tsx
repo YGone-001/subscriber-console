@@ -1,7 +1,23 @@
 import { Link } from 'react-router-dom';
 import { useI18n } from '../../providers/I18nProvider';
-import { evidenceLink, inspectionInvestigationLink, type Coverage, type InspectionItem, type ResolvedScope } from './inspection-model';
+import { evidenceLink, inspectionInvestigationLink, type Coverage, type InspectionItem, type ResolvedScope, type ScopeChanges } from './inspection-model';
 import styles from '../../styles/modules/inspections.module.css';
+
+export function InspectionScopeChanges({ changes }: { changes?: ScopeChanges }) {
+  const { t } = useI18n();
+  const groups = [
+    { key: 'resources', added: changes?.addedResources?.map(r => ({ id: r.resourceId, name: r.name })), removed: changes?.removedResources?.map(r => ({ id: r.resourceId, name: r.name })) },
+    { key: 'agents', added: changes?.addedAgents?.map(a => ({ id: a.agentId, name: a.name })), removed: changes?.removedAgents?.map(a => ({ id: a.agentId, name: a.name })) },
+  ];
+  return <div className={styles.scopeSummary}>{groups.map(group => <details key={group.key}>
+    <summary>{t(`inspection_scope_changes_${group.key}`)}</summary>
+    {!group.added || !group.removed ? <p className={styles.note}>{t('inspection_scope_changes_unavailable')}</p> : group.added.length + group.removed.length === 0 ? <p className={styles.note}>{t('inspection_scope_changes_none')}</p> : <ul className={styles.memberList}>
+      {(['added', 'removed'] as const).flatMap(change => group[change]!.map(member => <li key={`${change}:${member.id}`}>
+        <span>{t(`inspection_scope_member_${change}`)}: {member.name || member.id}</span><small className={styles.identity}>{member.id}</small>
+      </li>))}
+    </ul>}
+  </details>)}</div>;
+}
 
 export function InspectionStatus({ value }: { value: string }) { const { t } = useI18n(); return <span className={styles.status} data-state={value}>{t(`inspection_status_${value}`)}</span>; }
 export function InspectionScopeSummary({ scope }: { scope: ResolvedScope }) { const { t } = useI18n(); return <div className={styles.scopeSummary}><p>{t('inspection_scope_counts', { resources: scope.resources?.length || 0, agents: scope.agentIds?.length || 0 })}</p><p className={styles.note}>{t('inspection_membership_hint')}</p><details><summary>{t('inspection_scope_members')}</summary><ul className={styles.memberList}>{scope.resources?.map(r => <li key={r.resourceId}><Link to={`/inventory/${r.resourceId}`}>{r.name || r.resourceId}</Link><small>{r.domain.toUpperCase()} · {r.kind}</small></li>)}</ul>{scope.agents?.length ? <ul className={styles.memberList}>{scope.agents.map(a => <li key={a.agentId}><Link to={`/agents/${a.agentId}`}>{a.name || a.agentId}</Link></li>)}</ul> : null}</details>{scope.agentCoverage?.state !== 'complete' ? <p className={styles.note}>{t(`inspection_reason_${scope.agentCoverage?.reason || 'source_unavailable'}`)}</p> : null}</div>; }

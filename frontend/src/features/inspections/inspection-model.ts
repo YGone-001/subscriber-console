@@ -13,9 +13,15 @@ export type Definition = { name: string; description: string; scope: InspectionS
 export type InspectionPlan = Definition & { planId: string; revision: number; scheduleRevision: number; enabled: boolean; archived: boolean; authorizedBy: string; createdAt: string; updatedAt: string; nextAt: string | null; activeRunId: string; lastRunId: string; scheduleReason: string };
 export type Coverage = { state: string; reason: string; readAt: string; count: number; limit: number };
 export type ResourceFact = { resourceId: string; name: string; kind: string; domain: string };
+export type ScopeChanges = {
+  addedResources: ResourceFact[] | null;
+  removedResources: ResourceFact[] | null;
+  addedAgents: ResolvedScope['agents'] | null;
+  removedAgents: ResolvedScope['agents'] | null;
+};
 export type ResolvedScope = { resources: ResourceFact[]; agentIds: string[]; agents: { agentId: string; name: string; revision: number }[]; fingerprint: string; membershipDigest: string; coverage: Coverage; agentCoverage: Coverage };
 export type InspectionItem = { key: string; kind: string; subjectId: string; resourceId: string; name: string; result: string; severity: string; reason: string; readAt: string; evidenceAt: string | null; ageSeconds: number | null; maxAgeSeconds: number; evidenceId: string; compatibility: string; layers?: Record<string, string>; count?: number; link: string; change?: string };
-export type InspectionRun = { runId: string; planId: string; planRevision: number; definition: Definition; version: number; mode: string; actor: string; state: string; reason: string; conclusion: string; queuedAt: string; scheduledFor: string | null; missedUntil: string | null; missedCount: number; startedAt: string | null; finishedAt: string | null; scope: ResolvedScope; coverage: Record<string, Coverage>; counts: Record<string, number>; comparison: { previousRunId: string; state: string; added: number; removed: number; newFindings: number; notRedetected: number; incomparable: number } };
+export type InspectionRun = { runId: string; planId: string; planRevision: number; definition: Definition; version: number; mode: string; actor: string; state: string; reason: string; conclusion: string; queuedAt: string; scheduledFor: string | null; missedUntil: string | null; missedCount: number; startedAt: string | null; finishedAt: string | null; scope: ResolvedScope; coverage: Record<string, Coverage>; counts: Record<string, number>; comparison: { previousRunId: string; state: string; added: number; removed: number; newFindings: number; notRedetected: number; incomparable: number; scopeChanges?: ScopeChanges } };
 export type InspectionPage<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
 export type InspectionPreview = { definition: Definition; scope: ResolvedScope; next: string[]; generatedAt: string };
 export type InspectionMeta = { running: boolean; lastError: string; readiness: string; reason: string; retainedRuns: number | null; queuedRuns: number | null; maxRetainedRuns: number; retentionDays: number; maxResources: number; maxAgents: number; timezones: string[] };

@@ -7,7 +7,7 @@ import { SWRConfig } from 'swr';
 import { I18nProvider } from '../src/providers/I18nProvider';
 import { inspectionsEn, inspectionsZh } from '../src/lib/locales/inspections';
 import { CHECK_KINDS, directoryPath, evidenceLink, inspectionInvestigationLink, inspectionNewLink, inspectionReturn, newDefinition, planLink, runLink, validateInspectionDraft, type InspectionItem } from '../src/features/inspections/inspection-model';
-import { InspectionCoverage, InspectionItemEvidence, InspectionStatus } from '../src/features/inspections/InspectionEvidence';
+import { InspectionCoverage, InspectionItemEvidence, InspectionScopeChanges, InspectionStatus } from '../src/features/inspections/InspectionEvidence';
 import { InspectionEditor } from '../src/features/inspections/InspectionEditor';
 import { alertReturn } from '../src/features/investigations/investigation-model';
 
@@ -25,6 +25,20 @@ test('inspection read queries preserve scope and drop navigation and unrelated f
 test('run and plan navigation preserve local inspection return context only', () => { const current = '/inspections?view=runs&state=missed'; for (const link of [runLink(id, current), planLink(id, current)]) assert.equal(inspectionReturn(link.slice(link.indexOf('?'))), current); for (const value of ['https://evil.test', '//evil.test', '/ocs/contracts']) assert.equal(inspectionReturn(`?returnTo=${encodeURIComponent(value)}`), '/inspections'); });
 test('evidence links reject external, executable and unrelated destinations', () => { for (const value of ['javascript:alert(1)', '//evil.test/', '/users', '/inventory\\evil.test', '/agents\n/evil']) assert.equal(evidenceLink(value), null); assert.equal(evidenceLink(`/config-snapshots/${id}`), `/config-snapshots/${id}`); });
 test('an unavailable source displays a gap rather than a zero observation count', () => { const html = render(<InspectionCoverage coverage={{ configuration: { state: 'unavailable', reason: 'source_unavailable', readAt: '2026-11-19T00:00:00Z', count: 0, limit: 128 } }} />); assert.ok(html.includes('data-state="unavailable"')); assert.ok(!html.includes('0 / 128')); assert.ok(!html.includes('inspection_reason_')); });
+test('membership differences retain captured identities and independent unavailable populations', () => {
+  const html = render(<InspectionScopeChanges changes={{ addedResources: [{ resourceId: id, name: 'Captured new NF', kind: 'network_function', domain: '5gc' }], removedResources: [{ resourceId: 'old-resource', name: 'Captured old NF', kind: 'network_function', domain: '5gc' }], addedAgents: null, removedAgents: null }} />);
+  for (const value of ['Captured new NF', 'Captured old NF', id, 'old-resource']) assert.ok(html.includes(value));
+  assert.ok(html.includes(inspectionsEn.inspection_scope_changes_unavailable));
+  assert.ok(html.includes(inspectionsEn.inspection_scope_member_removed));
+  assert.ok(!html.includes(inspectionsEn.inspection_change_not_redetected));
+  assert.ok(!html.includes('href='));
+  const legacy = render(<InspectionScopeChanges />);
+  assert.ok(legacy.includes(inspectionsEn.inspection_scope_changes_unavailable));
+  assert.ok(!legacy.includes(inspectionsEn.inspection_scope_changes_none));
+  const empty = render(<InspectionScopeChanges changes={{ addedResources: [], removedResources: [], addedAgents: [], removedAgents: [] }} />);
+  assert.ok(empty.includes(inspectionsEn.inspection_scope_changes_none));
+  assert.ok(!empty.includes(inspectionsEn.inspection_scope_changes_unavailable));
+});
 test('report evidence retains unknown layers and only supported alert anchors enter investigations', () => {
   const item: InspectionItem = { key: 'drift:1', kind: 'drift', subjectId: id, resourceId: id, name: 'SYNTHETIC', result: 'finding', severity: 'warning', reason: 'configuration_drift_open', readAt: '2026-11-19T00:00:00Z', evidenceAt: null, ageSeconds: null, maxAgeSeconds: 900, evidenceId: id, compatibility: 'g1', link: `/config-snapshots/${id}`, layers: { service: 'unknown' } };
   const current = `/inspections/runs/${id}?result=unknown`; const link = new URL(inspectionInvestigationLink(item, current)!, 'http://test.local'); assert.equal(link.searchParams.get('anchorKind'), 'config_drift'); assert.equal(link.searchParams.get('anchorId'), id); assert.equal(link.searchParams.has('alertId'), false); assert.equal(alertReturn(link.search), current); assert.equal(inspectionInvestigationLink({ ...item, kind: 'monitoring' }, current), null); assert.equal(inspectionInvestigationLink({ ...item, result: 'unknown' }, current), null);

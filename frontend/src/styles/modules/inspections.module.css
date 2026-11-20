@@ -40,6 +40,7 @@
 .scopeSummary { display: grid; gap: var(--space-8); }
 .scopeSummary p { margin: 0; }
 .memberList, .selected { margin: var(--space-12) 0; padding-left: var(--space-20); display: grid; gap: var(--space-8); }
+.memberList li { min-width: 0; overflow-wrap: anywhere; }
 .selected li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-12); overflow-wrap: anywhere; }
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-16) var(--space-24); margin: 0; font-size: var(--ref-font-size-caption); }
 .facts dt { color: var(--text-secondary); margin-bottom: var(--space-4); }
