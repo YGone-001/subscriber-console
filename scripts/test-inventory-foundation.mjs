@@ -25,6 +25,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
@@ -757,6 +758,34 @@ async function main() {
 
       const deleteRes = await req('DELETE', `/api/inventory/resources/${createdId}`, undefined, operatorToken);
       assert.ok(deleteRes.status === 404 || deleteRes.status === 405, 'Hard delete route must return 404/405');
+    });
+
+    await verifyAsync('runtime metadata survives Mongo updates and scope assignment without allowing spoofing', async () => {
+      const id = randomUUID();
+      const runtimeAttributes = { 'runtime.componentId': 'amf', 'runtime.processName': 'amfd', 'runtime.hostId': 'fixture-host', 'runtime.source': 'xcloud-runtime' };
+      const source = { kind: 'discovered', system: 'xcloud-runtime', authority: 'authoritative', externalId: 'xrt:fixture-host:amf:amfd' };
+      const resource = { kind: 'network_function', name: 'fixture-runtime-amf', domain: '5gc', lifecycleState: 'planned' };
+      // This bootstrap-shaped fixture exists only in the suite-owned database.
+      await inventoryColl.insertOne({ _id: id, schemaVersion: 1, ...resource, nameNormalized: resource.name, attributes: runtimeAttributes, source, revision: 1, createdAt: now, updatedAt: now, createdBy: 'fixture', updatedBy: 'fixture' });
+      const scopes = [{ networkKey: 'lab-a', operatorName: '', plmns: [] }];
+      const attributes = { ...runtimeAttributes, future: { enabled: true }, xcloudOperationalScopes: scopes };
+      const roundtrip = await req('PUT', `/api/inventory/resources/${id}`, { expectedRevision: 1, resource: { ...resource, attributes } }, operatorToken);
+      assert.equal(roundtrip.status, 200, JSON.stringify(roundtrip.body));
+      assert.deepEqual(roundtrip.body.attributes, attributes);
+      assert.deepEqual(roundtrip.body.source, source);
+      const omitted = await req('PUT', `/api/inventory/resources/${id}`, { expectedRevision: 2, resource: { ...resource, attributes: { future: { enabled: true }, xcloudOperationalScopes: scopes } } }, operatorToken);
+      assert.equal(omitted.status, 200, JSON.stringify(omitted.body));
+      assert.deepEqual(omitted.body.attributes, attributes);
+      assert.equal(omitted.body.revision, 3);
+      const before = await inventoryColl.findOne({ _id: id });
+      assert.deepEqual(before.attributes, attributes);
+      const stale = await req('PUT', `/api/inventory/resources/${id}`, { expectedRevision: 1, resource: { ...resource, attributes } }, operatorToken);
+      assert.equal(stale.status, 409);
+      const forged = await req('PUT', `/api/inventory/resources/${id}`, { expectedRevision: 3, resource: { ...resource, attributes: { ...attributes, 'runtime.hostId': 'forged-host' } } }, operatorToken);
+      assert.equal(forged.status, 400);
+      assert.deepEqual(await inventoryColl.findOne({ _id: id }), before);
+      const audit = await waitForAudit(auditColl, { targetId: id, action: 'inventory.resource.update', 'newData.revision': 3 });
+      assert.ok(audit, 'Runtime metadata update must retain the existing audit path');
     });
 
     console.log(`\n-- All ${passed}/${totalChecks} Inventory Foundation Integration Tests Passed! --\n`);

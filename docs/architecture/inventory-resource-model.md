@@ -147,6 +147,13 @@ Vendor and functional identities belong in `role` or `software`, not the canonic
 - Array lengths: max 128 elements.
 - String value lengths: max 2048 characters.
 - MongoDB operator injection prevention: Attribute keys must not contain `.` or begin with `$`.
+- Updates have one bounded compatibility exception: the four existing top-level
+  string keys `runtime.componentId`, `runtime.processName`, `runtime.hostId` and
+  `runtime.source` from runtime bootstrap can roundtrip unchanged. The governed
+  mutation service verifies their persisted values, rejects injection or edits,
+  and retains them when omitted. The merged attributes are validated against the
+  same bounds before the Fresh Actor check and atomic CAS write. Creation and
+  nested/unknown dotted keys keep the ordinary restrictions.
 - Sensitive key rejection: Any attribute key containing case-insensitive fragments matching `password`, `passwd`, `secret`, `token`, `apikey`, `privatekey`, or `credential` is rejected with HTTP 400 before persistence.
 
 ### 3.7 Provenance and Client Spoofing Prevention

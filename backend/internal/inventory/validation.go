@@ -278,6 +278,20 @@ func ValidateLabels(labels map[string]string) error {
 
 // ValidateAttributes recursively checks attribute limits, key syntax, and sensitive keys.
 func ValidateAttributes(attrs map[string]any) error {
+	return validateAttributes(attrs, false)
+}
+
+func runtimeAttribute(key string) bool {
+	switch key {
+	case "runtime.componentId", "runtime.processName", "runtime.hostId", "runtime.source":
+		return true
+	}
+	return false
+}
+
+// Update validation permits the four bootstrap metadata keys structurally;
+// MutationService verifies their stored values before accepting an update.
+func validateAttributes(attrs map[string]any, allowRuntime bool) error {
 	if len(attrs) == 0 {
 		return nil
 	}
@@ -303,7 +317,13 @@ func ValidateAttributes(attrs map[string]any) error {
 				if totalKeys > 128 {
 					return errors.New("attributes aggregate keys exceed maximum limit of 128")
 				}
-				if strings.Contains(k, ".") || strings.HasPrefix(k, "$") {
+				preservedRuntime := allowRuntime && depth == 1 && runtimeAttribute(k)
+				if preservedRuntime {
+					if _, ok := child.(string); !ok {
+						return fmt.Errorf("runtime attribute %q must be a string", k)
+					}
+				}
+				if (strings.Contains(k, ".") || strings.HasPrefix(k, "$")) && !preservedRuntime {
 					return fmt.Errorf("attribute key %q must not contain '.' or start with '$'", k)
 				}
 				normalizedKey := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(k, "_", ""), "-", ""))
@@ -427,7 +447,7 @@ func ValidateUpdateRequest(req *UpdateResourceRequest) error {
 	if err := ValidateLabels(r.Labels); err != nil {
 		return err
 	}
-	if err := ValidateAttributes(r.Attributes); err != nil {
+	if err := validateAttributes(r.Attributes, true); err != nil {
 		return err
 	}
 	return nil

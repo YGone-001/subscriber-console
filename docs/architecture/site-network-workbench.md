@@ -117,12 +117,13 @@ Updates preserve unowned attributes. New/changed controlled declarations are
 validated and normalized; unchanged malformed legacy attributes can survive an
 unrelated update and are reported invalid during projection.
 
-Runtime-adopted resources currently retain top-level dotted attributes such as
-`runtime.componentId` and `runtime.hostId`, while the generic Inventory update
-validator rejects dotted attribute keys. Reposting those resources to add network
-declarations therefore fails validation. Do not remove their runtime metadata to
-work around this mismatch. Site/host containment remains independently usable;
-NF network declarations require a compatibility fix in the governed update path.
+Runtime-adopted resources retain the four top-level string attributes
+`runtime.componentId`, `runtime.processName`, `runtime.hostId` and `runtime.source`.
+Governed updates accept their unchanged stored values and preserve them when
+omitted, so adding explicit network declarations does not erase runtime metadata.
+Injecting or changing those values is rejected before a write. Creation, unknown
+dotted keys and nested dotted keys retain the ordinary attribute restrictions.
+Fresh Actor, CAS and attribute bounds also apply after preserved values are merged.
 
 Containment add and retire are independent operations, not an atomic move or a
 single-parent constraint. Each result is shown explicitly. Partial changes are

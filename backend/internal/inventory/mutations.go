@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"subscriber/internal/auth"
@@ -62,16 +63,51 @@ func (s *MutationService) Update(ctx context.Context, p *auth.Principal, id stri
 	if err != nil {
 		return nil, nil, err
 	}
-	attrs, scopeErr := PrepareOperationalScopeChange(req.Resource.Kind, before.Attributes, req.Resource.Attributes)
+	preserved, err := preserveRuntimeAttributes(before.Attributes, req.Resource.Attributes)
+	if err != nil {
+		return nil, nil, &governance.HTTPError{Status: 400, Code: "VALIDATION_FAILED", Message: err.Error()}
+	}
+	attrs, scopeErr := PrepareOperationalScopeChange(req.Resource.Kind, before.Attributes, preserved)
 	if err := scopeErr; err != nil {
 		return nil, nil, &governance.HTTPError{Status: 400, Code: "VALIDATION_FAILED", Message: err.Error()}
 	}
 	req.Resource.Attributes = attrs
+	if err := validateAttributes(attrs, true); err != nil {
+		return nil, nil, &governance.HTTPError{Status: 400, Code: "VALIDATION_FAILED", Message: err.Error()}
+	}
 	actor, err := s.actor(ctx, p)
 	if err != nil {
 		return nil, nil, err
 	}
 	return s.repo.Update(ctx, id, req, actor)
+}
+
+// Runtime identity metadata is read-only even when a client omits attributes.
+// Copy the request map so validation cannot mutate a fetched resource snapshot.
+func preserveRuntimeAttributes(before, incoming map[string]any) (map[string]any, error) {
+	var out map[string]any
+	if incoming != nil {
+		out = make(map[string]any, len(incoming))
+	}
+	for key, value := range incoming {
+		if runtimeAttribute(key) {
+			stored, exists := before[key].(string)
+			text, stringValue := value.(string)
+			if !exists || !stringValue || stored != text {
+				return nil, fmt.Errorf("runtime attribute %q is read-only", key)
+			}
+		}
+		out[key] = value
+	}
+	for key, value := range before {
+		if runtimeAttribute(key) {
+			if out == nil {
+				out = make(map[string]any)
+			}
+			out[key] = value
+		}
+	}
+	return out, nil
 }
 
 func (s *MutationService) Retire(ctx context.Context, p *auth.Principal, id string, req *RetireResourceRequest) (*Resource, *Resource, error) {
