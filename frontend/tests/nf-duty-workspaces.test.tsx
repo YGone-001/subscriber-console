@@ -484,3 +484,15 @@ test('metric drawer preserves trigger and recovery values as distinct evidence',
   assert.ok(markup.includes('150') && markup.includes('40'));
   assert.ok(!markup.includes('nf_alerts_scope_undefined'));
 });
+
+
+test('metric duration proof distinguishes trigger and recovery observation windows', () => {
+  const metric = { metric: 'process_resident_memory_bytes', series: 'unlabeled', unit: 'bytes', subject: 'exporter_process', value: 150, sampleId: 'duration-end', observedAt: '2026-11-21T01:02:00Z', conditionSince: '2026-11-21T01:00:00Z', elapsedSeconds: 120, observations: 3, maxGapSeconds: 90, firstSampleId: 'first-trigger-sample' };
+  const markup = renderDrawer(evidenceAlert({ conditionType: 'metric_threshold', metricCondition: { metric: metric.metric, series: 'unlabeled', operator: 'gt', threshold: 100, recoveryThreshold: 50, durationSeconds: 120, recoveryDurationSeconds: 60 }, evidence: { runStatus: 'success', metric }, metricRecovery: { ...metric, value: 40, elapsedSeconds: 60, observations: 2, firstSampleId: 'first-recovery-sample' } }), false);
+  assert.ok(markup.includes(en.nf_metric_duration));
+  assert.ok(markup.includes(en.nf_metric_recovery_duration));
+  assert.ok(markup.includes('first-trigger-sample'));
+  assert.ok(markup.includes('first-recovery-sample'));
+  assert.ok(markup.includes('120 seconds across 3 samples'));
+  assert.ok(markup.includes('60 seconds across 2 samples'));
+});

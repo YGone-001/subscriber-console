@@ -5,8 +5,8 @@ import { fetchNfHealthTarget } from '../nf-health/nf-health-api';
 import type { GetTargetResponse } from '../nf-health/nf-health-types';
 import type { MetricForm } from './metric-threshold';
 
-export function MetricThresholdFields({ targetId, value, onChange, disabled, readOnly }: {
-  targetId: string; value: MetricForm; onChange: (next: MetricForm) => void; disabled: boolean; readOnly: boolean;
+export function MetricThresholdFields({ targetId, value, onChange, disabled, readOnly, maxDurationSeconds = 0 }: {
+  maxDurationSeconds?: number; targetId: string; value: MetricForm; onChange: (next: MetricForm) => void; disabled: boolean; readOnly: boolean;
 }) {
   const { t } = useI18n();
   const [preview, setPreview] = useState<{ targetId: string; data?: GetTargetResponse; failed?: boolean } | null>(null);
@@ -42,6 +42,17 @@ export function MetricThresholdFields({ targetId, value, onChange, disabled, rea
       <input id="nf-metric-recovery" className="form-input" type="number" min="0" step="any" value={value.recoveryThreshold}
         disabled={disabled || readOnly} onChange={(event) => onChange({ ...value, recoveryThreshold: event.target.value })} />
     </Field>
-    <p>{t(readOnly ? 'nf_metric_immutable' : 'nf_metric_immediate')}</p>
+    {maxDurationSeconds > 0 ? <>
+      <Field htmlFor="nf-metric-duration" label={t('nf_metric_duration')} description={t('nf_metric_duration_range', { max: maxDurationSeconds })}>
+        <input id="nf-metric-duration" className="form-input" type="number" min="0" max={maxDurationSeconds} step="1" value={value.durationSeconds ?? '0'}
+          disabled={disabled || readOnly} onChange={(event) => onChange({ ...value, durationSeconds: event.target.value })} />
+      </Field>
+      <Field htmlFor="nf-metric-recovery-duration" label={t('nf_metric_recovery_duration')} description={t('nf_metric_duration_range', { max: maxDurationSeconds })}>
+        <input id="nf-metric-recovery-duration" className="form-input" type="number" min="0" max={maxDurationSeconds} step="1" value={value.recoveryDurationSeconds ?? '0'}
+          disabled={disabled || readOnly} onChange={(event) => onChange({ ...value, recoveryDurationSeconds: event.target.value })} />
+      </Field>
+      {measured ? <p role="status">{t(measured.durationEligible ? 'nf_metric_duration_eligible' : 'nf_metric_reason_continuity_unverified', { gap: measured.maxGapSeconds ?? '-' })}</p> : null}
+    </> : null}
+    <p>{t(readOnly ? 'nf_metric_immutable' : maxDurationSeconds > 0 ? 'nf_metric_duration_hint' : 'nf_metric_immediate')}</p>
   </section>;
 }

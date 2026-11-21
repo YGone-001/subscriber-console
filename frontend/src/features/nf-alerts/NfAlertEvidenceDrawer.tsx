@@ -237,6 +237,10 @@ export function NfAlertEvidenceDrawer({
               <p>{t('nf_metric_rule_revision')}: {alert.ruleRevision ?? '-'}</p>
               <p>{t('nf_metric_threshold')}: {alert.metricCondition?.threshold ?? '-'} bytes</p>
               <p>{t('nf_metric_recovery')}: {alert.metricCondition?.recoveryThreshold ?? '-'} bytes</p>
+              <p>{t('nf_metric_duration')}: {alert.metricCondition?.durationSeconds ?? 0} s</p>
+              <p>{t('nf_metric_recovery_duration')}: {alert.metricCondition?.recoveryDurationSeconds ?? 0} s</p>
+              {evidence?.metric?.conditionSince ? <p>{t('nf_metric_duration_evidence', { at: formatTimestamp(evidence.metric.conditionSince), elapsed: evidence.metric.elapsedSeconds ?? 0, count: evidence.metric.observations ?? 0, gap: evidence.metric.maxGapSeconds ?? 0 })} <code>{evidence.metric.firstSampleId}</code></p> : null}
+              {alert.metricRecovery?.conditionSince ? <p>{t('nf_metric_duration_evidence', { at: formatTimestamp(alert.metricRecovery.conditionSince), elapsed: alert.metricRecovery.elapsedSeconds ?? 0, count: alert.metricRecovery.observations ?? 0, gap: alert.metricRecovery.maxGapSeconds ?? 0 })} <code>{alert.metricRecovery.firstSampleId}</code></p> : null}
               {evidence?.metric ? <p>{t('nf_metric_trigger_value')}: {evidence.metric.value} {evidence.metric.unit} ({formatTimestamp(evidence.metric.observedAt)})</p> : null}
               {alert.metricRecovery ? <p>{t('nf_metric_recovered_value')}: {alert.metricRecovery.value} {alert.metricRecovery.unit} ({formatTimestamp(alert.metricRecovery.observedAt)})</p> : null}
             </> : null}

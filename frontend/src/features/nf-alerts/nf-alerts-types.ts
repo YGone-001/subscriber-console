@@ -31,7 +31,7 @@ export interface RuleCondition {
 // AlertRule is an operator-authored configuration. A rule is a pure observer
 // over NF Health evidence and never modifies the network.
 export interface AlertRule {
-  metricEvaluation?: { quality: string; reason: string; observedAt?: string };
+  metricEvaluation?: MetricEvaluationStatus;
   metricCondition?: MetricCondition;
   ruleId: string;
   schemaVersion: number;
@@ -95,6 +95,7 @@ export interface Alert {
 
 // NfAlertsMeta mirrors the GET /api/nf-alerts/meta vocabulary payload.
 export interface NfAlertsMeta {
+  maxMetricDurationSeconds?: number;
   metricEnabled?: boolean;
   metricCapabilities?: { metric: string; type: string; unit: string; subject: string; series: string; eligible: boolean; reason: string }[];
   schemaVersion: number;
@@ -197,6 +198,8 @@ export interface AlertListQueryParams {
   limit?: number;
 }
 export interface MetricCondition {
+  durationSeconds?: number;
+  recoveryDurationSeconds?: number;
   metric: string;
   series: 'unlabeled';
   operator: 'gt' | 'gte' | 'lt' | 'lte';
@@ -204,6 +207,11 @@ export interface MetricCondition {
   recoveryThreshold: number;
 }
 export interface MetricEvidence {
+  conditionSince?: string;
+  firstSampleId?: string;
+  elapsedSeconds?: number;
+  observations?: number;
+  maxGapSeconds?: number;
   metric: string;
   series: string;
   unit: string;
@@ -211,4 +219,17 @@ export interface MetricEvidence {
   value: number;
   sampleId: string;
   observedAt: string;
+}
+
+export interface MetricEvaluationStatus {
+  quality: string;
+  reason: string;
+  observedAt?: string;
+  ruleRevision?: number;
+  phase?: 'idle' | 'pending' | 'firing' | 'recovering' | 'unknown';
+  conditionSince?: string;
+  elapsedSeconds?: number;
+  requiredSeconds?: number;
+  observations?: number;
+  maxGapSeconds?: number;
 }

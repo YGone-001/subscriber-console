@@ -63,7 +63,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
   useEffect(() => {
     if (!open) return;
     setFormError(null);
-    setMetric({ operator: rule?.metricCondition?.operator ?? 'gt', threshold: rule?.metricCondition ? String(rule.metricCondition.threshold) : '', recoveryThreshold: rule?.metricCondition ? String(rule.metricCondition.recoveryThreshold) : '' });
+    setMetric({ operator: rule?.metricCondition?.operator ?? 'gt', threshold: rule?.metricCondition ? String(rule.metricCondition.threshold) : '', recoveryThreshold: rule?.metricCondition ? String(rule.metricCondition.recoveryThreshold) : '', durationSeconds: String(rule?.metricCondition?.durationSeconds ?? 0), recoveryDurationSeconds: String(rule?.metricCondition?.recoveryDurationSeconds ?? 0) });
     if (rule) {
       setName(rule.name);
       setDescription(rule.description ?? '');
@@ -163,7 +163,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
     const condition: RuleCondition | undefined =
       conditionType === 'state' ? { scope, state } : undefined;
 
-    const metricCondition = conditionType === 'metric_threshold' ? buildMetricCondition(metric) : undefined;
+    const metricCondition = conditionType === 'metric_threshold' ? buildMetricCondition(metric, meta?.maxMetricDurationSeconds ?? 0) : undefined;
     if (conditionType === 'metric_threshold' && (!trimmedTarget || trimmedResource || !metricCondition)) {
       setFormError(t('nf_metric_invalid')); return;
     }
@@ -435,7 +435,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
           ) : null}
         </div>
 
-        {conditionType === 'metric_threshold' ? <MetricThresholdFields targetId={targetId} value={metric} onChange={setMetric} disabled={submitting} readOnly={isEdit} /> : null}
+        {conditionType === 'metric_threshold' ? <MetricThresholdFields maxDurationSeconds={meta?.maxMetricDurationSeconds} targetId={targetId} value={metric} onChange={setMetric} disabled={submitting} readOnly={isEdit} /> : null}
         <div className={styles.formRow}>
           <Field htmlFor="nf-alerts-severity" label={t('nf_alerts_field_severity')}>
             <select

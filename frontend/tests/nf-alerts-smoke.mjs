@@ -356,7 +356,7 @@ function handleApi(req, res, url, context) {
     return sendJson(res, 200, { targets: [{ targetId: METRIC_TARGET, name: 'RSS exporter', domain: '5gc', nfType: 'AMF', collectorProfile: 'http_metrics' }], page: page(8) });
   }
   if (pathname === `/api/nf-health/targets/${METRIC_TARGET}` && req.method === 'GET') {
-    return sendJson(res, 200, { target: { targetId: METRIC_TARGET, name: 'RSS exporter' }, thresholdPreview: { value: 150, reason: 'measured' }, latestSample: { collectedAt: TS.last } });
+    return sendJson(res, 200, { target: { targetId: METRIC_TARGET, name: 'RSS exporter' }, thresholdPreview: { value: 150, reason: 'measured', durationEligible: true, durationReason: 'measured', maxGapSeconds: 90 }, latestSample: { collectedAt: TS.last } });
   }
   if (pathname === '/api/nf-alerts/rules' && req.method === 'POST') {
     let body = '';
@@ -566,6 +566,7 @@ async function main() {
     });
     await notifyServer.close();
     META.metricEnabled = true;
+    META.maxMetricDurationSeconds = 3600;
     META.conditionTypes.push('metric_threshold');
     const metricServer = await startServer();
     servers.push(metricServer);
@@ -583,9 +584,17 @@ async function main() {
       check('metric_missing_threshold_rejected', capturedMetricRule === null && await page.getByRole('alert').isVisible(), 'no mutation on empty input');
       await page.locator('#nf-metric-threshold').fill('100');
       await page.locator('#nf-metric-recovery').fill('50');
+      await page.locator('#nf-metric-duration').fill('1.5');
+      await page.getByRole('button', { name: /Create rule/i }).click();
+      check('metric_fractional_duration_rejected', capturedMetricRule === null, 'duration must use integer seconds');
+      await page.locator('#nf-metric-duration').fill('120');
+      await page.locator('#nf-metric-recovery-duration').fill('60');
+      check('metric_duration_identity_explained', (await page.getByRole('dialog').innerText()).includes('at most 90 seconds'), 'server-owned max gap');
+
       await page.getByRole('button', { name: /Create rule/i }).click();
       await page.locator('#nf-alerts-create-title').waitFor({ state: 'detached', timeout: 15000 });
       check('metric_payload_is_explicit', capturedMetricRule?.conditionType === 'metric_threshold' && capturedMetricRule?.targetId === METRIC_TARGET && capturedMetricRule?.metricCondition?.threshold === 100 && capturedMetricRule?.metricCondition?.recoveryThreshold === 50 && capturedMetricRule?.metricCondition?.series === 'unlabeled' && !capturedMetricRule?.condition, 'typed target and thresholds');
+      check('metric_duration_payload_explicit', capturedMetricRule?.metricCondition?.durationSeconds === 120 && capturedMetricRule?.metricCondition?.recoveryDurationSeconds === 60, 'duration in seconds');
     });
     await metricServer.close();
     servers.length = 0;

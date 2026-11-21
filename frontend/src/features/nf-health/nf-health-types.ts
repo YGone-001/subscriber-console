@@ -268,7 +268,7 @@ export interface ListTargetsResponse {
 }
 
 export interface GetTargetResponse {
-  thresholdPreview?: { value: number | null; reason: string };
+  thresholdPreview?: { value: number | null; reason: string; durationEligible?: boolean; durationReason?: string; maxGapSeconds?: number };
   target: HealthTargetSummary;
   latestSample?: HealthSample;
   lastRun?: HealthRun;

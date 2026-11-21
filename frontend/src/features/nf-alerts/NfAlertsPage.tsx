@@ -1,4 +1,4 @@
-import { metricConditionLabel } from './metric-threshold';
+import { metricConditionLabel, metricTimingLabel } from './metric-threshold';
 /*
  * NF alerts duty workspace.
  *
@@ -683,7 +683,7 @@ function NfHealthAlertsPage() {
                         </code>
                       </td>
                       <td>{severityBadge(rule.severity, t)}
-                        {rule.conditionType === 'metric_threshold' ? <p>{t('nf_metric_last_evaluation')}: {t(`nf_metric_reason_${rule.metricEvaluation?.reason ?? 'measurement_missing'}`)} {rule.metricEvaluation?.observedAt ? formatTimestamp(rule.metricEvaluation.observedAt) : ''}</p> : null}
+                        {rule.conditionType === 'metric_threshold' ? <p>{t('nf_metric_last_evaluation')}: {t(`nf_metric_reason_${rule.metricEvaluation?.reason ?? 'measurement_missing'}`, { gap: rule.metricEvaluation?.maxGapSeconds ?? '-' })} {rule.metricEvaluation?.observedAt ? formatTimestamp(rule.metricEvaluation.observedAt) : ''}<br />{metricTimingLabel(rule.metricEvaluation, t)}</p> : null}
                       </td>
                       <td>{formatCooldown(rule.cooldownSeconds)}</td>
                       <td>
