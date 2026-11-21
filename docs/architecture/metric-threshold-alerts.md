@@ -2,7 +2,7 @@
 
 The source implements opt-in gauge thresholds with observation-based trigger and
 recovery durations in the existing NF alert module. Hourly rollups have a
-separate opt-in owner described in [hourly metric history](metric-hour-history.md).
+separate opt-in owner described in [metric history](metric-history.md).
 Statistical anomaly/trend detection is not implemented. NF Health layer states
 and business-process observations retain their existing meaning.
 

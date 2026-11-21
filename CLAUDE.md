@@ -1292,15 +1292,22 @@ the existing metric state collection; worker/callback counters are runtime-only.
 No read triggers collection or replay. Authority:
 `docs/architecture/metric-threshold-alerts.md`.
 
-### Hourly metric history boundary
+### Metric history boundary
 
 `NF_METRIC_AGGREGATES_ENABLED` defaults off independently of alert evaluation.
-NF Health owns one bounded closed-hour worker, the Ops collection
+NF Health owns one bounded aggregation worker, the Ops collection
 `app_nf_metric_aggregates` and the pure core.read metric-history endpoint.
 Only verified unlabeled exporter RSS gauges with continuity proof are accepted.
 UTC half-open hours retain separate identity/gap segments, count/sum/min/max,
-sample mean and clipped observed interval coverage. No zero filling, cross-epoch
-averaging, interpolation, L3 decisions or notifications occur. Worker visits the
-latest closed hour only; historical backfill, daily rollups, aggregate TTL and
-late recomputation remain unimplemented. An explicit dry-run/apply migration
-owns the aggregate index. Authority: `docs/architecture/metric-hour-history.md`.
+sample mean and clipped observed interval coverage. Daily buckets merge hourly
+count/sum/min/max by sample count, never averaged hourly means, keep the same
+identity/gap segmentation rule, and store a digest of the consumed hour
+revisions. No zero filling, cross-epoch averaging, interpolation, L3 decisions or
+notifications occur. The worker finalizes the latest closed hour and repairs at
+most three missing or incomplete hours per target per tick inside a 48-hour
+window, newest first; hours past raw retention or with no recorded evidence stay
+missing instead of being published as zero. Hourly buckets expire after 30 days
+and daily buckets after 90 days through an explicit TTL index; raw sample
+retention is unchanged. An explicit dry-run/apply migration owns the aggregate
+indexes and replaces the superseded hourly-only unique index. Authority:
+`docs/architecture/metric-history.md`.

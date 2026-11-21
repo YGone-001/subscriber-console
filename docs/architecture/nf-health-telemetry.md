@@ -973,9 +973,9 @@ Remaining gaps recorded by the capability audit:
   and packet capture are prohibited, and the gated live suite refuses to run
   without an explicit read-only authorization flag.
 
-## Hourly metric history
+## Metric history
 
 The opt-in aggregation worker and pure metric-history endpoint are owned by
-[hourly metric history](metric-hour-history.md). They add the separate Ops
+[metric history](metric-history.md). They add the separate Ops
 collection app_nf_metric_aggregates and one core.read route, preserving raw
 sample retention, health semantics and collection ownership.
