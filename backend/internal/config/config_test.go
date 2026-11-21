@@ -132,3 +132,20 @@ func TestMetricAlertsRequireExplicitValidOptIn(t *testing.T) {
 		t.Fatal("invalid boolean accepted")
 	}
 }
+
+func TestMetricAggregationRequiresExplicitOptIn(t *testing.T) {
+	t.Setenv("NF_METRIC_AGGREGATES_ENABLED", "")
+	cfg, err := Load()
+	if err != nil || cfg.NFMetricAggregatesEnabled {
+		t.Fatal("aggregation default must be disabled")
+	}
+	t.Setenv("NF_METRIC_AGGREGATES_ENABLED", "true")
+	cfg, err = Load()
+	if err != nil || !cfg.NFMetricAggregatesEnabled {
+		t.Fatal("aggregation opt-in failed")
+	}
+	t.Setenv("NF_METRIC_AGGREGATES_ENABLED", "invalid")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid aggregation flag accepted")
+	}
+}

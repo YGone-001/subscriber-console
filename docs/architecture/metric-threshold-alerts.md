@@ -1,8 +1,9 @@
 # Metric threshold alerts
 
 The source implements opt-in gauge thresholds with observation-based trigger and
-recovery durations in the existing NF alert module. It does not implement
-historical rollups or statistical anomaly/trend detection. NF Health layer states
+recovery durations in the existing NF alert module. Hourly rollups have a
+separate opt-in owner described in [hourly metric history](metric-hour-history.md).
+Statistical anomaly/trend detection is not implemented. NF Health layer states
 and business-process observations retain their existing meaning.
 
 ## Capability and activation

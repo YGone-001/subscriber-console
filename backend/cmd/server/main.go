@@ -367,6 +367,10 @@ func main() {
 		}
 		return target, nil
 	})
+	aggregateWorker := nfhealth.NewMetricAggregateWorker(nfHealthRepo, cfg.NFMetricAggregatesEnabled, nfHealthIdentityCheck)
+	nfHealthHandler.SetMetricHistory(nfHealthRepo, aggregateWorker)
+	aggregateWorker.Start(context.Background())
+	defer aggregateWorker.Stop()
 	nfHealthScheduler := nfhealth.NewScheduler(nfHealthRepo, nfHealthCollector)
 	nfHealthScheduler.Start(context.Background())
 	defer nfHealthScheduler.Stop()
@@ -799,6 +803,7 @@ func main() {
 	mux.Handle("GET /api/nf-health/interfaces", authMiddleware(http.HandlerFunc(nfHealthHandler.InterfaceMatrix)))
 	mux.Handle("GET /api/nf-health/targets/{targetId}", authMiddleware(http.HandlerFunc(nfHealthHandler.GetTarget)))
 	mux.Handle("GET /api/nf-health/targets/{targetId}/history", authMiddleware(http.HandlerFunc(nfHealthHandler.GetTargetHistory)))
+	mux.Handle("GET /api/nf-health/targets/{targetId}/metric-history", authMiddleware(http.HandlerFunc(nfHealthHandler.GetMetricHistory)))
 	mux.Handle("GET /api/nf-health/samples", authMiddleware(http.HandlerFunc(nfHealthHandler.ListSamples)))
 	mux.Handle("GET /api/nf-health/runs", authMiddleware(http.HandlerFunc(nfHealthHandler.ListRuns)))
 	mux.Handle("GET /api/nf-health/runs/{runId}", authMiddleware(http.HandlerFunc(nfHealthHandler.GetRun)))

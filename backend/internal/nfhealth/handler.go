@@ -46,13 +46,15 @@ type RepositoryAPI interface {
 
 // Handler serves the NF Health API surface.
 type Handler struct {
-	repo        RepositoryAPI
-	collector   *Collector
-	limiter     RateLimiter
-	auditWriter AuditWriter
-	dest        *DestinationAllowlist
-	units       *ServiceUnitAllowlist
-	bindings    *ProcessBindingRegistry
+	metricHistory         MetricHistoryReader
+	metricAggregateWorker *MetricAggregateWorker
+	repo                  RepositoryAPI
+	collector             *Collector
+	limiter               RateLimiter
+	auditWriter           AuditWriter
+	dest                  *DestinationAllowlist
+	units                 *ServiceUnitAllowlist
+	bindings              *ProcessBindingRegistry
 	// identity provides read-only Inventory and Discovery resolution. NF
 	// Health never writes Inventory or Discovery through these resolvers.
 	identity IdentityResolvers
@@ -222,6 +224,7 @@ func (h *Handler) auditWrite(p *auth.Principal, action, targetID string, revisio
 
 // MetaResponse is the GET /api/nf-health/meta payload.
 type MetaResponse struct {
+	MetricHistory               *MetricAggregateStatus   `json:"metricHistory,omitempty"`
 	ThresholdCapabilities       []ThresholdCapability    `json:"thresholdCapabilities"`
 	BusinessRulesVersion        string                   `json:"businessRulesVersion"`
 	BusinessRules               []BusinessRuleDefinition `json:"businessRules"`
@@ -272,7 +275,12 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	if h.limiter != nil && !h.limiter.Enforce(w, r, "nf-health:meta:"+p.Username, 120, 60) {
 		return
 	}
-	response.JSON(w, http.StatusOK, MetaResponse{
+	var metricHistory *MetricAggregateStatus
+	if h.metricAggregateWorker != nil {
+		status := h.metricAggregateWorker.Snapshot()
+		metricHistory = &status
+	}
+	response.JSON(w, http.StatusOK, MetaResponse{MetricHistory: metricHistory,
 		ThresholdCapabilities:       ThresholdCapabilities(),
 		BusinessRulesVersion:        BusinessRulesVersion,
 		BusinessRules:               BusinessRuleDefinitions(),

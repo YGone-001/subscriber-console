@@ -19,10 +19,23 @@ type MetricOutcomeBatch struct {
 }
 
 func (r *Repository) MetricOutcomes(ctx context.Context, targetID, resourceID string, from, to time.Time, limit int) (MetricOutcomeBatch, error) {
-	batch := MetricOutcomeBatch{Outcomes: []CollectionResult{}}
 	if limit < 1 || limit > 128 || to.Before(from) || to.Sub(from) > 2*time.Hour+time.Second {
-		return batch, fmt.Errorf("invalid metric replay budget")
+		return MetricOutcomeBatch{Outcomes: []CollectionResult{}}, fmt.Errorf("invalid metric replay budget")
 	}
+	return r.metricOutcomes(ctx, targetID, resourceID, from, to, limit, to)
+}
+
+// AggregateOutcomes shares publication, identity and ordering checks with alerts.
+// Its fixed hour plus leading continuity allowance is bounded to 2.5 hours.
+func (r *Repository) AggregateOutcomes(ctx context.Context, targetID, resourceID string, from, to time.Time) (MetricOutcomeBatch, error) {
+	if to.Before(from) || to.Sub(from) > 150*time.Minute {
+		return MetricOutcomeBatch{}, fmt.Errorf("invalid aggregation window")
+	}
+	return r.metricOutcomes(ctx, targetID, resourceID, from, to, 10000, time.Now().UTC())
+}
+
+func (r *Repository) metricOutcomes(ctx context.Context, targetID, resourceID string, from, to time.Time, limit int, publicationNow time.Time) (MetricOutcomeBatch, error) {
+	batch := MetricOutcomeBatch{Outcomes: []CollectionResult{}}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	// Canonical controller timestamps are UTC RFC3339Nano. Broad whole-second
@@ -72,7 +85,7 @@ func (r *Repository) MetricOutcomes(ctx context.Context, targetID, resourceID st
 		}
 		// A just-written run may be between insert and publication. Stop at it;
 		// never let a newer live callback move the watermark past this barrier.
-		if !run.MetricRecorded && to.Sub(at) < 30*time.Second {
+		if !run.MetricRecorded && publicationNow.Sub(at) < 30*time.Second {
 			batch.More = true
 			batch.Reason = "recording_pending"
 			break

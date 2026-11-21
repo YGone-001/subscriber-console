@@ -1,3 +1,4 @@
+import { NF_METRIC_AGGREGATE_INDEX_SPECS } from './lib/nf-metric-aggregate-indexes.mjs';
 import { Long, MongoClient } from 'mongodb';
 import bcrypt from 'bcryptjs';
 import { loadEnv } from './lib/load-env.mjs';
@@ -560,6 +561,10 @@ async function ensureIndexes() {
     { key: { linkedResourceId: 1 }, name: 'nf_obs_linked_resource' },
     { key: { lastSeenAt: -1, _id: 1 }, name: 'nf_obs_lastseen_id' },
   ])).map((name) => ({ database: appDbName, collection: 'app_nf_observations', name })));
+
+  for (const spec of NF_METRIC_AGGREGATE_INDEX_SPECS) {
+    createdIndexes.push(...(await appDb.collection(spec.collection).createIndexes(spec.indexes)).map(name => ({database: appDbName, collection: spec.collection, name})));
+  }
 
   // ── xcloud_ops.app_nf_health_targets ──
   // Operator-authored monitoring configuration. Identity separation is

@@ -56,7 +56,7 @@ assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
 assert.equal(goRegistrations.length, EXPECTED_GO_REGISTRATIONS, `Go registered operations must be exactly ${EXPECTED_GO_REGISTRATIONS}, got ${goRegistrations.length}`);
 
 const healthGoRoutes = goRegistrations.filter((r) => r.includes('/api/nf-health'));
-assert.equal(healthGoRoutes.length, 11, `NF Health Go registrations must be exactly 11, got ${healthGoRoutes.length}`);
+assert.equal(healthGoRoutes.length, 12, `NF Health Go registrations must be exactly 12, got ${healthGoRoutes.length}`);
 
 const expectedHealthGo = [
   'GET /api/nf-health/meta',
@@ -64,6 +64,7 @@ const expectedHealthGo = [
   'GET /api/nf-health/interfaces',
   'GET /api/nf-health/targets/{targetId}',
   'GET /api/nf-health/targets/{targetId}/history',
+  'GET /api/nf-health/targets/{targetId}/metric-history',
   'GET /api/nf-health/samples',
   'GET /api/nf-health/runs',
   'GET /api/nf-health/runs/{runId}',
@@ -77,7 +78,7 @@ for (const expected of expectedHealthGo) {
 
 const healthReads = healthGoRoutes.filter((r) => r.startsWith('GET '));
 const healthMutations = healthGoRoutes.filter((r) => !r.startsWith('GET '));
-assert.equal(healthReads.length, 8, `NF Health read count must be 8, got ${healthReads.length}`);
+assert.equal(healthReads.length, 9, `NF Health read count must be 9, got ${healthReads.length}`);
 assert.equal(healthMutations.length, 3, `NF Health mutation count must be 3, got ${healthMutations.length}`);
 
 assert.equal(healthGoRoutes.filter((r) => r.startsWith('DELETE ')).length, 0, 'NF Health hard-delete endpoint must be 0');
@@ -94,11 +95,11 @@ const healthContract = JSON.parse(readFileSync(resolve(frontend, 'nf-health-cont
 assert.ok(Array.isArray(healthContract.routes), 'nf-health-contract.json must declare routes');
 assert.equal(healthContract.routes.length, 2, 'nf-health-contract.json must declare 2 routes');
 assert.ok(Array.isArray(healthContract.apis), 'nf-health-contract.json must declare apis');
-assert.equal(healthContract.apis.length, 11, 'nf-health-contract.json must declare 11 APIs');
+assert.equal(healthContract.apis.length, 12, 'nf-health-contract.json must declare 12 APIs');
 
 const declaredReads = healthContract.apis.filter((api) => api.access === 'read');
 const declaredWrites = healthContract.apis.filter((api) => api.access === 'write');
-assert.equal(declaredReads.length, 8, 'nf-health-contract.json must declare 8 reads');
+assert.equal(declaredReads.length, 9, 'nf-health-contract.json must declare 9 reads');
 assert.equal(declaredWrites.length, 3, 'nf-health-contract.json must declare 3 writes');
 for (const api of declaredReads) {
   assert.equal(api.permission, 'core.read', `${api.method} ${api.path} read permission must be core.read`);
@@ -119,8 +120,9 @@ assert.deepEqual(
     'xcloud_ops.app_nf_health_runs',
     'xcloud_ops.app_nf_health_samples',
     'xcloud_ops.app_nf_health_targets',
+    'xcloud_ops.app_nf_metric_aggregates',
   ],
-  'nf-health-contract.json must declare exactly the three NF Health collections',
+  'nf-health-contract.json must declare exactly the declared NF Health and aggregation collections',
 );
 
 assert.ok(Array.isArray(healthContract.collectorProfiles), 'collectorProfiles must be declared');
@@ -456,7 +458,7 @@ console.log('nf_health_egress_default_deny=1');
 console.log('nf_health_dialog_actions_pinned=1');
 
 console.log('nf_health_frontend_routes=2');
-console.log('nf_health_go_registrations=10');
+console.log(`nf_health_go_registrations=${healthGoRoutes.length}`);
 console.log(`go_registration_count=${goRegistrations.length}`);
 console.log('nf_health_collections=4');
 console.log('nf_health_security_findings=0');

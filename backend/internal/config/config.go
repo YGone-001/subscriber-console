@@ -31,6 +31,7 @@ type Config struct {
 	NFHealthServiceUnits         string // comma-separated approved service units / process names
 	NFHealthTLSCAFile            string // optional CA bundle for https metrics endpoints
 	NFHealthLocalProcessBindings string // comma-separated resourceId=unit local bindings
+	NFMetricAggregatesEnabled    bool   // opt-in historical exporter gauge aggregation
 	NFMetricAlertsEnabled        bool   // opt-in exporter gauge policies
 	NFHealthProcessSnapshot      string // optional root-owned local process evidence snapshot
 
@@ -88,16 +89,25 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("NF_METRIC_ALERTS_ENABLED must be a boolean")
 		}
 	}
+	aggregateEnabled := false
+	if raw := os.Getenv("NF_METRIC_AGGREGATES_ENABLED"); raw != "" {
+		var err error
+		aggregateEnabled, err = strconv.ParseBool(raw)
+		if err != nil {
+			return nil, fmt.Errorf("NF_METRIC_AGGREGATES_ENABLED must be a boolean")
+		}
+	}
 	cfg := &Config{
-		NFMetricAlertsEnabled: metricEnabled,
-		HTTPAddr:              envOrDefault("HTTP_ADDR", "127.0.0.1:18888"),
-		ReadTimeout:           envDurationOrDefault("HTTP_READ_TIMEOUT", 15*time.Second),
-		WriteTimeout:          envDurationOrDefault("HTTP_WRITE_TIMEOUT", 30*time.Second),
-		IdleTimeout:           envDurationOrDefault("HTTP_IDLE_TIMEOUT", 120*time.Second),
-		ShutdownTimeout:       envDurationOrDefault("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
-		MongoURI:              envOrDefault("MONGODB_URI", "mongodb://127.0.0.1:27017"),
-		MongoDBXCloud:         envOrDefault("MONGODB_XCLOUD_DB", "xcloud"),
-		MongoDBOps:            envOrDefault("MONGODB_APP_DB", "xcloud_ops"),
+		NFMetricAggregatesEnabled: aggregateEnabled,
+		NFMetricAlertsEnabled:     metricEnabled,
+		HTTPAddr:                  envOrDefault("HTTP_ADDR", "127.0.0.1:18888"),
+		ReadTimeout:               envDurationOrDefault("HTTP_READ_TIMEOUT", 15*time.Second),
+		WriteTimeout:              envDurationOrDefault("HTTP_WRITE_TIMEOUT", 30*time.Second),
+		IdleTimeout:               envDurationOrDefault("HTTP_IDLE_TIMEOUT", 120*time.Second),
+		ShutdownTimeout:           envDurationOrDefault("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
+		MongoURI:                  envOrDefault("MONGODB_URI", "mongodb://127.0.0.1:27017"),
+		MongoDBXCloud:             envOrDefault("MONGODB_XCLOUD_DB", "xcloud"),
+		MongoDBOps:                envOrDefault("MONGODB_APP_DB", "xcloud_ops"),
 
 		DiscoveryAllowedTargets: os.Getenv("DISCOVERY_ALLOWED_TARGETS"),
 		DiscoveryTLSCAFile:      os.Getenv("DISCOVERY_TLS_CA_FILE"),

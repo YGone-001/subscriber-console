@@ -7,6 +7,7 @@
     { "method": "GET", "path": "/api/nf-health/interfaces", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/nf-health/targets/{targetId}", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/nf-health/targets/{targetId}/history", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/nf-health/targets/{targetId}/metric-history", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/nf-health/samples", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/nf-health/runs", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/nf-health/runs/{runId}", "access": "read", "permission": "core.read" },
@@ -34,7 +35,8 @@
   "collections": [
     "xcloud_ops.app_nf_health_targets",
     "xcloud_ops.app_nf_health_runs",
-    "xcloud_ops.app_nf_health_samples"
+    "xcloud_ops.app_nf_health_samples",
+    "xcloud_ops.app_nf_metric_aggregates"
   ],
   "serverOwnedFields": [
     "targetId",
