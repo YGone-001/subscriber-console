@@ -79,6 +79,7 @@ func TestMetricMongoLifecycleAndReplay(t *testing.T) {
 		}
 		return out
 	}
+	clock.T = time.Now().UTC()
 	first := collect()
 	if out := evaluate(first); out.Opened != 1 {
 		t.Fatalf("first %+v", out)
@@ -124,7 +125,7 @@ func TestMetricMongoLifecycleAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Evidence.Metric.Value != 150 || saved.MetricRecovery == nil || saved.MetricRecovery.Value != 40 {
+	if saved.Evidence.Metric.Value != 150 || saved.MetricRecovery == nil || saved.MetricRecovery.Value != 40 || saved.MetricLatest == nil || saved.MetricLatest.Evidence.Value != 40 {
 		t.Fatalf("evidence overwritten %+v", saved)
 	}
 	production = NewMongoEvaluatorRepository(NewRepository(repo.rules, repo.alerts))
@@ -178,8 +179,12 @@ func TestMetricMongoLifecycleAndReplay(t *testing.T) {
 		t.Fatal("expired journal created an alert")
 	}
 	fields := MutableRuleFields{Name: "changed", Enabled: true, ConditionType: ConditionTypeMetricThreshold, MetricCondition: rssCondition("gt", 200, 50), Severity: SeverityWarning}
-	if _, _, err := repo.UpdateRule(ctx, rule.RuleID, &UpdateRuleRequest{ExpectedRevision: rule.Revision, Rule: fields}, "operator"); err == nil {
-		t.Fatal("condition silently changed")
+	if _, _, err := repo.UpdateRule(ctx, rule.RuleID, &UpdateRuleRequest{ExpectedRevision: rule.Revision, Rule: fields}, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ = repo.GetAlert(ctx, current.AlertID)
+	if saved.ResolvedReason != ResolveReasonConfigurationChanged || saved.MetricRecovery != nil || *saved.MetricCondition.Threshold != 100 {
+		t.Fatal("policy edit rewrote trigger or fabricated recovery")
 	}
 	state, err = repo.loadMetricState(ctx, rule.RuleID)
 	if err != nil {

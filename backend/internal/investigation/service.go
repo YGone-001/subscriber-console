@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"subscriber/internal/nfalert"
 	"sync"
 	"time"
 
@@ -325,7 +326,15 @@ func addAlertEvents(out *ContextView, a AlertFact, basis string) {
 		if e != nil {
 			continue
 		}
-		out.Events = append(out.Events, Event{AnchorKind: a.AnchorKind, Key: v.kind + ":" + a.ID + a.AnchorID, Kind: v.kind, ID: a.ID + a.AnchorID, SourceID: a.SourceID, ResourceID: a.ResourceID, TargetID: a.TargetID, At: at.UTC(), Name: a.Name, Outcome: a.Severity, Basis: basis})
+		var metric *nfalert.MetricAlertSummary
+		if a.MetricCondition != nil {
+			metric = &nfalert.MetricAlertSummary{RuleRevision: a.RuleRevision, Condition: a.MetricCondition, Trigger: a.Evidence.Metric, Recovery: a.MetricRecovery}
+		}
+		reason := ""
+		if v.kind == "alert_resolved" {
+			reason = a.ResolvedReason
+		}
+		out.Events = append(out.Events, Event{Metric: metric, ResolvedReason: reason, AnchorKind: a.AnchorKind, Key: v.kind + ":" + a.ID + a.AnchorID, Kind: v.kind, ID: a.ID + a.AnchorID, SourceID: a.SourceID, ResourceID: a.ResourceID, TargetID: a.TargetID, At: at.UTC(), Name: a.Name, Outcome: a.Severity, Basis: basis})
 	}
 }
 func (s *Service) checkWriter(ctx context.Context, p *auth.Principal) (*governance.FreshActor, error) {

@@ -127,3 +127,17 @@ func classifyMetric(m *MetricCondition, value float64) string {
 	}
 	return "hold"
 }
+
+// MetricObservation is independent of the immutable trigger and recovery proof.
+type MetricObservation struct {
+	Status   MetricEvaluationStatus `json:"status" bson:"status"`
+	Evidence *MetricEvidence        `json:"evidence,omitempty" bson:"evidence,omitempty"`
+}
+
+// MetricAlertSummary contains only retained, display-safe alert evidence.
+type MetricAlertSummary struct {
+	RuleRevision int64            `json:"ruleRevision" bson:"ruleRevision"`
+	Condition    *MetricCondition `json:"condition" bson:"condition"`
+	Trigger      *MetricEvidence  `json:"trigger" bson:"trigger"`
+	Recovery     *MetricEvidence  `json:"recovery,omitempty" bson:"recovery,omitempty"`
+}

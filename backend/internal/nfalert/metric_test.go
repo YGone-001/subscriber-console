@@ -125,3 +125,26 @@ func TestMetricHTTPRejectsInvalidDurations(t *testing.T) {
 		}
 	}
 }
+
+func TestMetricUpdateAndDisableRequireFreshActor(t *testing.T) {
+	repo := newStubRepo()
+	id := "0192f0c0-a000-7000-8000-000000000001"
+	repo.rules[id] = &AlertRule{RuleID: id, TargetID: id, ConditionType: ConditionTypeMetricThreshold, MetricCondition: rssCondition("gt", 100, 50), Revision: 1}
+	h := newTestServer(repo)
+	h.ConfigureMetricRules(true, nil, metricActor{true})
+	payload := map[string]any{"expectedRevision": 1, "rule": map[string]any{"name": "RSS disabled", "enabled": false, "conditionType": ConditionTypeMetricThreshold, "metricCondition": rssCondition("gt", 200, 50), "severity": "warning"}}
+	if rec := doRouted(h, "PUT", "/api/nf-alerts/rules/"+id, "viewer", payload); rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer disable=%d", rec.Code)
+	}
+	h.ConfigureMetricRules(true, nil, metricActor{false})
+	if rec := doRouted(h, "PUT", "/api/nf-alerts/rules/"+id, "operator", payload); rec.Code != http.StatusForbidden {
+		t.Fatalf("revoked actor disable=%d %s", rec.Code, rec.Body)
+	}
+	h.ConfigureMetricRules(true, nil, metricActor{true})
+	if rec := doRouted(h, "PUT", "/api/nf-alerts/rules/"+id, "operator", payload); rec.Code != http.StatusOK {
+		t.Fatalf("eligible disable=%d %s", rec.Code, rec.Body)
+	}
+	if rec := doRouted(h, "PUT", "/api/nf-alerts/rules/"+id, "operator", payload); rec.Code != http.StatusConflict {
+		t.Fatalf("stale edit=%d", rec.Code)
+	}
+}

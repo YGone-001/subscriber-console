@@ -27,7 +27,7 @@ func projection(fields ...string) bson.M {
 	return m
 }
 
-var alertProjection = projection("resourceId", "targetId", "ruleName", "severity", "state", "firstTriggeredAt", "lastTriggeredAt", "acknowledgedAt", "assignedAt", "recoveringAt", "resolvedAt", "triggerCount")
+var alertProjection = projection("ruleRevision", "resolvedReason", "metricCondition.metric", "metricCondition.series", "metricCondition.operator", "metricCondition.threshold", "metricCondition.recoveryThreshold", "metricCondition.durationSeconds", "metricCondition.recoveryDurationSeconds", "evidence.metric.metric", "evidence.metric.series", "evidence.metric.unit", "evidence.metric.subject", "evidence.metric.value", "evidence.metric.sampleId", "evidence.metric.observedAt", "evidence.metric.conditionSince", "evidence.metric.firstSampleId", "evidence.metric.elapsedSeconds", "evidence.metric.observations", "evidence.metric.maxGapSeconds", "metricRecovery.metric", "metricRecovery.series", "metricRecovery.unit", "metricRecovery.subject", "metricRecovery.value", "metricRecovery.sampleId", "metricRecovery.observedAt", "metricRecovery.conditionSince", "metricRecovery.firstSampleId", "metricRecovery.elapsedSeconds", "metricRecovery.observations", "metricRecovery.maxGapSeconds", "resourceId", "targetId", "ruleName", "severity", "state", "firstTriggeredAt", "lastTriggeredAt", "acknowledgedAt", "assignedAt", "recoveringAt", "resolvedAt", "triggerCount")
 
 func missing(err error) error {
 	if errors.Is(err, mongo.ErrNoDocuments) {

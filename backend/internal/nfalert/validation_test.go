@@ -207,7 +207,7 @@ func TestCanonicalVocabularies(t *testing.T) {
 	if len(CanonicalConditionTypes) != 2 {
 		t.Fatalf("condition types vocabulary mismatch: %v", CanonicalConditionTypes)
 	}
-	if len(CanonicalResolveReasons) != 3 {
+	if len(CanonicalResolveReasons) != 5 {
 		t.Fatalf("resolve reasons vocabulary mismatch: %v", CanonicalResolveReasons)
 	}
 }

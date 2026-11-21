@@ -1270,7 +1270,13 @@ and observation-only business rules are unchanged. Metric writes revalidate the
 fresh actor; creation/enabling and evaluation verify current Inventory identity. The sole new Ops collection is
 `app_nf_metric_rule_states` (standard unique `_id`, revision CAS, observation
 watermark and replayable safe transition). One controller owns evaluation;
-trigger evidence is immutable and recovery evidence is separate. Trigger/recovery
+trigger evidence is immutable and recovery evidence is separate. Metric condition
+edits retain scope/type, use Fresh Actor and CAS, and close old incidents as
+configuration_changed; disabling uses rule_disabled, never measured recovery.
+A private rule-CAS closure intent is retried by the bounded worker even for
+disabled rules. Latest observations remain separate; notification and investigation
+carry retained safe condition/version/value summaries independent of raw sample TTL.
+Trigger/recovery
 durations accept 0-3600 integer seconds (zero preserves single-sample behavior).
 Positive durations require verified exporter continuity, at least two increasing
 observations, bounded gaps and matching rule/target epochs. Missing evidence,

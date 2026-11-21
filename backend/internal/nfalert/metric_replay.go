@@ -69,6 +69,9 @@ func (m *MongoEvaluatorRepository) reconcileMetricLocked(ctx context.Context, in
 	if err != nil {
 		return nil, err
 	}
+	if err := m.repo.drainMetricPolicyClosure(ctx, rule); err != nil {
+		return nil, err
+	}
 	if !rule.Enabled || rule.ConditionType != ConditionTypeMetricThreshold {
 		return total, nil
 	}
@@ -207,7 +210,7 @@ func (m *MongoEvaluatorRepository) reconcileMetricLocked(ctx context.Context, in
 func (m *MongoEvaluatorRepository) ScanMetricRules(ctx context.Context, after string) ([]AlertRule, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	q := bson.M{"enabled": true, "conditionType": ConditionTypeMetricThreshold}
+	q := bson.M{"conditionType": ConditionTypeMetricThreshold, "$or": bson.A{bson.M{"enabled": true}, bson.M{"metricClosure": bson.M{"$ne": nil}}}}
 	if after != "" {
 		q["_id"] = bson.M{"$gt": after}
 	}

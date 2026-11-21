@@ -10,21 +10,24 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"subscriber/internal/nfalert"
 	"time"
 )
 
 // WebhookPayload is the JSON body delivered to a webhook channel.
 type WebhookPayload struct {
-	DeliveryID   string `json:"deliveryId"`
-	Event        string `json:"event"`
-	AlertID      string `json:"alertId"`
-	RuleID       string `json:"ruleId"`
-	RuleName     string `json:"ruleName"`
-	TargetID     string `json:"targetId"`
-	TargetName   string `json:"targetName"`
-	Severity     string `json:"severity"`
-	TriggerCount int    `json:"triggerCount"`
-	OccurredAt   string `json:"occurredAt"`
+	Metric         *nfalert.MetricAlertSummary `json:"metric,omitempty" bson:"metric,omitempty"`
+	ResolvedReason string                      `json:"resolvedReason,omitempty" bson:"resolvedReason,omitempty"`
+	DeliveryID     string                      `json:"deliveryId"`
+	Event          string                      `json:"event"`
+	AlertID        string                      `json:"alertId"`
+	RuleID         string                      `json:"ruleId"`
+	RuleName       string                      `json:"ruleName"`
+	TargetID       string                      `json:"targetId"`
+	TargetName     string                      `json:"targetName"`
+	Severity       string                      `json:"severity"`
+	TriggerCount   int                         `json:"triggerCount"`
+	OccurredAt     string                      `json:"occurredAt"`
 }
 
 // Sender delivers one delivery to a channel.
@@ -53,16 +56,18 @@ func (s *WebhookSender) Send(ctx context.Context, channel *NotificationChannel, 
 		return fmt.Errorf("unsupported configuration notification payload version")
 	}
 	payload := WebhookPayload{
-		DeliveryID:   delivery.ID,
-		Event:        delivery.Event,
-		AlertID:      delivery.AlertID,
-		RuleID:       delivery.RuleID,
-		RuleName:     delivery.RuleName,
-		TargetID:     delivery.TargetID,
-		TargetName:   delivery.TargetName,
-		Severity:     delivery.Severity,
-		TriggerCount: delivery.TriggerCount,
-		OccurredAt:   delivery.OccurredAt,
+		Metric:         delivery.Metric,
+		ResolvedReason: delivery.ResolvedReason,
+		DeliveryID:     delivery.ID,
+		Event:          delivery.Event,
+		AlertID:        delivery.AlertID,
+		RuleID:         delivery.RuleID,
+		RuleName:       delivery.RuleName,
+		TargetID:       delivery.TargetID,
+		TargetName:     delivery.TargetName,
+		Severity:       delivery.Severity,
+		TriggerCount:   delivery.TriggerCount,
+		OccurredAt:     delivery.OccurredAt,
 	}
 	var wire any = payload
 	if delivery.SubjectKind == "config_drift" {

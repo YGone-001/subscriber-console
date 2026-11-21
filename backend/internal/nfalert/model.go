@@ -44,9 +44,11 @@ const (
 
 // Resolve reasons recorded on closed alerts.
 const (
-	ResolveReasonRecovery    = "recovery"
-	ResolveReasonManual      = "manual"
-	ResolveReasonRuleDeleted = "rule_deleted"
+	ResolveReasonRecovery             = "recovery"
+	ResolveReasonManual               = "manual"
+	ResolveReasonRuleDeleted          = "rule_deleted"
+	ResolveReasonConfigurationChanged = "configuration_changed"
+	ResolveReasonRuleDisabled         = "rule_disabled"
 )
 
 // Cooldown bounds. The cooldown is the dedupe window: repeated triggers inside
@@ -73,6 +75,7 @@ const (
 //   - both empty      : the rule applies to all targets.
 //   - both set        : invalid, rejected on write.
 type AlertRule struct {
+	MetricClosure    *metricPolicyClosure    `json:"-" bson:"metricClosure,omitempty"`
 	MetricReplay     *MetricReplayStatus     `json:"metricReplay,omitempty" bson:"-"`
 	MetricEvaluation *MetricEvaluationStatus `json:"metricEvaluation,omitempty" bson:"-"`
 	MetricCondition  *MetricCondition        `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
@@ -117,32 +120,33 @@ type AlertEvidence struct {
 // (rule, target) pair. At most one non-resolved alert exists per pair; the
 // evaluation engine maintains that invariant.
 type Alert struct {
-	MetricRecovery   *MetricEvidence  `json:"metricRecovery,omitempty" bson:"metricRecovery,omitempty"`
-	RuleRevision     int64            `json:"ruleRevision,omitempty" bson:"ruleRevision,omitempty"`
-	MetricCondition  *MetricCondition `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
-	AlertID          string           `json:"alertId" bson:"_id"`
-	SchemaVersion    int              `json:"schemaVersion" bson:"schemaVersion"`
-	RuleID           string           `json:"ruleId" bson:"ruleId"`
-	RuleName         string           `json:"ruleName" bson:"ruleName"`
-	TargetID         string           `json:"targetId" bson:"targetId"`
-	ResourceID       string           `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
-	TargetName       string           `json:"targetName" bson:"targetName"`
-	Severity         string           `json:"severity" bson:"severity"`
-	State            string           `json:"state" bson:"state"`
-	ConditionType    string           `json:"conditionType" bson:"conditionType"`
-	Condition        RuleCondition    `json:"condition,omitempty" bson:"condition,omitempty"`
-	TriggerCount     int              `json:"triggerCount" bson:"triggerCount"`
-	FirstTriggeredAt string           `json:"firstTriggeredAt" bson:"firstTriggeredAt"`
-	LastTriggeredAt  string           `json:"lastTriggeredAt" bson:"lastTriggeredAt"`
-	Evidence         AlertEvidence    `json:"evidence" bson:"evidence"`
-	AcknowledgedAt   string           `json:"acknowledgedAt,omitempty" bson:"acknowledgedAt,omitempty"`
-	AcknowledgedBy   string           `json:"acknowledgedBy,omitempty" bson:"acknowledgedBy,omitempty"`
-	AssignedTo       string           `json:"assignedTo,omitempty" bson:"assignedTo,omitempty"`
-	AssignedAt       string           `json:"assignedAt,omitempty" bson:"assignedAt,omitempty"`
-	RecoveringAt     string           `json:"recoveringAt,omitempty" bson:"recoveringAt,omitempty"`
-	ResolvedAt       string           `json:"resolvedAt,omitempty" bson:"resolvedAt,omitempty"`
-	ResolvedReason   string           `json:"resolvedReason,omitempty" bson:"resolvedReason,omitempty"`
-	UpdatedAt        string           `json:"updatedAt" bson:"updatedAt"`
+	MetricLatest     *MetricObservation `json:"metricLatest,omitempty" bson:"metricLatest,omitempty"`
+	MetricRecovery   *MetricEvidence    `json:"metricRecovery,omitempty" bson:"metricRecovery,omitempty"`
+	RuleRevision     int64              `json:"ruleRevision,omitempty" bson:"ruleRevision,omitempty"`
+	MetricCondition  *MetricCondition   `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
+	AlertID          string             `json:"alertId" bson:"_id"`
+	SchemaVersion    int                `json:"schemaVersion" bson:"schemaVersion"`
+	RuleID           string             `json:"ruleId" bson:"ruleId"`
+	RuleName         string             `json:"ruleName" bson:"ruleName"`
+	TargetID         string             `json:"targetId" bson:"targetId"`
+	ResourceID       string             `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
+	TargetName       string             `json:"targetName" bson:"targetName"`
+	Severity         string             `json:"severity" bson:"severity"`
+	State            string             `json:"state" bson:"state"`
+	ConditionType    string             `json:"conditionType" bson:"conditionType"`
+	Condition        RuleCondition      `json:"condition,omitempty" bson:"condition,omitempty"`
+	TriggerCount     int                `json:"triggerCount" bson:"triggerCount"`
+	FirstTriggeredAt string             `json:"firstTriggeredAt" bson:"firstTriggeredAt"`
+	LastTriggeredAt  string             `json:"lastTriggeredAt" bson:"lastTriggeredAt"`
+	Evidence         AlertEvidence      `json:"evidence" bson:"evidence"`
+	AcknowledgedAt   string             `json:"acknowledgedAt,omitempty" bson:"acknowledgedAt,omitempty"`
+	AcknowledgedBy   string             `json:"acknowledgedBy,omitempty" bson:"acknowledgedBy,omitempty"`
+	AssignedTo       string             `json:"assignedTo,omitempty" bson:"assignedTo,omitempty"`
+	AssignedAt       string             `json:"assignedAt,omitempty" bson:"assignedAt,omitempty"`
+	RecoveringAt     string             `json:"recoveringAt,omitempty" bson:"recoveringAt,omitempty"`
+	ResolvedAt       string             `json:"resolvedAt,omitempty" bson:"resolvedAt,omitempty"`
+	ResolvedReason   string             `json:"resolvedReason,omitempty" bson:"resolvedReason,omitempty"`
+	UpdatedAt        string             `json:"updatedAt" bson:"updatedAt"`
 }
 
 // CreateRuleRequest is the body for POST /api/nf-alerts/rules.
@@ -243,7 +247,7 @@ var (
 		nfhealth.StateDegraded,
 		nfhealth.StateUnknown,
 	}
-	CanonicalResolveReasons = []string{ResolveReasonRecovery, ResolveReasonManual, ResolveReasonRuleDeleted}
+	CanonicalResolveReasons = []string{ResolveReasonRecovery, ResolveReasonManual, ResolveReasonRuleDeleted, ResolveReasonConfigurationChanged, ResolveReasonRuleDisabled}
 )
 
 // ScopeAllowedStates returns the states a given condition scope may select.

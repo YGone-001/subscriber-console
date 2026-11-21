@@ -11,6 +11,7 @@ import (
 
 // MetaResponse is the GET /api/nf-alerts/meta payload.
 type MetaResponse struct {
+	MetricConditionEditable  bool                           `json:"metricConditionEditable"`
 	MetricWorker             *MetricWorkerStatus            `json:"metricWorker,omitempty"`
 	MaxMetricDurationSeconds int                            `json:"maxMetricDurationSeconds"`
 	MetricEnabled            bool                           `json:"metricEnabled"`
@@ -49,6 +50,7 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, MetaResponse{
 		MetricWorker:             worker,
 		MetricEnabled:            h.metricEnabled,
+		MetricConditionEditable:  h.metricEnabled,
 		MaxMetricDurationSeconds: MaxMetricDurationSeconds,
 		MetricCapabilities:       nfhealth.ThresholdCapabilities(),
 		SchemaVersion:            SchemaVersion,

@@ -49,11 +49,13 @@ and additionally revalidate the fresh actor before persistence. The production
 metric target reader reuses collection-time Inventory identity validation, so
 retired/missing/retyped resources are rejected. A rule requires an enabled,
 Inventory-bound HTTP metrics target; process_only is not eligible. Creation can
-precede the first sample, but no measurement is invented. Metric identity,
-operator, thresholds and durations are fixed after creation; replacing those
-requires a new rule. Names, enabled flag, severity and cooldown metadata remain mutable under
-the existing CAS. Trigger snapshots retain the original severity and rule revision.
-Disabling a rule holds its existing alert; manual resolve remains available.
+precede the first sample, but no measurement is invented. Target scope and condition type remain immutable. Approved metric conditions,
+operators, thresholds and durations are editable under the existing revision CAS.
+Meta advertises metricConditionEditable; clients connected to older servers keep
+conditions read-only. Every metric rule revision, including metadata edits, closes
+old open incidents as configuration_changed, or rule_disabled when disabled.
+These are resolved events, never recovered events, and add no metricRecovery.
+Trigger snapshots retain their original condition, severity and rule revision.
 Disabling can succeed even when the target is no longer eligible. Deletion uses
 the existing rule_deleted lifecycle and cancels unpublished metric work.
 
@@ -67,7 +69,7 @@ Unknown future condition types also cannot fall into the legacy false/recovery p
 
 The sole new collection is `xcloud_ops.app_nf_metric_rule_states`. Its `_id` is
 the rule UUID, which is sufficient because each metric rule has one immutable
-target/metric/series. The collection uses MongoDB's standard unique `_id` index;
+target and one approved metric/series per revision. The collection uses MongoDB's standard unique `_id` index;
 there is no custom index, startup index mutation or TTL. State writes originate
 only in authorized mutations or post-recording collection evaluation, never GET.
 The document retains revision, accepted observation watermark, last sample ID,
@@ -93,7 +95,9 @@ samples with identical instants are conservatively not ordered. Incoherent
 sample/run references cannot advance the accepted watermark.
 
 Trigger evidence and rule configuration remain unchanged after opening. Recovery
-adds a separate `metricRecovery` snapshot. Journaled work that expires before
+adds a separate `metricRecovery` snapshot. `metricLatest` retains the last accepted
+evaluation quality/time and optional safe value without rewriting trigger evidence
+or changing lifecycle timestamps. Journaled work that expires before
 publication is discarded as indeterminate and awaits fresh evidence; it cannot
 produce an obsolete notification or fabricated recovery. Disable/delete cancels
 unpublished work. No expired source sample is needed to display stored safe values. Duration
@@ -105,8 +109,8 @@ Notification intent delivery retains the existing best-effort sink contract;
 this feature does not promise lossless transport when the sink itself fails.
 A bounded background reconciliation worker and the live post-recording callback
 use the same serialized source replay. Duration journals require a matching
-freshly verified continuity epoch before publication; rule edits alone cannot
-replay them without that proof.
+freshly verified continuity epoch before publication. Rule edits cancel unpublished
+measurement transitions; they do not publish an earlier measurement intent.
 The entire metric evaluation has a four-second deadline; status reads have a
 two-second deadline. Reconciliation introduces no extra network probe.
 
@@ -126,7 +130,7 @@ the configured valid interval (or its established default). Missing/failed/stale
 observations, an excessive gap, ambiguous identity or a changed exporter/config
 restart the pending segment. Entering the hysteresis band or the opposite
 predicate clears incomplete trigger/recovery timing. An open alert remains open
-until its recovery predicate completes; a manual lifecycle operation never
+until its recovery predicate completes, or an explicit manual/configuration closure; a manual lifecycle operation never
 transfers a recovery timer to a different incident. No wall-clock timer can open
 or recover an alert without a new accepted observation.
 
@@ -136,7 +140,8 @@ count. Process restart resumes it only when subsequent evidence remains compatib
 and within the gap. Every rule revision change, including metadata edits, starts
 a new comparison segment. Disable/enable also changes revision and clears pending
 timing. Rule reads project old-version progress as indeterminate without modifying
-storage. Samples older than the current policy update do not accrue duration.
+storage. Samples older than the current policy update cannot trigger or recover even when
+duration is zero.
 
 The UI distinguishes idle, pending trigger, firing, pending recovery and unknown
 from alert lifecycle and NF service health. Progress is explicitly the last
@@ -145,7 +150,7 @@ observed elapsed/required seconds and sample count, never an interpolated timer.
 ## Recording reconciliation and diagnostics
 
 The worker starts only when NF_METRIC_ALERTS_ENABLED is true. It visits a keyset
-page of at most 16 enabled metric rules every 30 seconds, sharing the existing
+page of at most 16 enabled metric rules or pending policy closures every 30 seconds, sharing the existing
 single-controller evaluation gate. A tick has a ten-second budget, each rule a
 four-second budget and each source query a two-second deadline. One failing
 rule cannot permanently starve later pages. Shutdown cancels the worker and waits
@@ -220,3 +225,31 @@ For binary rollback, stop metric evaluation first and disable metric rules using
 the new binary. The preceding single-observation binary ignores persisted duration
 fields and must not evaluate positive-duration rules. Retain state and evidence;
 there is no automatic schema rewrite or deletion during rollback.
+
+## Policy closure, notification and investigation
+
+The same rule CAS stores a private metricClosure intent on app_nf_alert_rules.
+The existing open alert is resolved before another evaluation of that rule. The
+worker includes disabled rules with pending closure intents, so a controller
+restart after the CAS can finish closure without a target or telemetry read.
+Closure retries select older rule revisions and reuse the exact resolution time;
+re-emission uses the existing alert/event/channel outbox key. The intent clears
+only after alert persistence and best-effort notification publication. A failed
+post-CAS close can return an error after the rule revision has committed; clients
+must reload the current rule before editing again. No Mongo transaction or new
+collection/index is required. Deletion first finishes any earlier policy closure,
+then retains the existing rule_deleted behavior.
+
+NF notification deliveries and webhook payloads add optional metric and
+resolvedReason fields. The metric summary includes trigger rule revision,
+condition, retained trigger proof and optional measured recovery proof. Legacy
+payload fields and outbox keys remain unchanged. Delayed escalations retain the
+same snapshot and the existing worker skips them when the alert is resolved.
+Sink failures remain best effort, not guaranteed lossless delivery.
+
+Investigation uses explicit nested field projections from retained alerts, with
+no raw sample dependency and no raw labels, endpoints or private source content.
+Its anchor and alert timeline include the condition, version, trigger/recovery
+summaries and closure reason. Missing raw samples do not erase this explanation;
+the UI states that raw evidence may have expired rather than asserting a TTL
+lookup it has not performed. Reads remain pure, bounded and core.read protected.

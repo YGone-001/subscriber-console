@@ -245,8 +245,8 @@ func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateR
 		return nil, nil, err
 	}
 	if existing.ConditionType == ConditionTypeMetricThreshold || m.ConditionType == ConditionTypeMetricThreshold {
-		if existing.ConditionType != m.ConditionType || !sameMetricCondition(existing.MetricCondition, m.MetricCondition) {
-			return nil, nil, validationError("NF_ALERT_METRIC_IMMUTABLE", "create a new rule to change metric conditions")
+		if existing.ConditionType != m.ConditionType {
+			return nil, nil, validationError("NF_ALERT_METRIC_IMMUTABLE", "create a new rule to change condition type")
 		}
 	}
 	updated := *existing
@@ -265,35 +265,43 @@ func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateR
 		return nil, nil, err
 	}
 	if existing.ConditionType == ConditionTypeMetricThreshold {
-		var err error
-		if !updated.Enabled {
-			err = r.cancelMetricTransition(ctx, ruleID)
-		} else {
-			err = r.drainMetricTransition(ctx, ruleID)
+		if err := r.drainMetricPolicyClosure(ctx, existing); err != nil {
+			return nil, nil, err
 		}
-		if err != nil {
+		if err := r.cancelMetricTransition(ctx, ruleID); err != nil {
 			return nil, nil, err
 		}
 	}
 	updated.Revision = existing.Revision + 1
 	updated.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	updated.UpdatedBy = actor
+	if existing.ConditionType == ConditionTypeMetricThreshold {
+		reason := ResolveReasonConfigurationChanged
+		if !updated.Enabled {
+			reason = ResolveReasonRuleDisabled
+		}
+		updated.MetricClosure = &metricPolicyClosure{Revision: updated.Revision, At: updated.UpdatedAt, Reason: reason}
+	}
 
+	setFields := bson.M{
+		"name":            updated.Name,
+		"description":     updated.Description,
+		"enabled":         updated.Enabled,
+		"conditionType":   updated.ConditionType,
+		"metricCondition": updated.MetricCondition,
+		"condition":       updated.Condition,
+		"severity":        updated.Severity,
+		"cooldownSeconds": updated.CooldownSeconds,
+		"revision":        updated.Revision,
+		"updatedAt":       updated.UpdatedAt,
+		"updatedBy":       updated.UpdatedBy,
+	}
+	if existing.ConditionType == ConditionTypeMetricThreshold {
+		setFields["metricClosure"] = updated.MetricClosure
+	}
 	res := r.rules.FindOneAndUpdate(ctx,
 		bson.M{"_id": ruleID, "revision": existing.Revision},
-		bson.M{"$set": bson.M{
-			"name":            updated.Name,
-			"description":     updated.Description,
-			"enabled":         updated.Enabled,
-			"conditionType":   updated.ConditionType,
-			"metricCondition": updated.MetricCondition,
-			"condition":       updated.Condition,
-			"severity":        updated.Severity,
-			"cooldownSeconds": updated.CooldownSeconds,
-			"revision":        updated.Revision,
-			"updatedAt":       updated.UpdatedAt,
-			"updatedBy":       updated.UpdatedBy,
-		}},
+		bson.M{"$set": setFields},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)
 	var doc AlertRule
@@ -302,6 +310,11 @@ func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateR
 			return nil, nil, ErrRevisionConflict
 		}
 		return nil, nil, err
+	}
+	if doc.ConditionType == ConditionTypeMetricThreshold {
+		if err := r.drainMetricPolicyClosure(ctx, &doc); err != nil {
+			return existing, &doc, err
+		}
 	}
 	return existing, &doc, nil
 }
@@ -318,6 +331,9 @@ func (r *Repository) DeleteRule(ctx context.Context, ruleID string, actor string
 		return nil, nil, err
 	}
 	if existing.ConditionType == ConditionTypeMetricThreshold {
+		if err := r.drainMetricPolicyClosure(ctx, existing); err != nil {
+			return nil, nil, err
+		}
 		if err := r.cancelMetricTransition(ctx, ruleID); err != nil {
 			return nil, nil, err
 		}

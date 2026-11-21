@@ -13,7 +13,10 @@
 //     alert pipeline.
 package notify
 
-import "time"
+import (
+	"subscriber/internal/nfalert"
+	"time"
+)
 
 // Channel kinds. Only webhook is implemented; the token keeps the wire
 // contract open for a future capability without a schema change.
@@ -148,32 +151,34 @@ type EscalationMutable struct {
 
 // Delivery is one outbox record: one alert transition, one channel.
 type Delivery struct {
-	SubjectKind    string    `json:"subjectKind,omitempty" bson:"subjectKind,omitempty"`
-	SubjectID      string    `json:"subjectId,omitempty" bson:"subjectId,omitempty"`
-	SourceID       string    `json:"sourceId,omitempty" bson:"sourceId,omitempty"`
-	SourceName     string    `json:"sourceName,omitempty" bson:"sourceName,omitempty"`
-	ResourceID     string    `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
-	PayloadVersion int       `json:"payloadVersion,omitempty" bson:"payloadVersion,omitempty"`
-	ID             string    `json:"id" bson:"_id"`
-	DeliveryKey    string    `json:"deliveryKey" bson:"deliveryKey"`
-	Event          string    `json:"event" bson:"event"`
-	AlertID        string    `json:"alertId" bson:"alertId"`
-	RuleID         string    `json:"ruleId" bson:"ruleId"`
-	RuleName       string    `json:"ruleName" bson:"ruleName"`
-	TargetID       string    `json:"targetId" bson:"targetId"`
-	TargetName     string    `json:"targetName" bson:"targetName"`
-	Severity       string    `json:"severity" bson:"severity"`
-	TriggerCount   int       `json:"triggerCount" bson:"triggerCount"`
-	OccurredAt     string    `json:"occurredAt" bson:"occurredAt"`
-	ChannelID      string    `json:"channelId" bson:"channelId"`
-	Status         string    `json:"status" bson:"status"`
-	Attempts       int       `json:"attempts" bson:"attempts"`
-	SendingUntil   time.Time `json:"-" bson:"sendingUntil"`
-	NotBefore      time.Time `json:"notBefore" bson:"notBefore"`
-	NextAttemptAt  time.Time `json:"nextAttemptAt" bson:"nextAttemptAt"`
-	LastError      string    `json:"lastError,omitempty" bson:"lastError,omitempty"`
-	CreatedAt      string    `json:"createdAt" bson:"createdAt"`
-	CompletedAt    string    `json:"completedAt,omitempty" bson:"completedAt,omitempty"`
+	Metric         *nfalert.MetricAlertSummary `json:"metric,omitempty" bson:"metric,omitempty"`
+	ResolvedReason string                      `json:"resolvedReason,omitempty" bson:"resolvedReason,omitempty"`
+	SubjectKind    string                      `json:"subjectKind,omitempty" bson:"subjectKind,omitempty"`
+	SubjectID      string                      `json:"subjectId,omitempty" bson:"subjectId,omitempty"`
+	SourceID       string                      `json:"sourceId,omitempty" bson:"sourceId,omitempty"`
+	SourceName     string                      `json:"sourceName,omitempty" bson:"sourceName,omitempty"`
+	ResourceID     string                      `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
+	PayloadVersion int                         `json:"payloadVersion,omitempty" bson:"payloadVersion,omitempty"`
+	ID             string                      `json:"id" bson:"_id"`
+	DeliveryKey    string                      `json:"deliveryKey" bson:"deliveryKey"`
+	Event          string                      `json:"event" bson:"event"`
+	AlertID        string                      `json:"alertId" bson:"alertId"`
+	RuleID         string                      `json:"ruleId" bson:"ruleId"`
+	RuleName       string                      `json:"ruleName" bson:"ruleName"`
+	TargetID       string                      `json:"targetId" bson:"targetId"`
+	TargetName     string                      `json:"targetName" bson:"targetName"`
+	Severity       string                      `json:"severity" bson:"severity"`
+	TriggerCount   int                         `json:"triggerCount" bson:"triggerCount"`
+	OccurredAt     string                      `json:"occurredAt" bson:"occurredAt"`
+	ChannelID      string                      `json:"channelId" bson:"channelId"`
+	Status         string                      `json:"status" bson:"status"`
+	Attempts       int                         `json:"attempts" bson:"attempts"`
+	SendingUntil   time.Time                   `json:"-" bson:"sendingUntil"`
+	NotBefore      time.Time                   `json:"notBefore" bson:"notBefore"`
+	NextAttemptAt  time.Time                   `json:"nextAttemptAt" bson:"nextAttemptAt"`
+	LastError      string                      `json:"lastError,omitempty" bson:"lastError,omitempty"`
+	CreatedAt      string                      `json:"createdAt" bson:"createdAt"`
+	CompletedAt    string                      `json:"completedAt,omitempty" bson:"completedAt,omitempty"`
 }
 
 // DeliveryListFilter filters the delivery ledger listing.

@@ -14,15 +14,17 @@ const (
 // transitions. It carries display-safe identity only: no secret and no channel
 // detail appear here.
 type AlertEvent struct {
-	Event        string
-	AlertID      string
-	RuleID       string
-	RuleName     string
-	TargetID     string
-	TargetName   string
-	Severity     string
-	TriggerCount int
-	OccurredAt   string
+	Metric         *MetricAlertSummary
+	ResolvedReason string
+	Event          string
+	AlertID        string
+	RuleID         string
+	RuleName       string
+	TargetID       string
+	TargetName     string
+	Severity       string
+	TriggerCount   int
+	OccurredAt     string
 }
 
 // AlertEventSink receives alert transition intents. Implementations must be
@@ -37,15 +39,21 @@ func buildAlertEvent(event string, alert *Alert, occurredAt string) AlertEvent {
 	if alert == nil {
 		return AlertEvent{Event: event, OccurredAt: occurredAt}
 	}
+	var metric *MetricAlertSummary
+	if alert.ConditionType == ConditionTypeMetricThreshold {
+		metric = &MetricAlertSummary{RuleRevision: alert.RuleRevision, Condition: alert.MetricCondition, Trigger: alert.Evidence.Metric, Recovery: alert.MetricRecovery}
+	}
 	return AlertEvent{
-		Event:        event,
-		AlertID:      alert.AlertID,
-		RuleID:       alert.RuleID,
-		RuleName:     alert.RuleName,
-		TargetID:     alert.TargetID,
-		TargetName:   alert.TargetName,
-		Severity:     alert.Severity,
-		TriggerCount: alert.TriggerCount,
-		OccurredAt:   occurredAt,
+		Metric:         metric,
+		ResolvedReason: alert.ResolvedReason,
+		Event:          event,
+		AlertID:        alert.AlertID,
+		RuleID:         alert.RuleID,
+		RuleName:       alert.RuleName,
+		TargetID:       alert.TargetID,
+		TargetName:     alert.TargetName,
+		Severity:       alert.Severity,
+		TriggerCount:   alert.TriggerCount,
+		OccurredAt:     occurredAt,
 	}
 }

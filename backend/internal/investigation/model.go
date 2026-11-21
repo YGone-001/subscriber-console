@@ -2,6 +2,7 @@ package investigation
 
 import (
 	"errors"
+	"subscriber/internal/nfalert"
 	"time"
 )
 
@@ -26,6 +27,14 @@ func fail(status int, code, message string) error { return &Failure{status, code
 
 // Evidence facts are positive projections; no raw bodies or configuration content.
 type AlertFact struct {
+	RuleRevision    int64                    `json:"ruleRevision,omitempty" bson:"ruleRevision,omitempty"`
+	MetricCondition *nfalert.MetricCondition `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
+	Evidence        struct {
+		Metric *nfalert.MetricEvidence `json:"metric,omitempty" bson:"metric,omitempty"`
+	} `json:"evidence,omitempty" bson:"evidence,omitempty"`
+	MetricRecovery *nfalert.MetricEvidence `json:"metricRecovery,omitempty" bson:"metricRecovery,omitempty"`
+	ResolvedReason string                  `json:"resolvedReason,omitempty" bson:"resolvedReason,omitempty"`
+
 	AnchorKind           string `json:"anchorKind,omitempty"`
 	AnchorID             string `json:"anchorId,omitempty"`
 	SourceID             string `json:"sourceId,omitempty"`
@@ -112,6 +121,9 @@ type Coverage struct {
 	HistoryCoverage string `json:"historyCoverage"`
 }
 type Event struct {
+	Metric         *nfalert.MetricAlertSummary `json:"metric,omitempty"`
+	ResolvedReason string                      `json:"resolvedReason,omitempty"`
+
 	AnchorKind string     `json:"anchorKind,omitempty"`
 	Key        string     `json:"key"`
 	Kind       string     `json:"kind"`

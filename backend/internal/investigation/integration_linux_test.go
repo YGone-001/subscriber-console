@@ -219,3 +219,43 @@ func TestMongoEvidenceProjectionAndConcurrentCaseLifecycle(t *testing.T) {
 		t.Fatal("mixed-offset row-limit ordering lost actual time")
 	}
 }
+
+func TestMetricInvestigationSurvivesRawSampleExpiry(t *testing.T) {
+	db := ownedMongo(t)
+	ctx := context.Background()
+	seedEvidence(t, db, instant)
+	metric := bson.M{"metric": "process_resident_memory_bytes", "series": "unlabeled", "unit": "bytes", "subject": "exporter_process", "value": 150, "sampleId": testID(60), "observedAt": instant.Format(time.RFC3339Nano), "labels": "SENSITIVE-LABELS", "endpoint": "SENSITIVE-ENDPOINT"}
+	condition := bson.M{"metric": "process_resident_memory_bytes", "series": "unlabeled", "operator": "gt", "threshold": 100, "recoveryThreshold": 50, "durationSeconds": 120, "raw": "SENSITIVE-CONDITION"}
+	_, err := db.Collection("app_nf_alerts").UpdateOne(ctx, bson.M{"_id": testID(10)}, bson.M{"$set": bson.M{"ruleRevision": 7, "metricCondition": condition, "evidence.metric": metric, "state": "resolved", "resolvedAt": instant.Add(time.Minute).Format(time.RFC3339Nano), "resolvedReason": "configuration_changed"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Collection("app_nf_health_samples").DeleteMany(ctx, bson.M{}); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewRepository(db)
+	service := NewService(repo, repo, &testActors{}, nil, []byte(strings.Repeat("k", 32)))
+	view, err := service.Context(ctx, testWindow())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(view)
+	if strings.Contains(string(raw), "SENSITIVE") {
+		t.Fatal("metric projection leaked private fields")
+	}
+	if view.Anchor.RuleRevision != 7 || view.Anchor.Evidence.Metric.Value != 150 || *view.Anchor.MetricCondition.Threshold != 100 {
+		t.Fatal("retained metric summary lost after raw expiry")
+	}
+	found := false
+	for _, event := range view.Events {
+		if event.Kind == "alert_resolved" && event.ID == testID(10) {
+			found = true
+			if event.ResolvedReason != "configuration_changed" || event.Metric == nil || event.Metric.Trigger.Value != 150 || event.Metric.Recovery != nil {
+				t.Fatal("policy closure misrepresented as recovery")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("closed metric event missing")
+	}
+}

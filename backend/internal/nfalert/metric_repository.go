@@ -256,6 +256,9 @@ func (m *MongoEvaluatorRepository) evaluateMetricLocked(ctx context.Context, rul
 	if err != nil {
 		return nil, err
 	}
+	if err := r.drainMetricPolicyClosure(ctx, current); err != nil {
+		return nil, err
+	}
 	if !current.Enabled || current.ConditionType != ConditionTypeMetricThreshold {
 		return outcome, nil
 	}
@@ -370,13 +373,13 @@ func (m *MongoEvaluatorRepository) evaluateMetricLocked(ctx context.Context, rul
 	identity, gap := nfhealth.ThresholdContinuity(freshTarget, sample)
 	state.Status.MaxGapSeconds = gap
 	needsContinuity := current.MetricCondition.DurationSeconds > 0 || current.MetricCondition.RecoveryDurationSeconds > 0
-	if value != nil && needsContinuity {
+	if value != nil {
 		versionAt, err := time.Parse(time.RFC3339Nano, current.UpdatedAt)
 		if err != nil || eventAt.Before(versionAt) {
 			value = nil
 			state.Status.Reason = "rule_version_changed"
 		}
-		if value != nil && identity == "" {
+		if value != nil && needsContinuity && identity == "" {
 			value = nil
 			state.Status.Reason = "continuity_unverified"
 		}
@@ -384,6 +387,11 @@ func (m *MongoEvaluatorRepository) evaluateMetricLocked(ctx context.Context, rul
 	if value == nil {
 		resetMetricTiming(state)
 		outcome.Indeterminate++
+		if open != nil {
+			if err := r.storeMetricLatest(ctx, open.AlertID, state.Status, nil); err != nil {
+				return nil, err
+			}
+		}
 		return outcome, r.saveMetricState(ctx, state)
 	}
 	decision := classifyMetric(current.MetricCondition, *value)
@@ -408,12 +416,18 @@ func (m *MongoEvaluatorRepository) evaluateMetricLocked(ctx context.Context, rul
 		evidence.Observations = timed.Observations
 		evidence.MaxGapSeconds = timed.MaxGapSeconds
 	}
+	if open != nil {
+		if err := r.storeMetricLatest(ctx, open.AlertID, state.Status, evidence); err != nil {
+			return nil, err
+		}
+	}
 	at := now.UTC().Format(time.RFC3339Nano)
 	if timed.Action == "open" {
 		alert := &Alert{AlertID: metricAlertID(current.RuleID, sample.SampleID), SchemaVersion: SchemaVersion,
 			RuleID: current.RuleID, RuleRevision: current.Revision, RuleName: current.Name, TargetID: freshTarget.TargetID,
 			ResourceID: freshTarget.ResourceID, TargetName: freshTarget.Name, Severity: current.Severity, State: AlertStateActive,
 			ConditionType: ConditionTypeMetricThreshold, MetricCondition: current.MetricCondition, TriggerCount: 1,
+			MetricLatest:     &MetricObservation{Status: state.Status, Evidence: evidence},
 			FirstTriggeredAt: at, LastTriggeredAt: at, UpdatedAt: at,
 			Evidence: AlertEvidence{RunStatus: result.Run.Status, SampleID: sample.SampleID, CollectedAt: sample.CollectedAt, Metric: evidence}}
 		state.Pending = &metricTransition{RuleRevision: current.Revision, DurationIdentity: durationPublicationIdentity(current.MetricCondition, identity), Kind: "open", Alert: alert, At: at, ValidUntil: eventAt.Add(time.Duration(nfhealth.FreshnessPolicySeconds(freshTarget)) * time.Second)}
