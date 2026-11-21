@@ -222,6 +222,7 @@ func (h *Handler) auditWrite(p *auth.Principal, action, targetID string, revisio
 
 // MetaResponse is the GET /api/nf-health/meta payload.
 type MetaResponse struct {
+	ThresholdCapabilities       []ThresholdCapability    `json:"thresholdCapabilities"`
 	BusinessRulesVersion        string                   `json:"businessRulesVersion"`
 	BusinessRules               []BusinessRuleDefinition `json:"businessRules"`
 	ServiceWindowVersion        string                   `json:"serviceWindowVersion"`
@@ -272,6 +273,7 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, MetaResponse{
+		ThresholdCapabilities:       ThresholdCapabilities(),
 		BusinessRulesVersion:        BusinessRulesVersion,
 		BusinessRules:               BusinessRuleDefinitions(),
 		ServiceWindowVersion:        ServiceWindowVersion,
@@ -773,12 +775,13 @@ func resourceCategoryMetrics(samples []MetricSample) []MetricSample {
 // freshness. A stale or unknown measurement never presents as healthy, and the
 // latest sample is retained as historical evidence rather than current proof.
 type GetTargetResponse struct {
-	Target         HealthTargetSummary  `json:"target"`
-	Latest         *HealthSample        `json:"latestSample,omitempty"`
-	LastRun        *HealthRun           `json:"lastRun,omitempty"`
-	Overall        string               `json:"overallState"`
-	Freshness      FreshnessProjection  `json:"freshness"`
-	ServiceWindows *ServiceWindowReport `json:"serviceWindows,omitempty"`
+	ThresholdPreview *ThresholdPreview    `json:"thresholdPreview,omitempty"`
+	Target           HealthTargetSummary  `json:"target"`
+	Latest           *HealthSample        `json:"latestSample,omitempty"`
+	LastRun          *HealthRun           `json:"lastRun,omitempty"`
+	Overall          string               `json:"overallState"`
+	Freshness        FreshnessProjection  `json:"freshness"`
+	ServiceWindows   *ServiceWindowReport `json:"serviceWindows,omitempty"`
 }
 
 // GetTarget handles GET /api/nf-health/targets/{targetId}.
@@ -856,6 +859,8 @@ func (h *Handler) GetTarget(w http.ResponseWriter, r *http.Request) {
 		resp.Target.LastRunStatus = last.Status
 		resp.Target.LastRunAt = last.StartedAt
 	}
+	value, reason := ThresholdValue(target, resp.Latest, "process_resident_memory_bytes", time.Now().UTC())
+	resp.ThresholdPreview = &ThresholdPreview{Value: value, Reason: reason}
 	response.JSON(w, http.StatusOK, resp)
 }
 

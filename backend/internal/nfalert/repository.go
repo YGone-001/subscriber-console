@@ -21,14 +21,15 @@ import (
 //   - app_nf_alert_rules  operator-authored alerting configuration
 //   - app_nf_alerts       open / acknowledged / resolved alert instances
 type Repository struct {
-	rules  *mongo.Collection
-	alerts *mongo.Collection
-	sink   AlertEventSink
+	rules      *mongo.Collection
+	alerts     *mongo.Collection
+	metricGate chan struct{}
+	sink       AlertEventSink
 }
 
 // NewRepository constructs the NF alert persistence adapter.
 func NewRepository(rules, alerts *mongo.Collection) *Repository {
-	return &Repository{rules: rules, alerts: alerts}
+	return &Repository{rules: rules, alerts: alerts, metricGate: make(chan struct{}, 1)}
 }
 
 // SetAlertEventSink installs the notification sink. It is optional and must
@@ -112,6 +113,9 @@ func decodeCursor(cursor string) (CursorData, error) {
 
 // CreateRule inserts a new alert rule with a server-generated identity.
 func (r *Repository) CreateRule(ctx context.Context, req *CreateRuleRequest, actor string) (*AlertRule, error) {
+	if err := ValidateMetricCondition(req.ConditionType, req.TargetID, req.ResourceID, req.MetricCondition); err != nil {
+		return nil, err
+	}
 	cooldown, err := NormalizeCooldown(req.CooldownSeconds)
 	if err != nil {
 		return nil, err
@@ -130,6 +134,7 @@ func (r *Repository) CreateRule(ctx context.Context, req *CreateRuleRequest, act
 		TargetID:        strings.TrimSpace(req.TargetID),
 		ResourceID:      strings.TrimSpace(req.ResourceID),
 		ConditionType:   req.ConditionType,
+		MetricCondition: req.MetricCondition,
 		Condition:       RuleCondition{},
 		Severity:        req.Severity,
 		CooldownSeconds: cooldown,
@@ -162,6 +167,9 @@ func (r *Repository) GetRule(ctx context.Context, ruleID string) (*AlertRule, er
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, ErrNotFound
 		}
+		return nil, err
+	}
+	if err := r.attachMetricStatus(ctx, []*AlertRule{&doc}); err != nil {
 		return nil, err
 	}
 	return &doc, nil
@@ -208,12 +216,23 @@ func (r *Repository) ListRules(ctx context.Context, filter RuleListFilter) ([]Al
 		last := docs[len(docs)-1]
 		next = encodeCursor(last.UpdatedAt, last.RuleID)
 	}
+	refs := make([]*AlertRule, len(docs))
+	for i := range docs {
+		refs[i] = &docs[i]
+	}
+	if err := r.attachMetricStatus(ctx, refs); err != nil {
+		return nil, nil, false, err
+	}
 	return docs, next, hasMore, nil
 }
 
 // UpdateRule applies a CAS-guarded mutable-field update. Identity fields
 // (targetId, resourceId) are immutable by design.
 func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateRuleRequest, actor string) (*AlertRule, *AlertRule, error) {
+	if err := r.lockMetric(ctx); err != nil {
+		return nil, nil, err
+	}
+	defer r.unlockMetric()
 	existing, err := r.GetRule(ctx, ruleID)
 	if err != nil {
 		return nil, nil, err
@@ -222,11 +241,20 @@ func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateR
 		return nil, nil, ErrRevisionConflict
 	}
 	m := req.Rule
+	if err := ValidateMetricCondition(m.ConditionType, existing.TargetID, existing.ResourceID, m.MetricCondition); err != nil {
+		return nil, nil, err
+	}
+	if existing.ConditionType == ConditionTypeMetricThreshold || m.ConditionType == ConditionTypeMetricThreshold {
+		if existing.ConditionType != m.ConditionType || !sameMetricCondition(existing.MetricCondition, m.MetricCondition) {
+			return nil, nil, validationError("NF_ALERT_METRIC_IMMUTABLE", "create a new rule to change metric conditions")
+		}
+	}
 	updated := *existing
 	updated.Name = strings.TrimSpace(m.Name)
 	updated.Description = strings.TrimSpace(m.Description)
 	updated.Enabled = m.Enabled
 	updated.ConditionType = m.ConditionType
+	updated.MetricCondition = m.MetricCondition
 	updated.Condition = RuleCondition{}
 	if m.Condition != nil {
 		updated.Condition = *m.Condition
@@ -235,6 +263,17 @@ func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateR
 	updated.CooldownSeconds, err = NormalizeCooldown(m.CooldownSeconds)
 	if err != nil {
 		return nil, nil, err
+	}
+	if existing.ConditionType == ConditionTypeMetricThreshold {
+		var err error
+		if !updated.Enabled {
+			err = r.cancelMetricTransition(ctx, ruleID)
+		} else {
+			err = r.drainMetricTransition(ctx, ruleID)
+		}
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	updated.Revision = existing.Revision + 1
 	updated.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -247,6 +286,7 @@ func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateR
 			"description":     updated.Description,
 			"enabled":         updated.Enabled,
 			"conditionType":   updated.ConditionType,
+			"metricCondition": updated.MetricCondition,
 			"condition":       updated.Condition,
 			"severity":        updated.Severity,
 			"cooldownSeconds": updated.CooldownSeconds,
@@ -269,9 +309,18 @@ func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateR
 // DeleteRule removes a rule and resolves its open alerts. Open alerts are
 // never orphaned: the rule deletion is recorded as the resolve reason.
 func (r *Repository) DeleteRule(ctx context.Context, ruleID string, actor string) (*AlertRule, []Alert, error) {
+	if err := r.lockMetric(ctx); err != nil {
+		return nil, nil, err
+	}
+	defer r.unlockMetric()
 	existing, err := r.GetRule(ctx, ruleID)
 	if err != nil {
 		return nil, nil, err
+	}
+	if existing.ConditionType == ConditionTypeMetricThreshold {
+		if err := r.cancelMetricTransition(ctx, ruleID); err != nil {
+			return nil, nil, err
+		}
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = r.rules.DeleteOne(ctx, bson.M{"_id": ruleID})

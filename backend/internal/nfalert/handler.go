@@ -11,6 +11,8 @@ import (
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/governance"
+	"subscriber/internal/nfhealth"
 	"subscriber/internal/response"
 )
 
@@ -41,14 +43,54 @@ type RepositoryAPI interface {
 
 // Handler serves the NF alert API surface.
 type Handler struct {
-	repo        RepositoryAPI
-	limiter     RateLimiter
-	auditWriter AuditWriter
+	repo          RepositoryAPI
+	limiter       RateLimiter
+	auditWriter   AuditWriter
+	metricEnabled bool
+	metricTargets MetricTargetReader
+	metricActors  governance.ActorRepository
 }
 
 // NewHandler constructs the NF alert HTTP handler.
 func NewHandler(repo RepositoryAPI, limiter RateLimiter, auditWriter AuditWriter) *Handler {
 	return &Handler{repo: repo, limiter: limiter, auditWriter: auditWriter}
+}
+
+// ConfigureMetricRules is wired before serving requests. Missing dependencies fail closed.
+func (h *Handler) ConfigureMetricRules(enabled bool, targets MetricTargetReader, actors governance.ActorRepository) {
+	h.metricEnabled = enabled
+	h.metricTargets = targets
+	h.metricActors = actors
+}
+func (h *Handler) validateMetricWrite(w http.ResponseWriter, r *http.Request, kind, targetID, resourceID string, condition *MetricCondition) bool {
+	if err := ValidateMetricCondition(kind, targetID, resourceID, condition); err != nil {
+		writeValidation(w, err)
+		return false
+	}
+	if kind != ConditionTypeMetricThreshold {
+		return true
+	}
+	if !h.metricEnabled || h.metricTargets == nil {
+		response.Error(w, http.StatusServiceUnavailable, "Metric rules are not enabled", "NF_ALERT_METRIC_UNAVAILABLE")
+		return false
+	}
+	target, err := h.metricTargets.GetTarget(r.Context(), targetID)
+	if err != nil || target == nil || !target.Enabled || target.ResourceID == "" ||
+		target.IdentityState != nfhealth.IdentityInventoryAuthoritative || target.CollectorProfile != nfhealth.CollectorHTTPMetrics {
+		response.BadRequest(w, "Metric rules require an enabled Inventory-bound HTTP metrics target", "NF_ALERT_METRIC_TARGET_INVALID")
+		return false
+	}
+	return true
+}
+func (h *Handler) revalidateMetricActor(w http.ResponseWriter, r *http.Request, p *auth.Principal, kind string) bool {
+	if kind != ConditionTypeMetricThreshold {
+		return true
+	}
+	if _, err := governance.RevalidateFreshActor(r.Context(), h.metricActors, p); err != nil {
+		response.Error(w, err.Status, err.Message, err.Code)
+		return false
+	}
+	return true
 }
 
 const maxBodyBytes = 64 << 10

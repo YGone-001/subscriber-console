@@ -115,3 +115,20 @@ func TestEnvDurationOrDefault(t *testing.T) {
 		t.Errorf("envDurationOrDefault() = %v, want %v", got, 5*time.Second)
 	}
 }
+
+func TestMetricAlertsRequireExplicitValidOptIn(t *testing.T) {
+	t.Setenv("NF_METRIC_ALERTS_ENABLED", "")
+	cfg, err := Load()
+	if err != nil || cfg.NFMetricAlertsEnabled {
+		t.Fatalf("default metric gate: %v", err)
+	}
+	t.Setenv("NF_METRIC_ALERTS_ENABLED", "true")
+	cfg, err = Load()
+	if err != nil || !cfg.NFMetricAlertsEnabled {
+		t.Fatalf("opt-in metric gate: %v", err)
+	}
+	t.Setenv("NF_METRIC_ALERTS_ENABLED", "sometimes")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid boolean accepted")
+	}
+}

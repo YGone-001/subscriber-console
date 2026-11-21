@@ -338,7 +338,7 @@ func main() {
 	// Collection-time authoritative identity revalidation: missing, retired,
 	// unsupported or no-longer-matching Inventory resources fail closed, while
 	// historical runs and samples remain readable evidence.
-	nfHealthCollector.SetCollectionIdentityCheck(func(ctx context.Context, target *nfhealth.HealthTarget) error {
+	nfHealthIdentityCheck := func(ctx context.Context, target *nfhealth.HealthTarget) error {
 		return nfhealth.ValidateCollectionIdentity(ctx, target, func(ctx context.Context, resourceID string) (*nfhealth.ResourceProjection, error) {
 			resource, err := inventoryRepo.GetByID(ctx, resourceID)
 			if err != nil {
@@ -355,6 +355,17 @@ func main() {
 				LifecycleState: resource.LifecycleState,
 			}, nil
 		}, nfHealthBindings)
+	}
+	nfHealthCollector.SetCollectionIdentityCheck(nfHealthIdentityCheck)
+	metricTargets := nfalert.MetricTargetReaderFunc(func(ctx context.Context, id string) (*nfhealth.HealthTarget, error) {
+		target, err := nfHealthRepo.GetTarget(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if err := nfHealthIdentityCheck(ctx, target); err != nil {
+			return nil, err
+		}
+		return target, nil
 	})
 	nfHealthScheduler := nfhealth.NewScheduler(nfHealthRepo, nfHealthCollector)
 	nfHealthScheduler.Start(context.Background())
@@ -367,8 +378,12 @@ func main() {
 		mc.Ops.Collection("app_nf_alert_rules"),
 		mc.Ops.Collection("app_nf_alerts"),
 	)
-	nfAlertEvaluator := nfalert.NewEvaluator(nfalert.NewMongoEvaluatorRepository(nfAlertRepo))
+	nfMetricRepo := nfalert.NewMongoEvaluatorRepository(nfAlertRepo)
+	nfMetricRepo.SetMetricTargetReader(metricTargets)
+	nfAlertEvaluator := nfalert.NewEvaluator(nfMetricRepo)
+	nfAlertEvaluator.SetMetricEnabled(cfg.NFMetricAlertsEnabled)
 	nfAlertHandler := nfalert.NewHandler(nfAlertRepo, limiter, auditWriter)
+	nfAlertHandler.ConfigureMetricRules(cfg.NFMetricAlertsEnabled, metricTargets, userRepo)
 	investigationRepo := investigation.NewRepository(mc.Ops)
 	investigationService := investigation.NewService(investigationRepo, investigationRepo, userRepo, auditWriter, jwtSecretBytes)
 	investigationHandler := investigation.NewHandler(investigationService, limiter)

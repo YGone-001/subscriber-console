@@ -29,8 +29,9 @@ const (
 // a run_failed condition requires the run outcome. No condition infers health
 // from absence of evidence.
 const (
-	ConditionTypeState     = "state"
-	ConditionTypeRunFailed = "run_failed"
+	ConditionTypeMetricThreshold = "metric_threshold"
+	ConditionTypeState           = "state"
+	ConditionTypeRunFailed       = "run_failed"
 )
 
 // Condition scopes for state conditions.
@@ -72,22 +73,24 @@ const (
 //   - both empty      : the rule applies to all targets.
 //   - both set        : invalid, rejected on write.
 type AlertRule struct {
-	RuleID          string        `json:"ruleId" bson:"_id"`
-	SchemaVersion   int           `json:"schemaVersion" bson:"schemaVersion"`
-	Name            string        `json:"name" bson:"name"`
-	Description     string        `json:"description,omitempty" bson:"description,omitempty"`
-	Enabled         bool          `json:"enabled" bson:"enabled"`
-	TargetID        string        `json:"targetId,omitempty" bson:"targetId,omitempty"`
-	ResourceID      string        `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
-	ConditionType   string        `json:"conditionType" bson:"conditionType"`
-	Condition       RuleCondition `json:"condition,omitempty" bson:"condition,omitempty"`
-	Severity        string        `json:"severity" bson:"severity"`
-	CooldownSeconds int           `json:"cooldownSeconds" bson:"cooldownSeconds"`
-	Revision        int64         `json:"revision" bson:"revision"`
-	CreatedAt       string        `json:"createdAt" bson:"createdAt"`
-	CreatedBy       string        `json:"createdBy" bson:"createdBy"`
-	UpdatedAt       string        `json:"updatedAt" bson:"updatedAt"`
-	UpdatedBy       string        `json:"updatedBy" bson:"updatedBy"`
+	MetricEvaluation *MetricEvaluationStatus `json:"metricEvaluation,omitempty" bson:"-"`
+	MetricCondition  *MetricCondition        `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
+	RuleID           string                  `json:"ruleId" bson:"_id"`
+	SchemaVersion    int                     `json:"schemaVersion" bson:"schemaVersion"`
+	Name             string                  `json:"name" bson:"name"`
+	Description      string                  `json:"description,omitempty" bson:"description,omitempty"`
+	Enabled          bool                    `json:"enabled" bson:"enabled"`
+	TargetID         string                  `json:"targetId,omitempty" bson:"targetId,omitempty"`
+	ResourceID       string                  `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
+	ConditionType    string                  `json:"conditionType" bson:"conditionType"`
+	Condition        RuleCondition           `json:"condition,omitempty" bson:"condition,omitempty"`
+	Severity         string                  `json:"severity" bson:"severity"`
+	CooldownSeconds  int                     `json:"cooldownSeconds" bson:"cooldownSeconds"`
+	Revision         int64                   `json:"revision" bson:"revision"`
+	CreatedAt        string                  `json:"createdAt" bson:"createdAt"`
+	CreatedBy        string                  `json:"createdBy" bson:"createdBy"`
+	UpdatedAt        string                  `json:"updatedAt" bson:"updatedAt"`
+	UpdatedBy        string                  `json:"updatedBy" bson:"updatedBy"`
 }
 
 // RuleCondition is the state predicate for state-type rules. RunFailed rules
@@ -101,6 +104,7 @@ type RuleCondition struct {
 // opened or re-armed the alert. It records exactly what was observed, never a
 // derived summary beyond the evaluated states.
 type AlertEvidence struct {
+	Metric       *MetricEvidence    `json:"metric,omitempty" bson:"metric,omitempty"`
 	RunStatus    string             `json:"runStatus" bson:"runStatus"`
 	SampleID     string             `json:"sampleId,omitempty" bson:"sampleId,omitempty"`
 	CollectedAt  string             `json:"collectedAt,omitempty" bson:"collectedAt,omitempty"`
@@ -112,42 +116,46 @@ type AlertEvidence struct {
 // (rule, target) pair. At most one non-resolved alert exists per pair; the
 // evaluation engine maintains that invariant.
 type Alert struct {
-	AlertID          string        `json:"alertId" bson:"_id"`
-	SchemaVersion    int           `json:"schemaVersion" bson:"schemaVersion"`
-	RuleID           string        `json:"ruleId" bson:"ruleId"`
-	RuleName         string        `json:"ruleName" bson:"ruleName"`
-	TargetID         string        `json:"targetId" bson:"targetId"`
-	ResourceID       string        `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
-	TargetName       string        `json:"targetName" bson:"targetName"`
-	Severity         string        `json:"severity" bson:"severity"`
-	State            string        `json:"state" bson:"state"`
-	ConditionType    string        `json:"conditionType" bson:"conditionType"`
-	Condition        RuleCondition `json:"condition,omitempty" bson:"condition,omitempty"`
-	TriggerCount     int           `json:"triggerCount" bson:"triggerCount"`
-	FirstTriggeredAt string        `json:"firstTriggeredAt" bson:"firstTriggeredAt"`
-	LastTriggeredAt  string        `json:"lastTriggeredAt" bson:"lastTriggeredAt"`
-	Evidence         AlertEvidence `json:"evidence" bson:"evidence"`
-	AcknowledgedAt   string        `json:"acknowledgedAt,omitempty" bson:"acknowledgedAt,omitempty"`
-	AcknowledgedBy   string        `json:"acknowledgedBy,omitempty" bson:"acknowledgedBy,omitempty"`
-	AssignedTo       string        `json:"assignedTo,omitempty" bson:"assignedTo,omitempty"`
-	AssignedAt       string        `json:"assignedAt,omitempty" bson:"assignedAt,omitempty"`
-	RecoveringAt     string        `json:"recoveringAt,omitempty" bson:"recoveringAt,omitempty"`
-	ResolvedAt       string        `json:"resolvedAt,omitempty" bson:"resolvedAt,omitempty"`
-	ResolvedReason   string        `json:"resolvedReason,omitempty" bson:"resolvedReason,omitempty"`
-	UpdatedAt        string        `json:"updatedAt" bson:"updatedAt"`
+	MetricRecovery   *MetricEvidence  `json:"metricRecovery,omitempty" bson:"metricRecovery,omitempty"`
+	RuleRevision     int64            `json:"ruleRevision,omitempty" bson:"ruleRevision,omitempty"`
+	MetricCondition  *MetricCondition `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
+	AlertID          string           `json:"alertId" bson:"_id"`
+	SchemaVersion    int              `json:"schemaVersion" bson:"schemaVersion"`
+	RuleID           string           `json:"ruleId" bson:"ruleId"`
+	RuleName         string           `json:"ruleName" bson:"ruleName"`
+	TargetID         string           `json:"targetId" bson:"targetId"`
+	ResourceID       string           `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
+	TargetName       string           `json:"targetName" bson:"targetName"`
+	Severity         string           `json:"severity" bson:"severity"`
+	State            string           `json:"state" bson:"state"`
+	ConditionType    string           `json:"conditionType" bson:"conditionType"`
+	Condition        RuleCondition    `json:"condition,omitempty" bson:"condition,omitempty"`
+	TriggerCount     int              `json:"triggerCount" bson:"triggerCount"`
+	FirstTriggeredAt string           `json:"firstTriggeredAt" bson:"firstTriggeredAt"`
+	LastTriggeredAt  string           `json:"lastTriggeredAt" bson:"lastTriggeredAt"`
+	Evidence         AlertEvidence    `json:"evidence" bson:"evidence"`
+	AcknowledgedAt   string           `json:"acknowledgedAt,omitempty" bson:"acknowledgedAt,omitempty"`
+	AcknowledgedBy   string           `json:"acknowledgedBy,omitempty" bson:"acknowledgedBy,omitempty"`
+	AssignedTo       string           `json:"assignedTo,omitempty" bson:"assignedTo,omitempty"`
+	AssignedAt       string           `json:"assignedAt,omitempty" bson:"assignedAt,omitempty"`
+	RecoveringAt     string           `json:"recoveringAt,omitempty" bson:"recoveringAt,omitempty"`
+	ResolvedAt       string           `json:"resolvedAt,omitempty" bson:"resolvedAt,omitempty"`
+	ResolvedReason   string           `json:"resolvedReason,omitempty" bson:"resolvedReason,omitempty"`
+	UpdatedAt        string           `json:"updatedAt" bson:"updatedAt"`
 }
 
 // CreateRuleRequest is the body for POST /api/nf-alerts/rules.
 type CreateRuleRequest struct {
-	Name            string         `json:"name"`
-	Description     string         `json:"description,omitempty"`
-	Enabled         *bool          `json:"enabled,omitempty"`
-	TargetID        string         `json:"targetId,omitempty"`
-	ResourceID      string         `json:"resourceId,omitempty"`
-	ConditionType   string         `json:"conditionType"`
-	Condition       *RuleCondition `json:"condition,omitempty"`
-	Severity        string         `json:"severity"`
-	CooldownSeconds int            `json:"cooldownSeconds"`
+	MetricCondition *MetricCondition `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
+	Name            string           `json:"name"`
+	Description     string           `json:"description,omitempty"`
+	Enabled         *bool            `json:"enabled,omitempty"`
+	TargetID        string           `json:"targetId,omitempty"`
+	ResourceID      string           `json:"resourceId,omitempty"`
+	ConditionType   string           `json:"conditionType"`
+	Condition       *RuleCondition   `json:"condition,omitempty"`
+	Severity        string           `json:"severity"`
+	CooldownSeconds int              `json:"cooldownSeconds"`
 }
 
 // UpdateRuleRequest is the body for PUT /api/nf-alerts/rules/{ruleId}.
@@ -160,13 +168,14 @@ type UpdateRuleRequest struct {
 
 // MutableRuleFields is the operator-mutable projection of an alert rule.
 type MutableRuleFields struct {
-	Name            string         `json:"name"`
-	Description     string         `json:"description,omitempty"`
-	Enabled         bool           `json:"enabled"`
-	ConditionType   string         `json:"conditionType"`
-	Condition       *RuleCondition `json:"condition,omitempty"`
-	Severity        string         `json:"severity"`
-	CooldownSeconds int            `json:"cooldownSeconds"`
+	MetricCondition *MetricCondition `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
+	Name            string           `json:"name"`
+	Description     string           `json:"description,omitempty"`
+	Enabled         bool             `json:"enabled"`
+	ConditionType   string           `json:"conditionType"`
+	Condition       *RuleCondition   `json:"condition,omitempty"`
+	Severity        string           `json:"severity"`
+	CooldownSeconds int              `json:"cooldownSeconds"`
 }
 
 // RuleListFilter filters rule listings.

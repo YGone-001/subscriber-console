@@ -5,22 +5,25 @@ import (
 	"net/http"
 	"strings"
 
+	"subscriber/internal/nfhealth"
 	"subscriber/internal/response"
 )
 
 // MetaResponse is the GET /api/nf-alerts/meta payload.
 type MetaResponse struct {
-	SchemaVersion          int      `json:"schemaVersion"`
-	AlertStates            []string `json:"alertStates"`
-	Severities             []string `json:"severities"`
-	ConditionTypes         []string `json:"conditionTypes"`
-	ConditionScopes        []string `json:"conditionScopes"`
-	StateConditionValues   []string `json:"stateConditionValues"`
-	ResolveReasons         []string `json:"resolveReasons"`
-	MinCooldownSeconds     int      `json:"minCooldownSeconds"`
-	MaxCooldownSeconds     int      `json:"maxCooldownSeconds"`
-	DefaultCooldownSeconds int      `json:"defaultCooldownSeconds"`
-	RunStatuses            []string `json:"runStatuses"`
+	MetricEnabled          bool                           `json:"metricEnabled"`
+	MetricCapabilities     []nfhealth.ThresholdCapability `json:"metricCapabilities"`
+	SchemaVersion          int                            `json:"schemaVersion"`
+	AlertStates            []string                       `json:"alertStates"`
+	Severities             []string                       `json:"severities"`
+	ConditionTypes         []string                       `json:"conditionTypes"`
+	ConditionScopes        []string                       `json:"conditionScopes"`
+	StateConditionValues   []string                       `json:"stateConditionValues"`
+	ResolveReasons         []string                       `json:"resolveReasons"`
+	MinCooldownSeconds     int                            `json:"minCooldownSeconds"`
+	MaxCooldownSeconds     int                            `json:"maxCooldownSeconds"`
+	DefaultCooldownSeconds int                            `json:"defaultCooldownSeconds"`
+	RunStatuses            []string                       `json:"runStatuses"`
 }
 
 // Meta handles GET /api/nf-alerts/meta.
@@ -32,11 +35,17 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	if h.limiter != nil && !h.limiter.Enforce(w, r, "nf-alerts:meta:"+p.Username, 120, 60) {
 		return
 	}
+	types := append([]string{}, CanonicalConditionTypes...)
+	if h.metricEnabled {
+		types = append(types, ConditionTypeMetricThreshold)
+	}
 	response.JSON(w, http.StatusOK, MetaResponse{
+		MetricEnabled:          h.metricEnabled,
+		MetricCapabilities:     nfhealth.ThresholdCapabilities(),
 		SchemaVersion:          SchemaVersion,
 		AlertStates:            CanonicalAlertStates,
 		Severities:             CanonicalSeverities,
-		ConditionTypes:         CanonicalConditionTypes,
+		ConditionTypes:         types,
 		ConditionScopes:        CanonicalConditionScopes,
 		StateConditionValues:   CanonicalStateConditionValues,
 		ResolveReasons:         CanonicalResolveReasons,
@@ -142,6 +151,9 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		writeValidation(w, err)
 		return
 	}
+	if !h.validateMetricWrite(w, r, req.ConditionType, req.TargetID, req.ResourceID, req.MetricCondition) || !h.revalidateMetricActor(w, r, p, req.ConditionType) {
+		return
+	}
 	rule, err := h.repo.CreateRule(r.Context(), &req, p.Username)
 	if err != nil {
 		writeValidation(w, err)
@@ -200,6 +212,26 @@ func (h *Handler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		writeValidation(w, err)
 		return
 	}
+	existing, lookupErr := h.repo.GetRule(r.Context(), ruleID)
+	if lookupErr != nil {
+		writeRuleNotFound(w, lookupErr)
+		return
+	}
+	if err := ValidateMetricCondition(req.Rule.ConditionType, existing.TargetID, existing.ResourceID, req.Rule.MetricCondition); err != nil {
+		writeValidation(w, err)
+		return
+	}
+	if req.Rule.ConditionType == ConditionTypeMetricThreshold && req.Rule.Enabled &&
+		!h.validateMetricWrite(w, r, req.Rule.ConditionType, existing.TargetID, existing.ResourceID, req.Rule.MetricCondition) {
+		return
+	}
+	actorKind := req.Rule.ConditionType
+	if existing.ConditionType == ConditionTypeMetricThreshold {
+		actorKind = ConditionTypeMetricThreshold
+	}
+	if !h.revalidateMetricActor(w, r, p, actorKind) {
+		return
+	}
 	before, after, err := h.repo.UpdateRule(r.Context(), ruleID, &req, p.Username)
 	if err != nil {
 		if err == ErrNotFound {
@@ -231,6 +263,14 @@ func (h *Handler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	ruleID := r.PathValue("ruleId")
 	if err := ValidateUUID(ruleID); err != nil {
 		writeValidation(w, err)
+		return
+	}
+	existing, getErr := h.repo.GetRule(r.Context(), ruleID)
+	if getErr != nil {
+		writeRuleNotFound(w, getErr)
+		return
+	}
+	if !h.revalidateMetricActor(w, r, p, existing.ConditionType) {
 		return
 	}
 	rule, resolved, err := h.repo.DeleteRule(r.Context(), ruleID, p.Username)

@@ -96,6 +96,10 @@ func ValidateRuleFields(name, conditionType string, condition *RuleCondition, se
 		if !StateSelectable(scope, state) {
 			return validationError("NF_ALERT_INVALID_CONDITION", "condition state is not selectable for the scope")
 		}
+	case ConditionTypeMetricThreshold:
+		if condition != nil {
+			return validationError("NF_ALERT_INVALID_CONDITION", "metric threshold must not carry a state condition")
+		}
 	case ConditionTypeRunFailed:
 		// A failed-run condition carries no payload. A payload would be a
 		// silent contract drift, so it is rejected instead of ignored.

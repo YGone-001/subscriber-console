@@ -27,8 +27,9 @@ import (
 // Health, Inventory, Topology or Discovery documents. It is a pure observer
 // over recorded evidence.
 type Evaluator struct {
-	repo  EvaluationRepository
-	clock nfhealth.Clock
+	repo          EvaluationRepository
+	clock         nfhealth.Clock
+	metricEnabled bool
 }
 
 // EvaluationRepository is the persistence surface the engine needs.
@@ -44,6 +45,8 @@ type EvaluationRepository interface {
 func NewEvaluator(repo EvaluationRepository) *Evaluator {
 	return &Evaluator{repo: repo, clock: nfhealth.SystemClock{}}
 }
+
+func (e *Evaluator) SetMetricEnabled(enabled bool) { e.metricEnabled = enabled }
 
 // SetClock installs an injectable test clock.
 func (e *Evaluator) SetClock(clock nfhealth.Clock) {
@@ -64,6 +67,7 @@ type EvaluationOutcome struct {
 	Opened         int
 	Recounted      int
 	Recovered      int
+	Indeterminate  int
 }
 
 // EvaluateTargets evaluates all enabled rules against the given collection
@@ -84,6 +88,8 @@ func (e *Evaluator) EvaluateTargets(ctx context.Context, inputs []EvaluationInpu
 		return outcome, nil
 	}
 
+	metricCtx, cancelMetric := context.WithTimeout(ctx, 4*time.Second)
+	defer cancelMetric()
 	for i := range inputs {
 		input := inputs[i]
 		if input.Target == nil || input.Result == nil {
@@ -92,6 +98,29 @@ func (e *Evaluator) EvaluateTargets(ctx context.Context, inputs []EvaluationInpu
 		for j := range rules {
 			rule := rules[j]
 			if !ruleMatchesTarget(&rule, input.Target) {
+				continue
+			}
+			if rule.ConditionType == ConditionTypeMetricThreshold {
+				if !e.metricEnabled {
+					continue
+				}
+				metricRepo, ok := e.repo.(interface {
+					EvaluateMetric(context.Context, *AlertRule, *nfhealth.HealthTarget, *nfhealth.CollectionResult, time.Time) (*EvaluationOutcome, error)
+				})
+				if !ok {
+					return outcome, validationError("NF_ALERT_METRIC_UNAVAILABLE", "metric evaluator unavailable")
+				}
+				result, err := metricRepo.EvaluateMetric(metricCtx, &rule, input.Target, input.Result, e.clock.Now())
+				if err != nil {
+					return outcome, err
+				}
+				outcome.Opened += result.Opened
+				outcome.Recovered += result.Recovered
+				outcome.Indeterminate += result.Indeterminate
+				continue
+			}
+			// Unknown future condition types must never enter the legacy false/recovery path.
+			if rule.ConditionType != ConditionTypeState && rule.ConditionType != ConditionTypeRunFailed {
 				continue
 			}
 			satisfied, evidence := evaluateRule(&rule, input.Target, input.Result, e.clock.Now())
@@ -274,9 +303,10 @@ var errInvalidTimestamp error = timestampError{}
 
 // MongoEvaluatorRepository is the production EvaluationRepository.
 type MongoEvaluatorRepository struct {
-	repo   *Repository
-	rules  *mongo.Collection
-	alerts *mongo.Collection
+	repo          *Repository
+	metricTargets MetricTargetReader
+	rules         *mongo.Collection
+	alerts        *mongo.Collection
 }
 
 // NewMongoEvaluatorRepository constructs the production evaluation repository.

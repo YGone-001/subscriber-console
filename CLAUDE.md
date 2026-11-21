@@ -1259,3 +1259,17 @@ Reviewed source is not attestation of the running exporter build; every rule
 retains `decisionEligible=false` and `healthEffect=none`. Existing health, alert,
 notification and inspection authorities are unchanged. Details are owned by
 `docs/architecture/nf-health-telemetry.md`.
+
+### Metric threshold alert boundary
+
+`NF_METRIC_ALERTS_ENABLED` defaults off. The existing NF alert CRUD/meta support
+single-target `metric_threshold` rules for verified unlabeled exporter RSS in
+bytes, with complementary trigger/recovery comparisons and hysteresis. Missing,
+stale, ambiguous or incoherent evidence cannot recover an alert; NF Health/L3
+and observation-only business rules are unchanged. Metric writes revalidate the
+fresh actor; creation/enabling and evaluation verify current Inventory identity. The sole new Ops collection is
+`app_nf_metric_rule_states` (standard unique `_id`, revision CAS, observation
+watermark and replayable safe transition). One controller owns evaluation;
+trigger evidence is immutable and recovery evidence is separate. There is no
+duration rule or historical catch-up worker yet. Authority:
+`docs/architecture/metric-threshold-alerts.md`.
