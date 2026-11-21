@@ -469,3 +469,18 @@ test('both locales define the duty vocabulary', () => {
     assert.ok(key in zh, `zh locale must define ${key}`);
   }
 });
+
+test('metric drawer preserves trigger and recovery values as distinct evidence', () => {
+  const metric = { metric: 'process_resident_memory_bytes', series: 'unlabeled', unit: 'bytes', subject: 'exporter_process', value: 150, sampleId: 'rss-trigger', observedAt: '2026-11-21T01:00:00Z' };
+  const markup = renderDrawer(evidenceAlert({
+    conditionType: 'metric_threshold', condition: undefined, ruleRevision: 7,
+    metricCondition: { metric: metric.metric, series: 'unlabeled', operator: 'gt', threshold: 100, recoveryThreshold: 50 },
+    evidence: { runStatus: 'success', metric },
+    metricRecovery: { ...metric, value: 40, sampleId: 'rss-recovered' },
+  }), false);
+  assert.ok(markup.includes(en.nf_metric_note));
+  assert.ok(markup.includes(en.nf_metric_trigger_value));
+  assert.ok(markup.includes(en.nf_metric_recovered_value));
+  assert.ok(markup.includes('150') && markup.includes('40'));
+  assert.ok(!markup.includes('nf_alerts_scope_undefined'));
+});

@@ -143,6 +143,8 @@ const NOTIFY_DELIVERIES = [
   { id: 'd-2', deliveryKey: 'alert-critical-active:opened:ch-2', event: 'opened', alertId: 'alert-critical-active', ruleId: 'rule-1', ruleName: 'AMF process unhealthy', targetId: 'target-amf', targetName: 'amf-01', severity: 'critical', triggerCount: 1, occurredAt: TS.last, channelId: 'ch-2', status: 'failed', attempts: 3, lastError: 'connection refused', nextAttemptAt: TS.last, createdAt: TS.last },
 ];
 
+let capturedMetricRule = null;
+const METRIC_TARGET = '0192f0c0-a000-7000-8000-000000000099';
 const META = {
   schemaVersion: 1,
   alertStates: ['active', 'acknowledged', 'resolved'],
@@ -350,6 +352,21 @@ function handleApi(req, res, url, context) {
     return sendJson(res, 200, { ...alert });
   }
 
+  if (pathname === '/api/nf-health/targets' && req.method === 'GET') {
+    return sendJson(res, 200, { targets: [{ targetId: METRIC_TARGET, name: 'RSS exporter', domain: '5gc', nfType: 'AMF', collectorProfile: 'http_metrics' }], page: page(8) });
+  }
+  if (pathname === `/api/nf-health/targets/${METRIC_TARGET}` && req.method === 'GET') {
+    return sendJson(res, 200, { target: { targetId: METRIC_TARGET, name: 'RSS exporter' }, thresholdPreview: { value: 150, reason: 'measured' }, latestSample: { collectedAt: TS.last } });
+  }
+  if (pathname === '/api/nf-alerts/rules' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      capturedMetricRule = JSON.parse(body);
+      sendJson(res, 201, { ...capturedMetricRule, ruleId: 'created-metric-rule', revision: 1 });
+    });
+    return;
+  }
   if (pathname === '/api/nf-alerts/rules' && req.method === 'GET') {
     if (context.failRules) {
       return sendJson(res, 503, { error: 'fixture injected failure', code: 'FIXTURE_INJECTED_FAILURE' });
@@ -515,6 +532,7 @@ async function main() {
       await page.locator('[data-nf-alert-panel="rules"]').waitFor({ state: 'visible', timeout: 20000 });
       await page.locator('[data-nf-notify-open="true"]').click();
       await page.locator('[data-notify-tab="channels"]').waitFor({ state: 'visible', timeout: 20000 });
+      await page.getByRole('dialog').first().getByText('Ops webhook', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
       const channelText = await page.getByRole('dialog').first().innerText();
       check('notify_settings_show_channels', channelText.includes('Ops webhook'), 'channel row');
       check('notify_settings_never_echo_secret', !channelText.includes('s3cr3t'), 'the secret is write-only');
@@ -547,6 +565,29 @@ async function main() {
       check('notify_delivery_retry_requeues', true, 'retry moves the row to pending');
     });
     await notifyServer.close();
+    META.metricEnabled = true;
+    META.conditionTypes.push('metric_threshold');
+    const metricServer = await startServer();
+    servers.push(metricServer);
+    await withPage(browser, metricServer.origin, async (page) => {
+      await page.getByRole('button', { name: 'Rules', exact: true }).click();
+      await page.locator('[data-nf-alert-panel="rules"]').waitFor({ state: 'visible', timeout: 20000 });
+      await page.getByRole('button', { name: /Add rule/i }).click();
+      await page.locator('#nf-alerts-name').fill('Exporter RSS threshold');
+      await page.locator('#nf-alerts-condition-type').selectOption('metric_threshold');
+      await page.locator('#nf-alerts-target-search').fill('RSS');
+      await page.getByRole('option', { name: /RSS exporter/ }).click();
+      await page.getByText(/Latest observation: 150 bytes/).waitFor({ timeout: 10000 });
+      check('metric_origin_is_explicit', (await page.getByRole('dialog').innerText()).includes('not NF service memory'), 'exporter boundary');
+      await page.getByRole('button', { name: /Create rule/i }).click();
+      check('metric_missing_threshold_rejected', capturedMetricRule === null && await page.getByRole('alert').isVisible(), 'no mutation on empty input');
+      await page.locator('#nf-metric-threshold').fill('100');
+      await page.locator('#nf-metric-recovery').fill('50');
+      await page.getByRole('button', { name: /Create rule/i }).click();
+      await page.locator('#nf-alerts-create-title').waitFor({ state: 'detached', timeout: 15000 });
+      check('metric_payload_is_explicit', capturedMetricRule?.conditionType === 'metric_threshold' && capturedMetricRule?.targetId === METRIC_TARGET && capturedMetricRule?.metricCondition?.threshold === 100 && capturedMetricRule?.metricCondition?.recoveryThreshold === 50 && capturedMetricRule?.metricCondition?.series === 'unlabeled' && !capturedMetricRule?.condition, 'typed target and thresholds');
+    });
+    await metricServer.close();
     servers.length = 0;
   } finally {
     await browser.close();

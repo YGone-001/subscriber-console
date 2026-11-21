@@ -1,3 +1,4 @@
+import { metricConditionLabel } from './metric-threshold';
 /*
  * NF alert evidence drawer.
  *
@@ -231,6 +232,14 @@ export function NfAlertEvidenceDrawer({
 
           <section className={styles.drawerSection}>
             <h3 className={styles.drawerSectionTitle}>{t('nf_alerts_drawer_evidence')}</h3>
+            {alert.conditionType === 'metric_threshold' ? <>
+              <p>{t('nf_metric_note')}</p>
+              <p>{t('nf_metric_rule_revision')}: {alert.ruleRevision ?? '-'}</p>
+              <p>{t('nf_metric_threshold')}: {alert.metricCondition?.threshold ?? '-'} bytes</p>
+              <p>{t('nf_metric_recovery')}: {alert.metricCondition?.recoveryThreshold ?? '-'} bytes</p>
+              {evidence?.metric ? <p>{t('nf_metric_trigger_value')}: {evidence.metric.value} {evidence.metric.unit} ({formatTimestamp(evidence.metric.observedAt)})</p> : null}
+              {alert.metricRecovery ? <p>{t('nf_metric_recovered_value')}: {alert.metricRecovery.value} {alert.metricRecovery.unit} ({formatTimestamp(alert.metricRecovery.observedAt)})</p> : null}
+            </> : null}
             {evidence ? (
               <div className={styles.detailGrid}>
                 <div className={styles.detailRow}>
@@ -353,6 +362,7 @@ function alertStateBadge(state: AlertState, t: (key: string) => string): React.R
 }
 
 function conditionLabel(alert: Alert, t: (key: string) => string): string {
+  if (alert.conditionType === 'metric_threshold') return metricConditionLabel(alert.metricCondition);
   if (alert.conditionType === 'run_failed') return t('nf_alerts_condition_run_failed');
   if (!alert.condition) return t('nf_alerts_condition_state');
   return `${t(`nf_alerts_scope_${alert.condition.scope}`)} = ${t(`nf_alerts_state_${alert.condition.state}`)}`;

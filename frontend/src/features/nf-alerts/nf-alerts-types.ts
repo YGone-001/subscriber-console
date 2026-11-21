@@ -7,7 +7,7 @@ export type AlertState = 'active' | 'acknowledged' | 'assigned' | 'recovering' |
 export type AlertSeverity = 'critical' | 'warning' | 'info';
 
 // Condition types evaluate explicit NF Health measurement evidence.
-export type ConditionType = 'state' | 'run_failed';
+export type ConditionType = 'state' | 'run_failed' | 'metric_threshold';
 
 // Scopes for state conditions.
 export type ConditionScope = 'overall' | 'process' | 'interface' | 'service';
@@ -31,6 +31,8 @@ export interface RuleCondition {
 // AlertRule is an operator-authored configuration. A rule is a pure observer
 // over NF Health evidence and never modifies the network.
 export interface AlertRule {
+  metricEvaluation?: { quality: string; reason: string; observedAt?: string };
+  metricCondition?: MetricCondition;
   ruleId: string;
   schemaVersion: number;
   name: string;
@@ -52,6 +54,7 @@ export interface AlertRule {
 // AlertEvidence is the immutable measurement snapshot that opened or re-armed
 // the alert: exactly what was observed, never a derived summary.
 export interface AlertEvidence {
+  metric?: MetricEvidence;
   runStatus: RunStatus;
   sampleId?: string;
   collectedAt?: string;
@@ -62,6 +65,9 @@ export interface AlertEvidence {
 // Alert is one open, acknowledged or resolved alert instance for a
 // (rule, target) pair.
 export interface Alert {
+  metricRecovery?: MetricEvidence;
+  ruleRevision?: number;
+  metricCondition?: MetricCondition;
   alertId: string;
   schemaVersion: number;
   ruleId: string;
@@ -89,6 +95,8 @@ export interface Alert {
 
 // NfAlertsMeta mirrors the GET /api/nf-alerts/meta vocabulary payload.
 export interface NfAlertsMeta {
+  metricEnabled?: boolean;
+  metricCapabilities?: { metric: string; type: string; unit: string; subject: string; series: string; eligible: boolean; reason: string }[];
   schemaVersion: number;
   alertStates: AlertState[];
   severities: AlertSeverity[];
@@ -140,6 +148,7 @@ export interface DeleteRuleResponse {
 // CreateRuleRequest is the body for POST /api/nf-alerts/rules. Exactly one of
 // targetId / resourceId may be set; both empty applies to all targets.
 export interface CreateRuleRequest {
+  metricCondition?: MetricCondition;
   name: string;
   description?: string;
   enabled?: boolean;
@@ -159,6 +168,7 @@ export interface UpdateRuleRequest {
     name: string;
     description?: string;
     enabled: boolean;
+    metricCondition?: MetricCondition;
     conditionType: ConditionType;
     condition?: RuleCondition;
     severity: AlertSeverity;
@@ -185,4 +195,20 @@ export interface AlertListQueryParams {
   q?: string;
   cursor?: string;
   limit?: number;
+}
+export interface MetricCondition {
+  metric: string;
+  series: 'unlabeled';
+  operator: 'gt' | 'gte' | 'lt' | 'lte';
+  threshold: number;
+  recoveryThreshold: number;
+}
+export interface MetricEvidence {
+  metric: string;
+  series: string;
+  unit: string;
+  subject: string;
+  value: number;
+  sampleId: string;
+  observedAt: string;
 }

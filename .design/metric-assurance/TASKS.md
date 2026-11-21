@@ -1,7 +1,7 @@
 # 指标阈值告警、历史聚合与异常趋势开发计划
 
 日期：2026-11-21
-状态：待开发；所有接口、集合与参数均为提案，不代表已实现。
+状态：实施中；T01–T03 已实现首个 gauge 闭环，后续未勾选项仍为提案。当前事实见 docs/architecture/metric-threshold-alerts.md。
 依据：[开发范围](DESIGN_BRIEF.md)；基线 develop / 90bc35ea。
 
 ## 交付策略与工作量
@@ -34,12 +34,12 @@
 
 ## 语义核验与最小体验
 
-- [ ] **T01 指标能力目录与规则选择预览**：修改 NF Health meta、指标注册表和规则表单，逐项登记类型、单位、来源、归属、scope、比较资格及原因；先让目标/指标/单位/不可用原因可审查。单 target 单 series，服务端拒绝类型不符、未知指标、歧义序列和客户端自报身份。验收：exporter RSS 不冒充 NF 内存，累计 CPU 秒数不冒充百分比，process_only 不出现虚构 HTTP 指标。复用 Field/StatePanel。依赖：无。
-- [ ] **T02 规则与质量合同冻结**：新增纯函数评估模型和测试，修改表单校验与错误反馈，定义 satisfied/recovered/indeterminate，以及 pending/firing/recovering 的时间语义。固定指标资格、缺口、过期、重复和乱序策略、服务端预算及错误码。验收：用固定采样序列演示触发、保持、恢复；新规则的 indeterminate 永不进入既有 false→恢复逻辑；旧 state/run_failed 合同测试保持。依赖：T01。
+- [x] **T01 指标能力目录与规则选择预览**：修改 NF Health meta、指标注册表和规则表单，逐项登记类型、单位、来源、归属、scope、比较资格及原因；先让目标/指标/单位/不可用原因可审查。单 target 单 series，服务端拒绝类型不符、未知指标、歧义序列和客户端自报身份。验收：exporter RSS 不冒充 NF 内存，累计 CPU 秒数不冒充百分比，process_only 不出现虚构 HTTP 指标。复用 Field/StatePanel。依赖：无。
+- [x] **T02 规则与质量合同冻结**：新增纯函数评估模型和测试，修改表单校验与错误反馈，定义 satisfied/recovered/indeterminate，以及 pending/firing/recovering 的时间语义。固定指标资格、缺口、过期、重复和乱序策略、服务端预算及错误码。验收：用固定采样序列演示触发、保持、恢复；新规则的 indeterminate 永不进入既有 false→恢复逻辑；旧 state/run_failed 合同测试保持。依赖：T01。
 
 ## 阈值告警闭环
 
-- [ ] **T03 单样本阈值闭环**：扩展现有规则 CRUD、meta、规则列表和证据抽屉，新增 conditionType=metric_threshold 和独立 metricCondition。支持 gt/gte/lt/lte；触发/恢复阈值按方向校验，单位由服务端推导。起步 duration=0 也只按有效证据执行。验收：配置 gauge 阈值后手动及定时采集均能开警，重复回放不重复开警，正常值可恢复，缺失值保持不确定。复用既有告警生命周期和唯一索引。依赖：T02。
+- [x] **T03 单样本阈值闭环**：扩展现有规则 CRUD、meta、规则列表和证据抽屉，新增 conditionType=metric_threshold 和独立 metricCondition。支持 gt/gte/lt/lte；触发/恢复阈值按方向校验，单位由服务端推导。起步 duration=0 也只按有效证据执行。验收：配置 gauge 阈值后手动及定时采集均能开警，重复回放不重复开警，正常值可恢复，缺失值保持不确定。复用既有告警生命周期和唯一索引。依赖：T02。
 - [ ] **T04 持续触发、迟滞与重启恢复**：新增 app_nf_metric_rule_states，状态由 ruleId/targetId/series/规则评估版本确定。记录 lastSampleId、lastObservedAt、firstBreachAt、firstRecoveryAt、lastEvaluationQuality 等；CAS/串行化和确定性评估 ID 保证重复与乱序不推进状态。跨评估状态、告警与通知意图的写入采用可重放 pendingTransition 日志及幂等应用，不能先标已处理再丢失开警；复用通知已有 outbox，不假设部署支持 Mongo 多文档事务。修改表单加入持续时间、恢复阈值和恢复持续时间。缺口打断 pending/recovery 累积；firing 告警保留，等待新鲜有效证据恢复。验收：进程重启、并发手动/定时采集、规则更新、停用再启用均不继承不兼容计时。依赖：T03。
 - [ ] **T05 评估失败可见与有界补偿**：扩展采集后 observer，状态仅在采样成功持久化后推进；失败不阻塞采集。新增有界恢复扫描和进度记录，捕捉 hook 丢失；单 target 顺序处理。live 通知只针对新鲜证据，补偿历史不发送过时开警；中间发生的观测用回放诊断说明。保留失败、积压、最新处理时间可见性；缺历史无法恢复时明确 incomplete。验收：模拟样本已落库而 hook 失败，恢复后状态一致，无重复投递、无无限扫描。依赖：T04。
 - [ ] **T06 通知、调查与规则编辑闭环**：扩展现有通知安全摘要、证据详情和调查上下文；告警保存触发时不可变规则配置/版本与决定性证据引用，最近观测另存，避免编辑规则改写历史解释。规则编辑/停用时只处理新型指标规则的待计时状态；开放告警按显式 configuration_changed/rule_disabled 原因闭合，不标成实测恢复。删除沿用既有 rule_deleted。验收：通知幂等、升级规则有效、viewer 403、编辑冲突保留草稿、调查可看到指标条件而不依赖可过期的原始样本。依赖：T05。
@@ -95,3 +95,8 @@
 ## 首个开发工作包
 
 从 T01–T03 开始，先完成“一条已验证 gauge 的阈值告警”纵向闭环，审查真实指标归属与缺测行为后，再进入持续时间和历史 worker。T10 counter 扩展可延期，不阻塞 gauge 聚合与异常观察。容量预测与 RCA 保持后续独立需求。
+
+
+## 当前实施边界
+
+T01–T03 的源码闭环已实现：单目标、单无标签 exporter RSS gauge、gt/gte/lt/lte、立即触发/恢复与迟滞、不可变触发证据和独立恢复证据、双语表单和服务端预览。提前引入了 T04 所需的持久化水位与可重放发布日志，避免首次交付依赖易失内存去重；持续时间、后台补偿扫描、历史聚合和异常趋势仍未实现。首版指标条件固定，替换条件通过新建规则完成；停用保留已有告警，不冒称恢复。该限制会在后续治理任务中再评估。

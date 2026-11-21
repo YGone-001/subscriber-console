@@ -6,6 +6,8 @@
  * window bounds come from the server-owned metadata vocabulary.
  */
 import { useEffect, useState } from 'react';
+import { MetricThresholdFields } from './MetricThresholdFields';
+import { buildMetricCondition, type MetricForm } from './metric-threshold';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
 import { useI18n } from '../../providers/I18nProvider';
@@ -38,6 +40,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
   const { t } = useI18n();
   const isEdit = rule !== null;
 
+  const [metric, setMetric] = useState<MetricForm>({ operator: 'gt', threshold: '', recoveryThreshold: '' });
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [enabled, setEnabled] = useState(true);
@@ -60,6 +63,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
   useEffect(() => {
     if (!open) return;
     setFormError(null);
+    setMetric({ operator: rule?.metricCondition?.operator ?? 'gt', threshold: rule?.metricCondition ? String(rule.metricCondition.threshold) : '', recoveryThreshold: rule?.metricCondition ? String(rule.metricCondition.recoveryThreshold) : '' });
     if (rule) {
       setName(rule.name);
       setDescription(rule.description ?? '');
@@ -159,6 +163,10 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
     const condition: RuleCondition | undefined =
       conditionType === 'state' ? { scope, state } : undefined;
 
+    const metricCondition = conditionType === 'metric_threshold' ? buildMetricCondition(metric) : undefined;
+    if (conditionType === 'metric_threshold' && (!trimmedTarget || trimmedResource || !metricCondition)) {
+      setFormError(t('nf_metric_invalid')); return;
+    }
     setSubmitting(true);
     try {
       if (isEdit && rule) {
@@ -168,6 +176,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
             name: trimmedName,
             description: description.trim() || undefined,
             enabled,
+            metricCondition: metricCondition ?? undefined,
             conditionType,
             condition,
             severity,
@@ -182,6 +191,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
           enabled,
           targetId: trimmedTarget || undefined,
           resourceId: trimmedResource || undefined,
+          metricCondition: metricCondition ?? undefined,
           conditionType,
           condition,
           severity,
@@ -278,9 +288,9 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
                 }}
                 disabled={submitting}
               >
-                <option value="all">{t('nf_alerts_scope_mode_all')}</option>
+                <option value="all" disabled={conditionType === 'metric_threshold'}>{t('nf_alerts_scope_mode_all')}</option>
                 <option value="target">{t('nf_alerts_scope_mode_target')}</option>
-                <option value="resource">{t('nf_alerts_scope_mode_resource')}</option>
+                <option value="resource" disabled={conditionType === 'metric_threshold'}>{t('nf_alerts_scope_mode_resource')}</option>
               </select>
             </Field>
 
@@ -371,11 +381,15 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
               id="nf-alerts-condition-type"
               className="form-input"
               value={conditionType}
-              onChange={(event) => setConditionType(event.target.value as ConditionType)}
-              disabled={submitting}
+              onChange={(event) => {
+                const next = event.target.value as ConditionType; setConditionType(next);
+                if (next === 'metric_threshold' && !isEdit) { setScopeMode('target'); setResourceId(''); }
+              }}
+              disabled={submitting || rule?.conditionType === 'metric_threshold'}
             >
               <option value="state">{t('nf_alerts_condition_state')}</option>
               <option value="run_failed">{t('nf_alerts_condition_run_failed')}</option>
+              {(meta?.metricEnabled || rule?.conditionType === 'metric_threshold') ? <option value="metric_threshold" disabled={isEdit && rule?.conditionType !== 'metric_threshold'}>{t('nf_metric_title')}</option> : null}
             </select>
           </Field>
 
@@ -421,6 +435,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
           ) : null}
         </div>
 
+        {conditionType === 'metric_threshold' ? <MetricThresholdFields targetId={targetId} value={metric} onChange={setMetric} disabled={submitting} readOnly={isEdit} /> : null}
         <div className={styles.formRow}>
           <Field htmlFor="nf-alerts-severity" label={t('nf_alerts_field_severity')}>
             <select
@@ -494,6 +509,13 @@ function describeDialogError(
 ): string {
   if (err instanceof MutationApiError) {
     switch (err.code) {
+      case 'NF_ALERT_INVALID_METRIC':
+      case 'NF_ALERT_METRIC_TARGET_INVALID':
+        return t('nf_metric_invalid');
+      case 'NF_ALERT_METRIC_IMMUTABLE':
+        return t('nf_metric_immutable');
+      case 'NF_ALERT_METRIC_UNAVAILABLE':
+        return t('nf_metric_unavailable');
       case 'NF_ALERT_RULE_NOT_FOUND':
         return t('nf_alerts_err_rule_not_found');
       case 'NF_ALERT_REVISION_CONFLICT':

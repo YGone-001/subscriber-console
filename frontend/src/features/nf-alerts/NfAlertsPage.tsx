@@ -1,3 +1,4 @@
+import { metricConditionLabel } from './metric-threshold';
 /*
  * NF alerts duty workspace.
  *
@@ -678,10 +679,12 @@ function NfHealthAlertsPage() {
                       </td>
                       <td>
                         <code className={styles.chip}>
-                          {conditionLabel(rule.conditionType, rule.condition, t)}
+                          {rule.conditionType === 'metric_threshold' ? metricConditionLabel(rule.metricCondition) : conditionLabel(rule.conditionType, rule.condition, t)}
                         </code>
                       </td>
-                      <td>{severityBadge(rule.severity, t)}</td>
+                      <td>{severityBadge(rule.severity, t)}
+                        {rule.conditionType === 'metric_threshold' ? <p>{t('nf_metric_last_evaluation')}: {t(`nf_metric_reason_${rule.metricEvaluation?.reason ?? 'measurement_missing'}`)} {rule.metricEvaluation?.observedAt ? formatTimestamp(rule.metricEvaluation.observedAt) : ''}</p> : null}
+                      </td>
                       <td>{formatCooldown(rule.cooldownSeconds)}</td>
                       <td>
                         {rule.enabled ? (
@@ -900,7 +903,7 @@ function NfHealthAlertsPage() {
                           >
                             <strong>{alert.ruleName}</strong>
                           </button>
-                          <code className={styles.chip}>{conditionLabel(alert.conditionType, alert.condition, t)}</code>
+                          <code className={styles.chip}>{alert.conditionType === 'metric_threshold' ? metricConditionLabel(alert.metricCondition) : conditionLabel(alert.conditionType, alert.condition, t)}</code>
                         </div>
                       </td>
                       <td>
