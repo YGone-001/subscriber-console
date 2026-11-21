@@ -1,3 +1,4 @@
+import { metricHistoryZh } from './metric-history';
 import { metricAlertsZh } from './metric-alerts';
 import { driftZh } from './config-drift';
 import { evidenceZh } from './operations-evidence';
@@ -9,6 +10,7 @@ import { healthWindowZh } from './nf-health-window';
 import { healthRulesZh } from './nf-health-rules';
 
 export const zh: Record<string, string> = {
+    ...metricHistoryZh,
     ...metricAlertsZh,
     ...healthWindowZh,
     ...healthRulesZh,

@@ -1,3 +1,4 @@
+import { MetricHistoryPanel } from './MetricHistoryPanel';
 /*
  * NF Health target detail route.
  *
@@ -89,6 +90,7 @@ export function NfHealthDetailPage() {
   const [busy, setBusy] = useState(false);
   const [collectOpen, setCollectOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   const [trendWindow, setTrendWindow] = useState<TrendWindowKey>('1h');
 
   const loadAll = useCallback(async () => {
@@ -106,6 +108,7 @@ export function NfHealthDetailPage() {
       setRuns(runsRes.runs ?? []);
       setSamples(historyRes.samples ?? []);
       setMeta(metaRes);
+      setHistoryRefresh(value => value + 1);
       if (detailRes.target.candidateId) {
         try {
           const candidateRes = await fetchDiscoveryCandidate(detailRes.target.candidateId);
@@ -415,6 +418,7 @@ export function NfHealthDetailPage() {
           </section>
 
           {target.collectorProfile === 'http_metrics' ? <ServiceWindowPanel report={detail?.serviceWindows} /> : null}
+          {meta?.metricHistory?.enabled && target.collectorProfile === 'http_metrics' ? <MetricHistoryPanel key={`${targetId}:${historyRefresh}`} targetId={targetId} refresh={historyRefresh} /> : null}
 
           <section className="dash-card">
             <div className={styles.sectionHead}>
