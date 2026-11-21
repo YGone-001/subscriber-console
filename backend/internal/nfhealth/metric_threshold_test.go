@@ -74,3 +74,27 @@ func TestThresholdValueEvidence(t *testing.T) {
 		})
 	}
 }
+
+func TestThresholdContinuityRequiresVerifiedIncarnation(t *testing.T) {
+	target := &HealthTarget{TargetID: "target", ResourceID: "resource", IntervalSeconds: 60, Revision: 1}
+	sample := &HealthSample{WindowBinding: windowBinding(target), WindowIdentity: "verified", CollectedAt: "2026-11-21T00:00:00Z", Metrics: []MetricSample{{Key: "process_start_time_seconds", Value: 1000, Type: "gauge", Unit: "seconds", Category: CategoryResource, Source: "metrics_endpoint", CollectedAt: "2026-11-21T00:00:00Z", ScopeVerified: true}}}
+	token, gap := ThresholdContinuity(target, sample)
+	if token == "" || gap != 90 {
+		t.Fatal("verified identity missing")
+	}
+	target.Revision++
+	next, _ := ThresholdContinuity(target, sample)
+	if next == token {
+		t.Fatal("target version retained identity")
+	}
+	target.Revision--
+	sample.WindowIdentity = ""
+	if value, _ := ThresholdContinuity(target, sample); value != "" {
+		t.Fatal("missing incarnation accepted")
+	}
+	sample.WindowIdentity = "verified"
+	sample.Metrics[0].Labels = map[string]string{"instance": "other"}
+	if value, _ := ThresholdContinuity(target, sample); value != "" {
+		t.Fatal("labeled incarnation paired with unlabeled RSS")
+	}
+}

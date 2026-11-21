@@ -115,3 +115,13 @@ func TestUnknownAndDisabledMetricTypesHoldOpenAlerts(t *testing.T) {
 		}
 	}
 }
+
+func TestMetricHTTPRejectsInvalidDurations(t *testing.T) {
+	h := newTestServer(newStubRepo())
+	for _, duration := range []any{1.5, 3601, -1, "120"} {
+		rec := doRouted(h, "POST", "/api/nf-alerts/rules", "operator", map[string]any{"name": "RSS", "conditionType": ConditionTypeMetricThreshold, "targetId": "0192f0c0-a000-7000-8000-000000000001", "severity": "warning", "metricCondition": map[string]any{"metric": "process_resident_memory_bytes", "series": "unlabeled", "operator": "gt", "threshold": 100, "recoveryThreshold": 50, "durationSeconds": duration}})
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("invalid duration %v returned %d", duration, rec.Code)
+		}
+	}
+}

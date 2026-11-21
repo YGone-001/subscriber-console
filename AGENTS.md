@@ -1270,6 +1270,12 @@ and observation-only business rules are unchanged. Metric writes revalidate the
 fresh actor; creation/enabling and evaluation verify current Inventory identity. The sole new Ops collection is
 `app_nf_metric_rule_states` (standard unique `_id`, revision CAS, observation
 watermark and replayable safe transition). One controller owns evaluation;
-trigger evidence is immutable and recovery evidence is separate. There is no
-duration rule or historical catch-up worker yet. Authority:
+trigger evidence is immutable and recovery evidence is separate. Trigger/recovery
+durations accept 0-3600 integer seconds (zero preserves single-sample behavior).
+Positive durations require verified exporter continuity, at least two increasing
+observations, bounded gaps and matching rule/target epochs. Missing evidence,
+hysteresis, rule changes and incarnation changes restart timing; wall-clock
+waiting never transitions an alert. Exact persisted UTC instants preserve
+nanoseconds and conservatively read legacy BSON Date watermarks. No historical
+catch-up worker is implemented. Authority:
 `docs/architecture/metric-threshold-alerts.md`.

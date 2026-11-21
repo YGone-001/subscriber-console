@@ -5,35 +5,51 @@ import (
 	"subscriber/internal/nfhealth"
 )
 
+const MaxMetricDurationSeconds = 3600
+
 type MetricCondition struct {
-	Metric            string   `json:"metric" bson:"metric"`
-	Series            string   `json:"series" bson:"series"`
-	Operator          string   `json:"operator" bson:"operator"`
-	Threshold         *float64 `json:"threshold" bson:"threshold"`
-	RecoveryThreshold *float64 `json:"recoveryThreshold" bson:"recoveryThreshold"`
+	DurationSeconds         int      `json:"durationSeconds,omitempty" bson:"durationSeconds,omitempty"`
+	RecoveryDurationSeconds int      `json:"recoveryDurationSeconds,omitempty" bson:"recoveryDurationSeconds,omitempty"`
+	Metric                  string   `json:"metric" bson:"metric"`
+	Series                  string   `json:"series" bson:"series"`
+	Operator                string   `json:"operator" bson:"operator"`
+	Threshold               *float64 `json:"threshold" bson:"threshold"`
+	RecoveryThreshold       *float64 `json:"recoveryThreshold" bson:"recoveryThreshold"`
 }
 
 type MetricEvidence struct {
-	Metric     string  `json:"metric" bson:"metric"`
-	Series     string  `json:"series" bson:"series"`
-	Unit       string  `json:"unit" bson:"unit"`
-	Subject    string  `json:"subject" bson:"subject"`
-	Value      float64 `json:"value" bson:"value"`
-	SampleID   string  `json:"sampleId" bson:"sampleId"`
-	ObservedAt string  `json:"observedAt" bson:"observedAt"`
+	ConditionSince string  `json:"conditionSince,omitempty" bson:"conditionSince,omitempty"`
+	FirstSampleID  string  `json:"firstSampleId,omitempty" bson:"firstSampleId,omitempty"`
+	ElapsedSeconds int     `json:"elapsedSeconds,omitempty" bson:"elapsedSeconds,omitempty"`
+	Observations   int     `json:"observations,omitempty" bson:"observations,omitempty"`
+	MaxGapSeconds  int     `json:"maxGapSeconds,omitempty" bson:"maxGapSeconds,omitempty"`
+	Metric         string  `json:"metric" bson:"metric"`
+	Series         string  `json:"series" bson:"series"`
+	Unit           string  `json:"unit" bson:"unit"`
+	Subject        string  `json:"subject" bson:"subject"`
+	Value          float64 `json:"value" bson:"value"`
+	SampleID       string  `json:"sampleId" bson:"sampleId"`
+	ObservedAt     string  `json:"observedAt" bson:"observedAt"`
 }
 
 type MetricEvaluationStatus struct {
-	Quality    string `json:"quality" bson:"quality"`
-	Reason     string `json:"reason" bson:"reason"`
-	ObservedAt string `json:"observedAt,omitempty" bson:"observedAt,omitempty"`
+	RuleRevision    int64  `json:"ruleRevision,omitempty" bson:"ruleRevision,omitempty"`
+	Phase           string `json:"phase,omitempty" bson:"phase,omitempty"`
+	ConditionSince  string `json:"conditionSince,omitempty" bson:"conditionSince,omitempty"`
+	ElapsedSeconds  int    `json:"elapsedSeconds,omitempty" bson:"elapsedSeconds,omitempty"`
+	RequiredSeconds int    `json:"requiredSeconds,omitempty" bson:"requiredSeconds,omitempty"`
+	Observations    int    `json:"observations,omitempty" bson:"observations,omitempty"`
+	MaxGapSeconds   int    `json:"maxGapSeconds,omitempty" bson:"maxGapSeconds,omitempty"`
+	Quality         string `json:"quality" bson:"quality"`
+	Reason          string `json:"reason" bson:"reason"`
+	ObservedAt      string `json:"observedAt,omitempty" bson:"observedAt,omitempty"`
 }
 
 func sameMetricCondition(a, b *MetricCondition) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	return a.Metric == b.Metric && a.Series == b.Series && a.Operator == b.Operator &&
+	return a.DurationSeconds == b.DurationSeconds && a.RecoveryDurationSeconds == b.RecoveryDurationSeconds && a.Metric == b.Metric && a.Series == b.Series && a.Operator == b.Operator &&
 		a.Threshold != nil && b.Threshold != nil && *a.Threshold == *b.Threshold &&
 		a.RecoveryThreshold != nil && b.RecoveryThreshold != nil && *a.RecoveryThreshold == *b.RecoveryThreshold
 }
@@ -51,6 +67,9 @@ func ValidateMetricCondition(kind, targetID, resourceID string, m *MetricConditi
 	if m == nil || !nfhealth.ThresholdMetricApproved(m.Metric) || m.Series != "unlabeled" ||
 		m.Threshold == nil || m.RecoveryThreshold == nil {
 		return validationError("NF_ALERT_INVALID_METRIC", "an approved metric, unlabeled series and both thresholds are required")
+	}
+	if m.DurationSeconds < 0 || m.DurationSeconds > MaxMetricDurationSeconds || m.RecoveryDurationSeconds < 0 || m.RecoveryDurationSeconds > MaxMetricDurationSeconds {
+		return validationError("NF_ALERT_INVALID_METRIC", "durations must be integer seconds between 0 and 3600")
 	}
 	for _, value := range []float64{*m.Threshold, *m.RecoveryThreshold} {
 		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {

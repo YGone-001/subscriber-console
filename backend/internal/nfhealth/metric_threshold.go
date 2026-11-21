@@ -2,6 +2,7 @@ package nfhealth
 
 import (
 	"math"
+	"strconv"
 	"time"
 )
 
@@ -108,6 +109,41 @@ func ThresholdValue(target *HealthTarget, sample *HealthSample, metric string, n
 
 // ThresholdPreview is a read-only projection, not an evaluation or a collection.
 type ThresholdPreview struct {
-	Value  *float64 `json:"value"`
-	Reason string   `json:"reason"`
+	DurationEligible bool     `json:"durationEligible"`
+	DurationReason   string   `json:"durationReason"`
+	MaxGapSeconds    int      `json:"maxGapSeconds"`
+	Value            *float64 `json:"value"`
+	Reason           string   `json:"reason"`
+}
+
+// ThresholdContinuity uses the same verified exporter incarnation as interval
+// observations. No private binding, process token or endpoint enters the API.
+func ThresholdContinuity(target *HealthTarget, sample *HealthSample) (string, int) {
+	gap := ThresholdMaxGapSeconds(target)
+	if target == nil || sample == nil || sample.WindowBinding != windowBinding(target) || sample.WindowIdentity == "" {
+		return "", gap
+	}
+	count := 0
+	for _, metric := range sample.Metrics {
+		if metric.Key != "process_start_time_seconds" {
+			continue
+		}
+		count++
+		if !metric.ScopeVerified || len(metric.Labels) != 0 || metric.Type != "gauge" || metric.Unit != "seconds" ||
+			metric.Category != CategoryResource || metric.Source != "metrics_endpoint" || metric.CollectedAt != sample.CollectedAt ||
+			math.IsNaN(metric.Value) || math.IsInf(metric.Value, 0) || metric.Value <= 0 {
+			return "", gap
+		}
+	}
+	if count != 1 {
+		return "", gap
+	}
+	return windowHash(sample.WindowBinding, sample.WindowIdentity, strconv.FormatInt(target.Revision, 10)), gap
+}
+func ThresholdMaxGapSeconds(target *HealthTarget) int {
+	if target == nil {
+		return DefaultIntervalSeconds * 3 / 2
+	}
+	gap, _ := windowLimits(target)
+	return gap
 }

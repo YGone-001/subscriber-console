@@ -30,20 +30,24 @@ func (r *Repository) metricStates() *mongo.Collection {
 }
 
 type metricTransition struct {
-	Kind       string          `bson:"kind"`
-	ValidUntil time.Time       `bson:"validUntil"`
-	Alert      *Alert          `bson:"alert"`
-	At         string          `bson:"at"`
-	Evidence   *MetricEvidence `bson:"evidence,omitempty"`
+	RuleRevision     int64           `bson:"ruleRevision,omitempty"`
+	DurationIdentity string          `bson:"durationIdentity,omitempty"`
+	Kind             string          `bson:"kind"`
+	ValidUntil       time.Time       `bson:"validUntil"`
+	Alert            *Alert          `bson:"alert"`
+	At               string          `bson:"at"`
+	Evidence         *MetricEvidence `bson:"evidence,omitempty"`
 }
 
 type metricState struct {
-	ID           string                 `bson:"_id"`
-	Revision     int64                  `bson:"revision"`
-	LastAt       time.Time              `bson:"lastAt"`
-	LastSampleID string                 `bson:"lastSampleId"`
-	Status       MetricEvaluationStatus `bson:"status"`
-	Pending      *metricTransition      `bson:"pending,omitempty"`
+	LastOutcomeAt metricInstant          `bson:"lastOutcomeAt,omitempty"`
+	Timing        metricTiming           `bson:"timing"`
+	ID            string                 `bson:"_id"`
+	Revision      int64                  `bson:"revision"`
+	LastAt        metricInstant          `bson:"lastAt"`
+	LastSampleID  string                 `bson:"lastSampleId"`
+	Status        MetricEvaluationStatus `bson:"status"`
+	Pending       *metricTransition      `bson:"pending,omitempty"`
 }
 
 func (r *Repository) loadMetricState(ctx context.Context, id string) (*metricState, error) {
@@ -73,7 +77,7 @@ func (r *Repository) saveMetricState(ctx context.Context, state *metricState) er
 
 // No raw sample/label/endpoint is copied into the journal. Its alert snapshot
 // is the display-safe immutable evidence required to replay an interrupted write.
-func (r *Repository) drainMetricTransition(ctx context.Context, id string) error {
+func (r *Repository) drainMetricTransition(ctx context.Context, id string, allowedIdentity ...string) error {
 	state, err := r.loadMetricState(ctx, id)
 	if err != nil || state.Pending == nil {
 		return err
@@ -83,7 +87,22 @@ func (r *Repository) drainMetricTransition(ctx context.Context, id string) error
 		state.Pending = nil
 		state.Status.Quality = "indeterminate"
 		state.Status.Reason = "publication_expired"
+		state.Status.Phase = "unknown"
+		resetMetricTiming(state)
 		return r.saveMetricState(ctx, state)
+	}
+	if p.DurationIdentity != "" && (len(allowedIdentity) != 1 || allowedIdentity[0] != p.DurationIdentity) {
+		return nil
+	}
+	if p.RuleRevision > 0 {
+		var current AlertRule
+		err := r.rules.FindOne(ctx, bson.M{"_id": id}).Decode(&current)
+		if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+			return err
+		}
+		if errors.Is(err, mongo.ErrNoDocuments) || !current.Enabled || current.Revision != p.RuleRevision {
+			return r.cancelMetricTransition(ctx, id)
+		}
 	}
 	switch p.Kind {
 	case "open":
@@ -124,6 +143,11 @@ func (r *Repository) drainMetricTransition(ctx context.Context, id string) error
 		return fmt.Errorf("unknown metric transition")
 	}
 	state.Pending = nil
+	if p.Kind == "open" {
+		state.Status.Phase = "firing"
+	} else {
+		state.Status.Phase = "idle"
+	}
 	return r.saveMetricState(ctx, state)
 }
 
@@ -131,12 +155,14 @@ func (r *Repository) drainMetricTransition(ctx context.Context, id string) error
 // It never reports measured recovery or closes an existing alert.
 func (r *Repository) cancelMetricTransition(ctx context.Context, id string) error {
 	state, err := r.loadMetricState(ctx, id)
-	if err != nil || state.Revision == 0 || state.Pending == nil {
+	if err != nil || state.Revision == 0 {
 		return err
 	}
 	state.Pending = nil
 	state.Status.Quality = "indeterminate"
 	state.Status.Reason = "publication_cancelled"
+	state.Status.Phase = "unknown"
+	resetMetricTiming(state)
 	return r.saveMetricState(ctx, state)
 }
 
@@ -167,6 +193,9 @@ func (r *Repository) attachMetricStatus(ctx context.Context, rules []*AlertRule)
 		}
 		if rule := byID[state.ID]; rule != nil {
 			status := state.Status
+			if status.RuleRevision != rule.Revision {
+				status = MetricEvaluationStatus{Quality: "indeterminate", Reason: "rule_version_changed", Phase: "unknown", RuleRevision: rule.Revision}
+			}
 			rule.MetricEvaluation = &status
 		}
 	}
@@ -214,9 +243,6 @@ func (m *MongoEvaluatorRepository) EvaluateMetric(ctx context.Context, rule *Ale
 	if !current.Enabled || current.ConditionType != ConditionTypeMetricThreshold {
 		return outcome, nil
 	}
-	if err := r.drainMetricTransition(ctx, rule.RuleID); err != nil {
-		return nil, err
-	}
 	if err := ValidateMetricCondition(current.ConditionType, current.TargetID, current.ResourceID, current.MetricCondition); err != nil {
 		return nil, err
 	}
@@ -224,72 +250,163 @@ func (m *MongoEvaluatorRepository) EvaluateMetric(ctx context.Context, rule *Ale
 		return nil, fmt.Errorf("metric target reader unavailable")
 	}
 	freshTarget, err := m.metricTargets.GetTarget(ctx, current.TargetID)
-	if err != nil {
-		return nil, err
-	}
-	if freshTarget == nil {
+	if err != nil || freshTarget == nil {
+		if state, loadErr := r.loadMetricState(ctx, current.RuleID); loadErr == nil && state.Revision > 0 {
+			resetMetricTiming(state)
+			state.Pending = nil
+			state.Status = MetricEvaluationStatus{Quality: "indeterminate", Reason: "target_not_eligible", Phase: "unknown", RuleRevision: current.Revision}
+			if saveErr := r.saveMetricState(ctx, state); saveErr != nil {
+				return nil, saveErr
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
 		return nil, fmt.Errorf("metric target unavailable")
 	}
 	state, err := r.loadMetricState(ctx, rule.RuleID)
 	if err != nil {
 		return nil, err
 	}
+
 	sample := result.Sample
-	coherent := sample != nil && sample.SampleID != "" && result.Run.RunID != "" &&
-		result.Run.SampleID == sample.SampleID && sample.RunID == result.Run.RunID &&
-		sample.TargetID == freshTarget.TargetID && sample.ResourceID == freshTarget.ResourceID &&
-		result.Run.TargetID == freshTarget.TargetID && result.Run.ResourceID == freshTarget.ResourceID
-	if coherent {
-		at, err := time.Parse(time.RFC3339Nano, sample.CollectedAt)
-		if err == nil && !at.After(now) {
-			if !state.LastAt.IsZero() && !at.After(state.LastAt) {
-				return outcome, nil
-			}
-			state.LastAt = at
-			state.LastSampleID = sample.SampleID
+	eventAt, ordered := metricOutcomeTime(freshTarget, result, now)
+	watermark := state.LastOutcomeAt
+	if state.LastAt.After(watermark.Time) {
+		watermark = state.LastAt
+	}
+	if ordered && !watermark.IsZero() {
+		if eventAt.Before(watermark.Time) {
+			return outcome, nil
+		}
+		if eventAt.Equal(watermark.Time) && (state.Pending == nil || sample == nil || sample.SampleID != state.LastSampleID) {
+			return outcome, nil
 		}
 	}
+	if state.Pending != nil && !ordered {
+		return outcome, nil
+	}
+	if state.Pending != nil {
+		p := state.Pending
+		epoch, _ := nfhealth.ThresholdContinuity(freshTarget, sample)
+		value, _ := nfhealth.ThresholdValue(freshTarget, sample, current.MetricCondition.Metric, now)
+		if p.RuleRevision != 0 && p.RuleRevision != current.Revision || p.DurationIdentity != "" && (value == nil || epoch != p.DurationIdentity) {
+			if err := r.cancelMetricTransition(ctx, current.RuleID); err != nil {
+				return nil, err
+			}
+		} else if err := r.drainMetricTransition(ctx, current.RuleID, epoch); err != nil {
+			return nil, err
+		}
+		state, err = r.loadMetricState(ctx, current.RuleID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if ordered && !watermark.IsZero() && !eventAt.After(watermark.Time) {
+		return outcome, nil
+	}
+	if ordered {
+		state.LastOutcomeAt = metricInstant{eventAt}
+	}
+	coherent := ordered && sample != nil && sample.SampleID != "" && sample.RunID == result.Run.RunID &&
+		result.Run.SampleID == sample.SampleID && sample.TargetID == freshTarget.TargetID && sample.ResourceID == freshTarget.ResourceID
+	if coherent && sample.SampleID == state.LastSampleID {
+		return outcome, nil
+	}
+	if coherent {
+		sampleAt, err := time.Parse(time.RFC3339Nano, sample.CollectedAt)
+		coherent = err == nil && sampleAt.Equal(eventAt)
+	}
+	if coherent {
+		state.LastAt = metricInstant{eventAt}
+		state.LastSampleID = sample.SampleID
+	}
 	value, reason := nfhealth.ThresholdValue(freshTarget, sample, current.MetricCondition.Metric, now)
-	if result.Run.Status == nfhealth.RunStatusFailed || sample == nil || result.Run.RunID == "" ||
-		sample.SampleID == "" || result.Run.SampleID != sample.SampleID || sample.RunID != result.Run.RunID ||
-		result.Run.TargetID != freshTarget.TargetID || result.Run.ResourceID != freshTarget.ResourceID ||
-		target.TargetID != freshTarget.TargetID {
+	if !coherent || result.Run.Status == nfhealth.RunStatusFailed || target.TargetID != freshTarget.TargetID {
 		value = nil
 		reason = "collection_evidence_invalid"
 	}
-	state.Status = MetricEvaluationStatus{Quality: "indeterminate", Reason: reason}
-	if sample != nil {
-		state.Status.ObservedAt = sample.CollectedAt
-	}
-	if value == nil {
-		outcome.Indeterminate++
-		return outcome, r.saveMetricState(ctx, state)
-	}
-	state.Status.Quality = "measured"
-	evidence := &MetricEvidence{Metric: current.MetricCondition.Metric, Series: "unlabeled", Unit: "bytes",
-		Subject: "exporter_process", Value: *value, SampleID: sample.SampleID, ObservedAt: sample.CollectedAt}
 	open, err := m.FindOpenAlert(ctx, current.RuleID, freshTarget.TargetID)
 	if err != nil {
 		return nil, err
 	}
-	at := now.UTC().Format(time.RFC3339Nano)
+	openID := ""
+	if open != nil {
+		openID = open.AlertID
+	}
+	status := MetricEvaluationStatus{Quality: "indeterminate", Reason: reason, Phase: "unknown", RuleRevision: current.Revision}
+	if open != nil {
+		status.Phase = "firing"
+	}
+	if ordered {
+		status.ObservedAt = eventAt.UTC().Format(time.RFC3339Nano)
+	}
+	state.Status = status
+	identity, gap := nfhealth.ThresholdContinuity(freshTarget, sample)
+	state.Status.MaxGapSeconds = gap
+	needsContinuity := current.MetricCondition.DurationSeconds > 0 || current.MetricCondition.RecoveryDurationSeconds > 0
+	if value != nil && needsContinuity {
+		versionAt, err := time.Parse(time.RFC3339Nano, current.UpdatedAt)
+		if err != nil || eventAt.Before(versionAt) {
+			value = nil
+			state.Status.Reason = "rule_version_changed"
+		}
+		if value != nil && identity == "" {
+			value = nil
+			state.Status.Reason = "continuity_unverified"
+		}
+	}
+	if value == nil {
+		resetMetricTiming(state)
+		outcome.Indeterminate++
+		return outcome, r.saveMetricState(ctx, state)
+	}
 	decision := classifyMetric(current.MetricCondition, *value)
-	state.Status.Reason = decision
-	if decision == "trigger" && open == nil {
+	timing, timed := advanceMetricTiming(state.Timing, current, identity, gap, eventAt, sample.SampleID, decision, openID)
+	state.Timing = timing
+	state.Status = timed.Status
+	state.Status.RuleRevision = current.Revision
+	evidence := &MetricEvidence{Metric: current.MetricCondition.Metric, Series: "unlabeled", Unit: "bytes", Subject: "exporter_process", Value: *value, SampleID: sample.SampleID, ObservedAt: sample.CollectedAt}
+	if timed.Action != "" && timed.Status.RequiredSeconds > 0 {
+		evidence.ConditionSince = timed.Since.UTC().Format(time.RFC3339Nano)
+		evidence.FirstSampleID = timed.FirstSampleID
+		evidence.ElapsedSeconds = timed.ElapsedSeconds
+		evidence.Observations = timed.Observations
+		evidence.MaxGapSeconds = timed.MaxGapSeconds
+	}
+	at := now.UTC().Format(time.RFC3339Nano)
+	if timed.Action == "open" {
 		alert := &Alert{AlertID: metricAlertID(current.RuleID, sample.SampleID), SchemaVersion: SchemaVersion,
-			RuleID: current.RuleID, RuleRevision: current.Revision, RuleName: current.Name,
-			TargetID: freshTarget.TargetID, ResourceID: freshTarget.ResourceID, TargetName: freshTarget.Name,
-			Severity: current.Severity, State: AlertStateActive, ConditionType: ConditionTypeMetricThreshold,
-			MetricCondition: current.MetricCondition, TriggerCount: 1, FirstTriggeredAt: at, LastTriggeredAt: at, UpdatedAt: at,
+			RuleID: current.RuleID, RuleRevision: current.Revision, RuleName: current.Name, TargetID: freshTarget.TargetID,
+			ResourceID: freshTarget.ResourceID, TargetName: freshTarget.Name, Severity: current.Severity, State: AlertStateActive,
+			ConditionType: ConditionTypeMetricThreshold, MetricCondition: current.MetricCondition, TriggerCount: 1,
+			FirstTriggeredAt: at, LastTriggeredAt: at, UpdatedAt: at,
 			Evidence: AlertEvidence{RunStatus: result.Run.Status, SampleID: sample.SampleID, CollectedAt: sample.CollectedAt, Metric: evidence}}
-		state.Pending = &metricTransition{Kind: "open", Alert: alert, At: at, ValidUntil: state.LastAt.Add(time.Duration(nfhealth.FreshnessPolicySeconds(freshTarget)) * time.Second)}
+		state.Pending = &metricTransition{RuleRevision: current.Revision, DurationIdentity: durationPublicationIdentity(current.MetricCondition, identity), Kind: "open", Alert: alert, At: at, ValidUntil: eventAt.Add(time.Duration(nfhealth.FreshnessPolicySeconds(freshTarget)) * time.Second)}
 		outcome.Opened++
-	} else if decision == "recover" && open != nil {
-		state.Pending = &metricTransition{Kind: "recover", Alert: &Alert{AlertID: open.AlertID}, At: at, Evidence: evidence, ValidUntil: state.LastAt.Add(time.Duration(nfhealth.FreshnessPolicySeconds(freshTarget)) * time.Second)}
+	} else if timed.Action == "recover" {
+		state.Pending = &metricTransition{RuleRevision: current.Revision, DurationIdentity: durationPublicationIdentity(current.MetricCondition, identity), Kind: "recover", Alert: &Alert{AlertID: openID}, At: at, Evidence: evidence, ValidUntil: eventAt.Add(time.Duration(nfhealth.FreshnessPolicySeconds(freshTarget)) * time.Second)}
 		outcome.Recovered++
 	}
 	if err := r.saveMetricState(ctx, state); err != nil {
 		return nil, err
 	}
-	return outcome, r.drainMetricTransition(ctx, current.RuleID)
+	return outcome, r.drainMetricTransition(ctx, current.RuleID, identity)
+}
+
+// Failed runs also break continuity, but an older failed callback cannot erase
+// a newer accepted duration segment. Sample identity is checked independently.
+func metricOutcomeTime(target *nfhealth.HealthTarget, result *nfhealth.CollectionResult, now time.Time) (time.Time, bool) {
+	if result.Run.RunID == "" || result.Run.TargetID != target.TargetID || result.Run.ResourceID != target.ResourceID {
+		return time.Time{}, false
+	}
+	at, err := time.Parse(time.RFC3339Nano, result.Run.StartedAt)
+	return at, err == nil && !at.After(now)
+}
+
+func durationPublicationIdentity(condition *MetricCondition, identity string) string {
+	if condition.DurationSeconds > 0 || condition.RecoveryDurationSeconds > 0 {
+		return identity
+	}
+	return ""
 }

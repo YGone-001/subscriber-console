@@ -11,19 +11,20 @@ import (
 
 // MetaResponse is the GET /api/nf-alerts/meta payload.
 type MetaResponse struct {
-	MetricEnabled          bool                           `json:"metricEnabled"`
-	MetricCapabilities     []nfhealth.ThresholdCapability `json:"metricCapabilities"`
-	SchemaVersion          int                            `json:"schemaVersion"`
-	AlertStates            []string                       `json:"alertStates"`
-	Severities             []string                       `json:"severities"`
-	ConditionTypes         []string                       `json:"conditionTypes"`
-	ConditionScopes        []string                       `json:"conditionScopes"`
-	StateConditionValues   []string                       `json:"stateConditionValues"`
-	ResolveReasons         []string                       `json:"resolveReasons"`
-	MinCooldownSeconds     int                            `json:"minCooldownSeconds"`
-	MaxCooldownSeconds     int                            `json:"maxCooldownSeconds"`
-	DefaultCooldownSeconds int                            `json:"defaultCooldownSeconds"`
-	RunStatuses            []string                       `json:"runStatuses"`
+	MaxMetricDurationSeconds int                            `json:"maxMetricDurationSeconds"`
+	MetricEnabled            bool                           `json:"metricEnabled"`
+	MetricCapabilities       []nfhealth.ThresholdCapability `json:"metricCapabilities"`
+	SchemaVersion            int                            `json:"schemaVersion"`
+	AlertStates              []string                       `json:"alertStates"`
+	Severities               []string                       `json:"severities"`
+	ConditionTypes           []string                       `json:"conditionTypes"`
+	ConditionScopes          []string                       `json:"conditionScopes"`
+	StateConditionValues     []string                       `json:"stateConditionValues"`
+	ResolveReasons           []string                       `json:"resolveReasons"`
+	MinCooldownSeconds       int                            `json:"minCooldownSeconds"`
+	MaxCooldownSeconds       int                            `json:"maxCooldownSeconds"`
+	DefaultCooldownSeconds   int                            `json:"defaultCooldownSeconds"`
+	RunStatuses              []string                       `json:"runStatuses"`
 }
 
 // Meta handles GET /api/nf-alerts/meta.
@@ -40,19 +41,20 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		types = append(types, ConditionTypeMetricThreshold)
 	}
 	response.JSON(w, http.StatusOK, MetaResponse{
-		MetricEnabled:          h.metricEnabled,
-		MetricCapabilities:     nfhealth.ThresholdCapabilities(),
-		SchemaVersion:          SchemaVersion,
-		AlertStates:            CanonicalAlertStates,
-		Severities:             CanonicalSeverities,
-		ConditionTypes:         types,
-		ConditionScopes:        CanonicalConditionScopes,
-		StateConditionValues:   CanonicalStateConditionValues,
-		ResolveReasons:         CanonicalResolveReasons,
-		MinCooldownSeconds:     MinCooldownSeconds,
-		MaxCooldownSeconds:     MaxCooldownSeconds,
-		DefaultCooldownSeconds: DefaultCooldownSeconds,
-		RunStatuses:            []string{"success", "partial", "failed"},
+		MetricEnabled:            h.metricEnabled,
+		MaxMetricDurationSeconds: MaxMetricDurationSeconds,
+		MetricCapabilities:       nfhealth.ThresholdCapabilities(),
+		SchemaVersion:            SchemaVersion,
+		AlertStates:              CanonicalAlertStates,
+		Severities:               CanonicalSeverities,
+		ConditionTypes:           types,
+		ConditionScopes:          CanonicalConditionScopes,
+		StateConditionValues:     CanonicalStateConditionValues,
+		ResolveReasons:           CanonicalResolveReasons,
+		MinCooldownSeconds:       MinCooldownSeconds,
+		MaxCooldownSeconds:       MaxCooldownSeconds,
+		DefaultCooldownSeconds:   DefaultCooldownSeconds,
+		RunStatuses:              []string{"success", "partial", "failed"},
 	})
 }
 

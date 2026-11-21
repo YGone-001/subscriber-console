@@ -860,7 +860,12 @@ func (h *Handler) GetTarget(w http.ResponseWriter, r *http.Request) {
 		resp.Target.LastRunAt = last.StartedAt
 	}
 	value, reason := ThresholdValue(target, resp.Latest, "process_resident_memory_bytes", time.Now().UTC())
-	resp.ThresholdPreview = &ThresholdPreview{Value: value, Reason: reason}
+	continuity, maxGap := ThresholdContinuity(target, resp.Latest)
+	durationReason := "continuity_unverified"
+	if value != nil && continuity != "" {
+		durationReason = "measured"
+	}
+	resp.ThresholdPreview = &ThresholdPreview{Value: value, Reason: reason, DurationEligible: value != nil && continuity != "", DurationReason: durationReason, MaxGapSeconds: maxGap}
 	response.JSON(w, http.StatusOK, resp)
 }
 
