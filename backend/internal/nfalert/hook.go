@@ -14,6 +14,7 @@ import (
 type SchedulerHook struct {
 	evaluator *Evaluator
 	logger    *slog.Logger
+	onFailure func()
 }
 
 // NewSchedulerHook constructs the scheduler-to-engine adapter.
@@ -32,6 +33,9 @@ func (h *SchedulerHook) OnCollectionRecorded(ctx context.Context, target *nfheal
 		Result: result,
 	}})
 	if err != nil {
+		if h.onFailure != nil {
+			h.onFailure()
+		}
 		if h.logger != nil {
 			h.logger.Warn("nf alert evaluation failed", "targetId", targetIDOf(target), "error", err)
 		}
@@ -52,4 +56,10 @@ func targetIDOf(target *nfhealth.HealthTarget) string {
 		return ""
 	}
 	return target.TargetID
+}
+
+func (h *SchedulerHook) SetMetricWorker(worker *MetricWorker) {
+	if worker != nil {
+		h.onFailure = worker.NoteHookFailure
+	}
 }

@@ -46,6 +46,7 @@ type Handler struct {
 	repo          RepositoryAPI
 	limiter       RateLimiter
 	auditWriter   AuditWriter
+	replayStatus  func() MetricWorkerStatus
 	metricEnabled bool
 	metricTargets MetricTargetReader
 	metricActors  governance.ActorRepository
@@ -237,4 +238,10 @@ func (h *Handler) auditWrite(p *auth.Principal, action, resourceType, resourceID
 		Metadata:  meta,
 	}
 	h.auditWriter.WriteBestEffort(input)
+}
+
+func (h *Handler) SetMetricWorker(worker *MetricWorker) {
+	if worker != nil {
+		h.replayStatus = worker.Snapshot
+	}
 }

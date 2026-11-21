@@ -40,6 +40,7 @@ type metricTransition struct {
 }
 
 type metricState struct {
+	Replay        *MetricReplayStatus    `bson:"replay,omitempty"`
 	LastOutcomeAt metricInstant          `bson:"lastOutcomeAt,omitempty"`
 	Timing        metricTiming           `bson:"timing"`
 	ID            string                 `bson:"_id"`
@@ -181,7 +182,7 @@ func (r *Repository) attachMetricStatus(ctx context.Context, rules []*AlertRule)
 		return nil
 	}
 	cursor, err := r.metricStates().Find(ctx, bson.M{"_id": bson.M{"$in": ids}},
-		options.Find().SetProjection(bson.M{"status": 1}).SetLimit(int64(len(ids))))
+		options.Find().SetProjection(bson.M{"status": 1, "replay": 1}).SetLimit(int64(len(ids))))
 	if err != nil {
 		return err
 	}
@@ -197,6 +198,10 @@ func (r *Repository) attachMetricStatus(ctx context.Context, rules []*AlertRule)
 				status = MetricEvaluationStatus{Quality: "indeterminate", Reason: "rule_version_changed", Phase: "unknown", RuleRevision: rule.Revision}
 			}
 			rule.MetricEvaluation = &status
+			rule.MetricReplay = state.Replay
+			if state.Replay != nil && state.Replay.RuleRevision != rule.Revision {
+				rule.MetricReplay = &MetricReplayStatus{State: "incomplete", Reason: "rule_version_changed", RuleRevision: rule.Revision}
+			}
 		}
 	}
 	return cursor.Err()
@@ -224,15 +229,26 @@ func (m *MongoEvaluatorRepository) SetMetricTargetReader(reader MetricTargetRead
 	m.metricTargets = reader
 }
 
-func (m *MongoEvaluatorRepository) EvaluateMetric(ctx context.Context, rule *AlertRule, target *nfhealth.HealthTarget, result *nfhealth.CollectionResult, now time.Time) (*EvaluationOutcome, error) {
+func (m *MongoEvaluatorRepository) EvaluateMetric(ctx context.Context, rule *AlertRule, target *nfhealth.HealthTarget, result *nfhealth.CollectionResult, now time.Time) (outcome *EvaluationOutcome, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
-	outcome := &EvaluationOutcome{}
-	r := m.repo
-	if err := r.lockMetric(ctx); err != nil {
+	if err = m.repo.lockMetric(ctx); err != nil {
 		return nil, err
 	}
-	defer r.unlockMetric()
+	defer m.repo.unlockMetric()
+	if m.metricSource != nil {
+		outcome, err = m.reconcileMetricLocked(ctx, rule, result, now)
+		if err != nil {
+			m.recordReplayFailure(ctx, rule.RuleID, rule.Revision)
+		}
+		return outcome, err
+	}
+	return m.evaluateMetricLocked(ctx, rule, target, result, now, true)
+}
+
+func (m *MongoEvaluatorRepository) evaluateMetricLocked(ctx context.Context, rule *AlertRule, target *nfhealth.HealthTarget, result *nfhealth.CollectionResult, now time.Time, publish bool) (*EvaluationOutcome, error) {
+	outcome := &EvaluationOutcome{}
+	r := m.repo
 	current, err := r.GetRule(ctx, rule.RuleID)
 	if errors.Is(err, ErrNotFound) {
 		return outcome, nil
@@ -286,11 +302,20 @@ func (m *MongoEvaluatorRepository) EvaluateMetric(ctx context.Context, rule *Ale
 	if state.Pending != nil && !ordered {
 		return outcome, nil
 	}
+	if state.Pending != nil && !publish {
+		if err := r.cancelMetricTransition(ctx, current.RuleID); err != nil {
+			return nil, err
+		}
+		state, err = r.loadMetricState(ctx, current.RuleID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if state.Pending != nil {
 		p := state.Pending
 		epoch, _ := nfhealth.ThresholdContinuity(freshTarget, sample)
 		value, _ := nfhealth.ThresholdValue(freshTarget, sample, current.MetricCondition.Metric, now)
-		if p.RuleRevision != 0 && p.RuleRevision != current.Revision || p.DurationIdentity != "" && (value == nil || epoch != p.DurationIdentity) {
+		if eventAt.After(watermark.Time) || p.RuleRevision != 0 && p.RuleRevision != current.Revision || p.DurationIdentity != "" && (value == nil || epoch != p.DurationIdentity) {
 			if err := r.cancelMetricTransition(ctx, current.RuleID); err != nil {
 				return nil, err
 			}
@@ -363,6 +388,15 @@ func (m *MongoEvaluatorRepository) EvaluateMetric(ctx context.Context, rule *Ale
 	}
 	decision := classifyMetric(current.MetricCondition, *value)
 	timing, timed := advanceMetricTiming(state.Timing, current, identity, gap, eventAt, sample.SampleID, decision, openID)
+	if !publish && timed.Action != "" {
+		// Preserve the verified observation segment, but never create a historical
+		// incident or clear the actual current incident during replay.
+		timing.Direction = decision
+		timing.Since = metricInstant{timed.Since}
+		timing.FirstSampleID = timed.FirstSampleID
+		timing.Observations = timed.Observations
+		timed.Action = ""
+	}
 	state.Timing = timing
 	state.Status = timed.Status
 	state.Status.RuleRevision = current.Revision
@@ -390,6 +424,9 @@ func (m *MongoEvaluatorRepository) EvaluateMetric(ctx context.Context, rule *Ale
 	}
 	if err := r.saveMetricState(ctx, state); err != nil {
 		return nil, err
+	}
+	if !publish {
+		return outcome, nil
 	}
 	return outcome, r.drainMetricTransition(ctx, current.RuleID, identity)
 }

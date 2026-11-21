@@ -73,6 +73,7 @@ const (
 //   - both empty      : the rule applies to all targets.
 //   - both set        : invalid, rejected on write.
 type AlertRule struct {
+	MetricReplay     *MetricReplayStatus     `json:"metricReplay,omitempty" bson:"-"`
 	MetricEvaluation *MetricEvaluationStatus `json:"metricEvaluation,omitempty" bson:"-"`
 	MetricCondition  *MetricCondition        `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
 	RuleID           string                  `json:"ruleId" bson:"_id"`

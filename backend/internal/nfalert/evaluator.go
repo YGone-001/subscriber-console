@@ -305,6 +305,7 @@ var errInvalidTimestamp error = timestampError{}
 type MongoEvaluatorRepository struct {
 	repo          *Repository
 	metricTargets MetricTargetReader
+	metricSource  MetricOutcomeSource
 	rules         *mongo.Collection
 	alerts        *mongo.Collection
 }

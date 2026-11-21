@@ -11,6 +11,7 @@ import (
 
 // MetaResponse is the GET /api/nf-alerts/meta payload.
 type MetaResponse struct {
+	MetricWorker             *MetricWorkerStatus            `json:"metricWorker,omitempty"`
 	MaxMetricDurationSeconds int                            `json:"maxMetricDurationSeconds"`
 	MetricEnabled            bool                           `json:"metricEnabled"`
 	MetricCapabilities       []nfhealth.ThresholdCapability `json:"metricCapabilities"`
@@ -40,7 +41,13 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	if h.metricEnabled {
 		types = append(types, ConditionTypeMetricThreshold)
 	}
+	var worker *MetricWorkerStatus
+	if h.replayStatus != nil {
+		snapshot := h.replayStatus()
+		worker = &snapshot
+	}
 	response.JSON(w, http.StatusOK, MetaResponse{
+		MetricWorker:             worker,
 		MetricEnabled:            h.metricEnabled,
 		MaxMetricDurationSeconds: MaxMetricDurationSeconds,
 		MetricCapabilities:       nfhealth.ThresholdCapabilities(),

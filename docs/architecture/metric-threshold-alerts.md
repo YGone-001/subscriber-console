@@ -103,12 +103,12 @@ snapshot.
 
 Notification intent delivery retains the existing best-effort sink contract;
 this feature does not promise lossless transport when the sink itself fails.
-There is no background historical catch-up scanner yet. An interrupted journal
-is revisited by the next metric evaluation or applicable authorized rule mutation. Duration
-journals require a matching freshly verified continuity epoch before publication;
-rule edits alone cannot replay them without that proof.
+A bounded background reconciliation worker and the live post-recording callback
+use the same serialized source replay. Duration journals require a matching
+freshly verified continuity epoch before publication; rule edits alone cannot
+replay them without that proof.
 The entire metric evaluation has a four-second deadline; status reads have a
-two-second deadline. No worker or extra network probe is introduced.
+two-second deadline. Reconciliation introduces no extra network probe.
 
 ## Duration semantics
 
@@ -141,6 +141,64 @@ storage. Samples older than the current policy update do not accrue duration.
 The UI distinguishes idle, pending trigger, firing, pending recovery and unknown
 from alert lifecycle and NF service health. Progress is explicitly the last
 observed elapsed/required seconds and sample count, never an interpolated timer.
+
+## Recording reconciliation and diagnostics
+
+The worker starts only when NF_METRIC_ALERTS_ENABLED is true. It visits a keyset
+page of at most 16 enabled metric rules every 30 seconds, sharing the existing
+single-controller evaluation gate. A tick has a ten-second budget, each rule a
+four-second budget and each source query a two-second deadline. One failing
+rule cannot permanently starve later pages. Shutdown cancels the worker and waits
+for its bounded work. It never collects telemetry or modifies Inventory/Topology.
+
+NF Health RecordCollection stores its original run, sample and target projection
+before best-effort publication of a private metricRecorded marker on that run.
+A marker write failure never changes a successfully recorded health response.
+The marker is not in any JSON response. The reader stops at an unpublished run
+for 30 seconds, so a newer callback cannot skip a recording still in progress.
+An older incomplete recording or a missing/expired sample is a gap; no value or
+failed-run claim is invented. Legacy unmarked runs are also gaps, without
+backfilling or repairing the NF Health collections.
+
+Reconciliation reads at most 128 rows per rule visit in a two-hour UTC window,
+using the existing target/startedAt indexes, with one bounded sample batch by ID.
+Canonical controller timestamps are parsed as instants. A limited page never
+splits its final whole second, since fractional RFC3339 strings have a different
+lexical order from the whole-second representation. Dense seconds, noncanonical
+timestamps and unpublished barriers report partial reads rather than dropping
+records. Duplicate instants are ambiguous evidence, not multiple healthy samples.
+The existing nf_health_runs_target_started_id read index supports this ordered
+query; deployments retain the existing explicit read-index migration workflow.
+No index is created by reads or by this worker.
+
+Source rows are processed chronologically with both failed runs and successful
+samples. Intermediate rows are observation-only, including fresh intermediate
+rows: their trigger/recovery crossings cannot publish incidents or notifications.
+They can reconstruct a verified continuous timer. Only the latest row after a
+fully consumed bounded read, still fresh and consistent with current policy and
+Inventory evidence, can publish through the existing journal/outbox. A newer
+observation supersedes an unpublished intermediate intent. Concurrent live and
+worker passes use the same watermark and cannot duplicate the incident. GETs
+never start replay or repair state.
+
+The durable metric state stores a separate metricReplay diagnostic: last attempt,
+last successful bounded read, processing watermark/run ID, window, rows visited,
+historical rows, gaps, continuation flag, policy revision and cumulative failures.
+A failed source read cannot fall back to evaluating only the live callback.
+Failure diagnostics are best-effort with a separate 500 ms budget when the caller
+is canceled; if MongoDB itself is unavailable, persistence cannot be guaranteed.
+Current Inventory identity read failures invalidate pending timing. Meta exposes
+worker state, tick failures and callback failures as process-lifetime counters;
+these runtime counters reset at restart, while per-rule diagnostics remain durable.
+The existing rules page shows these facts separately from measurement and health.
+
+Caught-up means the available bounded query succeeded; it is not proof of full
+historical coverage, absence of future late writes, or a transaction snapshot.
+Cross-collection reads remain eventually consistent. Data inserted later with an
+older observation time, outside the forward watermark/window, is not retroactively
+applied to published incidents. Overlong downtime resets pending timing at the
+lookback boundary and reports a gap. No archival replay, automatic repair,
+lossless notification guarantee or multi-controller lease is introduced.
 
 ## Rollback and operational checks
 

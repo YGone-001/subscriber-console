@@ -380,6 +380,7 @@ func main() {
 	)
 	nfMetricRepo := nfalert.NewMongoEvaluatorRepository(nfAlertRepo)
 	nfMetricRepo.SetMetricTargetReader(metricTargets)
+	nfMetricRepo.SetMetricOutcomeSource(nfHealthRepo)
 	nfAlertEvaluator := nfalert.NewEvaluator(nfMetricRepo)
 	nfAlertEvaluator.SetMetricEnabled(cfg.NFMetricAlertsEnabled)
 	nfAlertHandler := nfalert.NewHandler(nfAlertRepo, limiter, auditWriter)
@@ -419,7 +420,13 @@ func main() {
 		nfLogRegistry, _ = nflogs.NewRegistry("", "", "", "")
 	}
 	nfLogHandler := nflogs.NewHandler(nfLogRegistry, limiter, auditWriter)
-	nfHealthScheduler.SetCollectionHook(nfalert.NewSchedulerHook(nfAlertEvaluator, logger))
+	metricWorker := nfalert.NewMetricWorker(nfMetricRepo, cfg.NFMetricAlertsEnabled)
+	nfAlertHandler.SetMetricWorker(metricWorker)
+	nfAlertHook := nfalert.NewSchedulerHook(nfAlertEvaluator, logger)
+	nfAlertHook.SetMetricWorker(metricWorker)
+	nfHealthScheduler.SetCollectionHook(nfAlertHook)
+	metricWorker.Start(context.Background())
+	defer metricWorker.Stop()
 
 	// Operations summary: full-collection statistics aggregated from the
 	// domain repositories. Sections are computed independently so one

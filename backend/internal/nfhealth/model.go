@@ -317,6 +317,7 @@ type HealthTarget struct {
 // canonical Inventory association needed to identify which Inventory resource
 // was measured; historical runs without it stay readable.
 type HealthRun struct {
+	MetricRecorded bool   `json:"-" bson:"metricRecorded,omitempty"`
 	RunID          string `json:"runId" bson:"_id"`
 	SchemaVersion  int    `json:"schemaVersion" bson:"schemaVersion"`
 	TargetID       string `json:"targetId" bson:"targetId"`

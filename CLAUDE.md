@@ -1276,6 +1276,12 @@ Positive durations require verified exporter continuity, at least two increasing
 observations, bounded gaps and matching rule/target epochs. Missing evidence,
 hysteresis, rule changes and incarnation changes restart timing; wall-clock
 waiting never transitions an alert. Exact persisted UTC instants preserve
-nanoseconds and conservatively read legacy BSON Date watermarks. No historical
-catch-up worker is implemented. Authority:
+nanoseconds and conservatively read legacy BSON Date watermarks. Unbounded
+historical replay is not implemented. A bounded metric reconciliation
+worker (16 rules/tick, 128 outcomes/visit, 2-hour lookback) and live callbacks
+share chronological replay; only the latest fully-read fresh evidence publishes.
+NF Health recording exposes a private best-effort publication marker; missing or
+expired evidence remains an explicit gap. Per-rule replay diagnostics persist in
+the existing metric state collection; worker/callback counters are runtime-only.
+No read triggers collection or replay. Authority:
 `docs/architecture/metric-threshold-alerts.md`.

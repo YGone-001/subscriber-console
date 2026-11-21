@@ -676,7 +676,15 @@ func (r *Repository) RecordCollection(ctx context.Context, target *HealthTarget,
 	}
 	set["lastProjection"] = BuildTargetProjection(&updated, layers, probes, now)
 	_, err := r.targets.UpdateOne(ctx, bson.M{"_id": target.TargetID}, bson.M{"$set": set})
-	return err
+	if err != nil {
+		return err
+	}
+	// Publish only after both evidence documents and target freshness are stored.
+	// Reconciliation treats an absent marker as incomplete recording, not success.
+	_, _ = r.runs.UpdateOne(ctx, bson.M{"_id": result.Run.RunID}, bson.M{"$set": bson.M{"metricRecorded": true}})
+	// Failure to publish evaluation eligibility cannot fail recorded telemetry.
+	// The reconciler exposes the absent marker as a recording gap.
+	return nil
 }
 
 // measurementAccepted reports whether a sample carries at least one measured
