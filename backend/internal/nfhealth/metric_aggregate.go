@@ -7,8 +7,30 @@ import (
 )
 
 const MetricAggregateVersion = "rss-hour-v1"
+const MetricDayAggregateVersion = "rss-day-v1"
 const MetricAggregateMetric = "process_resident_memory_bytes"
 const MaxAggregateSegments = 32
+
+const (
+	MetricHourPeriod = "1h"
+	MetricDayPeriod  = "1d"
+	// Buckets are published only after this grace so late recordings inside a
+	// closed interval can still be observed before statistics are finalized.
+	MetricAggregateGrace = 5 * time.Minute
+	// Retention bounds how long published buckets survive. Raw samples keep
+	// their own shorter retention and are never extended by aggregation.
+	DefaultMetricHourRetentionDays = 30
+	DefaultMetricDayRetentionDays  = 90
+	// Read limits match retention: hourly history is bounded to 30 days and
+	// daily history to 90 days.
+	MaxMetricHourHistoryDays = 30
+	MaxMetricDayHistoryDays  = 90
+	// Bounded repair revisits only recent hours and only a few slots per target
+	// per tick. Hours outside this window stay missing and are counted by the
+	// read contract instead of being filled with zero.
+	MetricBackfillWindowHours = 48
+	MaxMetricHoursPerTick     = 3
+)
 
 // Segments never join across failed observations, gaps or exporter incarnations.
 // Epoch is an opaque digest; no private process/endpoint proof is exposed.
@@ -25,17 +47,31 @@ type MetricAggregateSegment struct {
 }
 
 type MetricAggregateBucket struct {
-	CoveredSeconds float64                  `json:"coveredSeconds" bson:"coveredSeconds"`
-	ID             string                   `json:"-" bson:"_id"`
-	TargetID       string                   `json:"targetId" bson:"targetId"`
-	ResourceID     string                   `json:"resourceId" bson:"resourceId"`
-	Metric         string                   `json:"metric" bson:"metric"`
-	Series         string                   `json:"series" bson:"series"`
-	Version        string                   `json:"algorithmVersion" bson:"algorithmVersion"`
-	Start          time.Time                `json:"from" bson:"bucketStart"`
-	End            time.Time                `json:"to" bson:"bucketEnd"`
-	Revision       int64                    `json:"revision" bson:"revision"`
-	GeneratedAt    time.Time                `json:"generatedAt" bson:"generatedAt"`
+	CoveredSeconds float64 `json:"coveredSeconds" bson:"coveredSeconds"`
+	ID             string  `json:"-" bson:"_id"`
+	TargetID       string  `json:"targetId" bson:"targetId"`
+	ResourceID     string  `json:"resourceId" bson:"resourceId"`
+	Metric         string  `json:"metric" bson:"metric"`
+	Series         string  `json:"series" bson:"series"`
+	Period         string  `json:"period" bson:"period"`
+	Version        string  `json:"algorithmVersion" bson:"algorithmVersion"`
+	// SourceVersion and SourceDigest describe the input buckets a derived
+	// period consumed. A changed digest is the only staleness signal a later
+	// analysis may bind to; publishing never rewrites the source evidence.
+	SourceVersion string    `json:"sourceAlgorithmVersion,omitempty" bson:"sourceAlgorithmVersion,omitempty"`
+	SourceDigest  string    `json:"sourceDigest,omitempty" bson:"sourceDigest,omitempty"`
+	Start         time.Time `json:"from" bson:"bucketStart"`
+	End           time.Time `json:"to" bson:"bucketEnd"`
+	ExpiresAt     time.Time `json:"expiresAt,omitempty" bson:"expiresAt,omitempty"`
+	Revision      int64     `json:"revision" bson:"revision"`
+	GeneratedAt   time.Time `json:"generatedAt" bson:"generatedAt"`
+	// Hours and MissingHours describe a daily bucket: how many closed hourly
+	// buckets contributed and how many expected hours were absent.
+	Hours        int `json:"hours,omitempty" bson:"hours,omitempty"`
+	MissingHours int `json:"missingHours,omitempty" bson:"missingHours,omitempty"`
+	// SourceComplete means the bounded reads behind this bucket were consumed
+	// without known missing samples. It is not a claim of full measurement
+	// coverage, future late writes or service health.
 	SourceComplete bool                     `json:"sourceComplete" bson:"sourceComplete"`
 	Quality        string                   `json:"quality" bson:"quality"`
 	Reason         string                   `json:"reason,omitempty" bson:"reason,omitempty"`
@@ -52,8 +88,8 @@ func aggregateBucketID(targetID string, start time.Time) string {
 // clipped adjacent pairs; no forward extrapolation or sample-count coverage.
 func BuildMetricHour(target *HealthTarget, start time.Time, batch MetricOutcomeBatch, now time.Time) MetricAggregateBucket {
 	start = start.UTC()
-	out := MetricAggregateBucket{ID: aggregateBucketID(target.TargetID, start), TargetID: target.TargetID, ResourceID: target.ResourceID, Metric: MetricAggregateMetric, Series: "unlabeled", Version: MetricAggregateVersion, Start: start, End: start.Add(time.Hour), GeneratedAt: now.UTC(), SourceComplete: !batch.More && batch.Gaps == 0, Quality: "unavailable", Excluded: map[string]int{}, Segments: []MetricAggregateSegment{}}
-	if !start.Equal(start.Truncate(time.Hour)) || out.End.After(now.Add(-5*time.Minute)) {
+	out := MetricAggregateBucket{ID: aggregateBucketID(target.TargetID, start), TargetID: target.TargetID, ResourceID: target.ResourceID, Metric: MetricAggregateMetric, Series: "unlabeled", Period: MetricHourPeriod, Version: MetricAggregateVersion, Start: start, End: start.Add(time.Hour), GeneratedAt: now.UTC(), SourceComplete: !batch.More && batch.Gaps == 0, Quality: "unavailable", Excluded: map[string]int{}, Segments: []MetricAggregateSegment{}}
+	if !start.Equal(start.Truncate(time.Hour)) || out.End.After(now.Add(-MetricAggregateGrace)) {
 		out.Reason = "hour_not_closed"
 		out.SourceComplete = false
 		return out
