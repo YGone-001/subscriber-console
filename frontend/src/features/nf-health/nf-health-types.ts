@@ -180,7 +180,7 @@ export interface MetricDefinition {
 }
 
 export interface NfHealthMeta {
-  metricHistory?: {enabled: boolean; state: string; lastAttemptAt?: string; lastSuccessAt?: string; failures: number};
+  metricHistory?: {enabled: boolean; state: string; lastAttemptAt?: string; lastSuccessAt?: string; failures: number; hourRetentionDays?: number; dayRetentionDays?: number; backfillWindowHours?: number; rawRetentionDays?: number; hoursPublished?: number; daysPublished?: number; backfillRepairs?: number};
   businessRulesVersion?: string;
   businessRules?: BusinessRuleDefinition[];
   serviceWindowVersion?: string;
