@@ -1,3 +1,4 @@
+import { metricConditionLabel } from '../nf-alerts/metric-threshold';
 import type { ReactNode } from 'react';
 import { EVIDENCE_TIME_FORMAT } from '../../lib/evidence-time';
 import { Link } from 'react-router-dom';
@@ -25,6 +26,8 @@ export function InvestigationTimeline({data,category='all'}:{data:InvestigationC
       <p>{event.name||resources.get(event.resourceId)?.name||t('inv_unresolved_resource')}</p>
       <p className={styles.note}>{label('inv_outcome_',event.outcome)} &middot; {t(`inv_basis_${event.basis}`)}</p>
       {event.kind==='configuration'?<><p>{t(event.changed===true?'inv_changed':event.changed===false?'inv_unchanged':'inv_change_unknown')}</p><p className={styles.note}>{t('inv_config_time')}</p></>:null}
+      {event.metric ? <div><p>{t('nf_metric_note')}</p><p>{t('nf_metric_rule_revision')}: {event.metric.ruleRevision}</p><p>{metricConditionLabel(event.metric.condition)}</p><p>{t('nf_metric_duration')}: {event.metric.condition.durationSeconds ?? 0} s; {t('nf_metric_recovery_duration')}: {event.metric.condition.recoveryDurationSeconds ?? 0} s</p><p>{t('nf_metric_trigger_value')}: {event.metric.trigger?.value ?? '-'} {event.metric.trigger?.unit} ({event.metric.trigger?.observedAt ? formatDateTime(event.metric.trigger.observedAt, EVIDENCE_TIME_FORMAT) : '-'})</p>{event.metric.recovery ? <p>{t('nf_metric_recovered_value')}: {event.metric.recovery.value} {event.metric.recovery.unit}</p> : null}<p className={styles.note}>{t('nf_metric_retained_evidence')}</p></div> : null}
+      {event.resolvedReason ? <p>{t(`nf_alerts_resolve_${event.resolvedReason}`)}</p> : null}
       {event.measuredAt?<p className={styles.note}>{t('inv_measured_at')}: {formatDateTime(event.measuredAt,EVIDENCE_TIME_FORMAT)}</p>:null}
       {event.layers?<dl className={styles.facts}>{(['process','interface','service'] as const).map(layer=><div key={layer}><dt>{t(`inv_layer_${layer}`)}</dt><dd>{label('inv_layer_',event.layers?.[layer].state||'unknown')}</dd></div>)}</dl>:null}
       <details><summary>{t('inv_event_detail')}</summary><dl className={styles.facts}><div><dt>{t('inv_resource')}</dt><dd className={styles.identity}>{event.resourceId||t('inv_unknown')}</dd></div><div><dt>{t('inv_evidence')}</dt><dd className={styles.identity}>{event.id}</dd></div>{event.snapshotId?<div><dt>{t('inv_snapshot')}</dt><dd className={styles.identity}>{event.snapshotId}</dd></div>:null}</dl><Link to={eventTarget(event)}>{t('inv_owner')}</Link><p className={styles.note}>{t('inv_owner_hint')}</p></details>

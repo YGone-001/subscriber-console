@@ -18,7 +18,7 @@ export type ConditionScope = 'overall' | 'process' | 'interface' | 'service';
 export type StateConditionValue = 'unhealthy' | 'degraded' | 'unknown';
 
 // Resolve reasons recorded on closed alerts.
-export type ResolveReason = 'recovery' | 'manual' | 'rule_deleted';
+export type ResolveReason = 'recovery' | 'manual' | 'rule_deleted' | 'configuration_changed' | 'rule_disabled';
 
 // Run outcomes reported by NF Health collection runs.
 export type RunStatus = 'success' | 'partial' | 'failed';
@@ -66,6 +66,7 @@ export interface AlertEvidence {
 // Alert is one open, acknowledged or resolved alert instance for a
 // (rule, target) pair.
 export interface Alert {
+  metricLatest?: { status: MetricEvaluationStatus; evidence?: MetricEvidence };
   metricRecovery?: MetricEvidence;
   ruleRevision?: number;
   metricCondition?: MetricCondition;
@@ -96,6 +97,7 @@ export interface Alert {
 
 // NfAlertsMeta mirrors the GET /api/nf-alerts/meta vocabulary payload.
 export interface NfAlertsMeta {
+  metricConditionEditable?: boolean;
   metricWorker?: MetricWorkerStatus;
   maxMetricDurationSeconds?: number;
   metricEnabled?: boolean;
@@ -258,3 +260,5 @@ export interface MetricWorkerStatus {
   failures: number;
   hookFailures: number;
 }
+
+export interface MetricAlertSummary { ruleRevision: number; condition: MetricCondition; trigger: MetricEvidence; recovery?: MetricEvidence }

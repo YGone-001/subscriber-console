@@ -1,4 +1,11 @@
 export const metricAlertsZh: Record<string, string> = {
+  nf_metric_edit_effect: "保存指标规则会重新计时，并以“配置变更”关闭已有告警；停用以“规则停用”关闭，不代表实测恢复。",
+  nf_alerts_resolve_configuration_changed: "配置变更关闭",
+  nf_alerts_resolve_rule_disabled: "规则停用关闭",
+  nf_metric_retained_evidence: "此摘要保存在告警中，不依赖原始样本保留期；原始样本可能已过期。",
+  nf_metric_latest_observation: "最近观测（独立于触发证据）",
+  nf_metric_unavailable_value: "无有效数值",
+
   "nf_metric_replay_title": "指标评估补偿",
   "nf_metric_replay_worker": "后台补偿扫描",
   "nf_metric_replay_not_observed": "尚无补偿诊断记录。",
@@ -81,6 +88,13 @@ export const metricAlertsZh: Record<string, string> = {
 };
 
 export const metricAlertsEn: Record<string, string> = {
+  nf_metric_edit_effect: "Saving a metric rule restarts timing and closes existing alerts as configuration changed. Disabling closes them as rule disabled; neither indicates measured recovery.",
+  nf_alerts_resolve_configuration_changed: "Closed after configuration change",
+  nf_alerts_resolve_rule_disabled: "Closed after rule disabled",
+  nf_metric_retained_evidence: "This summary is retained with the alert independently of raw sample retention. Raw samples may have expired.",
+  nf_metric_latest_observation: "Latest observation (separate from trigger evidence)",
+  nf_metric_unavailable_value: "No valid value",
+
   "nf_metric_replay_title": "Metric evaluation reconciliation",
   "nf_metric_replay_worker": "Background reconciliation",
   "nf_metric_replay_not_observed": "No reconciliation diagnostics recorded.",

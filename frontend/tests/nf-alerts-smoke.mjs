@@ -144,6 +144,8 @@ const NOTIFY_DELIVERIES = [
 ];
 
 let capturedMetricRule = null;
+let capturedMetricEdit = null;
+let metricEditConflict = true;
 const METRIC_TARGET = '0192f0c0-a000-7000-8000-000000000099';
 const META = {
   schemaVersion: 1,
@@ -363,8 +365,14 @@ function handleApi(req, res, url, context) {
     req.on('data', (chunk) => { body += chunk; });
     req.on('end', () => {
       capturedMetricRule = JSON.parse(body);
-      sendJson(res, 201, { ...capturedMetricRule, ruleId: 'created-metric-rule', revision: 1 });
+      RULES.push({ ...capturedMetricRule, ruleId: 'created-metric-rule', revision: 1, createdAt: TS.first, updatedAt: TS.last });
+      sendJson(res, 201, RULES.at(-1));
     });
+    return;
+  }
+  if (pathname === '/api/nf-alerts/rules/created-metric-rule' && req.method === 'PUT') {
+    let body = ''; req.on('data', chunk => { body += chunk; });
+    req.on('end', () => { capturedMetricEdit = JSON.parse(body); if (metricEditConflict) return sendJson(res, 409, { error: 'Revision conflict', code: 'NF_ALERT_REVISION_CONFLICT' }); return sendJson(res, 200, { ...RULES.at(-1), ...capturedMetricEdit.rule, revision: 2 }); });
     return;
   }
   if (pathname === '/api/nf-alerts/rules' && req.method === 'GET') {
@@ -566,6 +574,7 @@ async function main() {
     });
     await notifyServer.close();
     META.metricEnabled = true;
+    META.metricConditionEditable = true;
     META.maxMetricDurationSeconds = 3600;
     META.metricWorker = { state: 'running', failures: 0, hookFailures: 1 };
     META.conditionTypes.push('metric_threshold');
@@ -602,6 +611,18 @@ async function main() {
       await page.locator('#nf-alerts-create-title').waitFor({ state: 'detached', timeout: 15000 });
       check('metric_payload_is_explicit', capturedMetricRule?.conditionType === 'metric_threshold' && capturedMetricRule?.targetId === METRIC_TARGET && capturedMetricRule?.metricCondition?.threshold === 100 && capturedMetricRule?.metricCondition?.recoveryThreshold === 50 && capturedMetricRule?.metricCondition?.series === 'unlabeled' && !capturedMetricRule?.condition, 'typed target and thresholds');
       check('metric_duration_payload_explicit', capturedMetricRule?.metricCondition?.durationSeconds === 120 && capturedMetricRule?.metricCondition?.recoveryDurationSeconds === 60, 'duration in seconds');
+      const metricRow = page.getByRole('row').filter({ hasText: 'Exporter RSS threshold' });
+      await metricRow.getByRole('button', { name: /Edit rule/i }).click();
+      await page.locator('#nf-metric-threshold').fill('200');
+      check('metric_edit_closure_explained', (await page.getByRole('dialog').innerText()).includes('neither indicates measured recovery'), 'configuration close semantics');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await page.getByRole('dialog').getByRole('alert').waitFor();
+      check('metric_conflict_retains_draft', await page.locator('#nf-metric-threshold').inputValue() === '200' && capturedMetricEdit?.expectedRevision === 1, '409 retains edited threshold');
+      metricEditConflict = false;
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await page.locator('#nf-alerts-edit-title').waitFor({ state: 'detached', timeout: 15000 });
+      check('metric_edit_payload_is_governed', capturedMetricEdit?.rule?.metricCondition?.threshold === 200 && !capturedMetricEdit?.rule?.targetId, 'CAS payload retains scope identity');
+
     });
     await metricServer.close();
     servers.length = 0;

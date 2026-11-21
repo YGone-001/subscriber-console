@@ -1,13 +1,14 @@
+import type { MetricAlertSummary, MetricCondition, MetricEvidence } from '../nf-alerts/nf-alerts-types';
 import { resolveReturnTo, withReturnTo } from '../../lib/return-to';
 
 export type Coverage = { state: string; reason?: string; returned: number; limit: number; historyCoverage: string };
 export type ResourceFact = { resourceId: string; name: string; domain: string; role: string; kind: string; lifecycleState: string };
 export type EdgeFact = { edgeId: string; fromResourceId: string; toResourceId: string; relationshipType: string; revision: number };
 export type KnowledgeFact = { id: string; title: string; protocol: string; revision: number };
-export type EvidenceEvent = { key: string; kind: string; id: string; resourceId: string; targetId?: string; anchorKind?:string;sourceId?: string; snapshotId?: string; at: string; measuredAt?: string; name?: string; outcome: string; basis: string; changed: boolean | null; layers?: { process: {state: string}; interface: {state: string}; service: {state: string} } };
+export type EvidenceEvent = { metric?: MetricAlertSummary; resolvedReason?: string; key: string; kind: string; id: string; resourceId: string; targetId?: string; anchorKind?:string;sourceId?: string; snapshotId?: string; at: string; measuredAt?: string; name?: string; outcome: string; basis: string; changed: boolean | null; layers?: { process: {state: string}; interface: {state: string}; service: {state: string} } };
 export type InvestigationContext = {
   generatedAt: string; from: string; to: string; completeness: string; relationshipBasis: string;
-  anchor: {anchorKind?:string;anchorId?:string;sourceId?:string;baselineId?:string;baselineRevision?:number;triggerSnapshotId?:string;latestSnapshotId?:string;endReason?:string;alertId: string; resourceId: string; targetId: string; name: string; state: string; severity: string; firstTriggeredAt: string};
+  anchor: {metricCondition?: MetricCondition; evidence?: {metric?: MetricEvidence}; metricRecovery?: MetricEvidence; ruleRevision?: number; resolvedReason?: string; anchorKind?:string;anchorId?:string;sourceId?:string;baselineId?:string;baselineRevision?:number;triggerSnapshotId?:string;latestSnapshotId?:string;endReason?:string;alertId: string; resourceId: string; targetId: string; name: string; state: string; severity: string; firstTriggeredAt: string};
   resources: ResourceFact[]; relations: EdgeFact[]; events: EvidenceEvent[]; coverage: Record<string, Coverage>;
 };
 export type InvestigationRecord = {

@@ -436,7 +436,8 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
           ) : null}
         </div>
 
-        {conditionType === 'metric_threshold' ? <MetricThresholdFields maxDurationSeconds={meta?.maxMetricDurationSeconds} targetId={targetId} value={metric} onChange={setMetric} disabled={submitting} readOnly={isEdit} /> : null}
+        {conditionType === 'metric_threshold' && isEdit && meta?.metricConditionEditable ? <p role="status">{t('nf_metric_edit_effect')}</p> : null}
+        {conditionType === 'metric_threshold' ? <MetricThresholdFields maxDurationSeconds={meta?.maxMetricDurationSeconds} targetId={targetId} value={metric} onChange={setMetric} disabled={submitting} readOnly={isEdit && !meta?.metricConditionEditable} /> : null}
         <div className={styles.formRow}>
           <Field htmlFor="nf-alerts-severity" label={t('nf_alerts_field_severity')}>
             <select

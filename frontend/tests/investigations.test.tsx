@@ -45,3 +45,13 @@ test('operator editor presents record versions and explicit conclusion fields',(
   const html=render(<InvestigationEditor view={record} canWrite readError={false} onReload={async()=>record} onSaved={()=>{}}/>);assert.ok(html.includes('investigation-conclusion'));assert.ok(html.includes('investigation-notes'));assert.ok(html.includes('type="submit"'));assert.ok(html.includes('operator'));
 });
 test('investigation translations retain identical bilingual key sets',()=>{assert.deepEqual(Object.keys(investigationsEn).sort(),Object.keys(investigationsZh).sort());for(const key of Object.keys(investigationsEn)){assert.ok(investigationsEn[key].trim());assert.ok(investigationsZh[key].trim());}});
+
+test('metric investigation explains immutable trigger and configuration close after raw expiry',()=>{
+ const metric={ruleRevision:7,condition:{metric:'process_resident_memory_bytes',series:'unlabeled',operator:'gt' as const,threshold:100,recoveryThreshold:50,durationSeconds:120},trigger:{metric:'process_resident_memory_bytes',series:'unlabeled',unit:'bytes',subject:'exporter_process',value:150,sampleId:'expired',observedAt:at}};
+ const html=render(<InvestigationTimeline data={{...context,events:[{key:'metric',kind:'alert_resolved',id,resourceId:id,at,outcome:'warning',basis:'anchor_alert',changed:null,metric,resolvedReason:'configuration_changed'}]}}/>);
+ assert.ok(html.includes('150 bytes'));
+ assert.ok(html.includes('100 bytes'));
+ assert.ok(html.includes('Closed after configuration change'));
+ assert.ok(html.includes('Raw samples may have expired'));
+ assert.ok(!html.includes('nf_metric_'));
+});

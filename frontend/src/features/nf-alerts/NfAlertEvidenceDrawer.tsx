@@ -233,7 +233,7 @@ export function NfAlertEvidenceDrawer({
           <section className={styles.drawerSection}>
             <h3 className={styles.drawerSectionTitle}>{t('nf_alerts_drawer_evidence')}</h3>
             {alert.conditionType === 'metric_threshold' ? <>
-              <p>{t('nf_metric_note')}</p>
+              <p>{t('nf_metric_note')}</p><p>{t('nf_metric_retained_evidence')}</p>
               <p>{t('nf_metric_rule_revision')}: {alert.ruleRevision ?? '-'}</p>
               <p>{t('nf_metric_threshold')}: {alert.metricCondition?.threshold ?? '-'} bytes</p>
               <p>{t('nf_metric_recovery')}: {alert.metricCondition?.recoveryThreshold ?? '-'} bytes</p>
@@ -243,6 +243,7 @@ export function NfAlertEvidenceDrawer({
               {alert.metricRecovery?.conditionSince ? <p>{t('nf_metric_duration_evidence', { at: formatTimestamp(alert.metricRecovery.conditionSince), elapsed: alert.metricRecovery.elapsedSeconds ?? 0, count: alert.metricRecovery.observations ?? 0, gap: alert.metricRecovery.maxGapSeconds ?? 0 })} <code>{alert.metricRecovery.firstSampleId}</code></p> : null}
               {evidence?.metric ? <p>{t('nf_metric_trigger_value')}: {evidence.metric.value} {evidence.metric.unit} ({formatTimestamp(evidence.metric.observedAt)})</p> : null}
               {alert.metricRecovery ? <p>{t('nf_metric_recovered_value')}: {alert.metricRecovery.value} {alert.metricRecovery.unit} ({formatTimestamp(alert.metricRecovery.observedAt)})</p> : null}
+              {alert.metricLatest ? <p>{t('nf_metric_latest_observation')}: {alert.metricLatest.evidence ? `${alert.metricLatest.evidence.value} ${alert.metricLatest.evidence.unit}` : t('nf_metric_unavailable_value')} ({formatTimestamp(alert.metricLatest.status.observedAt)}) &middot; {t(`nf_metric_reason_${alert.metricLatest.status.reason}`) === `nf_metric_reason_${alert.metricLatest.status.reason}` ? alert.metricLatest.status.reason : t(`nf_metric_reason_${alert.metricLatest.status.reason}`)}</p> : null}
             </> : null}
             {evidence ? (
               <div className={styles.detailGrid}>
