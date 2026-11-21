@@ -1,3 +1,4 @@
+import { MetricReplaySummary, MetricWorkerSummary } from './MetricReplaySummary';
 import { metricConditionLabel, metricTimingLabel } from './metric-threshold';
 /*
  * NF alerts duty workspace.
@@ -271,6 +272,7 @@ function NfHealthAlertsPage() {
   const handleRefresh = () => {
     if (view === 'rules') {
       void loadRules(url.cursor);
+      void fetchNfAlertsMeta().then(setMeta).catch(() => setMeta(null));
     } else {
       void loadAlerts(url.cursor);
     }
@@ -572,6 +574,7 @@ function NfHealthAlertsPage() {
 
       {view === 'rules' ? (
         <section className="dash-card" data-nf-alert-panel="rules">
+          <MetricWorkerSummary status={meta?.metricWorker} />
           <div className={styles.sectionHead}>
             <h2>
               <Bell size={16} aria-hidden="true" />
@@ -684,6 +687,7 @@ function NfHealthAlertsPage() {
                       </td>
                       <td>{severityBadge(rule.severity, t)}
                         {rule.conditionType === 'metric_threshold' ? <p>{t('nf_metric_last_evaluation')}: {t(`nf_metric_reason_${rule.metricEvaluation?.reason ?? 'measurement_missing'}`, { gap: rule.metricEvaluation?.maxGapSeconds ?? '-' })} {rule.metricEvaluation?.observedAt ? formatTimestamp(rule.metricEvaluation.observedAt) : ''}<br />{metricTimingLabel(rule.metricEvaluation, t)}</p> : null}
+                        {rule.conditionType === 'metric_threshold' ? <MetricReplaySummary status={rule.metricReplay} /> : null}
                       </td>
                       <td>{formatCooldown(rule.cooldownSeconds)}</td>
                       <td>

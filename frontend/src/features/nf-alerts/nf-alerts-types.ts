@@ -31,6 +31,7 @@ export interface RuleCondition {
 // AlertRule is an operator-authored configuration. A rule is a pure observer
 // over NF Health evidence and never modifies the network.
 export interface AlertRule {
+  metricReplay?: MetricReplayStatus;
   metricEvaluation?: MetricEvaluationStatus;
   metricCondition?: MetricCondition;
   ruleId: string;
@@ -95,6 +96,7 @@ export interface Alert {
 
 // NfAlertsMeta mirrors the GET /api/nf-alerts/meta vocabulary payload.
 export interface NfAlertsMeta {
+  metricWorker?: MetricWorkerStatus;
   maxMetricDurationSeconds?: number;
   metricEnabled?: boolean;
   metricCapabilities?: { metric: string; type: string; unit: string; subject: string; series: string; eligible: boolean; reason: string }[];
@@ -232,4 +234,27 @@ export interface MetricEvaluationStatus {
   requiredSeconds?: number;
   observations?: number;
   maxGapSeconds?: number;
+}
+
+export interface MetricReplayStatus {
+  state: string;
+  reason: string;
+  lastAttemptAt: string;
+  lastSuccessAt?: string;
+  processedThrough?: string;
+  lastRunId?: string;
+  windowFrom?: string;
+  processed: number;
+  historical: number;
+  gaps: number;
+  more: boolean;
+  failures: number;
+  ruleRevision: number;
+}
+export interface MetricWorkerStatus {
+  state: string;
+  lastAttemptAt?: string;
+  lastSuccessAt?: string;
+  failures: number;
+  hookFailures: number;
 }

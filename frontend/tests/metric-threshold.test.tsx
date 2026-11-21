@@ -1,3 +1,4 @@
+import { MetricReplaySummary, MetricWorkerSummary } from '../src/features/nf-alerts/MetricReplaySummary';
 import React from 'react';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -52,4 +53,18 @@ test('duration fields are named, range bounded, and absent against older metadat
   const t = (key: string, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), metricAlertsEn[key] ?? key);
   assert.equal(metricTimingLabel({ quality: 'measured', reason: 'pending_trigger', phase: 'pending', elapsedSeconds: 60, requiredSeconds: 120, observations: 2 }, t), 'Pending trigger: 60/120 seconds, 2 valid observations');
   assert.equal(metricTimingLabel({ quality: 'indeterminate', reason: 'metric_missing', phase: 'firing' }, t), metricAlertsEn.nf_metric_phase_firing);
+});
+
+
+test('reconciliation diagnostics distinguish bounded catch-up, missing samples and worker health', () => {
+  const markup = renderToStaticMarkup(<I18nProvider>
+    <MetricWorkerSummary status={{ state: 'degraded', failures: 2, hookFailures: 3 }} />
+    <MetricReplaySummary status={{ state: 'partial', reason: 'recording_pending', lastAttemptAt: '2026-11-21T01:00:00Z', processed: 10, historical: 9, gaps: 1, more: true, failures: 2, ruleRevision: 1 }} />
+  </I18nProvider>);
+  assert.ok(markup.includes(metricAlertsEn.nf_metric_replay_degraded));
+  assert.ok(markup.includes(metricAlertsEn.nf_metric_replay_partial));
+  assert.ok(markup.includes(metricAlertsEn.nf_metric_replay_reason_recording_pending));
+  assert.ok(markup.includes(metricAlertsEn.nf_metric_replay_more));
+  assert.ok(markup.includes('evidence gaps: 1'));
+  assert.ok(!markup.includes('healthy'));
 });

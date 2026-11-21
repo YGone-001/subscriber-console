@@ -567,12 +567,19 @@ async function main() {
     await notifyServer.close();
     META.metricEnabled = true;
     META.maxMetricDurationSeconds = 3600;
+    META.metricWorker = { state: 'running', failures: 0, hookFailures: 1 };
     META.conditionTypes.push('metric_threshold');
     const metricServer = await startServer();
     servers.push(metricServer);
     await withPage(browser, metricServer.origin, async (page) => {
       await page.getByRole('button', { name: 'Rules', exact: true }).click();
       await page.locator('[data-nf-alert-panel="rules"]').waitFor({ state: 'visible', timeout: 20000 });
+      check('metric_replay_worker_visible', await page.getByRole('region', { name: 'Background reconciliation' }).isVisible(), 'existing rules view exposes worker diagnostics');
+      META.metricWorker.hookFailures = 2;
+      await page.getByRole('button', { name: 'Refresh', exact: true }).first().click();
+      await page.getByText(/evaluation callback failures: 2/).waitFor({ timeout: 10000 });
+      check('metric_replay_worker_refreshes', true, 'shared refresh reloads worker diagnostics');
+
       await page.getByRole('button', { name: /Add rule/i }).click();
       await page.locator('#nf-alerts-name').fill('Exporter RSS threshold');
       await page.locator('#nf-alerts-condition-type').selectOption('metric_threshold');

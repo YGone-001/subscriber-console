@@ -60,6 +60,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const defaultCooldown = meta?.defaultCooldownSeconds ?? 300;
   useEffect(() => {
     if (!open) return;
     setFormError(null);
@@ -95,9 +96,9 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
       setScope('overall');
       setState('unhealthy');
       setSeverity('warning');
-      setCooldownSeconds(meta?.defaultCooldownSeconds ?? 300);
+      setCooldownSeconds(defaultCooldown);
     }
-  }, [open, rule, meta]);
+  }, [open, rule, defaultCooldown]);
 
   useEffect(() => {
     if (scopeMode !== 'target') return undefined;
