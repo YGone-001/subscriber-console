@@ -120,17 +120,28 @@ type metricHistoryCursor struct {
 var ErrMetricHistoryInvalid = errors.New("invalid metric history request")
 var ErrMetricHistoryChanged = errors.New("metric history changed; restart pagination")
 
-// metricHistoryScope resolves the read resolution into its storage period,
-// algorithm version, bucket step and read limit. Only registered resolutions
-// are readable; unknown values never fall back to a default.
-func metricHistoryScope(resolution string) (period, version string, step time.Duration, maxDays int, ok bool) {
-	switch resolution {
-	case MetricHourPeriod:
-		return MetricHourPeriod, MetricAggregateVersion, time.Hour, MaxMetricHourHistoryDays, true
-	case MetricDayPeriod:
-		return MetricDayPeriod, MetricDayAggregateVersion, 24 * time.Hour, MaxMetricDayHistoryDays, true
+// metricAggregateSpec resolves a readable metric and resolution into its stored
+// period, algorithm version, reported unit and type, bucket step and read limit.
+// Unregistered combinations are rejected instead of falling back to a default,
+// so a counter can never be read as a gauge (or the reverse).
+func metricAggregateSpec(metric, resolution string) (period, version, unit, metricType string, step time.Duration, maxDays int, ok bool) {
+	if resolution != MetricHourPeriod && resolution != MetricDayPeriod {
+		return "", "", "", "", 0, 0, false
 	}
-	return "", "", 0, 0, false
+	switch metric {
+	case MetricAggregateMetric:
+		if resolution == MetricDayPeriod {
+			return MetricDayPeriod, MetricDayAggregateVersion, "bytes", "gauge", 24 * time.Hour, MaxMetricDayHistoryDays, true
+		}
+		return MetricHourPeriod, MetricAggregateVersion, "bytes", "gauge", time.Hour, MaxMetricHourHistoryDays, true
+	case MetricCounterMetric:
+		// Counter rates are hourly only: daily counter rollups are not provided.
+		if resolution == MetricDayPeriod {
+			return "", "", "", "", 0, 0, false
+		}
+		return MetricHourPeriod, MetricCounterAggregateVersion, MetricCounterRateUnit, "counter", time.Hour, MaxMetricHourHistoryDays, true
+	}
+	return "", "", "", "", 0, 0, false
 }
 
 func metricRetentionDays(period string) int {
@@ -141,8 +152,8 @@ func metricRetentionDays(period string) int {
 }
 
 func validateMetricHistory(q MetricHistoryQuery, now time.Time) error {
-	_, _, step, maxDays, ok := metricHistoryScope(q.Resolution)
-	if !ok || q.Metric != MetricAggregateMetric || q.Series != "unlabeled" || q.Limit < 1 || q.Limit > 200 || q.From.IsZero() ||
+	_, _, _, _, step, maxDays, ok := metricAggregateSpec(q.Metric, q.Resolution)
+	if !ok || q.Series != "unlabeled" || q.Limit < 1 || q.Limit > 200 || q.From.IsZero() ||
 		!q.From.Equal(q.From.UTC().Truncate(step)) || !q.To.Equal(q.To.UTC().Truncate(step)) || !q.To.After(q.From) ||
 		q.To.Sub(q.From) > time.Duration(maxDays)*24*time.Hour {
 		return fmt.Errorf("%w: require approved metric, unlabeled series, aligned buckets, a window within %d days and limit 1-200", ErrMetricHistoryInvalid, maxDays)
@@ -168,7 +179,7 @@ func (r *Repository) MetricHistory(ctx context.Context, q MetricHistoryQuery, no
 	// Normalise the window to UTC once: bucket keys decoded from BSON are UTC
 	// and the slot loop compares them by value.
 	q.From, q.To = q.From.UTC(), q.To.UTC()
-	period, version, step, _, _ := metricHistoryScope(q.Resolution)
+	period, version, unit, metricType, step, _, _ := metricAggregateSpec(q.Metric, q.Resolution)
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	expected := int(q.To.Sub(q.From) / step)
@@ -221,7 +232,7 @@ func (r *Repository) MetricHistory(ctx context.Context, q MetricHistoryQuery, no
 	if end > len(manifest) {
 		end = len(manifest)
 	}
-	out := &MetricHistoryView{MetricType: "gauge", Metric: q.Metric, Series: q.Series, Resolution: q.Resolution, Period: period, Unit: "bytes", Subject: "exporter_process", Version: version, From: q.From, To: q.To, Watermark: watermark, RetentionDays: metricRetentionDays(period), Buckets: []MetricAggregateBucket{}, Complete: true, MissingBuckets: expected - len(manifest), Page: PageInfo{Limit: q.Limit}}
+	out := &MetricHistoryView{MetricType: metricType, Metric: q.Metric, Series: q.Series, Resolution: q.Resolution, Period: period, Unit: unit, Subject: "exporter_process", Version: version, From: q.From, To: q.To, Watermark: watermark, RetentionDays: metricRetentionDays(period), Buckets: []MetricAggregateBucket{}, Complete: true, MissingBuckets: expected - len(manifest), Page: PageInfo{Limit: q.Limit}}
 	if period == MetricHourPeriod {
 		out.MissingHours = out.MissingBuckets
 	}

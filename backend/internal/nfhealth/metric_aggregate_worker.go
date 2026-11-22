@@ -22,10 +22,11 @@ type MetricAggregateStatus struct {
 	BackfillWindowHours int `json:"backfillWindowHours"`
 	// RawRetentionDays is the raw sample policy. Older hours cannot be
 	// reconstructed and stay missing instead of being published as zero.
-	RawRetentionDays int   `json:"rawRetentionDays"`
-	HoursPublished   int64 `json:"hoursPublished"`
-	DaysPublished    int64 `json:"daysPublished"`
-	BackfillRepairs  int64 `json:"backfillRepairs"`
+	RawRetentionDays      int   `json:"rawRetentionDays"`
+	HoursPublished        int64 `json:"hoursPublished"`
+	CounterHoursPublished int64 `json:"counterHoursPublished"`
+	DaysPublished         int64 `json:"daysPublished"`
+	BackfillRepairs       int64 `json:"backfillRepairs"`
 }
 
 // One opt-in worker visits 16 targets per minute. For each target it finalizes
@@ -229,20 +230,27 @@ func (w *MetricAggregateWorker) visitTarget(ctx context.Context, target *HealthT
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		written, backfill, err := w.buildHour(ctx, target, slot, latest, now)
+		gaugeWritten, counterWritten, backfill, err := w.buildHour(ctx, target, slot, latest, now)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		if !written {
+		if gaugeWritten || counterWritten {
+			w.mu.Lock()
+			if gaugeWritten {
+				w.status.HoursPublished++
+			}
+			if counterWritten {
+				w.status.CounterHoursPublished++
+			}
+			if backfill {
+				w.status.BackfillRepairs++
+			}
+			w.mu.Unlock()
+		}
+		if !gaugeWritten {
 			continue
 		}
-		w.mu.Lock()
-		w.status.HoursPublished++
-		if backfill {
-			w.status.BackfillRepairs++
-		}
-		w.mu.Unlock()
 		// A changed hour invalidates the day it belongs to. The daily bucket is
 		// recomputed from its published hours and keeps a digest of the exact
 		// revisions it consumed, so a later analysis can detect staleness.
@@ -253,56 +261,84 @@ func (w *MetricAggregateWorker) visitTarget(ctx context.Context, target *HealthT
 	return lastErr
 }
 
-func (w *MetricAggregateWorker) buildHour(ctx context.Context, target *HealthTarget, start, latest, now time.Time) (written, backfill bool, err error) {
+func (w *MetricAggregateWorker) buildHour(ctx context.Context, target *HealthTarget, start, latest, now time.Time) (gaugeWritten, counterWritten, backfill bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
-	prior, err := w.repo.metricAggregate(ctx, aggregateBucketID(target.TargetID, start))
+	priorGauge, err := w.repo.metricAggregate(ctx, aggregateBucketID(target.TargetID, start))
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
-	if prior != nil && prior.SourceComplete {
-		return false, false, nil
+	priorCounter, err := w.repo.metricAggregate(ctx, counterBucketID(target.TargetID, start))
+	if err != nil {
+		return false, false, false, err
+	}
+	gaugeFinal := priorGauge != nil && priorGauge.SourceComplete
+	counterFinal := priorCounter != nil && priorCounter.SourceComplete
+	if gaugeFinal && counterFinal {
+		return false, false, false, nil
 	}
 	// Fail closed if current Inventory identity cannot be checked. This never
 	// derives ownership from endpoint/name or changes the target configuration.
 	if w.check == nil {
-		return false, false, validationError("NF_METRIC_IDENTITY_UNAVAILABLE", "Inventory identity reader required")
+		return false, false, false, validationError("NF_METRIC_IDENTITY_UNAVAILABLE", "Inventory identity reader required")
 	}
 	if err := w.check(ctx, target); err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
+	// One bounded source read serves both derived series of the same hour.
 	batch, err := w.repo.AggregateOutcomes(ctx, target.TargetID, target.ResourceID, start.Add(-time.Duration(ThresholdMaxGapSeconds(target))*time.Second), start.Add(time.Hour))
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 	current, err := w.repo.GetTarget(ctx, target.TargetID)
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 	if current.Revision != target.Revision || !current.Enabled {
-		return false, false, ErrRevisionConflict
+		return false, false, false, ErrRevisionConflict
 	}
 	if err := w.check(ctx, current); err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
-	bucket := BuildMetricHour(target, start, batch, now)
-	// A repair slot with no recorded evidence at all is not published. An empty
-	// document would claim a read that never happened and would inflate the day
-	// rollup; the read contract reports the hour as missing instead.
-	if prior == nil && start.Before(latest) && len(batch.Outcomes) == 0 && batch.Gaps == 0 {
-		return false, false, nil
+	// A repair slot with no recorded evidence at all is not published, even when
+	// one of the two derived series already exists. An empty document would claim
+	// a read that never happened and would inflate the day rollup; the read
+	// contract reports the hour as missing instead.
+	if start.Before(latest) && len(batch.Outcomes) == 0 && batch.Gaps == 0 {
+		return false, false, false, nil
 	}
-	revision := int64(0)
-	if prior != nil {
-		if metricAggregateUnchanged(*prior, bucket) {
-			return false, false, nil
+	save := func(bucket MetricAggregateBucket, prior *MetricAggregateBucket) (bool, error) {
+		revision := int64(0)
+		if prior != nil {
+			if metricAggregateUnchanged(*prior, bucket) {
+				return false, nil
+			}
+			revision = prior.Revision
 		}
-		revision = prior.Revision
+		if err := w.repo.saveMetricAggregateRetained(ctx, &bucket, revision, w.hourRetention); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
-	if err := w.repo.saveMetricAggregateRetained(ctx, &bucket, revision, w.hourRetention); err != nil {
-		return false, false, err
+	if !gaugeFinal {
+		gaugeWritten, err = save(BuildMetricHour(target, start, batch, now), priorGauge)
+		if err != nil {
+			return gaugeWritten, false, false, err
+		}
 	}
-	return true, start.Before(latest), nil
+	if !counterFinal {
+		counterBucket := BuildMetricCounterHour(target, start, batch, now)
+		// A repair slot never publishes an empty counter document: the gauge
+		// bucket already records that hour, and an empty counter row would only
+		// restate the absence of inside observations.
+		if len(counterBucket.Segments) > 0 || !start.Before(latest) {
+			counterWritten, err = save(counterBucket, priorCounter)
+			if err != nil {
+				return gaugeWritten, counterWritten, false, err
+			}
+		}
+	}
+	return gaugeWritten, counterWritten, start.Before(latest), nil
 }
 
 // rebuildDay recomputes one UTC day from its published hours. It writes only

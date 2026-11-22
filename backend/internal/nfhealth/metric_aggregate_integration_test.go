@@ -166,8 +166,18 @@ func TestMetricAggregateMongoWorkerHistoryAndRawExpiry(t *testing.T) {
 	if saved.Revision != 2 {
 		t.Fatal("GET or repeated worker rewrote finalized hour")
 	}
+	// One counter bucket accompanies the newest hour. This fixture records no
+	// counter samples, so the bucket is published as an empty, complete hour
+	// instead of a fabricated rate.
+	counterBucket, counterErr := repo.metricAggregate(ctx, counterBucketID(target.TargetID, start))
+	if counterErr != nil || counterBucket == nil || counterBucket.Metric != MetricCounterMetric || counterBucket.MetricType != "counter" {
+		t.Fatalf("counter bucket missing: %+v %v", counterBucket, counterErr)
+	}
+	if len(counterBucket.Segments) != 0 || counterBucket.Reason != "no_valid_observations" || !counterBucket.SourceComplete {
+		t.Fatalf("counter bucket invented a rate: %+v", counterBucket)
+	}
 	count, _ := db.Collection("app_nf_metric_aggregates").CountDocuments(ctx, bson.M{})
-	if count != 3 {
+	if count != 4 {
 		t.Fatalf("unexpected history writes: %d", count)
 	}
 	// The compound index bounds the hour manifest scan.

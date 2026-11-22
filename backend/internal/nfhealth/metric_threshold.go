@@ -46,11 +46,29 @@ func ThresholdMetricApproved(metric string) bool {
 // ThresholdValue validates the accepted evidence against the CURRENT target
 // configuration. Private binding material never leaves this package.
 func ThresholdValue(target *HealthTarget, sample *HealthSample, metric string, now time.Time) (*float64, string) {
+	return verifiedSeriesValue(target, sample, metric, now, "gauge", "bytes", ThresholdMetricApproved)
+}
+
+// AggregateSeriesValue validates the same evidence for an aggregation input.
+// Aggregation approves a wider set than alert thresholds, so a counter can be
+// aggregated into deltas and rates without becoming a threshold candidate.
+func AggregateSeriesValue(target *HealthTarget, sample *HealthSample, metric string, now time.Time) (*float64, string) {
+	definition, ok := LookupMetric(metric)
+	if !ok {
+		return nil, "metric_not_approved"
+	}
+	return verifiedSeriesValue(target, sample, metric, now, definition.Type, definition.Unit, AggregateMetricApproved)
+}
+
+// verifiedSeriesValue is the single admissibility path for a recorded sample.
+// The type and unit come from the server-owned registry, so a counter can never
+// be read as a gauge (or the reverse) by mistake.
+func verifiedSeriesValue(target *HealthTarget, sample *HealthSample, metric string, now time.Time, wantType, wantUnit string, approved func(string) bool) (*float64, string) {
 	if target == nil || !target.Enabled || target.CollectorProfile != CollectorHTTPMetrics ||
 		target.ResourceID == "" || target.IdentityState != IdentityInventoryAuthoritative {
 		return nil, "target_not_eligible"
 	}
-	if !ThresholdMetricApproved(metric) {
+	if !approved(metric) {
 		return nil, "metric_not_approved"
 	}
 	if sample == nil {
@@ -98,7 +116,7 @@ func ThresholdValue(target *HealthTarget, sample *HealthSample, metric string, n
 	if !m.ScopeVerified || len(m.Labels) != 0 {
 		return nil, "series_not_verified"
 	}
-	if m.Type != "gauge" || m.Unit != "bytes" || m.Category != CategoryResource ||
+	if m.Type != wantType || m.Unit != wantUnit || m.Category != CategoryResource ||
 		m.Source != "metrics_endpoint" || m.CollectedAt != sample.CollectedAt ||
 		math.IsNaN(m.Value) || math.IsInf(m.Value, 0) || m.Value < 0 {
 		return nil, "metric_invalid"

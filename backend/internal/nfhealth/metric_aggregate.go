@@ -59,6 +59,14 @@ type MetricAggregateSegment struct {
 	First          time.Time `json:"firstObservedAt" bson:"firstObservedAt"`
 	Last           time.Time `json:"lastObservedAt" bson:"lastObservedAt"`
 	CoveredSeconds float64   `json:"coveredSeconds" bson:"coveredSeconds"`
+	// DeltaSum and DeltaCount describe counter increments inside this segment.
+	// A cumulative total is never averaged, so the gauge statistics above stay
+	// zero for a counter segment.
+	DeltaSum   float64 `json:"deltaSum,omitempty" bson:"deltaSum,omitempty"`
+	DeltaCount int     `json:"deltaCount,omitempty" bson:"deltaCount,omitempty"`
+	// Rate is DeltaSum/CoveredSeconds over valid intervals. It is absent when no
+	// interval could be compared: a reset, a gap or a single observation.
+	Rate *float64 `json:"rate,omitempty" bson:"rate,omitempty"`
 	// P95 is the exact nearest-rank 95th percentile of this segment's samples.
 	// It is absent when the segment exceeded the sort budget; it is never
 	// approximated and never merged across segments.
@@ -71,6 +79,7 @@ type MetricAggregateBucket struct {
 	TargetID       string  `json:"targetId" bson:"targetId"`
 	ResourceID     string  `json:"resourceId" bson:"resourceId"`
 	Metric         string  `json:"metric" bson:"metric"`
+	MetricType     string  `json:"metricType" bson:"metricType"`
 	Series         string  `json:"series" bson:"series"`
 	Period         string  `json:"period" bson:"period"`
 	Version        string  `json:"algorithmVersion" bson:"algorithmVersion"`
@@ -125,7 +134,7 @@ func nearestRankP95(values []float64) float64 {
 // clipped adjacent pairs; no forward extrapolation or sample-count coverage.
 func BuildMetricHour(target *HealthTarget, start time.Time, batch MetricOutcomeBatch, now time.Time) MetricAggregateBucket {
 	start = start.UTC()
-	out := MetricAggregateBucket{ID: aggregateBucketID(target.TargetID, start), TargetID: target.TargetID, ResourceID: target.ResourceID, Metric: MetricAggregateMetric, Series: "unlabeled", Period: MetricHourPeriod, Version: MetricAggregateVersion, P95State: P95Unavailable, Start: start, End: start.Add(time.Hour), GeneratedAt: now.UTC(), SourceComplete: !batch.More && batch.Gaps == 0, Quality: "unavailable", Excluded: map[string]int{}, Segments: []MetricAggregateSegment{}}
+	out := MetricAggregateBucket{ID: aggregateBucketID(target.TargetID, start), TargetID: target.TargetID, ResourceID: target.ResourceID, Metric: MetricAggregateMetric, MetricType: "gauge", Series: "unlabeled", Period: MetricHourPeriod, Version: MetricAggregateVersion, P95State: P95Unavailable, Start: start, End: start.Add(time.Hour), GeneratedAt: now.UTC(), SourceComplete: !batch.More && batch.Gaps == 0, Quality: "unavailable", Excluded: map[string]int{}, Segments: []MetricAggregateSegment{}}
 	if !start.Equal(start.Truncate(time.Hour)) || out.End.After(now.Add(-MetricAggregateGrace)) {
 		out.Reason = "hour_not_closed"
 		out.SourceComplete = false

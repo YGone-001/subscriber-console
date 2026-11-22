@@ -32,7 +32,7 @@ func BuildMetricDay(target *HealthTarget, dayStart time.Time, hours []MetricAggr
 	dayStart = dayStart.UTC()
 	out := MetricAggregateBucket{
 		ID: dayBucketID(target.TargetID, dayStart), TargetID: target.TargetID, ResourceID: target.ResourceID,
-		Metric: MetricAggregateMetric, Series: "unlabeled", Period: MetricDayPeriod, Version: MetricDayAggregateVersion,
+		Metric: MetricAggregateMetric, MetricType: "gauge", Series: "unlabeled", Period: MetricDayPeriod, Version: MetricDayAggregateVersion,
 		SourceVersion: MetricAggregateVersion, P95State: P95NotProvided, Start: dayStart, End: dayStart.Add(24 * time.Hour), GeneratedAt: now.UTC(),
 		Quality: "unavailable", Excluded: map[string]int{}, Segments: []MetricAggregateSegment{},
 	}
@@ -167,7 +167,7 @@ func metricAggregateUnchanged(prior, next MetricAggregateBucket) bool {
 	}
 	for i := range prior.Segments {
 		a, b := prior.Segments[i], next.Segments[i]
-		if a.Epoch != b.Epoch || a.Count != b.Count || a.Sum != b.Sum || a.Min != b.Min || a.Max != b.Max || a.Mean != b.Mean || a.CoveredSeconds != b.CoveredSeconds || !a.First.Equal(b.First) || !a.Last.Equal(b.Last) || !sameOptionalFloat(a.P95, b.P95) {
+		if a.Epoch != b.Epoch || a.Count != b.Count || a.Sum != b.Sum || a.Min != b.Min || a.Max != b.Max || a.Mean != b.Mean || a.CoveredSeconds != b.CoveredSeconds || a.DeltaSum != b.DeltaSum || a.DeltaCount != b.DeltaCount || !a.First.Equal(b.First) || !a.Last.Equal(b.Last) || !sameOptionalFloat(a.P95, b.P95) || !sameOptionalFloat(a.Rate, b.Rate) {
 			return false
 		}
 	}
