@@ -1,4 +1,5 @@
 import { MetricHistoryPanel } from './MetricHistoryPanel';
+import { MetricAnalysisPanel } from './MetricAnalysisPanel';
 /*
  * NF Health target detail route.
  *
@@ -419,6 +420,7 @@ export function NfHealthDetailPage() {
 
           {target.collectorProfile === 'http_metrics' ? <ServiceWindowPanel report={detail?.serviceWindows} /> : null}
           {meta?.metricHistory?.enabled && target.collectorProfile === 'http_metrics' ? <MetricHistoryPanel key={`${targetId}:${historyRefresh}`} targetId={targetId} refresh={historyRefresh} /> : null}
+          {meta?.metricHistory?.enabled && target.collectorProfile === 'http_metrics' ? <MetricAnalysisPanel key={`analysis:${targetId}:${historyRefresh}`} targetId={targetId} refresh={historyRefresh} /> : null}
 
           <section className="dash-card">
             <div className={styles.sectionHead}>

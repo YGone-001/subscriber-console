@@ -1,4 +1,5 @@
 import type { MetricHistory, MetricResolution } from './metric-history';
+import type { MetricAnalysisView } from './metric-analysis';
 import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
 import { postJson, putJson } from '../../lib/api/mutation-client';
 import type {
@@ -151,6 +152,10 @@ export async function updateNfHealthTarget(
 
 export async function collectNfHealthTarget(targetId: string): Promise<CollectResult> {
   return postJson<CollectResult>(`/api/nf-health/targets/${encodeURIComponent(targetId)}/collect`, {});
+}
+
+export function fetchNfMetricAnalysis(targetId: string, params: {from: string; to: string; cursor?: string}, signal: AbortSignal): Promise<MetricAnalysisView> {
+  return getJsonWithSignal<MetricAnalysisView>(withQuery(`/api/nf-health/targets/${encodeURIComponent(targetId)}/metric-analysis`, { metric: 'process_resident_memory_bytes', limit: 200, ...params }), signal);
 }
 
 export function fetchNfMetricHistory(targetId: string, params: {from: string; to: string; resolution?: MetricResolution; metric?: string; cursor?: string}, signal: AbortSignal): Promise<MetricHistory> {

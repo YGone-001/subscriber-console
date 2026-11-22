@@ -1,4 +1,5 @@
 import { metricHistoryEn } from './metric-history';
+import { metricAnalysisEn } from './metric-analysis';
 import { metricAlertsEn } from './metric-alerts';
 import { driftEn } from './config-drift';
 import { evidenceEn } from './operations-evidence';
@@ -11,6 +12,7 @@ import { healthRulesEn } from './nf-health-rules';
 
 export const en: Record<string, string> = {
     ...metricHistoryEn,
+    ...metricAnalysisEn,
     ...metricAlertsEn,
     ...healthWindowEn,
     ...healthRulesEn,
