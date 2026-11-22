@@ -267,3 +267,52 @@ tokens. The shared bounded-read hook accepts a data-dependent refresh interval s
 active run polling stops at a terminal state, preserving its existing cancellation
 and StrictMode ownership. Inspection alert links extend investigation return
 context only to the inspection run route; existing alert anchors are unchanged.
+
+## NF Health workspace ownership
+
+The NF Health list surface (`/nf-health`) is one orchestration owner plus four
+presentation components. The split is a composition change only: no endpoint,
+request shape, evidence semantic or permission changed with it.
+
+| File | Owns | Never does |
+|---|---|---|
+| `features/nf-health/NfHealthPage.tsx` | The authoritative read lifecycle (one request token, one abort controller per read pair), the 30s polling and visibility policy, the URL state contract and cursor walk, the full-population KPI projection, the KPI-as-filter mapping, and the governed manual collection mutation | Render card/table/matrix markup, own a second read for a sub-view |
+| `features/nf-health/NfHealthTargetCards.tsx` | The domain-grouped card wall: identity, NF type, L1/L2/L3 evidence, runtime utilization, last measurement, drawer opening and detail links | Fetch, poll, sort, interpret raw telemetry, own URL filters |
+| `features/nf-health/NfHealthTargetsTable.tsx` | The audit table columns, the legacy-identity label, the freshness and collection-outcome cells, and the authorization-driven collection action | Issue a second list read, grant a mutation through visibility |
+| `features/nf-health/NfHealthInterfaceMatrix.tsx` | The server-published interface columns, one cell per returned family, and the matrix detail links | Synthesize a row or column, infer protocol health from a metrics response |
+| `features/nf-health/NfHealthFilterToolbar.tsx` | The search draft form and the seven URL filters, as intents reported to the page | Write the URL, start a request, keep its own filter registry |
+| `features/nf-health/nf-health-badges.tsx` | The single badge vocabulary shared by all three views (overall state, freshness, layer coverage, matrix cell, utilization bar) | Decide health, compute freshness, fill a missing value |
+
+Rules that hold across the split:
+
+- **One read owner.** The page issues the list-or-matrix read and the
+  full-population summary read together, with one token and one abort
+  controller. A sub-view never issues its own list request, and the card wall,
+  table and matrix all consume the same response.
+- **Server order is preserved.** Domain grouping partitions the received
+  sequence; it never re-sorts it. The default order stays the server-defined
+  risk order.
+- **KPI scope is the full collection.** `MetricStrip` values come from the
+  operations summary health section, never from the visible page arrays. A
+  summary that is not complete degrades every KPI to an explicit unavailable
+  value rather than to a zero.
+- **Polling stays single.** Exactly one 30s interval exists while the list route
+  is mounted; it is suppressed while the tab is hidden, revalidates once on
+  visibility restoration, skips cursor walks, and is cleared on unmount.
+- **URL state has one registry.** `useOperationsUrlState` with
+  `HEALTH_URL_KEYS` owns `view`, `q`, `enabled`, `domain`, `state`, `layers`,
+  `freshness`, `collection`, `sort` and `cursor`. The toolbar reports intents.
+  A filter change drops the cursor in the same transition, and the legacy
+  `state=enabled` / `state=disabled` aliases keep their collection-state meaning.
+- **Search keeps the accepted draft rule.** `committedSearchRef` records the term
+  the page itself committed, so a late self-initiated URL echo cannot overwrite a
+  newer draft while external URL changes still flow into the input.
+- **Evidence vocabulary is single-sourced.** `nf-health-badges.tsx` renders every
+  list badge, so a layer that was never measured cannot read as healthy in one
+  view and unknown in another.
+
+Verification: `frontend/tests/nf-health-workspace.test.tsx` pins each component's
+rendering contract, `scripts/test-nf-health-ui-contract.mjs` asserts the
+list-surface invariants against the union of these files, and
+`npm --prefix frontend run acceptance:nf-health-workspace` proves the browser
+behaviour against the production build.
