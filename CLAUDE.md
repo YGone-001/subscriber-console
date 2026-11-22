@@ -1299,10 +1299,13 @@ NF Health owns one bounded aggregation worker, the Ops collection
 `app_nf_metric_aggregates` and the pure core.read metric-history endpoint.
 Only verified unlabeled exporter RSS gauges with continuity proof are accepted.
 UTC half-open hours retain separate identity/gap segments, count/sum/min/max,
-sample mean and clipped observed interval coverage. Daily buckets merge hourly
-count/sum/min/max by sample count, never averaged hourly means, keep the same
-identity/gap segmentation rule, and store a digest of the consumed hour
-revisions. No zero filling, cross-epoch averaging, interpolation, L3 decisions or
+sample mean and clipped observed interval coverage. Hourly segments also keep an
+exact nearest-rank P95 bounded to 2048 samples per segment; daily buckets never
+derive one. Daily buckets merge hourly count/sum/min/max by sample count, never
+averaged hourly means, keep the same identity/gap segmentation rule, and store a
+digest of the consumed hour revisions. The ops report exposes aggregates as a
+separate partition from retained samples, with their own columns and rows per
+identity segment. No zero filling, cross-epoch averaging, interpolation, L3 decisions or
 notifications occur. The worker finalizes the latest closed hour and repairs at
 most three missing or incomplete hours per target per tick inside a 48-hour
 window, newest first; hours past raw retention or with no recorded evidence stay

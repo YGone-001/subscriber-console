@@ -42,6 +42,16 @@ Domains describe current Inventory association, not historical ownership.
 - Samples expose count and first/last time, not a fabricated continuous coverage
   ratio. NF Health retention still defaults to seven days. The report neither
   extends retention nor interprets missing samples as healthy or zero.
+- The metric report has two partitions that never mix. `source=raw` (default)
+  reads retained samples. `source=aggregate` reads published hourly or daily
+  buckets with `resolution=1h|1d`; a resolution on the raw partition is rejected
+  rather than ignored. A bucket is included when its start falls inside the
+  requested window, so a partial overlap is never reported as a full bucket. Aggregate rows are per identity segment, so means and
+  percentiles are never combined across populations; each row carries unit,
+  resolution, algorithm version, quality, sample count, min/max/mean, an exact
+  P95 (absent above the sort budget) and observed coverage. Aggregate resource
+  ids are the canonical ids recorded at aggregation time; historical names are
+  not stored, so any name shown elsewhere is a current Inventory name.
 - Configuration events use collection/observation time, not an unknown actual
   modification time. Their rows contain metadata, not configuration fields.
 - Agent counts describe remote collectors now and exclude the local controller.
@@ -60,7 +70,9 @@ page. Detail uses stable row identities and cursors, with 50 rows by default and
 budget requires narrower filters and is not silently truncated.
 
 CSV is buffered and checked before response headers, with maximum 10000 rows and
-10 MiB. It shares query/field semantics with the JSON report, preserves nulls,
+10 MiB. Each metric partition exports its own column set: an aggregate export
+never carries raw sample columns, and a raw export never carries aggregate
+columns, so a spreadsheet cannot silently compare the two. It shares query/field semantics with the JSON report, preserves nulls,
 escapes quotes/newlines/Unicode, and protects spreadsheet formula prefixes,
 including prefixes preceded by whitespace/control characters. Typed numeric
 measurements remain numeric. Generation time, resolved window, source scope,

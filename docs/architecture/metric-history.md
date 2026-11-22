@@ -3,9 +3,9 @@
 NF Health owns an opt-in aggregation worker and a pure historical read endpoint
 for exporter RSS statistics. It shares the existing recording and measurement
 identity checks. It does not change alert decisions, NF Health/L3 states,
-collection scheduling or notification delivery. Percentiles, counter rates,
-capacity forecasting and anomaly or trend detection are not implemented by this
-module.
+collection scheduling or notification delivery. Daily percentiles, counter
+rates, capacity forecasting and anomaly or trend detection are not implemented
+by this module.
 
 ## Activation and storage
 
@@ -75,6 +75,23 @@ the hour; boundary-only evidence can prove coverage without inventing a mean. Mo
 32 segments, numeric overflow or source truncation publishes an explicit
 unavailable/incomplete hour with no truncated statistics. Individual exclusions
 and missing source samples remain visible. Empty hours do not invent zero values.
+
+## Percentile semantics
+
+Each hourly segment retains an exact 95th percentile computed by nearest rank
+over that segment's own samples: `sorted[ceil(0.95*n)-1]`. There is no
+interpolation, no approximation and no sampling. The exact sort is bounded to
+2048 samples per segment; a segment above that budget publishes no percentile
+and the bucket reports `p95State=budget` while keeping count, sum, min, max,
+mean and coverage. Percentiles are never merged across segments, so a bucket
+with two identities exposes two independent values. A bucket that has no valid
+observation reports `p95State=unavailable`.
+
+Daily buckets never derive a percentile from hourly percentiles. They report
+`p95State=not_provided` and their segments carry no `p95`. The algorithm version
+is part of the bucket identity, so this release publishes hourly buckets as
+`rss-hour-v2`; buckets written as `rss-hour-v1` keep their own identity and are
+not reinterpreted as if they had a percentile.
 
 ## Daily rollup semantics
 
@@ -155,8 +172,9 @@ days and may include the current day, whose bucket is reported as not closed.
 Unknown or duplicate parameters and unregistered resolutions are rejected.
 
 The response includes units/subject/type, resolution, period, algorithm version,
-per-bucket revisions, generation times, segments, quality/exclusions, retention
-days, `missingBuckets`, `incompleteBuckets`, `expiredBuckets` and pagination.
+per-bucket revisions, generation times, segments, per-segment `p95` and
+per-bucket `p95State`, quality/exclusions, retention days, `missingBuckets`,
+`incompleteBuckets`, `expiredBuckets` and pagination.
 `expiredBuckets` counts absent buckets older than the raw sample policy, which
 can no longer be reconstructed. A manifest of the whole requested window
 produces a deterministic read watermark; the cursor binds the target,
@@ -167,7 +185,9 @@ budget and do not promise an atomic snapshot. Invalid cursors return 400;
 database failures return 503 rather than pretending the history is empty.
 
 The existing target detail offers 24-hour/7-day/30-day hourly ranges and
-7-day/30-day/90-day daily ranges when meta advertises the feature.
+7-day/30-day/90-day daily ranges when meta advertises the feature. The data
+table carries a visible unit/resolution/algorithm-version note and a P95 column
+that states why a value is absent instead of showing zero.
 `metricRange` and `metricResolution` are URL state; older `metricHours` links are
 still read. Reads are aborted on scope changes; refresh restarts pagination. A
 scatter plot shows only single coherent segments with complete available source

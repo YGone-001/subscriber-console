@@ -1,7 +1,7 @@
 # 指标阈值告警、历史聚合与异常趋势开发计划
 
 日期：2026-11-21
-状态：实施中；T01–T08 已实现指标阈值闭环与小时/日聚合、保留期和有界补算，后续未勾选项仍为提案。当前事实见 docs/architecture/metric-threshold-alerts.md 与 docs/architecture/metric-history.md。
+状态：实施中；T01–T09 已实现指标阈值闭环、小时/日聚合、保留期、有界补算与小时 P95/报表分区，后续未勾选项仍为提案。当前事实见 docs/architecture/metric-threshold-alerts.md 与 docs/architecture/metric-history.md。
 依据：[开发范围](DESIGN_BRIEF.md)；基线 develop / 90bc35ea。
 
 ## 交付策略与工作量
@@ -50,7 +50,7 @@
 
 - [x] **T07 小时聚合与趋势读取**：新增 Go 聚合模块、app_nf_metric_aggregates 和 NF Health 详情的小时趋势选项。复用已验证 series 身份、类型、配置绑定及 incarnation；不同身份 epoch 分桶，不跨重启/重置拼接。只汇总已接受的 gauge，保存 count/sum/min/max、观测边界、质量及有效覆盖。首版均值明确为样本均值，不冒称时间均值；覆盖按有界有效相邻间隔并集计算，不以 count 冒充。验收：小时桶 [from,to) 为 UTC，重复 worker 不重复计数，未知 scope 不合桶，缺口断线。依赖：T02；按交付顺序在 T06 后实施。
 - [x] **T08 日汇总、保留与有界补算**：扩展聚合 worker、详情 7d/30d/90d 视图及运维元信息。日统计从小时的 sum/count 加权合并，min/max 合并；不平均小时均值、不合并小时 P95。默认小时保留 30 天、日保留 90 天，原始样本保留政策不变。worker 只处理闭合桶，建议预留 5 分钟迟到宽限；聚合桶可在原始证据仍存在时重算，版本条件写替换而非增量重复累加；小时桶变更须带动受影响日桶重算，并标记所引用分析结果过期。验收：跨日、迟到、补算、空桶、源样本 TTL 后无法重算及 worker 中断均显式报告，不产生“零流量”。依赖：T07。
-- [ ] **T09 统计分位与报表复用**：新增小时原始 gauge 的精确 P95（有界排序）及 sample_count，修改 opsreports 和 ChartDataTable 显示单位、分辨率、质量和算法版本。超过排序/扫描预算时返回不完整，不偷偷采样；日 P95 暂不提供。验收：确定性样本校验结果；CSV 正确转义；原始、聚合分区不可混算；历史资源名称/当前归属按已有报表规则清楚标识。依赖：T08。
+- [x] **T09 统计分位与报表复用**：新增小时原始 gauge 的精确 P95（有界排序）及 sample_count，修改 opsreports 和 ChartDataTable 显示单位、分辨率、质量和算法版本。超过排序/扫描预算时返回不完整，不偷偷采样；日 P95 暂不提供。验收：确定性样本校验结果；CSV 正确转义；原始、聚合分区不可混算；历史资源名称/当前归属按已有报表规则清楚标识。依赖：T08。
 - [ ] **T10 counter 区间扩展（独立可延期）**：复用 service_window 和 window_identity 的兼容性验证，新增注册批准的 counter 增量/速率聚合及单位解释，必要时抽取共享纯函数。区间按时间边界切分，累计总数不求均值；重启、重置、重复时刻、超长间隔、标签塌缩一律排除。速率使用有效 delta 总和 / coveredSeconds，不平均 interval rate；默认不加入阈值候选。验收：边界区间不双计、重置不负增量、零流量与缺测不同；业务完成比例仍 observation_only。依赖：T08。
 
 聚合 API 提案：新增 GET /api/nf-health/targets/{targetId}/metric-history，参数 metric、from、to、resolution=1h|1d、series、cursor；旧 history 接口保持。返回单位、metricType、bucket 边界、value/count/min/max/quality/coverage、数据水位、分页和完整性，不回传私有 scope 材料。小时最多查 30 天、日最多查 90 天，单次最多 200 桶、limit+1 检出截断；跨页 series 和截止水位绑定，发现聚合版本变化则提示重新读取，不声称跨页事务快照。
@@ -112,3 +112,5 @@ T06 已实现：通知 outbox/webhook 与调查上下文携带安全的触发条
 T07 已实现：独立默认关闭 NF_METRIC_AGGREGATES_ENABLED；复用采集发布/身份/连续性证明，只汇总无标签 exporter RSS gauge。一个 UTC 小时文档原子保留最多 32 个身份/缺口分段，保存 count/sum/min/max/样本均值及相邻有效区间覆盖；最多扫描 10000 条记录，超限不发布截断统计。每分钟最多访问 16 个目标，仅生成最新闭合小时（5 分钟宽限），重复已完成小时不写；当前不补算停机/历史缺口。只读 metric-history 接口支持 30 天范围和每页 200 桶、版本绑定分页；详情页复用共享控件和 ChartDataTable，提供 24h/7d/30d 小时视图、缺失说明、分段质量与覆盖。Ops 新增 app_nf_metric_aggregates，独立 dry-run/apply CLI 管理索引；日聚合、TTL、迟到重算和有界补算留给 T08。
 
 T08 已实现：日桶只由已发布小时桶派生，count/sum 相加、min/max 扩展、均值按总量重算，不平均小时均值也不推导分位；同一身份且跨小时边界间隔在采集容许内才合并分段，缺小时、换身份或超限间隔另起分段，日覆盖为已裁剪小时覆盖之和。小时桶保留 30 天、日桶保留 90 天，经 expiresAt 与 ttl_nf_metric_bucket 由 MongoDB TTL 监控删除，原始样本保留期不变；日桶记录参与小时数与缺失小时数，未闭合日发布但标为 day_not_closed，并保存所消费小时 revision 的 sourceDigest 作为后续分析过期句柄（当前无分析集合）。worker 每目标每 tick 先闭合最新小时，再在 48 小时窗口内自新向旧补算最多 3 个缺失或不完整小时；超出原始保留期或无任何记录的槽位不发布，读取侧计为缺失/不可重算，绝不补零；每次小时变更按 CAS 重算所属日桶，统计未变则不写。读取接口新增 resolution=1d（90 天、日对齐、含当前未闭合日），返回 missingBuckets/incompleteBuckets/expiredBuckets/retentionDays；详情页提供 24h/7d/30d 小时与 7d/30d/90d 日视图。索引迁移显式把 uniq_nf_metric_hour 替换为 uniq_nf_metric_bucket 并新建 TTL 索引，仅执行 dry-run。
+
+T09 已实现：小时聚合按身份分段保存精确 P95（nearest-rank，单段最多 2048 个样本的完整排序，不插值、不抽样），超出排序预算的分段不发布 P95 并把桶标为 p95State=budget，其余统计保留；日桶不推导分位（p95State=not_provided），小时算法版本升至 rss-hour-v2，旧桶不被重新解释。报表指标段新增聚合分区：source=raw|aggregate，聚合行按身份分段输出 unit/resolution/algorithmVersion/quality/sampleCount/min/max/mean/p95/coverage，原始与聚合使用不同 scope 与 CSV 列集，绝不混算，raw 分区拒绝 resolution 参数。NF Health 详情表新增 P95 列，ChartDataTable 增加可见的单位/分辨率/算法版本说明；P95 缺失显示原因而非 0。

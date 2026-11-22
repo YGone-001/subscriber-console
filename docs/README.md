@@ -39,7 +39,7 @@ Canonical frontend SPA source     -> frontend/src/
 ## Architecture
 
 - [Metric threshold alerts](architecture/metric-threshold-alerts.md) - opt-in exporter RSS policy, verified evidence, hysteresis and replay-safe single-observation evaluation.
-- [Metric history](architecture/metric-history.md): opt-in exporter RSS hourly and daily aggregates, observed coverage, retention and bounded history reads.
+- [Metric history](architecture/metric-history.md): opt-in exporter RSS hourly and daily aggregates, exact hourly percentiles, observed coverage, retention and bounded history reads.
 
 - [Site / network workbench](architecture/site-network-workbench.md) - explicit management scope, shared operational evidence and governed site maintenance.
 - [Site / network operations](operations/site-network-workbench.md) - site setup, explicit assignments, conflict checks and scoped reports.
