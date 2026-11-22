@@ -374,8 +374,8 @@ test('the ledger table collapses inside its own width instead of scrolling sidew
 
   const table = read('../src/features/topology/components/TopologyEdgeTable.tsx');
   assert.ok(table.includes('data-surface={surface}'), 'the table must expose the surface switch');
-  const page = read('../src/features/topology/TopologyPage.tsx');
-  assert.ok(page.includes('surface="ledger"'), 'the ledger opts into the compact column set');
+  const ledgerPanel = read('../src/features/topology/components/TopologyLedgerPanel.tsx');
+  assert.ok(ledgerPanel.includes('surface="ledger"'), 'the ledger opts into the compact column set');
 });
 
 test('the canvas page header keeps the title horizontal and lets the actions wrap', () => {

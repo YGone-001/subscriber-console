@@ -2147,7 +2147,10 @@ test('the relationship table keeps engineering identifiers out of the scanned co
 });
 
 test('the ledger keeps the endpoint pickers behind a disclosure', () => {
-  const source = readFileSync(new URL('../src/features/topology/TopologyPage.tsx', import.meta.url), 'utf8');
+  const source = readFileSync(
+    new URL('../src/features/topology/components/TopologyLedgerToolbar.tsx', import.meta.url),
+    'utf8',
+  );
   assert.ok(source.includes('data-ledger-advanced-filters="true"'), 'the pickers need their own disclosure');
   assert.ok(source.includes('topology_advanced_filters'), 'the disclosure must be labelled');
   assert.ok(

@@ -446,10 +446,14 @@ export async function startFixtureServer({
   edges = EDGES,
   live = LIVE_TOPOLOGY,
   operationsResources = null,
+  edgePageSize = null,
 }) {
   const unexpected = [];
   const requestLog = [];
   const openStreams = new Set();
+  /* One private copy per server: a mutation must not leak into another session
+   * or into the shared fixture module. */
+  const edgeList = [...edges];
 
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
@@ -457,7 +461,15 @@ export async function startFixtureServer({
 
     if (pathname.startsWith('/api/')) {
       requestLog.push(`${req.method} ${pathname}`);
-      return handleApi(req, res, url, { sessionKey, unexpected, openStreams, edges, live, operationsResources });
+      return handleApi(req, res, url, {
+        sessionKey,
+        unexpected,
+        openStreams,
+        edges: edgeList,
+        live,
+        operationsResources,
+        edgePageSize,
+      });
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -730,19 +742,31 @@ function handleApi(req, res, url, context) {
     const fromResourceId = url.searchParams.get('fromResourceId') ?? '';
     const toResourceId = url.searchParams.get('toResourceId') ?? '';
     const limit = Number(url.searchParams.get('limit') ?? 20) || 20;
-    const items = context.edges.filter((edge) => {
+    const matched = context.edges.filter((edge) => {
       if (lifecycleState && edge.lifecycleState !== lifecycleState) return false;
       if (relationshipType && edge.relationshipType !== relationshipType) return false;
       if (fromResourceId && edge.fromResourceId !== fromResourceId) return false;
       if (toResourceId && edge.toResourceId !== toResourceId) return false;
       return true;
-    }).slice(0, limit);
-    return sendJson(res, 200, { edges: items, page: { limit, nextCursor: null, hasMore: false } });
+    });
+    if (!context.edgePageSize) {
+      return sendJson(res, 200, { edges: matched.slice(0, limit), page: { limit, nextCursor: null, hasMore: false } });
+    }
+    /* Opt-in offset cursor: the client only ever sees an opaque cursor, exactly
+     * like the real endpoint. */
+    const size = context.edgePageSize;
+    const offset = Number(String(url.searchParams.get('cursor') ?? '').replace(/^o:/, '')) || 0;
+    const slice = matched.slice(offset, offset + size);
+    const next = offset + size < matched.length ? `o:${offset + size}` : null;
+    return sendJson(res, 200, {
+      edges: slice,
+      page: { limit: size, nextCursor: next, hasMore: Boolean(next) },
+    });
   }
   if (pathname === '/api/topology/edges' && req.method === 'POST') {
     return readBody(req, (payload) => {
       const now = TS.t5;
-      return sendJson(res, 201, {
+      const created = {
         edgeId: '7e2d2b20-0099-4b99-9c99-000000000099',
         schemaVersion: 1,
         relationshipType: payload?.relationshipType ?? 'depends_on',
@@ -759,14 +783,19 @@ function handleApi(req, res, url, context) {
         createdBy: 'fixture',
         updatedAt: now,
         updatedBy: 'fixture',
-      });
+      };
+      context.edges.push(created);
+      return sendJson(res, 201, created);
     });
   }
   const edgeRetire = /^\/api\/topology\/edges\/([^/]+)\/retire$/.exec(pathname);
   if (edgeRetire && req.method === 'POST') {
     return readBody(req, () => {
-      const edge = context.edges.find((item) => item.edgeId === edgeRetire[1]) ?? context.edges[0];
-      return sendJson(res, 200, { ...edge, lifecycleState: 'retired', revision: edge.revision + 1, updatedAt: TS.t5 });
+      const index = context.edges.findIndex((item) => item.edgeId === edgeRetire[1]);
+      const edge = context.edges[index >= 0 ? index : 0];
+      const retired = { ...edge, lifecycleState: 'retired', revision: edge.revision + 1, updatedAt: TS.t5 };
+      if (index >= 0) context.edges[index] = retired;
+      return sendJson(res, 200, retired);
     });
   }
   const edgeMatch = /^\/api\/topology\/edges\/([^/]+)$/.exec(pathname);
@@ -777,8 +806,9 @@ function handleApi(req, res, url, context) {
   }
   if (edgeMatch && req.method === 'PUT') {
     return readBody(req, (payload) => {
-      const edge = context.edges.find((item) => item.edgeId === edgeMatch[1]) ?? context.edges[0];
-      return sendJson(res, 200, {
+      const index = context.edges.findIndex((item) => item.edgeId === edgeMatch[1]);
+      const edge = context.edges[index >= 0 ? index : 0];
+      const updated = {
         ...edge,
         description: payload?.edge?.description ?? edge.description,
         labels: payload?.edge?.labels ?? edge.labels,
@@ -786,7 +816,9 @@ function handleApi(req, res, url, context) {
         interfaceNames: payload?.edge?.interfaceNames ?? edge.interfaceNames ?? [],
         revision: edge.revision + 1,
         updatedAt: TS.t5,
-      });
+      };
+      if (index >= 0) context.edges[index] = updated;
+      return sendJson(res, 200, updated);
     });
   }
   const neighbourMatch = /^\/api\/topology\/resources\/([^/]+)\/neighbors$/.exec(pathname);

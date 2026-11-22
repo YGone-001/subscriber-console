@@ -88,17 +88,28 @@ test('every topology surface states the time it is showing', () => {
     'the live canvas must state the server generatedAt as its source time',
   );
 
-  const ledger = read('../src/features/topology/TopologyPage.tsx');
-  assert.ok(ledger.includes('mode="read"'), 'the ledger reads on demand, so it states a read time');
-  assert.ok(ledger.includes('setLedgerReadAt('), 'the ledger must record when the read succeeded');
+  /* The read time is ledger status, so it lives in the ledger toolbar and is
+   * recorded by the ledger read owner. */
+  const ledgerToolbar = read('../src/features/topology/components/TopologyLedgerToolbar.tsx');
+  assert.ok(ledgerToolbar.includes('mode="read"'), 'the ledger reads on demand, so it states a read time');
   assert.equal(
-    (ledger.match(/<TopologyFreshnessChip mode="read"/g) ?? []).length,
+    (ledgerToolbar.match(/<TopologyFreshnessChip mode="read"/g) ?? []).length,
     1,
     'the ledger states its read time exactly once',
   );
   assert.ok(
-    ledger.indexOf('<TopologyFreshnessChip mode="read"') > ledger.indexOf('<div className={styles.toolbar}>'),
+    ledgerToolbar.indexOf('<TopologyFreshnessChip mode="read"') > ledgerToolbar.indexOf('<div className={styles.toolbar}>'),
     'the read time is ledger status and belongs to the ledger toolbar, not the page header actions',
+  );
+  const ledgerReadOwner = read('../src/features/topology/use-topology-ledger.ts');
+  assert.ok(
+    ledgerReadOwner.includes('setReadAt(new Date().toISOString())'),
+    'the ledger read owner must record when the read succeeded',
+  );
+  const ledgerPage = read('../src/features/topology/TopologyPage.tsx');
+  assert.ok(
+    ledgerPage.includes('readAt={ledger.readAt}'),
+    'the page must pass the recorded read time to the ledger toolbar',
   );
 
   const architecture = read('../src/features/topology/ArchitectureView.tsx');

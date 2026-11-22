@@ -93,8 +93,14 @@ test('the read clients accept an abort signal without changing the default call 
 });
 
 test('the ledger and the one-hop page both guard their reads', () => {
+  /* The ledger guard belongs to the ledger read owner; the page composes it. */
+  const ledgerPage = read('../src/features/topology/TopologyPage.tsx');
+  assert.ok(
+    ledgerPage.includes('useTopologyLedger('),
+    'the page must read the ledger through its read owner',
+  );
   for (const relative of [
-    '../src/features/topology/TopologyPage.tsx',
+    '../src/features/topology/use-topology-ledger.ts',
     '../src/features/topology/ResourceTopologyPage.tsx',
   ]) {
     const source = read(relative);

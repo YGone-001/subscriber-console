@@ -88,6 +88,11 @@ const topologyFiles = [
   'features/topology/components/TopologyGraph.tsx',
   'features/topology/components/TopologyEdgeDetail.tsx',
   'features/topology/components/TopologyResourcePicker.tsx',
+  'features/topology/components/TopologyLedgerToolbar.tsx',
+  'features/topology/components/TopologyLedgerPanel.tsx',
+  'features/topology/components/TopologyEdgeWorkflowDialogs.tsx',
+  'features/topology/use-topology-ledger.ts',
+  'features/topology/use-topology-edge-workflows.ts',
 ];
 for (const file of topologyFiles) {
   check(`TOP-UI-15:${file}`, existsSync(resolve(source, file)), `topology_file_present=${file}`);
@@ -182,10 +187,26 @@ check(
 // 9. Complete operator workflow coverage in the production surface
 const pageSource = read('features/topology/TopologyPage.tsx');
 const resourcePageSource = read('features/topology/ResourceTopologyPage.tsx');
+/* The ledger surface is an orchestrator plus its toolbar, body and workflow
+ * owner. Workflow and state assertions run against that union, which is exactly
+ * the source they covered when it was one file. */
+const ledgerSurfaceFiles = [
+  'features/topology/TopologyPage.tsx',
+  'features/topology/components/TopologyLedgerToolbar.tsx',
+  'features/topology/components/TopologyLedgerPanel.tsx',
+  'features/topology/components/TopologyEdgeWorkflowDialogs.tsx',
+  'features/topology/use-topology-ledger.ts',
+  'features/topology/use-topology-edge-workflows.ts',
+];
+const ledgerSource = ledgerSurfaceFiles.map((file) => read(file)).join('\n');
 check('TOP-UI-37', pageSource.includes('topology_create_relationship'), 'workflow=create_action_present');
-check('TOP-UI-38', pageSource.includes('TopologyEdgeForm'), 'workflow=create_edit_form_present');
+check('TOP-UI-38', ledgerSource.includes('TopologyEdgeForm'), 'workflow=create_edit_form_present');
 check('TOP-UI-39', pageSource.includes('retireTopologyEdge'), 'workflow=retire_present');
-check('TOP-UI-40', pageSource.includes('TOPOLOGY_REVISION_CONFLICT') && pageSource.includes('topology_reload'), 'workflow=stale_revision_reload_path');
+check(
+  'TOP-UI-40',
+  ledgerSource.includes('TOPOLOGY_REVISION_CONFLICT') && ledgerSource.includes('topology_reload'),
+  'workflow=stale_revision_reload_path',
+);
 check('TOP-UI-41', pageSource.includes('hasPermission(user, \'core.configure\')'), 'workflow=role_aware_mutation_control');
 check('TOP-UI-42', resourcePageSource.includes('TopologyGraph'), 'workflow=one_hop_graph_present');
 check('TOP-UI-43', resourcePageSource.includes('TopologyEdgeTable'), 'workflow=accessible_equivalent_table_present');
@@ -204,7 +225,11 @@ for (const [state, token] of [
   ['duplicate_conflict', 'topology_duplicate_edge'],
   ['stale_revision', 'topology_stale_revision_body'],
 ]) {
-  check(`TOP-UI-47:${state}`, pageSource.includes(token) || resourcePageSource.includes(token), `topology_state_${state}=present`);
+  check(
+    `TOP-UI-47:${state}`,
+    pageSource.includes(token) || resourcePageSource.includes(token) || ledgerSource.includes(token),
+    `topology_state_${state}=present`,
+  );
 }
 
 // 11. i18n completeness for the new surface
