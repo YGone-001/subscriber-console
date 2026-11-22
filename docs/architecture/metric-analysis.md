@@ -107,7 +107,10 @@ existing UUID target and the existing authenticated identity. It has a per-user
 60/minute rate limit, a two-second budget and never evaluates, collects or
 repairs anything. The parameters are `metric`, `kind=baseline|trend` (default
 `baseline`), hour-aligned `from` and `to`, `limit` (1-200) and `cursor`. An
-unknown kind is rejected instead of falling back to the other partition. The window is at most 90 days, matching the
+unknown kind is rejected instead of falling back to the other partition. The read filters one exact kind because a multi-valued kind filter would
+defeat the index-backed bucket order; a record written before the kind field
+existed is therefore not returned, and the same hour is rewritten with a kind
+on the next analysis. The window is at most 90 days, matching the
 analysis retention, and must not include the still-open hour.
 
 Records are returned newest first. The cursor binds the target, metric, window,

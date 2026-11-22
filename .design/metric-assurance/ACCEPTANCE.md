@@ -81,3 +81,45 @@ targets=100 hours=720 docs=72000 p50=68.9ms p95=94.1ms index=true heap_delta_kb=
 - 2026-11-22 15:2x，在本地 `xcloud_ops` 执行 `node scripts/migrate-nf-metric-aggregate-indexes.mjs --apply`：`READY` 三个集合，`ABSENT uniq_nf_metric_hour`（该库从未创建过旧索引），`NF_METRIC_AGGREGATE_INDEXES_READY`。
 - 结果索引：`app_nf_metric_aggregates` = `_id_`, `uniq_nf_metric_bucket`(unique), `ttl_nf_metric_bucket`(ttl=0)；`app_nf_metric_analysis` = `_id_`, `nf_metric_analysis_read`, `ttl_nf_metric_analysis`(ttl=0)；`app_nf_health_targets` = `nf_metric_aggregate_targets`。
 - 验证：同一读查询 `plan_index=uniq_nf_metric_bucket`，`examined=2 returned=2`；迁移后 worker 继续正常写入（5 个聚合文档 / 2 条分析记录）。
+
+## 收尾验收（2026-11-22）
+
+### 积压恢复（隔离 Mongo，确定性）
+
+`TestMetricAggregateBacklogRecovery`：48 小时窗口内留出 12 小时连续缺口，其余 36 小时有真实采集证据。
+
+```text
+BACKLOG seeded=36 published=36 ticks=16 max_per_tick=3
+```
+
+- 每 tick 最多补 3 个小时，实测 `max_per_tick=3`，未越过预算。
+- 16 tick 收敛：36 小时的理论下限是 12 tick，多出的 4 次是缺口槽位首次被尝试并标记（每次重试消耗一轮预算）。
+- 修复前该测试无法收敛：永久缺口会一直占用预算，缺口之后的小时永远修不到。现在"无记录证据"的槽位被记忆 10 分钟并从规划中跳过。
+
+### 分析读容量（真实 MongoDB）
+
+`TestMetricAnalysisLoadBudget`：100 目标 × 720 小时 = 72,000 条分析记录，30 天窗口、`limit=200`。
+
+```text
+ANALYSIS_LOAD targets=100 hours=720 docs=72000 p50=78.2ms p95=115.6ms scanned=720 index=true
+```
+
+- 修复前 `kind: {$in: [...]}` 使查询退化为 COLLSCAN + 阻塞排序：`scanned=72000`。
+- 改为精确 `kind` 后命中 `nf_metric_analysis_read`，只扫描窗口内的 720 条。
+
+### 前端键盘、双语与主题（Playwright + 真实构建产物）
+
+| 检查 | 结果 |
+|---|---|
+| 指标选择器可 Tab 到达 | ✅ `nf-metric-history-metric` |
+| 下一站是范围选择器 | ✅ `nf-metric-history-range` |
+| 焦点可见 | ✅ `box-shadow` 焦点环 + 主色描边（`rgb(11,109,122)`） |
+| 数据表可键盘展开 | ✅ `details.open = true` |
+| 中英切换 | ✅ 文案从「指标基线偏离」切到 "Metric baseline deviation" |
+| 主题切换 | ✅ light → dark，面板仍渲染 |
+| 控制台错误 | ✅ 无 |
+
+### 仍未覆盖（环境或范围限制）
+
+- 计划中的「100 目标 × 10 series」：实现只聚合单个无标签 series，多 series 需先扩指标白名单。
+- 真实 exporter 的长周期表现（≥1 周影子观察、内存随时间的走势）：需要时间累积。

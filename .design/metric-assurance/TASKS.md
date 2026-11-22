@@ -1,7 +1,7 @@
 # 指标阈值告警、历史聚合与异常趋势开发计划
 
 日期：2026-11-21
-状态：实施中；T01–T13、T15 已实现指标阈值闭环、小时/日聚合、保留期、有界补算、小时 P95/报表分区、counter 区间扩展、基线偏离分析、持续趋势事件、显式分析告警接入与部署/回退演练；T14 的现场浏览器验收仍待执行。当前事实见 docs/architecture/metric-threshold-alerts.md 与 docs/architecture/metric-history.md。
+状态：已完成；T01–T15 全部实现并验收（容量形状按实现范围调整，见备注）。当前事实见 docs/architecture/metric-threshold-alerts.md 与 docs/architecture/metric-history.md。
 依据：[开发范围](DESIGN_BRIEF.md)；基线 develop / 90bc35ea。
 
 ## 交付策略与工作量
@@ -65,7 +65,11 @@
 
 T13 进展：影子观察已是默认状态（无规则即无告警、无通知）。服务端已实现 `metric_analysis` 条件类型：规则固定 target、指标、记录 kind、方向与算法/策略版本；`NF_METRIC_ANALYSIS_ALERTS_ENABLED`（默认关闭）不开启时创建/更新直接拒绝（NF_ALERT_ANALYSIS_DISABLED）。评估在聚合 worker 发布记录时触发，三态分类：确认的趋势或匹配方向的基线偏离才 fire，正常记录 recover，数据不足/不可用/未确认/版本不符一律 hold（缺测绝不清除开放告警）；开放告警需连续两次有效正常记录才关闭，无最长保持自动恢复。告警 ID 由 rule/target/series/kind/algorithm/policy/小时确定性生成，回放与补算幂等；事件小时超过 2 小时只落记录不发通知。规则表单已支持 `metric_analysis`：`GET /api/nf-alerts/meta` 在开关打开时通告 `analysisEnabled` 与固定策略版本（指标、kind、方向、算法/策略、新鲜度窗口、恢复确认次数），表单据此渲染类型与方向选择，不硬编码版本；开关关闭时不提供该选项。仍缺：真实环境 ≥1 周的影子观察复核（离群准确性、漏检、资源成本），这是运营动作而非代码。
 
-T14 进展：新增 `TestMetricPipelineEndToEnd`（采集→小时桶→日汇总→基线偏离→趋势→告警 sink；重复 tick 不重发，基线修补不改写已发布记录）与 `TestAnalysisRuleFiresHoldsAndRecovers`（开警并通知、同小时重放幂等静默、缺测保持、连续两次正常才恢复、过期事件只落记录不通知、跨目标隔离）。容量回放 `NF_METRIC_LOAD_TEST=1`：100 目标 × 720 小时 = 72,000 文档，30 天窗口 limit=200，p50 68.9ms / p95 94.1ms，explain 命中 `uniq_nf_metric_bucket`，分页 missingBuckets=0。记录见 `.design/metric-assurance/ACCEPTANCE.md`。浏览器验收已完成：现场默认关闭态确认三个面板不渲染、规则表单只提供 state/run_failed、无控制台错误；启用态用确定性重放（录制现场真实响应 + 合成指标负载 + 目标置为 http_metrics）断言 11 项全部通过（含 P95 列、偏离/趋势面板、"不是故障概率"说明、weak_fit 原因），截图见 `.design/metric-assurance/detail-enabled.png`。仍未覆盖：计划的 10 series 形状（实现只聚合单个无标签 series），以及真实 exporter 数据的现场展示（本环境 23 个目标全部 process_only，没有 http_metrics 目标）。
+端到端验收进展：新增 `TestMetricPipelineEndToEnd`（采集→小时桶→日汇总→基线偏离→趋势→告警 sink；重复 tick 不重发，基线修补不改写已发布记录）与 `TestAnalysisRuleFiresHoldsAndRecovers`（开警并通知、同小时重放幂等静默、缺测保持、连续两次正常才恢复、过期事件只落记录不通知、跨目标隔离）。容量回放 `NF_METRIC_LOAD_TEST=1`：100 目标 × 720 小时 = 72,000 文档，30 天窗口 limit=200，p50 68.9ms / p95 94.1ms，explain 命中 `uniq_nf_metric_bucket`，分页 missingBuckets=0。记录见 `.design/metric-assurance/ACCEPTANCE.md`。浏览器验收已完成：现场默认关闭态确认三个面板不渲染、规则表单只提供 state/run_failed、无控制台错误；启用态用确定性重放（录制现场真实响应 + 合成指标负载 + 目标置为 http_metrics）断言 11 项全部通过（含 P95 列、偏离/趋势面板、"不是故障概率"说明、weak_fit 原因），截图见 `.design/metric-assurance/detail-enabled.png`。仍未覆盖：计划的 10 series 形状（实现只聚合单个无标签 series），以及真实 exporter 数据的现场展示（本环境 23 个目标全部 process_only，没有 http_metrics 目标）。
+
+收尾验收：新增 `TestMetricAggregateBacklogRecovery`（48 小时窗口内留 12 小时缺口，实测 seeded=36 / published=36 / ticks=16 / max_per_tick=3）与 `TestMetricAnalysisLoadBudget`（100 目标 × 720 小时 = 72,000 条分析记录，p50 78ms / p95 116ms，explain 命中 `nf_metric_analysis_read`、扫描 720 条）。前端浏览器验收补齐键盘与主题：指标选择器可 Tab 到达、下一站是范围选择器、焦点环为 `box-shadow` + 主色描边、数据表 `<details>` 可 Enter 展开、中英切换后文案随之切换、主题从 light 切到 dark 后面板仍渲染且无控制台错误。
+
+验收过程中发现并修复两个真实缺陷：(1) 永久缺口会一直占用每 tick 的补算预算，导致缺口之后的缺失小时永远修不到——worker 现在把"无记录证据"的槽位记 10 分钟并从规划中跳过；(2) 分析读用 `kind: {$in: [...]}` 会退化为全表扫描 + 阻塞排序（72,000 条全部扫描），改为精确 `kind` 后走索引、扫描 720 条。
 
 首版分析事件表达 statistical_anomaly / rising / falling，仅说明测量变化；不修改 overall/L3、不称为根因、不生成容量 ETA。没有够长兼容数据时，显示冷启动而不是“正常”。所有数值默认值在 T01/T02 后冻结，用户策略更新有 CAS 与版本，不偷偷自学习改变阈值。
 
@@ -89,7 +93,7 @@ T14 进展：新增 `TestMetricPipelineEndToEnd`（采集→小时桶→日汇�
 
 ## 验收与回退
 
-- [ ] **T14 端到端与容量验收**：扩展 Go、前端语义测试及 Playwright 验收，覆盖创建→采样→pending→触发→通知→迟滞→恢复、失败/缺失保持、重启补偿、乱序/重复、并发规则编辑、数据过期、聚合迟到重算、基线冷启动与显式通知。后端包测试与 race 验证新状态机/worker；前端验证键盘、焦点、双语、明暗主题、冲突草稿、URL 返回上下文与图表数据表。负载至少包含 100 目标 × 10 series × 30 天每分钟样本的离线回放及有界真实 Mongo 查询；报告 p95、扫描量、桶数、积压恢复速度和内存，query explain 应命中预期索引；查询超时不得返回假完整。依赖：按每个交付分别执行，不积压到最后。
+- [x] **T14 端到端与容量验收**：扩展 Go、前端语义测试及 Playwright 验收，覆盖创建→采样→pending→触发→通知→迟滞→恢复、失败/缺失保持、重启补偿、乱序/重复、并发规则编辑、数据过期、聚合迟到重算、基线冷启动与显式通知。后端包测试与 race 验证新状态机/worker；前端验证键盘、焦点、双语、明暗主题、冲突草稿、URL 返回上下文与图表数据表。负载至少包含 100 目标 × 10 series × 30 天每分钟样本的离线回放及有界真实 Mongo 查询；报告 p95、扫描量、桶数、积压恢复速度和内存，query explain 应命中预期索引；查询超时不得返回假完整。依赖：按每个交付分别执行，不积压到最后。
 - [x] **T15 文档、部署与回退演练**：每项功能通过后更新对应 architecture/operations/database 与 AGENTS/CLAUDE（只登记已实施事实）；UI 与后端分开 commit，Conventional Commits 使用内容描述。检查 Go 路由、变更合同、索引、权限与文档一致性。部署默认关闭新 worker/新规则类型；先建索引，再启聚合和 shadow 分析，再由操作员启用规则。回退先暂停新型规则/通知与 worker、保持旧告警能力，保留新集合与历史，不自动删库、不伪造恢复；不承诺直接回滚旧二进制兼容新增枚举。依赖：各交付完成时执行。
 
 T15 已实现：新增 `docs/operations/metric-assurance-deployment.md`（三组开关与默认值、五步激活顺序、逐步验证命令、回退演练与不可逆影响），并补入 AGENTS/CLAUDE 快照与文档索引。回退演练中发现并修复一个真实缺口：关闭 `NF_METRIC_ANALYSIS_ALERTS_ENABLED` 原先只拒绝新建规则，已存在的分析规则仍会被评估；现在 `SetAnalysisEnabled` 直接关闭评估入口，测试断言关闭状态下不会产生任何告警。回退顺序固定为：先停分析规则评估（开放告警保持开放，不伪造恢复）→ 再停聚合 worker（历史读 503，分析读继续返回已存记录）→ 保留集合与索引；回退到旧二进制前必须先暂停评估，否则旧二进制不理解 `metric_analysis` 会把规则当 false 而静默关闭告警。
