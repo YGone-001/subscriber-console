@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { metricAnalysisCounts, metricAnalysisWindow, metricTrendCounts, type MetricAnalysisItem } from '../src/features/nf-health/metric-analysis';
 import { metricAnalysisEn, metricAnalysisZh } from '../src/lib/locales/metric-analysis';
+import { buildAnalysisCondition } from '../src/features/nf-alerts/metric-analysis-form';
 
 test('analysis window ends at the last closed UTC hour', () => {
   assert.deepEqual(metricAnalysisWindow(168, Date.parse('2026-11-22T08:04:59Z')), { from: '2026-11-15T07:00:00.000Z', to: '2026-11-22T07:00:00.000Z' });
@@ -22,4 +23,13 @@ test('analysis summary counts states instead of inventing a score', () => {
   // A trend record is an event only when it is confirmed.
   assert.equal(metricTrendCounts([trend('rising')]).confirmed, 0);
   assert.deepEqual(Object.keys(metricAnalysisEn).sort(), Object.keys(metricAnalysisZh).sort());
+});
+test('analysis rule builder pins the advertised policy and refuses to guess', () => {
+  const policy = { metric: 'process_resident_memory_bytes', series: 'unlabeled', kinds: ['trend', 'baseline'], directions: ['rising', 'falling'], deviationAlgorithm: 'rss-mad-v1', deviationPolicy: 'rss-mad-policy-v1', trendAlgorithm: 'rss-trend-v1', trendPolicy: 'rss-trend-policy-v1', freshnessSeconds: 7200, recoveryConfirmations: 2 };
+  assert.deepEqual(buildAnalysisCondition({ kind: 'trend', direction: 'rising' }, policy), { metric: 'process_resident_memory_bytes', series: 'unlabeled', kind: 'trend', direction: 'rising', algorithmVersion: 'rss-trend-v1', policyVersion: 'rss-trend-policy-v1' });
+  assert.equal(buildAnalysisCondition({ kind: 'trend', direction: '' }, policy), undefined);
+  assert.equal(buildAnalysisCondition({ kind: 'trend', direction: 'rising' }, undefined), undefined);
+  const deviation = buildAnalysisCondition({ kind: 'baseline', direction: '' }, policy);
+  assert.equal(deviation?.direction, undefined);
+  assert.equal(deviation?.algorithmVersion, 'rss-mad-v1');
 });

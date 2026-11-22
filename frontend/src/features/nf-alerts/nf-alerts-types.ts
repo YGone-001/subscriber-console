@@ -7,7 +7,15 @@ export type AlertState = 'active' | 'acknowledged' | 'assigned' | 'recovering' |
 export type AlertSeverity = 'critical' | 'warning' | 'info';
 
 // Condition types evaluate explicit NF Health measurement evidence.
-export type ConditionType = 'state' | 'run_failed' | 'metric_threshold';
+export type ConditionType = 'state' | 'run_failed' | 'metric_threshold' | 'metric_analysis';
+
+// Analysis rules pin the frozen server policy: the algorithm and policy version
+// are chosen by the deployment, never typed by the operator.
+export interface AnalysisCondition {
+  metric: string; series: string; kind: 'baseline' | 'trend';
+  direction?: 'rising' | 'falling';
+  algorithmVersion: string; policyVersion: string;
+}
 
 // Scopes for state conditions.
 export type ConditionScope = 'overall' | 'process' | 'interface' | 'service';
@@ -34,6 +42,7 @@ export interface AlertRule {
   metricReplay?: MetricReplayStatus;
   metricEvaluation?: MetricEvaluationStatus;
   metricCondition?: MetricCondition;
+  analysisCondition?: AnalysisCondition;
   ruleId: string;
   schemaVersion: number;
   name: string;
@@ -70,6 +79,7 @@ export interface Alert {
   metricRecovery?: MetricEvidence;
   ruleRevision?: number;
   metricCondition?: MetricCondition;
+  analysisCondition?: AnalysisCondition;
   alertId: string;
   schemaVersion: number;
   ruleId: string;
@@ -101,6 +111,8 @@ export interface NfAlertsMeta {
   metricWorker?: MetricWorkerStatus;
   maxMetricDurationSeconds?: number;
   metricEnabled?: boolean;
+  analysisEnabled?: boolean;
+  analysisCapabilities?: { metric: string; series: string; kinds: string[]; directions: string[]; deviationAlgorithm: string; deviationPolicy: string; trendAlgorithm: string; trendPolicy: string; freshnessSeconds: number; recoveryConfirmations: number };
   metricCapabilities?: { metric: string; type: string; unit: string; subject: string; series: string; eligible: boolean; reason: string }[];
   schemaVersion: number;
   alertStates: AlertState[];
@@ -154,6 +166,7 @@ export interface DeleteRuleResponse {
 // targetId / resourceId may be set; both empty applies to all targets.
 export interface CreateRuleRequest {
   metricCondition?: MetricCondition;
+  analysisCondition?: AnalysisCondition;
   name: string;
   description?: string;
   enabled?: boolean;
@@ -174,6 +187,7 @@ export interface UpdateRuleRequest {
     description?: string;
     enabled: boolean;
     metricCondition?: MetricCondition;
+  analysisCondition?: AnalysisCondition;
     conditionType: ConditionType;
     condition?: RuleCondition;
     severity: AlertSeverity;

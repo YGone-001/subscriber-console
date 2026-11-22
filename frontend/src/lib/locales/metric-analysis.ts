@@ -59,7 +59,21 @@ export const metricAnalysisZh: Record<string, string> = {
   "nf_metric_trend_reason_last_buckets_not_consecutive": "末两个小时不连续",
   "nf_metric_trend_reason_cold_start": "没有可用小时（冷启动）",
   "nf_metric_trend_reason_current_bucket_incomplete": "最新小时证据不完整",
-  "nf_metric_trend_reason_bucket_not_closed": "小时尚未闭合"
+  "nf_metric_trend_reason_bucket_not_closed": "小时尚未闭合",
+  "nf_analysis_rule_title": "指标分析告警",
+  "nf_analysis_rule_note": "只对已发布的基线偏离或已确认的持续趋势生效。没有规则就不会产生告警，也不会发送通知。",
+  "nf_analysis_rule_kind": "分析类型",
+  "nf_analysis_rule_kind_trend": "持续趋势",
+  "nf_analysis_rule_kind_deviation": "基线偏离",
+  "nf_analysis_rule_direction": "方向",
+  "nf_analysis_rule_direction_rising": "上升",
+  "nf_analysis_rule_direction_falling": "下降",
+  "nf_analysis_rule_direction_any": "任一方向",
+  "nf_analysis_rule_trend_policy": "固定策略：{algorithm} · {policy}；策略升级不会自动改变已有规则的含义。",
+  "nf_analysis_rule_deviation_policy": "固定策略：{algorithm} · {policy}；策略升级不会自动改变已有规则的含义。",
+  "nf_analysis_rule_shadow_note": "事件超过 {freshness} 秒只落记录不发通知；开放告警需连续 {confirmations} 次有效正常分析才关闭。",
+  "nf_analysis_rule_unavailable": "本部署未启用分析告警，无法创建此类规则。",
+  "nf_analysis_rule_invalid": "分析规则缺少目标、方向或策略版本。"
 };
 export const metricAnalysisEn: Record<string, string> = {
   "nf_metric_analysis_title": "Metric baseline deviation",
@@ -122,5 +136,19 @@ export const metricAnalysisEn: Record<string, string> = {
   "nf_metric_trend_reason_last_buckets_not_consecutive": "The newest two hours are not consecutive",
   "nf_metric_trend_reason_cold_start": "No usable hours yet (cold start)",
   "nf_metric_trend_reason_current_bucket_incomplete": "The newest hour is incomplete",
-  "nf_metric_trend_reason_bucket_not_closed": "Hour is not closed yet"
+  "nf_metric_trend_reason_bucket_not_closed": "Hour is not closed yet",
+  "nf_analysis_rule_title": "Metric analysis alert",
+  "nf_analysis_rule_note": "Acts only on published baseline deviations or confirmed sustained trends. Without a rule there is no alert and no notification.",
+  "nf_analysis_rule_kind": "Analysis kind",
+  "nf_analysis_rule_kind_trend": "Sustained trend",
+  "nf_analysis_rule_kind_deviation": "Baseline deviation",
+  "nf_analysis_rule_direction": "Direction",
+  "nf_analysis_rule_direction_rising": "Rising",
+  "nf_analysis_rule_direction_falling": "Falling",
+  "nf_analysis_rule_direction_any": "Either direction",
+  "nf_analysis_rule_trend_policy": "Pinned policy: {algorithm} · {policy}; a policy upgrade never changes an existing rule's meaning.",
+  "nf_analysis_rule_deviation_policy": "Pinned policy: {algorithm} · {policy}; a policy upgrade never changes an existing rule's meaning.",
+  "nf_analysis_rule_shadow_note": "Events older than {freshness} seconds are recorded without notifying; an open alert closes only after {confirmations} consecutive valid normal analyses.",
+  "nf_analysis_rule_unavailable": "Analysis alerts are disabled on this deployment, so this rule cannot be created.",
+  "nf_analysis_rule_invalid": "The analysis rule needs a target, a direction and a policy version."
 };

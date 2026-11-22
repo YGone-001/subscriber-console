@@ -7,6 +7,8 @@
  */
 import { useEffect, useState } from 'react';
 import { MetricThresholdFields } from './MetricThresholdFields';
+import { AnalysisConditionFields } from './AnalysisConditionFields';
+import { analysisFormFromRule, buildAnalysisCondition, type AnalysisForm } from './metric-analysis-form';
 import { buildMetricCondition, type MetricForm } from './metric-threshold';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
@@ -41,6 +43,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
   const isEdit = rule !== null;
 
   const [metric, setMetric] = useState<MetricForm>({ operator: 'gt', threshold: '', recoveryThreshold: '' });
+  const [analysis, setAnalysis] = useState<AnalysisForm>(() => analysisFormFromRule(rule));
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [enabled, setEnabled] = useState(true);
@@ -168,6 +171,10 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
     if (conditionType === 'metric_threshold' && (!trimmedTarget || trimmedResource || !metricCondition)) {
       setFormError(t('nf_metric_invalid')); return;
     }
+    const analysisCondition = conditionType === 'metric_analysis' ? buildAnalysisCondition(analysis, meta?.analysisCapabilities) : undefined;
+    if (conditionType === 'metric_analysis' && (!trimmedTarget || trimmedResource || !analysisCondition)) {
+      setFormError(t('nf_analysis_rule_invalid')); return;
+    }
     setSubmitting(true);
     try {
       if (isEdit && rule) {
@@ -178,6 +185,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
             description: description.trim() || undefined,
             enabled,
             metricCondition: metricCondition ?? undefined,
+            analysisCondition: analysisCondition ?? undefined,
             conditionType,
             condition,
             severity,
@@ -193,6 +201,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
           targetId: trimmedTarget || undefined,
           resourceId: trimmedResource || undefined,
           metricCondition: metricCondition ?? undefined,
+          analysisCondition: analysisCondition ?? undefined,
           conditionType,
           condition,
           severity,
@@ -384,13 +393,14 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
               value={conditionType}
               onChange={(event) => {
                 const next = event.target.value as ConditionType; setConditionType(next);
-                if (next === 'metric_threshold' && !isEdit) { setScopeMode('target'); setResourceId(''); }
+                if ((next === 'metric_threshold' || next === 'metric_analysis') && !isEdit) { setScopeMode('target'); setResourceId(''); }
               }}
               disabled={submitting || rule?.conditionType === 'metric_threshold'}
             >
               <option value="state">{t('nf_alerts_condition_state')}</option>
               <option value="run_failed">{t('nf_alerts_condition_run_failed')}</option>
               {(meta?.metricEnabled || rule?.conditionType === 'metric_threshold') ? <option value="metric_threshold" disabled={isEdit && rule?.conditionType !== 'metric_threshold'}>{t('nf_metric_title')}</option> : null}
+              {(meta?.analysisEnabled || rule?.conditionType === 'metric_analysis') ? <option value="metric_analysis" disabled={isEdit && rule?.conditionType !== 'metric_analysis'}>{t('nf_analysis_rule_title')}</option> : null}
             </select>
           </Field>
 
@@ -438,6 +448,7 @@ export function NfAlertRuleDialog({ open, meta, rule, onClose, onSaved, onFormEr
 
         {conditionType === 'metric_threshold' && isEdit && meta?.metricConditionEditable ? <p role="status">{t('nf_metric_edit_effect')}</p> : null}
         {conditionType === 'metric_threshold' ? <MetricThresholdFields maxDurationSeconds={meta?.maxMetricDurationSeconds} targetId={targetId} value={metric} onChange={setMetric} disabled={submitting} readOnly={isEdit && !meta?.metricConditionEditable} /> : null}
+        {conditionType === 'metric_analysis' ? <AnalysisConditionFields value={analysis} onChange={setAnalysis} disabled={submitting} readOnly={isEdit && rule?.conditionType !== 'metric_analysis'} policy={meta?.analysisCapabilities} /> : null}
         <div className={styles.formRow}>
           <Field htmlFor="nf-alerts-severity" label={t('nf_alerts_field_severity')}>
             <select
