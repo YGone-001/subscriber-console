@@ -25,6 +25,7 @@ type MetricAggregateStatus struct {
 	RawRetentionDays      int   `json:"rawRetentionDays"`
 	HoursPublished        int64 `json:"hoursPublished"`
 	CounterHoursPublished int64 `json:"counterHoursPublished"`
+	AnalysesPublished     int64 `json:"analysesPublished"`
 	DaysPublished         int64 `json:"daysPublished"`
 	BackfillRepairs       int64 `json:"backfillRepairs"`
 }
@@ -251,6 +252,11 @@ func (w *MetricAggregateWorker) visitTarget(ctx context.Context, target *HealthT
 		if !gaugeWritten {
 			continue
 		}
+		// The changed hour is also compared with its own recent baseline. The
+		// analysis is a stored explanation, never an alert or a health change.
+		if err := w.analyzeHour(ctx, target, slot, now); err != nil {
+			lastErr = err
+		}
 		// A changed hour invalidates the day it belongs to. The daily bucket is
 		// recomputed from its published hours and keeps a digest of the exact
 		// revisions it consumed, so a later analysis can detect staleness.
@@ -339,6 +345,37 @@ func (w *MetricAggregateWorker) buildHour(ctx context.Context, target *HealthTar
 		}
 	}
 	return gaugeWritten, counterWritten, start.Before(latest), nil
+}
+
+func (w *MetricAggregateWorker) analyzeHour(ctx context.Context, target *HealthTarget, start, now time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	current, err := w.repo.metricAggregate(ctx, aggregateBucketID(target.TargetID, start))
+	if err != nil || current == nil {
+		return err
+	}
+	baseline, err := w.repo.metricAggregateHours(ctx, target.TargetID, start.Add(-time.Duration(MetricAnalysisBaselineHours)*time.Hour), start)
+	if err != nil {
+		return err
+	}
+	analysis := BuildMetricAnalysis(target, *current, baseline, now)
+	prior, err := w.repo.metricAnalysis(ctx, analysis.ID)
+	if err != nil {
+		return err
+	}
+	// The record is rewritten only when the analyzed revision, the consumed
+	// baseline revisions or the frozen policy changed.
+	if prior != nil && prior.SourceRevision == analysis.SourceRevision && prior.BaselineDigest == analysis.BaselineDigest &&
+		prior.PolicyVersion == analysis.PolicyVersion && prior.AlgorithmVersion == analysis.AlgorithmVersion {
+		return nil
+	}
+	if err := w.repo.saveMetricAnalysis(ctx, &analysis, prior); err != nil {
+		return err
+	}
+	w.mu.Lock()
+	w.status.AnalysesPublished++
+	w.mu.Unlock()
+	return nil
 }
 
 // rebuildDay recomputes one UTC day from its published hours. It writes only

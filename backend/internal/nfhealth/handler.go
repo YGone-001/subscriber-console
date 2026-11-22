@@ -47,6 +47,7 @@ type RepositoryAPI interface {
 // Handler serves the NF Health API surface.
 type Handler struct {
 	metricHistory         MetricHistoryReader
+	metricAnalysis        MetricAnalysisReader
 	metricAggregateWorker *MetricAggregateWorker
 	repo                  RepositoryAPI
 	collector             *Collector
