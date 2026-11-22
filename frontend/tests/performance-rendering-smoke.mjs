@@ -31,6 +31,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { clearTimeout as clearNodeTimeout } from 'node:timers';
+import { gzipSync } from 'node:zlib';
 
 import { chromium } from 'playwright';
 import { build } from 'vite';
@@ -232,7 +233,62 @@ async function main() {
 
     const output = (Array.isArray(buildResult) ? buildResult[0] : buildResult).output;
     const jsChunks = output.filter((item) => item.type === 'chunk');
-    check('PERF-07-A', jsChunks.length <= 110, `emitted JS chunks bounded at ${jsChunks.length} (limit <= 110)`);
+
+    /* Bundle budget.
+     *
+     * The old limit (110) was written when the build emitted 107 chunks, so it
+     * carried three chunks of headroom. Four feature surfaces have landed since:
+     * the inspections workbench and its model, the metric threshold form and the
+     * accessible chart data table, each one a genuinely route-scoped chunk, plus
+     * one renamed module that kept its single chunk. The net is 111.
+     *
+     * A bare count is a weak guard, so the budget below keeps the same three
+     * chunks of headroom and the assertions after it state what the budget
+     * actually protects: nothing new became reachable from the shared shell, the
+     * initial download did not grow with the chunk count, and no module is
+     * emitted twice. */
+    const chunkByFileName = new Map(jsChunks.map((chunk) => [chunk.fileName, chunk]));
+    const staticClosure = (seed) => {
+      const seen = new Set();
+      const stack = [...seed];
+      while (stack.length > 0) {
+        const name = stack.pop();
+        if (!name || seen.has(name)) continue;
+        const chunk = chunkByFileName.get(name);
+        if (!chunk) continue;
+        seen.add(name);
+        stack.push(...chunk.imports);
+      }
+      return seen;
+    };
+    const entryClosure = staticClosure(jsChunks.filter((chunk) => chunk.isEntry).map((chunk) => chunk.fileName));
+    const closureBytes = (names) => [...names].reduce(
+      (sum, name) => sum + Buffer.byteLength(chunkByFileName.get(name)?.code ?? '', 'utf8'),
+      0,
+    );
+    const closureGzip = (names) => [...names].reduce(
+      (sum, name) => sum + gzipSync(Buffer.from(chunkByFileName.get(name)?.code ?? '', 'utf8'), { level: 9 }).length,
+      0,
+    );
+    const entryRaw = closureBytes(entryClosure);
+    const entryGzip = closureGzip(entryClosure);
+    const entryHasChartEngine = [...entryClosure].some(
+      (name) => /recharts|generateCategoricalChart/i.test(name)
+        || /recharts/.test(JSON.stringify(Object.keys(chunkByFileName.get(name)?.modules ?? {}))),
+    );
+    const moduleChunkCount = new Map();
+    for (const chunk of jsChunks) {
+      for (const id of Object.keys(chunk.modules ?? {})) {
+        moduleChunkCount.set(id, (moduleChunkCount.get(id) ?? 0) + 1);
+      }
+    }
+    const duplicatedModules = [...moduleChunkCount.entries()].filter(([, count]) => count > 1);
+
+    check('PERF-07-A', jsChunks.length <= 114, `emitted JS chunks bounded at ${jsChunks.length} (limit <= 114)`);
+    check('PERF-07-B', entryClosure.size <= 3, `entry closure stays at ${entryClosure.size} request(s) (limit <= 3)`);
+    check('PERF-07-C', entryGzip <= 320000, `entry gzip stays at ${entryGzip} bytes (limit <= 320000, raw ${entryRaw})`);
+    check('PERF-07-D', !entryHasChartEngine, 'the chart engine is not reachable from the entry closure');
+    check('PERF-07-E', duplicatedModules.length === 0, `no module is emitted in more than one chunk (duplicated: ${duplicatedModules.length})`);
 
     server = await startStaticServer(tmpDist);
     console.log(`[acceptance:performance] Test server listening at ${server.origin}`);
