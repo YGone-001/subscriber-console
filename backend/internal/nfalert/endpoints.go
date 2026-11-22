@@ -165,6 +165,10 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 	if !h.validateMetricWrite(w, r, req.ConditionType, req.TargetID, req.ResourceID, req.MetricCondition) || !h.revalidateMetricActor(w, r, p, req.ConditionType) {
 		return
 	}
+	if err := ValidateAnalysisCondition(req.ConditionType, req.TargetID, req.ResourceID, req.AnalysisCondition, h.analysisEnabled); err != nil {
+		writeValidation(w, err)
+		return
+	}
 	rule, err := h.repo.CreateRule(r.Context(), &req, p.Username)
 	if err != nil {
 		writeValidation(w, err)
@@ -226,6 +230,10 @@ func (h *Handler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	existing, lookupErr := h.repo.GetRule(r.Context(), ruleID)
 	if lookupErr != nil {
 		writeRuleNotFound(w, lookupErr)
+		return
+	}
+	if err := ValidateAnalysisCondition(req.Rule.ConditionType, existing.TargetID, existing.ResourceID, req.Rule.AnalysisCondition, h.analysisEnabled); err != nil {
+		writeValidation(w, err)
 		return
 	}
 	if err := ValidateMetricCondition(req.Rule.ConditionType, existing.TargetID, existing.ResourceID, req.Rule.MetricCondition); err != nil {

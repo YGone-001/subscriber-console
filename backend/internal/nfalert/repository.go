@@ -126,23 +126,24 @@ func (r *Repository) CreateRule(ctx context.Context, req *CreateRuleRequest, act
 		enabled = *req.Enabled
 	}
 	doc := AlertRule{
-		RuleID:          newUUID(),
-		SchemaVersion:   SchemaVersion,
-		Name:            strings.TrimSpace(req.Name),
-		Description:     strings.TrimSpace(req.Description),
-		Enabled:         enabled,
-		TargetID:        strings.TrimSpace(req.TargetID),
-		ResourceID:      strings.TrimSpace(req.ResourceID),
-		ConditionType:   req.ConditionType,
-		MetricCondition: req.MetricCondition,
-		Condition:       RuleCondition{},
-		Severity:        req.Severity,
-		CooldownSeconds: cooldown,
-		Revision:        1,
-		CreatedAt:       now,
-		CreatedBy:       actor,
-		UpdatedAt:       now,
-		UpdatedBy:       actor,
+		RuleID:            newUUID(),
+		SchemaVersion:     SchemaVersion,
+		Name:              strings.TrimSpace(req.Name),
+		Description:       strings.TrimSpace(req.Description),
+		Enabled:           enabled,
+		TargetID:          strings.TrimSpace(req.TargetID),
+		ResourceID:        strings.TrimSpace(req.ResourceID),
+		ConditionType:     req.ConditionType,
+		MetricCondition:   req.MetricCondition,
+		AnalysisCondition: req.AnalysisCondition,
+		Condition:         RuleCondition{},
+		Severity:          req.Severity,
+		CooldownSeconds:   cooldown,
+		Revision:          1,
+		CreatedAt:         now,
+		CreatedBy:         actor,
+		UpdatedAt:         now,
+		UpdatedBy:         actor,
 	}
 	if req.Condition != nil {
 		doc.Condition = *req.Condition
@@ -255,6 +256,7 @@ func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateR
 	updated.Enabled = m.Enabled
 	updated.ConditionType = m.ConditionType
 	updated.MetricCondition = m.MetricCondition
+	updated.AnalysisCondition = m.AnalysisCondition
 	updated.Condition = RuleCondition{}
 	if m.Condition != nil {
 		updated.Condition = *m.Condition
@@ -284,17 +286,18 @@ func (r *Repository) UpdateRule(ctx context.Context, ruleID string, req *UpdateR
 	}
 
 	setFields := bson.M{
-		"name":            updated.Name,
-		"description":     updated.Description,
-		"enabled":         updated.Enabled,
-		"conditionType":   updated.ConditionType,
-		"metricCondition": updated.MetricCondition,
-		"condition":       updated.Condition,
-		"severity":        updated.Severity,
-		"cooldownSeconds": updated.CooldownSeconds,
-		"revision":        updated.Revision,
-		"updatedAt":       updated.UpdatedAt,
-		"updatedBy":       updated.UpdatedBy,
+		"name":              updated.Name,
+		"description":       updated.Description,
+		"enabled":           updated.Enabled,
+		"conditionType":     updated.ConditionType,
+		"metricCondition":   updated.MetricCondition,
+		"analysisCondition": updated.AnalysisCondition,
+		"condition":         updated.Condition,
+		"severity":          updated.Severity,
+		"cooldownSeconds":   updated.CooldownSeconds,
+		"revision":          updated.Revision,
+		"updatedAt":         updated.UpdatedAt,
+		"updatedBy":         updated.UpdatedBy,
 	}
 	if existing.ConditionType == ConditionTypeMetricThreshold {
 		setFields["metricClosure"] = updated.MetricClosure

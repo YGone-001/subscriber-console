@@ -35,8 +35,15 @@ type MetricAggregateStatus struct {
 // the newest closed hour and then repairs a bounded number of older missing or
 // incomplete hours inside a bounded window, newest first. Every published hour
 // rolls up the UTC day it belongs to.
+// MetricAnalysisSink receives every published analysis record. It is optional:
+// without a sink the records stay evidence only and can never become alerts.
+type MetricAnalysisSink interface {
+	PublishMetricAnalysis(context.Context, *HealthTarget, MetricAnalysis) error
+}
+
 type MetricAggregateWorker struct {
 	repo          *Repository
+	analysisSink  MetricAnalysisSink
 	check         func(context.Context, *HealthTarget) error
 	hourRetention time.Duration
 	dayRetention  time.Duration
@@ -68,6 +75,11 @@ func NewMetricAggregateWorker(repo *Repository, enabled bool, check func(context
 		},
 	}
 }
+
+// SetAnalysisSink wires the optional alert evaluator. It is called before the
+// worker starts, so no tick can observe a half-configured sink.
+func (w *MetricAggregateWorker) SetAnalysisSink(sink MetricAnalysisSink) { w.analysisSink = sink }
+
 func (w *MetricAggregateWorker) Snapshot() MetricAggregateStatus {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -379,6 +391,11 @@ func (w *MetricAggregateWorker) analyzeHour(ctx context.Context, target *HealthT
 	w.mu.Lock()
 	w.status.AnalysesPublished++
 	w.mu.Unlock()
+	// Alert evaluation is best-effort: the evidence is already stored, so a sink
+	// failure must not fail the aggregation tick.
+	if w.analysisSink != nil {
+		_ = w.analysisSink.PublishMetricAnalysis(ctx, target, analysis)
+	}
 	return nil
 }
 
@@ -413,6 +430,9 @@ func (w *MetricAggregateWorker) analyzeTrendHour(ctx context.Context, target *He
 	w.mu.Lock()
 	w.status.TrendsPublished++
 	w.mu.Unlock()
+	if w.analysisSink != nil {
+		_ = w.analysisSink.PublishMetricAnalysis(ctx, target, trend)
+	}
 	return nil
 }
 

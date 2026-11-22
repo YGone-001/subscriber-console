@@ -43,13 +43,14 @@ type RepositoryAPI interface {
 
 // Handler serves the NF alert API surface.
 type Handler struct {
-	repo          RepositoryAPI
-	limiter       RateLimiter
-	auditWriter   AuditWriter
-	replayStatus  func() MetricWorkerStatus
-	metricEnabled bool
-	metricTargets MetricTargetReader
-	metricActors  governance.ActorRepository
+	repo            RepositoryAPI
+	limiter         RateLimiter
+	auditWriter     AuditWriter
+	replayStatus    func() MetricWorkerStatus
+	metricEnabled   bool
+	analysisEnabled bool
+	metricTargets   MetricTargetReader
+	metricActors    governance.ActorRepository
 }
 
 // NewHandler constructs the NF alert HTTP handler.
@@ -58,6 +59,10 @@ func NewHandler(repo RepositoryAPI, limiter RateLimiter, auditWriter AuditWriter
 }
 
 // ConfigureMetricRules is wired before serving requests. Missing dependencies fail closed.
+// ConfigureAnalysisRules gates the metric_analysis condition type. It is off by
+// default: analysis records are shadow evidence until an operator enables them.
+func (h *Handler) ConfigureAnalysisRules(enabled bool) { h.analysisEnabled = enabled }
+
 func (h *Handler) ConfigureMetricRules(enabled bool, targets MetricTargetReader, actors governance.ActorRepository) {
 	h.metricEnabled = enabled
 	h.metricTargets = targets

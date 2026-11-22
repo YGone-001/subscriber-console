@@ -75,26 +75,27 @@ const (
 //   - both empty      : the rule applies to all targets.
 //   - both set        : invalid, rejected on write.
 type AlertRule struct {
-	MetricClosure    *metricPolicyClosure    `json:"-" bson:"metricClosure,omitempty"`
-	MetricReplay     *MetricReplayStatus     `json:"metricReplay,omitempty" bson:"-"`
-	MetricEvaluation *MetricEvaluationStatus `json:"metricEvaluation,omitempty" bson:"-"`
-	MetricCondition  *MetricCondition        `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
-	RuleID           string                  `json:"ruleId" bson:"_id"`
-	SchemaVersion    int                     `json:"schemaVersion" bson:"schemaVersion"`
-	Name             string                  `json:"name" bson:"name"`
-	Description      string                  `json:"description,omitempty" bson:"description,omitempty"`
-	Enabled          bool                    `json:"enabled" bson:"enabled"`
-	TargetID         string                  `json:"targetId,omitempty" bson:"targetId,omitempty"`
-	ResourceID       string                  `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
-	ConditionType    string                  `json:"conditionType" bson:"conditionType"`
-	Condition        RuleCondition           `json:"condition,omitempty" bson:"condition,omitempty"`
-	Severity         string                  `json:"severity" bson:"severity"`
-	CooldownSeconds  int                     `json:"cooldownSeconds" bson:"cooldownSeconds"`
-	Revision         int64                   `json:"revision" bson:"revision"`
-	CreatedAt        string                  `json:"createdAt" bson:"createdAt"`
-	CreatedBy        string                  `json:"createdBy" bson:"createdBy"`
-	UpdatedAt        string                  `json:"updatedAt" bson:"updatedAt"`
-	UpdatedBy        string                  `json:"updatedBy" bson:"updatedBy"`
+	MetricClosure     *metricPolicyClosure    `json:"-" bson:"metricClosure,omitempty"`
+	MetricReplay      *MetricReplayStatus     `json:"metricReplay,omitempty" bson:"-"`
+	MetricEvaluation  *MetricEvaluationStatus `json:"metricEvaluation,omitempty" bson:"-"`
+	MetricCondition   *MetricCondition        `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
+	AnalysisCondition *AnalysisCondition      `json:"analysisCondition,omitempty" bson:"analysisCondition,omitempty"`
+	RuleID            string                  `json:"ruleId" bson:"_id"`
+	SchemaVersion     int                     `json:"schemaVersion" bson:"schemaVersion"`
+	Name              string                  `json:"name" bson:"name"`
+	Description       string                  `json:"description,omitempty" bson:"description,omitempty"`
+	Enabled           bool                    `json:"enabled" bson:"enabled"`
+	TargetID          string                  `json:"targetId,omitempty" bson:"targetId,omitempty"`
+	ResourceID        string                  `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
+	ConditionType     string                  `json:"conditionType" bson:"conditionType"`
+	Condition         RuleCondition           `json:"condition,omitempty" bson:"condition,omitempty"`
+	Severity          string                  `json:"severity" bson:"severity"`
+	CooldownSeconds   int                     `json:"cooldownSeconds" bson:"cooldownSeconds"`
+	Revision          int64                   `json:"revision" bson:"revision"`
+	CreatedAt         string                  `json:"createdAt" bson:"createdAt"`
+	CreatedBy         string                  `json:"createdBy" bson:"createdBy"`
+	UpdatedAt         string                  `json:"updatedAt" bson:"updatedAt"`
+	UpdatedBy         string                  `json:"updatedBy" bson:"updatedBy"`
 }
 
 // RuleCondition is the state predicate for state-type rules. RunFailed rules
@@ -109,6 +110,7 @@ type RuleCondition struct {
 // derived summary beyond the evaluated states.
 type AlertEvidence struct {
 	Metric       *MetricEvidence    `json:"metric,omitempty" bson:"metric,omitempty"`
+	Analysis     *AnalysisEvidence  `json:"analysis,omitempty" bson:"analysis,omitempty"`
 	RunStatus    string             `json:"runStatus" bson:"runStatus"`
 	SampleID     string             `json:"sampleId,omitempty" bson:"sampleId,omitempty"`
 	CollectedAt  string             `json:"collectedAt,omitempty" bson:"collectedAt,omitempty"`
@@ -151,16 +153,17 @@ type Alert struct {
 
 // CreateRuleRequest is the body for POST /api/nf-alerts/rules.
 type CreateRuleRequest struct {
-	MetricCondition *MetricCondition `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
-	Name            string           `json:"name"`
-	Description     string           `json:"description,omitempty"`
-	Enabled         *bool            `json:"enabled,omitempty"`
-	TargetID        string           `json:"targetId,omitempty"`
-	ResourceID      string           `json:"resourceId,omitempty"`
-	ConditionType   string           `json:"conditionType"`
-	Condition       *RuleCondition   `json:"condition,omitempty"`
-	Severity        string           `json:"severity"`
-	CooldownSeconds int              `json:"cooldownSeconds"`
+	MetricCondition   *MetricCondition   `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
+	AnalysisCondition *AnalysisCondition `json:"analysisCondition,omitempty" bson:"analysisCondition,omitempty"`
+	Name              string             `json:"name"`
+	Description       string             `json:"description,omitempty"`
+	Enabled           *bool              `json:"enabled,omitempty"`
+	TargetID          string             `json:"targetId,omitempty"`
+	ResourceID        string             `json:"resourceId,omitempty"`
+	ConditionType     string             `json:"conditionType"`
+	Condition         *RuleCondition     `json:"condition,omitempty"`
+	Severity          string             `json:"severity"`
+	CooldownSeconds   int                `json:"cooldownSeconds"`
 }
 
 // UpdateRuleRequest is the body for PUT /api/nf-alerts/rules/{ruleId}.
@@ -173,14 +176,15 @@ type UpdateRuleRequest struct {
 
 // MutableRuleFields is the operator-mutable projection of an alert rule.
 type MutableRuleFields struct {
-	MetricCondition *MetricCondition `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
-	Name            string           `json:"name"`
-	Description     string           `json:"description,omitempty"`
-	Enabled         bool             `json:"enabled"`
-	ConditionType   string           `json:"conditionType"`
-	Condition       *RuleCondition   `json:"condition,omitempty"`
-	Severity        string           `json:"severity"`
-	CooldownSeconds int              `json:"cooldownSeconds"`
+	MetricCondition   *MetricCondition   `json:"metricCondition,omitempty" bson:"metricCondition,omitempty"`
+	AnalysisCondition *AnalysisCondition `json:"analysisCondition,omitempty" bson:"analysisCondition,omitempty"`
+	Name              string             `json:"name"`
+	Description       string             `json:"description,omitempty"`
+	Enabled           bool               `json:"enabled"`
+	ConditionType     string             `json:"conditionType"`
+	Condition         *RuleCondition     `json:"condition,omitempty"`
+	Severity          string             `json:"severity"`
+	CooldownSeconds   int                `json:"cooldownSeconds"`
 }
 
 // RuleListFilter filters rule listings.
