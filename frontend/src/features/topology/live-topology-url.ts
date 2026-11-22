@@ -12,6 +12,8 @@
  */
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { operationsSearchToParams } from '../operations/operations-url-state';
+import { useUrlPatchWriter } from '../operations/url-patch-coordinator';
 import type { TopologyDomainMode } from './nf-classification';
 import { ACTUAL_DOMAIN_MODE_OPTIONS } from './actual-topology-model';
 
@@ -69,12 +71,16 @@ export function useLiveTopologyViewState(): LiveViewState & {
    * the value the first setter just removed. */
   setSelection: (focus: string | undefined, edge: string | undefined) => void;
 } {
-  const [params, setParams] = useSearchParams();
+  /* Display reads the committed location; writes compose through the coordinator
+   * so two selection writes in the same turn both survive. */
+  const [params] = useSearchParams();
+  const writer = useUrlPatchWriter();
   const { search, domain, focus, edge } = readLiveViewState(params);
 
   const apply = useCallback((key: string, value: string | undefined) => {
-    setParams((current) => withLiveViewParam(current, key, value), { replace: true });
-  }, [setParams]);
+    const base = operationsSearchToParams(writer.baseSearch());
+    writer.commit(withLiveViewParam(base, key, value).toString(), { replace: true });
+  }, [writer]);
 
   /* Memoized so a panel prop keeps a stable identity between renders. The
    * setter still follows the current location: a consumer must call the value
@@ -84,15 +90,13 @@ export function useLiveTopologyViewState(): LiveViewState & {
   const setFocus = useCallback((value: string | undefined) => apply(LIVE_VIEW_FOCUS_PARAM, value), [apply]);
   const setEdge = useCallback((value: string | undefined) => apply(LIVE_VIEW_EDGE_PARAM, value), [apply]);
   const setSelection = useCallback((focusValue: string | undefined, edgeValue: string | undefined) => {
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      if (focusValue) next.set(LIVE_VIEW_FOCUS_PARAM, focusValue);
-      else next.delete(LIVE_VIEW_FOCUS_PARAM);
-      if (edgeValue) next.set(LIVE_VIEW_EDGE_PARAM, edgeValue);
-      else next.delete(LIVE_VIEW_EDGE_PARAM);
-      return next;
-    }, { replace: true });
-  }, [setParams]);
+    const next = new URLSearchParams(operationsSearchToParams(writer.baseSearch()));
+    if (focusValue) next.set(LIVE_VIEW_FOCUS_PARAM, focusValue);
+    else next.delete(LIVE_VIEW_FOCUS_PARAM);
+    if (edgeValue) next.set(LIVE_VIEW_EDGE_PARAM, edgeValue);
+    else next.delete(LIVE_VIEW_EDGE_PARAM);
+    writer.commit(next.toString(), { replace: true });
+  }, [writer]);
 
   return useMemo(
     () => ({ search, domain, focus, edge, setSearch, setDomain, setFocus, setEdge, setSelection }),

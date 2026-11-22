@@ -27,7 +27,12 @@
  */
 import { useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { applyOperationsPatch, sanitizeOperationsValue } from '../operations/operations-url-state';
+import {
+  applyOperationsPatch,
+  operationsSearchToParams,
+  sanitizeOperationsValue,
+} from '../operations/operations-url-state';
+import { useUrlPatchWriter } from '../operations/url-patch-coordinator';
 import {
   LIVE_VIEW_DOMAIN_PARAM,
   LIVE_VIEW_EDGE_PARAM,
@@ -54,6 +59,17 @@ export const TOPOLOGY_VIEW_KEYS = [
   TOPOLOGY_SOURCE_PARAM,
   TOPOLOGY_SCOPE_PARAM,
   TOPOLOGY_CURSOR_PARAM,
+] as const;
+
+/*
+ * The live canvas writes these on the same route. The view-state writer preserves
+ * them: a view change must not delete a selection another binding owns.
+ */
+export const TOPOLOGY_LIVE_VIEW_KEYS = [
+  LIVE_VIEW_SEARCH_PARAM,
+  LIVE_VIEW_DOMAIN_PARAM,
+  LIVE_VIEW_FOCUS_PARAM,
+  LIVE_VIEW_EDGE_PARAM,
 ] as const;
 
 /*
@@ -236,44 +252,68 @@ export type TopologyViewStateController = TopologyViewState & {
  * the shared operations patch contract.
  */
 export function useTopologyViewState(extraKeys: readonly string[] = []): TopologyViewStateController {
-  const [params, setParams] = useSearchParams();
+  /* Display reads the committed location; writes compose through the coordinator
+   * so a view change and a sibling write in the same turn both survive. */
+  const [params] = useSearchParams();
+  const writer = useUrlPatchWriter();
   const state = useMemo(() => resolveTopologyViewState(params), [params]);
   const canonical = useMemo(() => canonicalizeTopologyViewSearch(params), [params]);
 
   useEffect(() => {
     if (!canonical.changed) return;
-    setParams(new URLSearchParams(canonical.search.startsWith('?') ? canonical.search.slice(1) : canonical.search), {
-      replace: true,
-    });
-  }, [canonical, setParams]);
+    /* Canonicalize the newest logical search, so a newer user patch is carried
+     * through instead of being overwritten by a replace based on an older URL. */
+    const base = operationsSearchToParams(writer.baseSearch());
+    const next = canonicalizeTopologyViewSearch(base);
+    if (!next.changed) return;
+    writer.commit(next.search, { replace: true });
+  }, [canonical.changed, writer]);
 
   const extraSignature = extraKeys.join(',');
   const allowList = useMemo(
-    () => [...new Set([...TOPOLOGY_VIEW_KEYS, ...extraSignature.split(',').filter(Boolean)])],
+    () => [
+      ...new Set([
+        ...TOPOLOGY_VIEW_KEYS,
+        ...TOPOLOGY_LIVE_VIEW_KEYS,
+        ...extraSignature.split(',').filter(Boolean),
+      ]),
+    ],
     [extraSignature],
   );
 
   const applyState = useCallback(
     (next: TopologyViewState) => {
-      const result = applyOperationsPatch(params, topologyViewStatePatch(next), allowList);
+      const base = operationsSearchToParams(writer.baseSearch());
+      const result = applyOperationsPatch(base, topologyViewStatePatch(next), allowList);
       if (!result.changed) return;
-      setParams(new URLSearchParams(result.search.startsWith('?') ? result.search.slice(1) : result.search));
+      writer.commit(result.search);
     },
-    [params, setParams, allowList],
+    [writer, allowList],
+  );
+
+  /* Intents resolve the current state from the composition base, not from the
+   * render closure: a scope written earlier in the same turn must survive the
+   * next intent instead of being cleared by a stale read. */
+  const currentState = useCallback(
+    () => resolveTopologyViewState(operationsSearchToParams(writer.baseSearch())),
+    [writer],
   );
 
   const setPrimaryView = useCallback(
-    (primary: TopologyPrimaryView) => applyState({ ...state, primary }),
-    [applyState, state],
+    (primary: TopologyPrimaryView) => applyState({ ...currentState(), primary }),
+    [applyState, currentState],
   );
 
   const setSource = useCallback(
-    (source: TopologyGraphSource) => applyState({
-      primary: 'graph',
-      source,
-      runtimeScope: source === 'runtime' ? state.runtimeScope : 'config',
-    }),
-    [applyState, state.runtimeScope],
+    (source: TopologyGraphSource) => {
+      const current = currentState();
+      applyState({
+        primary: 'graph',
+        source,
+        runtimeScope: source === 'runtime' ? current.runtimeScope : 'config',
+      });
+    },
+    [applyState, currentState],
   );
 
   const setRuntimeScope = useCallback(

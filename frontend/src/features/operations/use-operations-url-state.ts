@@ -2,17 +2,24 @@
  * React binding for the operations URL contract.
  *
  * The hook owns exactly one concern: keeping a page's view, filters and cursor
- * in the query string so that reload, back/forward and a shared link restore the
- * same workspace. It never holds a duplicate copy of the state in component
- * memory, which is what made the previous per-page `useState` filters
- * unrecoverable.
+ * in the query string so reload, back/forward and a shared link restore the same
+ * workspace. It never holds a duplicate copy of the state in component memory,
+ * which is what made the previous per-page `useState` filters unrecoverable.
+ *
+ * Writes go through `useUrlPatchWriter`, which composes against the newest
+ * logical search rather than the render closure. That matters because several
+ * bindings can write the same route: two patches dispatched in one turn would
+ * otherwise both derive from the same committed search and the second would
+ * discard the first.
  *
  * Filter changes push a history entry (so Back returns to the previous filter
  * set) and drop the cursor; cursor changes push too, so Back steps between
- * loaded pages.
+ * loaded pages. A second write inside the same turn replaces the entry the first
+ * one created, so one logical transaction produces one history entry.
  */
 import { useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useUrlPatchWriter } from './url-patch-coordinator';
 import {
   applyOperationsPatch,
   OPERATIONS_CURSOR_PARAM,
@@ -55,7 +62,11 @@ export function useOperationsUrlState(options: OperationsUrlStateOptions): Opera
     [keySignature],
   );
 
-  const [params, setParams] = useSearchParams();
+  /* Display keeps reading the committed location, so the visible state and the
+   * address bar never disagree. */
+  const [params] = useSearchParams();
+  const writer = useUrlPatchWriter();
+
   const normalized = useMemo(
     () => applyOperationsPatch(params, {}, allowList),
     [params, allowList],
@@ -67,19 +78,27 @@ export function useOperationsUrlState(options: OperationsUrlStateOptions): Opera
 
   /* Canonicalize hand-edited or stale links without adding a history entry.
    * Consumers read the normalized state immediately, so malformed query values
-   * can never reach a page loader during the one render before this effect. */
+   * can never reach a page loader during the one render before this effect.
+   *
+   * The rewrite is applied to the newest logical search rather than to the
+   * committed one: a user patch issued in the same turn is carried through
+   * instead of being overwritten by a replace based on an older location. */
   useEffect(() => {
     if (!normalized.changed) return;
-    setParams(new URLSearchParams(normalizedParams), { replace: true });
-  }, [normalized.changed, normalizedParams, setParams]);
+    const base = operationsSearchToParams(writer.baseSearch());
+    const canonical = applyOperationsPatch(base, {}, allowList);
+    if (!canonical.changed) return;
+    writer.commit(canonical.search, { replace: true });
+  }, [normalized.changed, allowList, writer]);
 
   const apply = useCallback(
     (patch: OperationsPatch) => {
-      const result = applyOperationsPatch(normalizedParams, patch, allowList);
+      const base = operationsSearchToParams(writer.baseSearch());
+      const result = applyOperationsPatch(base, patch, allowList);
       if (!result.changed) return;
-      setParams(new URLSearchParams(result.search.startsWith('?') ? result.search.slice(1) : result.search));
+      writer.commit(result.search);
     },
-    [normalizedParams, setParams, allowList],
+    [writer, allowList],
   );
 
   const filters = useMemo(() => {
