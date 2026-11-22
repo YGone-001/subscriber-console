@@ -1332,5 +1332,10 @@ floor alone when MAD is 0 instead of dividing. States are
 baseline is never treated as normal. It is a measurement comparison, never a
 failure probability, and changes no health layer, alert state or collection. The
 read route is `GET /api/nf-health/targets/{targetId}/metric-analysis`
-(core.read, hour-aligned window up to 90 days, cursor). Authority:
+(core.read, hour-aligned window up to 90 days, cursor, `kind=baseline|trend`).
+The same collection also stores a sustained-trend record: an eight-hour
+least-squares fit that requires seven usable hours with a continuous newest pair,
+an 8 MiB fitted-change floor and `R² >= 0.7`, and becomes a confirmed event only
+after two consecutive evaluations agree on the direction. Fit quality is a gate
+and a diagnostic, never a confidence. Authority:
 `docs/architecture/metric-analysis.md`.

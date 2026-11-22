@@ -1,7 +1,7 @@
 # 指标阈值告警、历史聚合与异常趋势开发计划
 
 日期：2026-11-21
-状态：实施中；T01–T11 已实现指标阈值闭环、小时/日聚合、保留期、有界补算、小时 P95/报表分区、counter 区间扩展与基线偏离分析，后续未勾选项仍为提案。当前事实见 docs/architecture/metric-threshold-alerts.md 与 docs/architecture/metric-history.md。
+状态：实施中；T01–T12 已实现指标阈值闭环、小时/日聚合、保留期、有界补算、小时 P95/报表分区、counter 区间扩展、基线偏离分析与持续趋势事件，后续未勾选项仍为提案。当前事实见 docs/architecture/metric-threshold-alerts.md 与 docs/architecture/metric-history.md。
 依据：[开发范围](DESIGN_BRIEF.md)；基线 develop / 90bc35ea。
 
 ## 交付策略与工作量
@@ -60,7 +60,7 @@
 ## 异常趋势检测
 
 - [x] **T11 基线与异常分析卡片**：新增版本化纯函数分析器和 app_nf_metric_analysis，修改 NF Health 详情新增分析区。以当前已闭合小时桶与此前 48 小时同身份同单位同算法数据比较，当前桶排除在训练集外；至少 80% 合格基线桶且每桶覆盖达 80%，否则 insufficient_data。首版采用 median/MAD 稳健偏离评分，阈值与单位化最小绝对变化由显式服务端策略确定；MAD=0 时使用该最小变化门槛，不除零。只有正向登记的指标可分析。验收：离群峰值、平稳低噪声、冷启动、身份切换、数据过期都有确定性说明，不给“故障概率”。依赖：T08；若使用 P95 输入则另依赖 T09。
-- [ ] **T12 持续趋势与事件目录**：新增最近 8 个小时桶的趋势计算（至少 7 个合格且末两桶连续），使用线性斜率加可配置最小绝对变化量、方向和拟合质量；拟合优度用于诊断，不当作故障置信度。连续两次合格评估确认后才形成事件。扩展现有 NF Health 页面 URL 筛选/分页及详情，显示基线/分析窗口、实际变化、样本覆盖、策略版本和排除原因；可引用资源进入既有调查工作台。验收：上升、下降、一次尖峰、断续数据、迟到重算、长期低覆盖和重启冷启动结果明确。依赖：T11。
+- [x] **T12 持续趋势与事件目录**：新增最近 8 个小时桶的趋势计算（至少 7 个合格且末两桶连续），使用线性斜率加可配置最小绝对变化量、方向和拟合质量；拟合优度用于诊断，不当作故障置信度。连续两次合格评估确认后才形成事件。扩展现有 NF Health 页面 URL 筛选/分页及详情，显示基线/分析窗口、实际变化、样本覆盖、策略版本和排除原因；可引用资源进入既有调查工作台。验收：上升、下降、一次尖峰、断续数据、迟到重算、长期低覆盖和重启冷启动结果明确。依赖：T11。
 - [ ] **T13 影子观察与显式告警接入**：先记录和显示分析结果至少一周，复核离群结果、漏检样例和资源成本；不得默认发通知。通过验证后，在现有规则表单增加 metric_analysis 类型，用户显式选择指标/策略/方向和严重度，经现有权限、去重、通知、升级链处理。分析不可用不清除开放告警，恢复需连续两次有效正常分析，最长保持不等于自动恢复。验收：同一 target/series/bucket/算法/策略版本的事件幂等；历史回放不发通知；用户可停用分析通知而保留阈值告警与历史曲线。依赖：T12、T06。
 
 首版分析事件表达 statistical_anomaly / rising / falling，仅说明测量变化；不修改 overall/L3、不称为根因、不生成容量 ETA。没有够长兼容数据时，显示冷启动而不是“正常”。所有数值默认值在 T01/T02 后冻结，用户策略更新有 CAS 与版本，不偷偷自学习改变阈值。
@@ -118,3 +118,5 @@ T09 已实现：小时聚合按身份分段保存精确 P95（nearest-rank，单
 T10 已实现：抽取共享准入函数 `verifiedSeriesValue`，`AggregateSeriesValue` 按注册表类型与单位校验；对注册批准的 counter `process_cpu_seconds_total` 按身份分段发布增量与速率（deltaSum、deltaCount、覆盖秒数、rate=deltaSum/coveredSeconds，单位 seconds_per_second，表示 exporter 进程每秒消耗的 CPU 秒，不是容量百分比且可大于 1）。区间两端都在桶内才计增量，跨小时边界不计入任一小时；负增量为重置/重启，排除并另起分段；重复时刻、身份变化、超限间隔与标签歧义一律排除；零增量按有效区间计为实测零，与缺测区分；桶内少于两个样本报告 no_valid_intervals 而非 0。counter 桶使用独立算法版本 rss-counter-hour-v1，与 gauge 同集合；不进日汇总、不推导分位、不进入阈值候选（`ThresholdMetricApproved` 仍只批准 RSS gauge）；读取仅支持 1h，1d 直接拒绝。补算槽位无任何记录时不发布空 counter 文档。详情页新增指标切换（RSS / CPU 速率），counter 视图按速率出图并展示增量合计与有效区间数。
 
 T11 已实现：新增版本化纯函数分析器 `BuildMetricAnalysis` 与集合 `app_nf_metric_analysis`（唯一身份 target/metric/series/bucket/algorithm/policy，`_id` 为确定性摘要，revision CAS 替换，90 天 TTL，索引走同一 dry-run/apply 迁移）。以当前已闭合小时 gauge 桶对比同身份前 48 小时：要求窗口内 80% 合格、每桶覆盖 80%、当前桶单一身份且覆盖 80%，否则给出 cold_start / baseline_incomplete / identity_changed / baseline_identity_ambiguous / current_bucket_incomplete / identity_ambiguous 等确定性原因；决策用 median/MAD 稳健评分（|z| ≥ 3.5）叠加 8 MiB 单位化最小绝对变化，MAD=0 时只用绝对门槛（scoreMethod=absolute_floor，不除零）。记录保存 sourceRevision 与 baselineDigest，便于发现基线重算；状态为 ok/anomaly/insufficient_data/unavailable，只说明测量偏离，不给故障概率，不改变健康判定。新增只读接口 `GET /api/nf-health/targets/{targetId}/metric-analysis`（core.read、小时对齐、≤90 天、游标、限流 60/60s），读取侧标注 evidenceExpired（小时桶保留 30 天）。详情页新增分析区：策略、状态计数与明细表。
+
+T12 已实现：新增 `BuildMetricTrend`，对最近 8 个小时桶做最小二乘线性拟合（≥7 个合格小时、末两桶连续且同身份、每桶覆盖 ≥80%），以窗口拟合变化（斜率×7）对 8 MiB 单位化门槛、`R² ≥ 0.7` 拟合质量门槛判定 rising/falling/stable；拟合质量只作门槛与诊断，不参与置信度，单尖峰因此落到 weak_fit。只有上一小时同向评估也成立才置 `confirmed` 并记录 `confirmedFrom`，单小时不成事件。趋势记录与基线记录同集合 `app_nf_metric_analysis`，以 `kind` 区分并纳入记录身份与读取索引；读取接口新增 `kind=baseline|trend`（默认 baseline，未知 kind 直接拒绝），返回窗口/斜率/拟合变化/拟合质量/合格小时/确认状态与原因。详情页新增趋势区，并可携带 resourceId 跳转既有调查工作台。验收覆盖上升、下降、单尖峰、断续数据、迟到重算（baselineDigest）、长期低覆盖与重启冷启动。
