@@ -70,7 +70,12 @@ const tabBarSource = read('app/components/NavigationTabBar.tsx');
 const breadcrumbSource = read('app/components/NavigationBreadcrumbs.tsx');
 const paletteSource = read('app/components/CommandPalette.tsx');
 check('TOP-UI-11', sidebarSource.includes('getSidebarGroups'), 'sidebar=shared_authority');
-check('TOP-UI-12', /getVisibleNavigation|canAccessNavigationRoute/.test(tabBarSource), 'tab_bar=shared_authority');
+check(
+  'TOP-UI-12',
+  /from '\.\.\/\.\.\/lib\/navigation'/.test(tabBarSource)
+    && /resolveNavigationRoute|getNavigationRoute/.test(tabBarSource),
+  'tab_bar=shared_authority',
+);
 check('TOP-UI-13', breadcrumbSource.includes('getBreadcrumbs'), 'breadcrumbs=shared_authority');
 check('TOP-UI-14', /getVisibleNavigation|filterNavigation/.test(paletteSource), 'command_palette=shared_authority');
 

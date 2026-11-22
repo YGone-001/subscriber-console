@@ -305,8 +305,27 @@ assert.equal(businessUniqueEndpoints.size, MUTATION_CENSUS.uniqueEndpoints,
   `business mutation endpoints must remain ${MUTATION_CENSUS.uniqueEndpoints}, got ${businessUniqueEndpoints.size}`);
 assert.equal(businessReqContract.length, MUTATION_CENSUS.requestContracts,
   `business request contracts must remain ${MUTATION_CENSUS.requestContracts}, got ${businessReqContract.length}`);
+/* The operational contract is the authority for which non-Topology operational
+ * mutations the console performs; the Go registration site is the authority for
+ * which of them are actually served. Comparing the two sets keeps this gate
+ * truthful without a second literal that has to be hand-updated whenever the
+ * contract legitimately changes shape (the system-health rebuild removed two
+ * operations and left the old count behind). */
 const operationalUniqueEndpoints = new Set(operationalContract.flatMap((entry) => entry.operations).map((op) => op.request));
-assert.equal(operationalUniqueEndpoints.size, 9, `operational endpoints must remain 9, got ${operationalUniqueEndpoints.size}`);
+const servedRegistrations = new Set(goRegistrations);
+const unservedOperational = [...operationalUniqueEndpoints].filter((request) => !servedRegistrations.has(request));
+assert.equal(
+  unservedOperational.length,
+  0,
+  `operational contract endpoint(s) not served by the Go router: ${unservedOperational.join(', ')}`,
+);
+const operationalOwnsTopology = [...operationalUniqueEndpoints].filter((request) => request.includes('/api/topology'));
+assert.equal(
+  operationalOwnsTopology.length,
+  0,
+  `the operational contract must not own a Topology endpoint: ${operationalOwnsTopology.join(', ')}`,
+);
+console.log(`operational_contract_endpoints=${operationalUniqueEndpoints.size}`);
 
 // 7. Inventory authority is untouched by topology.
 const inventoryContract = JSON.parse(readFileSync(resolve(frontend, 'inventory-contract.json'), 'utf8'));
