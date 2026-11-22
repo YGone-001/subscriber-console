@@ -50,7 +50,7 @@ func (h *Handler) GetMetricAnalysis(w http.ResponseWriter, r *http.Request) {
 	values := r.URL.Query()
 	for name, list := range values {
 		switch name {
-		case "metric", "from", "to", "limit", "cursor":
+		case "metric", "kind", "from", "to", "limit", "cursor":
 		default:
 			response.BadRequest(w, "unsupported query parameter", "UNSUPPORTED_QUERY_PARAMETER")
 			return
@@ -79,7 +79,11 @@ func (h *Handler) GetMetricAnalysis(w http.ResponseWriter, r *http.Request) {
 	if metric == "" {
 		metric = MetricAggregateMetric
 	}
-	request := MetricAnalysisQuery{TargetID: id, Metric: metric, From: from.UTC(), To: to.UTC(), Limit: limit, Cursor: values.Get("cursor")}
+	kind := values.Get("kind")
+	if kind == "" {
+		kind = "baseline"
+	}
+	request := MetricAnalysisQuery{TargetID: id, Metric: metric, Kind: kind, From: from.UTC(), To: to.UTC(), Limit: limit, Cursor: values.Get("cursor")}
 	if e1 != nil || e2 != nil || e3 != nil || validateMetricAnalysis(request, now) != nil {
 		response.BadRequest(w, "invalid analysis window or metric", "NF_METRIC_ANALYSIS_INVALID")
 		return

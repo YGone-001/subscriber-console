@@ -15,7 +15,7 @@ export const NF_METRIC_AGGREGATE_INDEX_SPECS = [{
 }, {
   collection: 'app_nf_metric_analysis',
   indexes: [
-    { key: { targetId: 1, metric: 1, series: 1, algorithmVersion: 1, bucketStart: -1 }, name: 'nf_metric_analysis_read' },
+    { key: { targetId: 1, metric: 1, series: 1, kind: 1, algorithmVersion: 1, bucketStart: -1 }, name: 'nf_metric_analysis_read' },
     { key: { expiresAt: 1 }, name: 'ttl_nf_metric_analysis', expireAfterSeconds: 0 },
   ],
 }];

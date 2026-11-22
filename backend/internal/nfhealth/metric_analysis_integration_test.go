@@ -105,7 +105,7 @@ func TestMetricAnalysisReadContractAndHandler(t *testing.T) {
 		record := MetricAnalysis{
 			ID: analysisID(target.TargetID, MetricAggregateMetric, start), TargetID: target.TargetID, ResourceID: target.ResourceID,
 			Metric: MetricAggregateMetric, Series: "unlabeled", BucketStart: start,
-			AlgorithmVersion: MetricAnalysisVersion, PolicyVersion: MetricAnalysisPolicyVersion,
+			Kind: "baseline", AlgorithmVersion: MetricAnalysisVersion, PolicyVersion: MetricAnalysisPolicyVersion,
 			State: AnalysisOK, Unit: "bytes", Value: &value, BaselineExpected: MetricAnalysisBaselineHours,
 			BaselineEligible: MetricAnalysisBaselineHours, BaselineCoverage: 1, ComputedAt: now,
 		}

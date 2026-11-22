@@ -26,6 +26,7 @@ type MetricAggregateStatus struct {
 	HoursPublished        int64 `json:"hoursPublished"`
 	CounterHoursPublished int64 `json:"counterHoursPublished"`
 	AnalysesPublished     int64 `json:"analysesPublished"`
+	TrendsPublished       int64 `json:"trendsPublished"`
 	DaysPublished         int64 `json:"daysPublished"`
 	BackfillRepairs       int64 `json:"backfillRepairs"`
 }
@@ -257,6 +258,9 @@ func (w *MetricAggregateWorker) visitTarget(ctx context.Context, target *HealthT
 		if err := w.analyzeHour(ctx, target, slot, now); err != nil {
 			lastErr = err
 		}
+		if err := w.analyzeTrendHour(ctx, target, slot, now); err != nil {
+			lastErr = err
+		}
 		// A changed hour invalidates the day it belongs to. The daily bucket is
 		// recomputed from its published hours and keeps a digest of the exact
 		// revisions it consumed, so a later analysis can detect staleness.
@@ -378,7 +382,42 @@ func (w *MetricAggregateWorker) analyzeHour(ctx context.Context, target *HealthT
 	return nil
 }
 
+// analyzeTrendHour fits the last eight hours for one evaluated hour. It reuses
+// the same idempotency rule as the baseline analysis: the record is rewritten
+// only when the newest bucket revision or the consumed window revisions change.
+func (w *MetricAggregateWorker) analyzeTrendHour(ctx context.Context, target *HealthTarget, start, now time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	current, err := w.repo.metricAggregate(ctx, aggregateBucketID(target.TargetID, start))
+	if err != nil || current == nil || !current.SourceComplete {
+		return err
+	}
+	// One extra hour before the window lets the preceding evaluation run with a
+	// complete window, which is what confirmation compares against.
+	buckets, err := w.repo.metricAggregateHours(ctx, target.TargetID, start.Add(-time.Duration(MetricTrendWindowHours+1)*time.Hour), start.Add(time.Hour))
+	if err != nil {
+		return err
+	}
+	trend := BuildMetricTrend(target, buckets, start, now)
+	prior, err := w.repo.metricAnalysis(ctx, trend.ID)
+	if err != nil {
+		return err
+	}
+	if prior != nil && prior.SourceRevision == trend.SourceRevision && prior.BaselineDigest == trend.BaselineDigest &&
+		prior.PolicyVersion == trend.PolicyVersion && prior.AlgorithmVersion == trend.AlgorithmVersion {
+		return nil
+	}
+	if err := w.repo.saveMetricAnalysis(ctx, &trend, prior); err != nil {
+		return err
+	}
+	w.mu.Lock()
+	w.status.TrendsPublished++
+	w.mu.Unlock()
+	return nil
+}
+
 // rebuildDay recomputes one UTC day from its published hours. It writes only
+
 // when the merged statistics or the consumed revision digest changed.
 func (w *MetricAggregateWorker) rebuildDay(ctx context.Context, target *HealthTarget, dayStart, now time.Time) error {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)

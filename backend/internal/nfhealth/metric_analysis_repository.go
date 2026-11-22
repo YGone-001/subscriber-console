@@ -48,21 +48,37 @@ func (r *Repository) saveMetricAnalysis(ctx context.Context, analysis *MetricAna
 }
 
 type MetricAnalysisQuery struct {
-	TargetID, Metric, Cursor string
-	From, To                 time.Time
-	Limit                    int
+	TargetID, Metric, Kind, Cursor string
+	From, To                       time.Time
+	Limit                          int
+}
+
+// metricAnalysisKindScope resolves a record kind into its algorithm and policy.
+// Baseline and trend evidence share one collection but never share an identity.
+func metricAnalysisKindScope(kind string) (version, policy string, ok bool) {
+	switch kind {
+	case "", "baseline":
+		return MetricAnalysisVersion, MetricAnalysisPolicyVersion, true
+	case "trend":
+		return MetricTrendVersion, MetricTrendPolicyVersion, true
+	}
+	return "", "", false
 }
 
 type MetricAnalysisView struct {
 	TargetID          string           `json:"targetId"`
 	Metric            string           `json:"metric"`
+	Kind              string           `json:"kind"`
 	AlgorithmVersion  string           `json:"algorithmVersion"`
 	PolicyVersion     string           `json:"policyVersion"`
 	From              time.Time        `json:"from"`
 	To                time.Time        `json:"to"`
-	BaselineHours     int              `json:"baselineHours"`
-	ScoreThreshold    float64          `json:"scoreThreshold"`
-	MinAbsoluteChange float64          `json:"minAbsoluteChange"`
+	BaselineHours     int              `json:"baselineHours,omitempty"`
+	ScoreThreshold    float64          `json:"scoreThreshold,omitempty"`
+	MinAbsoluteChange float64          `json:"minAbsoluteChange,omitempty"`
+	WindowHours       int              `json:"windowHours,omitempty"`
+	MinTrendChange    float64          `json:"minTrendChange,omitempty"`
+	MinFit            float64          `json:"minFit,omitempty"`
 	Items             []MetricAnalysis `json:"items"`
 	Page              PageInfo         `json:"page"`
 }
@@ -71,6 +87,9 @@ var ErrMetricAnalysisInvalid = errors.New("invalid metric analysis request")
 var ErrMetricAnalysisChanged = errors.New("metric analysis changed; restart pagination")
 
 func validateMetricAnalysis(q MetricAnalysisQuery, now time.Time) error {
+	if _, _, ok := metricAnalysisKindScope(q.Kind); !ok {
+		return fmt.Errorf("%w: unknown analysis kind", ErrMetricAnalysisInvalid)
+	}
 	if !MetricAnalysisMetricApproved(q.Metric) || q.Limit < 1 || q.Limit > 200 || q.From.IsZero() ||
 		!q.From.Equal(q.From.UTC().Truncate(time.Hour)) || !q.To.Equal(q.To.UTC().Truncate(time.Hour)) || !q.To.After(q.From) ||
 		q.To.Sub(q.From) > time.Duration(MetricAnalysisRetentionDays)*24*time.Hour || q.To.After(now.UTC().Add(-MetricAggregateGrace).Truncate(time.Hour)) {
@@ -89,7 +108,18 @@ func (r *Repository) MetricAnalyses(ctx context.Context, q MetricAnalysisQuery, 
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	expected := int(q.To.Sub(q.From) / time.Hour)
-	filter := bson.M{"targetId": q.TargetID, "metric": q.Metric, "series": "unlabeled", "algorithmVersion": MetricAnalysisVersion, "bucketStart": bson.M{"$gte": q.From, "$lt": q.To}}
+	kind := q.Kind
+	if kind == "" {
+		kind = "baseline"
+	}
+	version, policy, _ := metricAnalysisKindScope(kind)
+	filter := bson.M{"targetId": q.TargetID, "metric": q.Metric, "series": "unlabeled", "algorithmVersion": version, "bucketStart": bson.M{"$gte": q.From, "$lt": q.To}}
+	if kind == "baseline" {
+		// Records written before the trend kind existed carry no kind at all.
+		filter["kind"] = bson.M{"$in": bson.A{"baseline", nil}}
+	} else {
+		filter["kind"] = kind
+	}
 	rows, err := r.metricAnalyses().Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "bucketStart", Value: -1}, {Key: "_id", Value: 1}}).SetLimit(int64(expected+1)).SetProjection(bson.M{"_id": 1, "revision": 1, "bucketStart": 1}))
 	if err != nil {
 		return nil, err
@@ -131,9 +161,13 @@ func (r *Repository) MetricAnalyses(ctx context.Context, q MetricAnalysisQuery, 
 		end = len(manifest)
 	}
 	out := &MetricAnalysisView{
-		TargetID: q.TargetID, Metric: q.Metric, AlgorithmVersion: MetricAnalysisVersion, PolicyVersion: MetricAnalysisPolicyVersion,
-		From: q.From, To: q.To, BaselineHours: MetricAnalysisBaselineHours, ScoreThreshold: MetricAnalysisScoreThreshold,
-		MinAbsoluteChange: MetricAnalysisMinAbsoluteChange, Items: []MetricAnalysis{}, Page: PageInfo{Limit: q.Limit},
+		TargetID: q.TargetID, Metric: q.Metric, Kind: kind, AlgorithmVersion: version, PolicyVersion: policy,
+		From: q.From, To: q.To, Items: []MetricAnalysis{}, Page: PageInfo{Limit: q.Limit},
+	}
+	if kind == "trend" {
+		out.WindowHours, out.MinTrendChange, out.MinFit = MetricTrendWindowHours, MetricTrendMinChange, MetricTrendMinFit
+	} else {
+		out.BaselineHours, out.ScoreThreshold, out.MinAbsoluteChange = MetricAnalysisBaselineHours, MetricAnalysisScoreThreshold, MetricAnalysisMinAbsoluteChange
 	}
 	ids := []string{}
 	for _, item := range manifest[offset:end] {

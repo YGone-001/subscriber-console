@@ -60,6 +60,8 @@ type MetricAnalysis struct {
 	ResourceID string `json:"resourceId" bson:"resourceId"`
 	Metric     string `json:"metric" bson:"metric"`
 	Series     string `json:"series" bson:"series"`
+	// Kind is "baseline" for a deviation record and "trend" for a fitted trend.
+	Kind string `json:"kind" bson:"kind,omitempty"`
 	// BucketStart is the analyzed UTC hour. The comparison window ends here.
 	BucketStart      time.Time `json:"bucketStart" bson:"bucketStart"`
 	AlgorithmVersion string    `json:"algorithmVersion" bson:"algorithmVersion"`
@@ -88,11 +90,23 @@ type MetricAnalysis struct {
 	BaselineCoverage  float64   `json:"baselineCoverage" bson:"baselineCoverage"`
 	BaselineFrom      time.Time `json:"baselineFrom,omitempty" bson:"baselineFrom,omitempty"`
 	BaselineTo        time.Time `json:"baselineTo,omitempty" bson:"baselineTo,omitempty"`
-	ScoreThreshold    float64   `json:"scoreThreshold" bson:"scoreThreshold"`
-	MinAbsoluteChange float64   `json:"minAbsoluteChange" bson:"minAbsoluteChange"`
-	Revision          int64     `json:"revision" bson:"revision"`
-	ComputedAt        time.Time `json:"computedAt" bson:"computedAt"`
-	ExpiresAt         time.Time `json:"expiresAt,omitempty" bson:"expiresAt,omitempty"`
+	ScoreThreshold    float64   `json:"scoreThreshold,omitempty" bson:"scoreThreshold,omitempty"`
+	MinAbsoluteChange float64   `json:"minAbsoluteChange,omitempty" bson:"minAbsoluteChange,omitempty"`
+	// Trend-only fields. A trend record never carries a baseline median, MAD or
+	// robust score, and a baseline record never carries a slope or a fit.
+	WindowHours        int       `json:"windowHours,omitempty" bson:"windowHours,omitempty"`
+	EligibleBuckets    int       `json:"eligibleBuckets,omitempty" bson:"eligibleBuckets,omitempty"`
+	LastTwoConsecutive bool      `json:"lastTwoConsecutive,omitempty" bson:"lastTwoConsecutive,omitempty"`
+	Slope              *float64  `json:"slope,omitempty" bson:"slope,omitempty"`
+	Fit                *float64  `json:"fit,omitempty" bson:"fit,omitempty"`
+	TrendChange        *float64  `json:"trendChange,omitempty" bson:"trendChange,omitempty"`
+	Confirmed          bool      `json:"confirmed,omitempty" bson:"confirmed,omitempty"`
+	ConfirmedFrom      time.Time `json:"confirmedFrom,omitempty" bson:"confirmedFrom,omitempty"`
+	MinTrendChange     float64   `json:"minTrendChange,omitempty" bson:"minTrendChange,omitempty"`
+	MinFit             float64   `json:"minFit,omitempty" bson:"minFit,omitempty"`
+	Revision           int64     `json:"revision" bson:"revision"`
+	ComputedAt         time.Time `json:"computedAt" bson:"computedAt"`
+	ExpiresAt          time.Time `json:"expiresAt,omitempty" bson:"expiresAt,omitempty"`
 	// EvidenceExpired is computed on read: the hourly buckets behind this record
 	// are past their own retention, so the numbers can no longer be re-verified.
 	EvidenceExpired bool `json:"evidenceExpired" bson:"-"`
@@ -122,7 +136,7 @@ func medianOf(values []float64) float64 {
 // failure probability.
 func BuildMetricAnalysis(target *HealthTarget, current MetricAggregateBucket, baseline []MetricAggregateBucket, now time.Time) MetricAnalysis {
 	out := MetricAnalysis{
-		TargetID: target.TargetID, ResourceID: target.ResourceID, Metric: current.Metric, Series: "unlabeled",
+		Kind: "baseline", TargetID: target.TargetID, ResourceID: target.ResourceID, Metric: current.Metric, Series: "unlabeled",
 		BucketStart: current.Start.UTC(), AlgorithmVersion: MetricAnalysisVersion, PolicyVersion: MetricAnalysisPolicyVersion,
 		Unit: "bytes", SourceRevision: current.Revision, Revision: 1, ComputedAt: now.UTC(),
 		BaselineExpected: MetricAnalysisBaselineHours, ScoreThreshold: MetricAnalysisScoreThreshold, MinAbsoluteChange: MetricAnalysisMinAbsoluteChange,
