@@ -378,6 +378,11 @@ jobs:
         working-directory: frontend
         run: node tests/nf-health-workspace-smoke.mjs
 
+      - name: Topology workspace acceptance
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+        working-directory: frontend
+        run: node tests/topology-workspace-smoke.mjs
+
       - name: Bounded read cancellation and remount acceptance
         if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
         working-directory: frontend
