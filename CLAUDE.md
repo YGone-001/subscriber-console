@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (225 exact METHOD+PATH registrations)
+Read + write APIs (226 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 225
+Go registration set                  = 226
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -555,8 +555,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 225 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，225 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：当前生产 Go 注册集合与可观察行为；管理面解冻不改变现有路由数与响应契约，当前生产路由 = Go 全部接管，**共 226 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，226 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -586,7 +586,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (225 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (226 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -636,7 +636,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **225 条** METHOD+PATH 精确注册（GET 119 / POST 74 / PUT 17 / DELETE 11 / PATCH 4）：
+路由权威为源码派生的 Go 注册集合，共 **226 条** METHOD+PATH 精确注册（GET 120 / POST 74 / PUT 17 / DELETE 11 / PATCH 4）：
 
 ```text
 GET    /api/agents
@@ -857,7 +857,7 @@ DELETE /api/tariff-plans/{planId}/rules/{ruleId}
 状态：
 
 ```text
-Go production API registrations = 225 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 226 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 34 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0
@@ -1319,3 +1319,18 @@ and daily buckets after 90 days through an explicit TTL index; raw sample
 retention is unchanged. An explicit dry-run/apply migration owns the aggregate
 indexes and replaces the superseded hourly-only unique index. Authority:
 `docs/architecture/metric-history.md`.
+
+### Metric baseline analysis boundary
+
+An analyzer owned by the same aggregation worker compares each closed hourly
+gauge bucket with the same identity's previous 48 hours and stores one versioned
+record per hour in `app_nf_metric_analysis` (90-day TTL, explicit index
+migration). It requires 80% of the window and 80% per-hour coverage, uses a
+median/MAD robust score plus a unit-ized absolute floor of 8 MiB, and uses the
+floor alone when MAD is 0 instead of dividing. States are
+`ok|anomaly|insufficient_data|unavailable` with explicit reasons; a missing
+baseline is never treated as normal. It is a measurement comparison, never a
+failure probability, and changes no health layer, alert state or collection. The
+read route is `GET /api/nf-health/targets/{targetId}/metric-analysis`
+(core.read, hour-aligned window up to 90 days, cursor). Authority:
+`docs/architecture/metric-analysis.md`.
