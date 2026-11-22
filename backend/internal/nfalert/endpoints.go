@@ -9,6 +9,36 @@ import (
 	"subscriber/internal/response"
 )
 
+// AnalysisCapabilities advertises the frozen analysis policy so the rule form
+// never hardcodes an algorithm or policy version.
+type AnalysisCapabilities struct {
+	Metric                string   `json:"metric"`
+	Series                string   `json:"series"`
+	Kinds                 []string `json:"kinds"`
+	Directions            []string `json:"directions"`
+	DeviationAlgorithm    string   `json:"deviationAlgorithm"`
+	DeviationPolicy       string   `json:"deviationPolicy"`
+	TrendAlgorithm        string   `json:"trendAlgorithm"`
+	TrendPolicy           string   `json:"trendPolicy"`
+	FreshnessSeconds      int      `json:"freshnessSeconds"`
+	RecoveryConfirmations int      `json:"recoveryConfirmations"`
+}
+
+// analysisCapabilities returns nil while the condition type is disabled, so a
+// client cannot render an option the server would reject.
+func analysisCapabilities(enabled bool) *AnalysisCapabilities {
+	if !enabled {
+		return nil
+	}
+	return &AnalysisCapabilities{
+		Metric: nfhealth.MetricAggregateMetric, Series: "unlabeled",
+		Kinds: []string{AnalysisKindTrend, AnalysisKindDeviation}, Directions: []string{"rising", "falling"},
+		DeviationAlgorithm: nfhealth.MetricAnalysisVersion, DeviationPolicy: nfhealth.MetricAnalysisPolicyVersion,
+		TrendAlgorithm: nfhealth.MetricTrendVersion, TrendPolicy: nfhealth.MetricTrendPolicyVersion,
+		FreshnessSeconds: AnalysisFreshnessSeconds, RecoveryConfirmations: AnalysisRecoveryConfirmations,
+	}
+}
+
 // MetaResponse is the GET /api/nf-alerts/meta payload.
 type MetaResponse struct {
 	MetricConditionEditable  bool                           `json:"metricConditionEditable"`
@@ -16,6 +46,8 @@ type MetaResponse struct {
 	MaxMetricDurationSeconds int                            `json:"maxMetricDurationSeconds"`
 	MetricEnabled            bool                           `json:"metricEnabled"`
 	MetricCapabilities       []nfhealth.ThresholdCapability `json:"metricCapabilities"`
+	AnalysisCapabilities     *AnalysisCapabilities          `json:"analysisCapabilities,omitempty"`
+	AnalysisEnabled          bool                           `json:"analysisEnabled"`
 	SchemaVersion            int                            `json:"schemaVersion"`
 	AlertStates              []string                       `json:"alertStates"`
 	Severities               []string                       `json:"severities"`
@@ -42,6 +74,9 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	if h.metricEnabled {
 		types = append(types, ConditionTypeMetricThreshold)
 	}
+	if h.analysisEnabled {
+		types = append(types, ConditionTypeMetricAnalysis)
+	}
 	var worker *MetricWorkerStatus
 	if h.replayStatus != nil {
 		snapshot := h.replayStatus()
@@ -53,6 +88,8 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		MetricConditionEditable:  h.metricEnabled,
 		MaxMetricDurationSeconds: MaxMetricDurationSeconds,
 		MetricCapabilities:       nfhealth.ThresholdCapabilities(),
+		AnalysisCapabilities:     analysisCapabilities(h.analysisEnabled),
+		AnalysisEnabled:          h.analysisEnabled,
 		SchemaVersion:            SchemaVersion,
 		AlertStates:              CanonicalAlertStates,
 		Severities:               CanonicalSeverities,
