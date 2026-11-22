@@ -20,6 +20,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertSpaRouteContract } from './lib/spa-routes.mjs';
+import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = resolve(root, 'frontend');
@@ -143,7 +144,26 @@ check(
 // 6. Contract JSON present
 const contract = JSON.parse(readFileSync(resolve(frontend, 'nf-health-contract.json'), 'utf8'));
 check('NFH-UI-32', contract.routes.length === 2, `contract_routes=${contract.routes.length}`);
-check('NFH-UI-33', contract.apis.length === 12, `contract_apis=${contract.apis.length}`);
+// The declared API list is compared to the Go registration site as an exact
+// set, so this contract cannot carry a second endpoint count that drifts.
+const contractApiSignatures = contract.apis.map((api) => `${api.method} ${api.path}`).sort();
+const goHealthSignatures = deriveGoRegistrations(root)
+  .keys.filter((key) => key.includes('/api/nf-health'))
+  .sort();
+check(
+  'NFH-UI-33',
+  contractApiSignatures.length === goHealthSignatures.length &&
+    contractApiSignatures.every((signature, index) => signature === goHealthSignatures[index]),
+  `contract_apis=${contractApiSignatures.length} go_registrations=${goHealthSignatures.length} exact_match=${
+    contractApiSignatures.length === goHealthSignatures.length &&
+    contractApiSignatures.every((signature, index) => signature === goHealthSignatures[index])
+  }`,
+);
+check(
+  'NFH-UI-33-PERMISSION',
+  contract.apis.every((api) => api.permission === (api.access === 'read' ? 'core.read' : 'core.configure')),
+  'contract_api_permissions=match_access_class',
+);
 check('NFH-UI-34', contract.collectorProfiles?.[0] === 'http_metrics', 'collector_profile=http_metrics');
 check('NFH-UI-62', /data-nf-health-matrix/.test(read('features/nf-health/NfHealthPage.tsx')), 'matrix_view_source=present');
 check('NFH-UI-63', localeEn.includes('nf_health_probe_family_sbi') && localeZh.includes('nf_health_probe_family_sbi'), 'matrix_locale=bilingual');

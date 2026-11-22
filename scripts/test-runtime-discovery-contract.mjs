@@ -67,10 +67,40 @@ assert.equal(
 );
 console.log(`spa_route_count=${routeCount}`);
 
-// 3. NF Health API surface unchanged ----------------------------------------
+// 3. NF Health API surface: exact membership, not a duplicated count ---------
+// The declared contract JSON is the single NF Health API authority and the Go
+// registration site is derived from source, so the two are compared as sets.
+// A literal count is what drifted: metric-history and metric-analysis each
+// landed a read without updating this file, and a bare number cannot tell an
+// added endpoint from a removed one.
+const nfHealthContract = JSON.parse(read(join(root, 'frontend/nf-health-contract.json')));
 const nfHealthRoutes = registrations.keys.filter((key) => key.includes('/api/nf-health'));
-assert.equal(nfHealthRoutes.length, 11, `NF Health API count must stay 11, got ${nfHealthRoutes.length}`);
-console.log('nf_health_api_count=10');
+const declaredNFHealthApis = nfHealthContract.apis.map((api) => `${api.method} ${api.path}`);
+const undeclaredNFHealth = nfHealthRoutes.filter((key) => !declaredNFHealthApis.includes(key));
+const missingNFHealth = declaredNFHealthApis.filter((key) => !nfHealthRoutes.includes(key));
+assert.equal(undeclaredNFHealth.length, 0, `undocumented NF Health registration(s): ${undeclaredNFHealth.join(', ')}`);
+assert.equal(missingNFHealth.length, 0, `declared NF Health endpoint(s) missing from the Go router: ${missingNFHealth.join(', ')}`);
+for (const api of nfHealthContract.apis) {
+  assert.equal(
+    api.permission,
+    api.access === 'read' ? 'core.read' : 'core.configure',
+    `${api.method} ${api.path} must declare the permission its access class requires`,
+  );
+}
+const nfHealthReads = nfHealthRoutes.filter((key) => key.startsWith('GET '));
+const nfHealthMutations = nfHealthRoutes.filter((key) => !key.startsWith('GET '));
+assert.equal(
+  nfHealthContract.apis.filter((api) => api.access === 'read').length,
+  nfHealthReads.length,
+  'the contract read set must equal the registered GET set',
+);
+assert.equal(
+  nfHealthContract.apis.filter((api) => api.access === 'write').length,
+  nfHealthMutations.length,
+  'the contract write set must equal the registered mutation set',
+);
+console.log(`nf_health_api_count=${nfHealthRoutes.length}`);
+console.log(`nf_health_reads=${nfHealthReads.length} nf_health_mutations=${nfHealthMutations.length}`);
 
 // 4. Registry coverage -------------------------------------------------------
 const registrySource = read(join(runtimeDir, 'registry.go'));

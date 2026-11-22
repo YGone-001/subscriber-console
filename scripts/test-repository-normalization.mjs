@@ -85,6 +85,7 @@ const EXPECTED_NF_HEALTH_ROUTES = new Set([
   'GET /api/nf-health/targets/{targetId}',
   'GET /api/nf-health/targets/{targetId}/history',
   'GET /api/nf-health/targets/{targetId}/metric-history',
+  'GET /api/nf-health/targets/{targetId}/metric-analysis',
   'GET /api/nf-health/samples',
   'GET /api/nf-health/runs',
   'GET /api/nf-health/runs/{runId}',
