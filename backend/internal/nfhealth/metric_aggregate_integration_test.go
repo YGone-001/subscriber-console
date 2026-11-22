@@ -29,6 +29,13 @@ func metricAggregateIndexes(t *testing.T, ctx context.Context, repo *Repository)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The analysis collection carries its own read index and retention TTL.
+	if _, err := repo.metricAnalyses().Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "targetId", Value: 1}, {Key: "metric", Value: 1}, {Key: "series", Value: 1}, {Key: "kind", Value: 1}, {Key: "algorithmVersion", Value: 1}, {Key: "bucketStart", Value: -1}}, Options: options.Index().SetName("nf_metric_analysis_read")},
+		{Keys: bson.D{{Key: "expiresAt", Value: 1}}, Options: options.Index().SetName("ttl_nf_metric_analysis").SetExpireAfterSeconds(0)},
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestMetricAggregateMongoWorkerHistoryAndRawExpiry(t *testing.T) {

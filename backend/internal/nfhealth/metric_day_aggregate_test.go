@@ -178,7 +178,7 @@ func TestPlanMetricHoursRepairsNewestGapsWithinBudget(t *testing.T) {
 	for i := 2; i <= 5; i++ {
 		published[latest.Add(-time.Duration(i)*time.Hour)] = MetricAggregateBucket{SourceComplete: false}
 	}
-	slots := planMetricHours(latest, MetricBackfillWindowHours, published, now, DefaultRetentionDays)
+	slots := planMetricHours(latest, MetricBackfillWindowHours, published, now, DefaultRetentionDays, nil)
 	if len(slots) != MaxMetricHoursPerTick {
 		t.Fatalf("unbounded repair plan: %v", slots)
 	}
@@ -192,7 +192,7 @@ func TestPlanMetricHoursRepairsNewestGapsWithinBudget(t *testing.T) {
 	for i := 0; i < MetricBackfillWindowHours; i++ {
 		complete[latest.Add(-time.Duration(i)*time.Hour)] = MetricAggregateBucket{SourceComplete: true}
 	}
-	if planned := planMetricHours(latest, MetricBackfillWindowHours, complete, now, DefaultRetentionDays); len(planned) != 0 {
+	if planned := planMetricHours(latest, MetricBackfillWindowHours, complete, now, DefaultRetentionDays, nil); len(planned) != 0 {
 		t.Fatalf("finalized hour was rebuilt: %v", planned)
 	}
 }
@@ -207,11 +207,11 @@ func TestPlanMetricHoursSkipsHoursPastRawRetention(t *testing.T) {
 	oldest := latest.Add(-23 * time.Hour)
 	published[oldest] = MetricAggregateBucket{SourceComplete: false}
 	// With a one-day raw retention the oldest slot is past its own evidence.
-	if slots := planMetricHours(latest, 24, published, now, 1); len(slots) != 0 {
+	if slots := planMetricHours(latest, 24, published, now, 1, nil); len(slots) != 0 {
 		t.Fatalf("expired slot was scheduled: %v", slots)
 	}
 	// The same slot is still repairable while raw samples exist.
-	slots := planMetricHours(latest, 24, published, now, DefaultRetentionDays)
+	slots := planMetricHours(latest, 24, published, now, DefaultRetentionDays, nil)
 	if len(slots) != 1 || !slots[0].Equal(oldest) {
 		t.Fatalf("repairable gap was skipped: %v", slots)
 	}

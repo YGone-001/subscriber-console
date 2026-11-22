@@ -50,6 +50,7 @@ type MetricAggregateWorker struct {
 	mu            sync.RWMutex
 	tick          sync.Mutex
 	status        MetricAggregateStatus
+	emptySlots    map[string]time.Time
 	after         string
 	cancel        context.CancelFunc
 	done          chan struct{}
@@ -63,6 +64,7 @@ func NewMetricAggregateWorker(repo *Repository, enabled bool, check func(context
 	return &MetricAggregateWorker{
 		repo:          repo,
 		check:         check,
+		emptySlots:    map[string]time.Time{},
 		hourRetention: time.Duration(DefaultMetricHourRetentionDays) * 24 * time.Hour,
 		dayRetention:  time.Duration(DefaultMetricDayRetentionDays) * 24 * time.Hour,
 		status: MetricAggregateStatus{
@@ -79,6 +81,31 @@ func NewMetricAggregateWorker(repo *Repository, enabled bool, check func(context
 // SetAnalysisSink wires the optional alert evaluator. It is called before the
 // worker starts, so no tick can observe a half-configured sink.
 func (w *MetricAggregateWorker) SetAnalysisSink(sink MetricAnalysisSink) { w.analysisSink = sink }
+
+// An hour with no recorded evidence is remembered briefly. Without this a
+// permanent gap would occupy the repair budget on every tick, so holes behind it
+// would never be reached.
+func (w *MetricAggregateWorker) markEmpty(targetID string, slot, now time.Time) {
+	key := targetID + "|" + slot.UTC().Format(time.RFC3339)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.emptySlots) > 4096 {
+		for existing, expiry := range w.emptySlots {
+			if !expiry.After(now) {
+				delete(w.emptySlots, existing)
+			}
+		}
+	}
+	w.emptySlots[key] = now.Add(10 * time.Minute)
+}
+
+func (w *MetricAggregateWorker) skipEmpty(targetID string, slot, now time.Time) bool {
+	key := targetID + "|" + slot.UTC().Format(time.RFC3339)
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	expiry, ok := w.emptySlots[key]
+	return ok && expiry.After(now)
+}
 
 func (w *MetricAggregateWorker) Snapshot() MetricAggregateStatus {
 	w.mu.RLock()
@@ -181,7 +208,7 @@ func (w *MetricAggregateWorker) visit(ctx context.Context, now time.Time) error 
 // A slot whose raw samples are already past their own retention cannot be
 // reconstructed and is skipped: it stays missing rather than being published
 // as zero.
-func planMetricHours(latest time.Time, windowHours int, published map[time.Time]MetricAggregateBucket, now time.Time, rawRetentionDays int) []time.Time {
+func planMetricHours(latest time.Time, windowHours int, published map[time.Time]MetricAggregateBucket, now time.Time, rawRetentionDays int, skip func(time.Time) bool) []time.Time {
 	if windowHours < 1 {
 		windowHours = 1
 	}
@@ -196,6 +223,9 @@ func planMetricHours(latest time.Time, windowHours int, published map[time.Time]
 			continue
 		}
 		if !expiredBefore.IsZero() && slot.Before(expiredBefore) {
+			continue
+		}
+		if skip != nil && skip(slot) {
 			continue
 		}
 		if len(slots) >= MaxMetricHoursPerTick {
@@ -240,7 +270,9 @@ func (w *MetricAggregateWorker) visitTarget(ctx context.Context, target *HealthT
 			lastErr = err
 		}
 	}
-	for _, slot := range planMetricHours(latest, MetricBackfillWindowHours, published, now, DefaultRetentionDays) {
+	for _, slot := range planMetricHours(latest, MetricBackfillWindowHours, published, now, DefaultRetentionDays, func(candidate time.Time) bool {
+		return w.skipEmpty(target.TargetID, candidate, now)
+	}) {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -327,6 +359,7 @@ func (w *MetricAggregateWorker) buildHour(ctx context.Context, target *HealthTar
 	// a read that never happened and would inflate the day rollup; the read
 	// contract reports the hour as missing instead.
 	if start.Before(latest) && len(batch.Outcomes) == 0 && batch.Gaps == 0 {
+		w.markEmpty(target.TargetID, start, now)
 		return false, false, false, nil
 	}
 	save := func(bucket MetricAggregateBucket, prior *MetricAggregateBucket) (bool, error) {
