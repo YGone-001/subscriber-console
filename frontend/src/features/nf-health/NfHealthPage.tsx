@@ -6,23 +6,26 @@
  * order is the server-defined risk order, and every filter lives in the URL so a
  * reload, a back/forward step or a shared link restores the same queue.
  *
+ * This module is the single orchestration owner of the list surface:
+ *
+ *   - the authoritative read lifecycle (one token, one abortable request pair);
+ *   - the 30s polling lifecycle and the visibility revalidation policy;
+ *   - the URL state contract and the cursor walk;
+ *   - the full-population KPI projection and the KPI-as-filter mapping;
+ *   - the governed manual collection mutation.
+ *
+ * The card wall, the audit table, the interface matrix and the filter toolbar
+ * are presentation components: they receive typed props and stable callbacks,
+ * they never fetch, never poll and never own URL state.
+ *
  * Layer state is never collapsed into one global health percentage, and an
  * unsupported layer stays visibly distinct from a measured healthy one.
  * Registry observation, process state and metric coverage remain separate
  * facts.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import {
-  Activity,
-  Boxes,
-  Link2,
-  Play,
-  Plus,
-  Search,
-  Server,
-  X,
-} from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Activity, Plus, Server } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { currentListLocation, withReturnTo } from '../../lib/return-to';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
@@ -44,7 +47,6 @@ import { useI18n } from '../../providers/I18nProvider';
 import { useRead } from '../../lib/api/use-read';
 import { isAbortError } from '../../lib/api/read-client';
 import { MutationApiError } from '../../lib/api/mutation-client';
-import { OPERATIONAL_DOMAINS } from '../operations/operational-model';
 import type { RuntimeComponent, RuntimeObservations } from '../runtime/runtime-types';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import {
@@ -54,11 +56,6 @@ import {
 } from './nf-health-api';
 import {
   DEFAULT_HEALTH_SORT,
-  HEALTH_COLLECTION_OUTCOMES,
-  HEALTH_FRESHNESS_STATES,
-  HEALTH_LAYER_FILTERS,
-  HEALTH_OVERALL_STATES,
-  HEALTH_SORTS,
   HEALTH_URL_KEYS,
   HEALTH_VIEWS,
   hasHealthFilters,
@@ -69,15 +66,20 @@ import {
 } from './nf-health-filters';
 import type {
   HealthTargetSummary,
-  InterfaceCell,
   InterfaceMatrixResponse,
-  LayerState,
   ListTargetsResponse,
   NfHealthMeta,
   PageInfo,
 } from './nf-health-types';
 import { NfHealthTargetDialog } from './NfHealthTargetDialog';
 import { NfHealthTargetDrawer } from './NfHealthTargetDrawer';
+import { NfHealthTargetCards, type HealthDomainGroup } from './NfHealthTargetCards';
+import { NfHealthTargetsTable } from './NfHealthTargetsTable';
+import { NfHealthInterfaceMatrix } from './NfHealthInterfaceMatrix';
+import {
+  NfHealthFilterToolbar,
+  type HealthToolbarFilterKey,
+} from './NfHealthFilterToolbar';
 import styles from '../../styles/modules/nf-health.module.css';
 
 const PAGE_LIMIT = 20;
@@ -334,6 +336,10 @@ export function NfHealthPage() {
     url.setFilter('q', next);
   };
 
+  const handleFilterChange = (key: HealthToolbarFilterKey, value: string) => {
+    url.setFilter(key, value);
+  };
+
   const handleClearFilters = () => {
     committedSearchRef.current = '';
     setSearchInput('');
@@ -391,7 +397,11 @@ export function NfHealthPage() {
     [runtimeByRole, runtimeByNfType],
   );
 
-  const domainGroups = useMemo(() => {
+  /* Domain grouping partitions the received sequence; it never re-sorts it. The
+   * backend already ordered the queue by risk, and grouping must preserve that
+   * order inside each domain or the "what needs attention now" answer becomes an
+   * alphabetical list. */
+  const domainGroups = useMemo<HealthDomainGroup[]>(() => {
     const groups = new Map<string, HealthTargetSummary[]>();
     for (const target of targets) {
       // Domain is a server-derived projection over the authoritative Inventory
@@ -498,6 +508,22 @@ export function NfHealthPage() {
 
   const filtersActive = hasHealthFilters(filters);
 
+  /* Detail links carry the current list URL so returning from a detail page
+   * restores the same queue. The table's name link stays plain: it is the
+   * identity cell, not a return-to affordance. */
+  const detailHref = useCallback(
+    (targetId: string) => withReturnTo(`/nf-health/${encodeURIComponent(targetId)}`, listLocation),
+    [listLocation],
+  );
+  const plainDetailHref = useCallback(
+    (targetId: string) => `/nf-health/${encodeURIComponent(targetId)}`,
+    [],
+  );
+  const handleOpenDetail = useCallback(
+    (targetId: string) => navigate(detailHref(targetId)),
+    [navigate, detailHref],
+  );
+
   return (
     <OperationsPageFrame
       title={t('nf_health_title')}
@@ -543,119 +569,16 @@ export function NfHealthPage() {
       )}
 
       <section className="dash-card" data-nf-health-panel={view}>
-        <div className={styles.toolbar}>
-          <form className={styles.search} onSubmit={handleSearchSubmit} role="search">
-            <Search size={16} className={styles.searchIcon} aria-hidden="true" />
-            <input
-              type="search"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              placeholder={t('nf_health_search_placeholder')}
-              aria-label={t('nf_health_search_placeholder')}
-            />
-            <button type="submit" className="btn btn-secondary">
-              {t('search')}
-            </button>
-          </form>
-          <div className={styles.filterGroup}>
-            <select
-              className="form-input"
-              aria-label={t('nf_health_filter_enabled')}
-              value={filters.enabled}
-              onChange={(event) => url.setFilter('enabled', event.target.value)}
-            >
-              <option value="">{t('nf_health_filter_all_states')}</option>
-              <option value="true">{t('nf_health_enabled')}</option>
-              <option value="false">{t('nf_health_disabled')}</option>
-            </select>
-            <select
-              className="form-input"
-              aria-label={t('nf_health_filter_domain')}
-              value={filters.domain}
-              onChange={(event) => url.setFilter('domain', event.target.value)}
-            >
-              <option value="">{t('nf_health_filter_all_domains')}</option>
-              {OPERATIONAL_DOMAINS.map((domain) => (
-                <option key={domain} value={domain}>
-                  {t(`ops_domain_${domain}`)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              aria-label={t('nf_health_filter_overall')}
-              value={filters.overall}
-              onChange={(event) => url.setFilter('state', event.target.value)}
-            >
-              <option value="">{t('nf_health_filter_all_overall')}</option>
-              {HEALTH_OVERALL_STATES.map((state) => (
-                <option key={state} value={state}>
-                  {t(`nf_health_state_${state}`)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              aria-label={t('nf_health_filter_layers')}
-              value={filters.layer}
-              onChange={(event) => url.setFilter('layers', event.target.value)}
-            >
-              <option value="">{t('nf_health_filter_all_layers')}</option>
-              {HEALTH_LAYER_FILTERS.map((layer) => (
-                <option key={layer} value={layer}>
-                  {t(`nf_health_layer_${layer}_measured_filter`)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              aria-label={t('nf_health_filter_freshness')}
-              value={filters.freshness}
-              onChange={(event) => url.setFilter('freshness', event.target.value)}
-            >
-              <option value="">{t('nf_health_filter_all_freshness')}</option>
-              {HEALTH_FRESHNESS_STATES.map((state) => (
-                <option key={state} value={state}>
-                  {t(`nf_health_freshness_${state}`)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              aria-label={t('nf_health_filter_collection')}
-              value={filters.collection}
-              onChange={(event) => url.setFilter('collection', event.target.value)}
-            >
-              <option value="">{t('nf_health_filter_all_collection')}</option>
-              {HEALTH_COLLECTION_OUTCOMES.map((outcome) => (
-                <option key={outcome} value={outcome}>
-                  {t(`nf_health_collection_${outcome}`)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              aria-label={t('nf_health_filter_sort')}
-              value={filters.sort}
-              onChange={(event) => url.setFilter('sort', event.target.value)}
-            >
-              {HEALTH_SORTS.map((sort) => (
-                <option key={sort} value={sort}>
-                  {sort === 'risk' ? t('nf_health_sort_risk') : t('nf_health_sort_updated')}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={handleClearFilters}
-              disabled={loading || !filtersActive}
-            >
-              <X size={14} aria-hidden="true" />
-              {t('nf_health_clear_filters')}
-            </button>
-          </div>
-        </div>
+        <NfHealthFilterToolbar
+          filters={filters}
+          searchInput={searchInput}
+          onSearchInputChange={setSearchInput}
+          onSearchSubmit={handleSearchSubmit}
+          onFilterChange={handleFilterChange}
+          onClearFilters={handleClearFilters}
+          disabled={loading}
+          filtersActive={filtersActive}
+        />
 
         <div className={styles.sectionHead}>
           <h2>
@@ -699,239 +622,27 @@ export function NfHealthPage() {
             />
           </div>
         ) : view === 'cards' ? (
-          <div className={styles.cardWall}>
-            {domainGroups.map((group) => (
-              <div key={group.domain} className={styles.cardGroup}>
-                <h3 className={styles.cardGroupTitle}>{group.label}</h3>
-                <div className={styles.cardGrid}>
-                  {group.targets.map((target) => {
-                    const runtimeComponent = resolveRuntimeComponent(target);
-                    return (
-                      <article key={target.targetId} className={styles.targetCard}>
-                        <button
-                          type="button"
-                          className={styles.targetCardMain}
-                          data-nf-health-card={target.targetId}
-                          onClick={() => setDrawerTarget(target)}
-                          aria-label={t('nf_health_open_drawer', { name: target.name })}
-                        >
-                          <header className={styles.targetCardHead}>
-                            <strong className={styles.targetCardName}>{target.name}</strong>
-                            <span className={styles.targetCardType}>{target.nfType ?? '-'}</span>
-                          </header>
-                          <div className={styles.targetCardStatus}>
-                            {overallBadge(target, t)}
-                          </div>
-                          <div className={styles.targetCardBadges}>
-                            {coverageBadge(true, target.coverage.l1Measured, t, styles, 'L1')}
-                            {coverageBadge(true, target.coverage.l2Measured, t, styles, 'L2')}
-                            {coverageBadge(
-                              target.coverage.l3Available,
-                              target.coverage.l3Measured,
-                              t,
-                              styles,
-                              'L3',
-                            )}
-                          </div>
-                          <UtilizationBar
-                            label={t('nf_health_card_memory')}
-                            available={Boolean(runtimeComponent?.memoryAvailable)}
-                            percent={runtimeComponent?.memoryPercent ?? null}
-                          />
-                          <UtilizationBar
-                            label={t('nf_health_card_cpu')}
-                            available={Boolean(runtimeComponent?.cpuAvailable)}
-                            percent={runtimeComponent?.cpuPercent ?? null}
-                          />
-                        </button>
-                        <footer className={styles.targetCardFoot}>
-                          <span className={styles.targetCardMeta}>
-                            {formatTimestamp(target.lastMeasuredAt)}
-                          </span>
-                          <Link
-                            to={withReturnTo(`/nf-health/${encodeURIComponent(target.targetId)}`, listLocation)}
-                            className={styles.rowLink}
-                          >
-                            {t('nf_health_open_detail')}
-                          </Link>
-                        </footer>
-                      </article>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+          <NfHealthTargetCards
+            groups={domainGroups}
+            detailHref={detailHref}
+            onOpenTarget={setDrawerTarget}
+            resolveRuntimeComponent={resolveRuntimeComponent}
+          />
         ) : view === 'table' ? (
-          <div className={styles.tableScroll}>
-            <table className={styles.table}>
-              <caption className="sr-only">{t('nf_health_targets_caption')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t('nf_health_col_name')}</th>
-                  <th scope="col">{t('nf_health_col_nf_type')}</th>
-                  <th scope="col">{t('nf_health_col_mode')}</th>
-                  <th scope="col">{t('nf_health_col_l1')}</th>
-                  <th scope="col">{t('nf_health_col_l2')}</th>
-                  <th scope="col">{t('nf_health_col_l3')}</th>
-                  <th scope="col">{t('nf_health_col_last_measured')}</th>
-                  <th scope="col">{t('nf_health_evidence_freshness')}</th>
-                  <th scope="col">{t('nf_health_col_collection_status')}</th>
-                  <th scope="col">{t('nf_health_col_actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {targets.map((target) => {
-                  const legacyIdentity =
-                    !target.resourceId ||
-                    target.identityState === 'legacy_unbound' ||
-                    target.identityState === 'legacy_unresolved';
-                  return (
-                    <tr key={target.targetId}>
-                      <td>
-                        <Link
-                          to={`/nf-health/${encodeURIComponent(target.targetId)}`}
-                          className={styles.rowLink}
-                        >
-                          {target.name}
-                        </Link>
-                        <div className={styles.stack}>
-                          <code className={styles.uuid}>{target.targetId}</code>
-                        </div>
-                      </td>
-                      <td>
-                        <div className={styles.stack}>
-                          <strong>{target.nfType ?? target.name}</strong>
-                          {target.domain ? (
-                            <span className={styles.chip}>{target.domain}</span>
-                          ) : null}
-                          {target.resourceId ? (
-                            <Link
-                              to={`/inventory/${encodeURIComponent(target.resourceId)}`}
-                              className={styles.rowLink}
-                              title={t('nf_health_link_resource')}
-                            >
-                              <Link2 size={12} aria-hidden="true" />
-                              {t('nf_health_link_resource')}
-                            </Link>
-                          ) : null}
-                          {target.candidateId ? (
-                            <Link to="/discovery" className={styles.rowLink} title={t('nf_health_link_candidate')}>
-                              <Boxes size={12} aria-hidden="true" />
-                              {t('nf_health_link_candidate')}
-                            </Link>
-                          ) : null}
-                          {legacyIdentity ? (
-                            <span className={styles.badgeUnknown} title={t('nf_health_identity_legacy_hint')}>
-                              {t('nf_health_identity_legacy')}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td>
-                        <code className={styles.chip}>
-                          {target.collectionMode === 'manual'
-                            ? t('nf_health_mode_manual')
-                            : t('nf_health_mode_scheduled')}
-                        </code>
-                      </td>
-                      <td>
-                        {coverageBadge(true, target.coverage.l1Measured, t, styles)}
-                      </td>
-                      <td>
-                        {coverageBadge(true, target.coverage.l2Measured, t, styles)}
-                      </td>
-                      <td>
-                        {coverageBadge(
-                          target.coverage.l3Available,
-                          target.coverage.l3Measured,
-                          t,
-                          styles,
-                        )}
-                      </td>
-                      <td>{formatTimestamp(target.lastMeasuredAt)}</td>
-                      <td>{freshnessBadge(target, t)}</td>
-                      <td>
-                        {target.lastError ? (
-                          <span className={styles.badgeUnhealthy}>{t('nf_health_status_failed')}</span>
-                        ) : target.lastSuccessAt ? (
-                          <span className={styles.badgeHealthy}>{t('nf_health_status_success')}</span>
-                        ) : (
-                          <span className={styles.badgeUnknown}>{t('nf_health_status_never')}</span>
-                        )}
-                      </td>
-                      <td>
-                        <div className={styles.rowActions}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => void handleCollect(target)}
-                            disabled={!canConfigure || collectingId === target.targetId}
-                            title={t('nf_health_collect_action')}
-                          >
-                            <Play size={14} />
-                            {collectingId === target.targetId ? t('nf_health_collecting') : t('nf_health_collect_action')}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            onClick={() => navigate(withReturnTo(`/nf-health/${encodeURIComponent(target.targetId)}`, listLocation))}
-                          >
-                            {t('nf_health_open_detail')}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <NfHealthTargetsTable
+            targets={targets}
+            canConfigure={canConfigure}
+            collectingId={collectingId}
+            onCollect={handleCollect}
+            targetHref={plainDetailHref}
+            onOpenDetail={handleOpenDetail}
+          />
         ) : (
-          <div className={styles.tableScroll}>
-            <table className={styles.matrix} data-nf-health-matrix="true">
-              <caption className="sr-only">{t('nf_health_matrix_caption')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t('nf_health_col_name')}</th>
-                  {matrixColumns.map((family) => (
-                    <th key={family} scope="col">
-                      {t(`nf_health_probe_family_${family}`)}
-                    </th>
-                  ))}
-                  <th scope="col">{t('nf_health_col_overall')}</th>
-                  <th scope="col">{t('nf_health_evidence_freshness')}</th>
-                  <th scope="col">{t('nf_health_col_last_measured')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matrixRows.map((row) => (
-                  <tr key={row.targetId} data-nf-health-matrix-row={row.targetId}>
-                    <th scope="row">
-                      <Link
-                        to={withReturnTo(`/nf-health/${encodeURIComponent(row.targetId)}`, listLocation)}
-                        className={styles.rowLink}
-                      >
-                        {row.name}
-                      </Link>
-                      <div className={styles.stack}>
-                        <span className={styles.chip}>{row.nfType ?? '-'}</span>
-                        {row.domain ? <span className={styles.chip}>{row.domain}</span> : null}
-                      </div>
-                    </th>
-                    {matrixColumns.map((family) => (
-                      <td key={family} data-nf-health-cell={`${row.targetId}:${family}`}>
-                        {matrixCell(row.cells[family] ?? { state: 'not_configured' as LayerState }, t)}
-                      </td>
-                    ))}
-                    <td>{stateBadge(row.overallState, t)}</td>
-                    <td>{freshnessStateBadge(row.freshness, t)}</td>
-                    <td>{formatTimestamp(row.lastMeasuredAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <NfHealthInterfaceMatrix
+            columns={matrixColumns}
+            rows={matrixRows}
+            detailHref={detailHref}
+          />
         )}
 
         {activeError ? null : activeCount > 0 || activePage?.hasMore ? (
@@ -986,161 +697,6 @@ export function NfHealthPage() {
       />
     </OperationsPageFrame>
   );
-}
-
-/* The main status of a target: the server projection, never a client guess.
- * A target whose projection is unknown says so instead of implying health. */
-function overallBadge(
-  target: HealthTargetSummary,
-  t: (key: string) => string,
-): React.ReactElement {
-  return stateBadge(target.overallState ?? 'unknown', t);
-}
-
-function stateBadge(state: string, t: (key: string) => string): React.ReactElement {
-  const className =
-    state === 'healthy'
-      ? styles.badgeHealthy
-      : state === 'degraded'
-        ? styles.badgeDegraded
-        : state === 'unhealthy'
-          ? styles.badgeUnhealthy
-          : state === 'stale'
-            ? styles.badgeStale
-            : state === 'not_configured'
-              ? styles.badgeNotConfigured
-              : styles.badgeUnknown;
-  const key = state === 'healthy' || state === 'degraded' || state === 'unhealthy' ||
-    state === 'stale' || state === 'not_configured'
-    ? `nf_health_state_${state}`
-    : 'nf_health_state_unknown';
-  return <span className={className}>{t(key)}</span>;
-}
-
-function freshnessBadge(
-  target: HealthTargetSummary,
-  t: (key: string) => string,
-): React.ReactElement {
-  return freshnessStateBadge(target.freshness?.state ?? 'unknown', t);
-}
-
-function freshnessStateBadge(state: string, t: (key: string) => string): React.ReactElement {
-  if (state === 'fresh') {
-    return <span className={styles.badgeHealthy}>{t('nf_health_state_healthy')}</span>;
-  }
-  if (state === 'stale') {
-    return <span className={styles.badgeStale}>{t('nf_health_state_stale')}</span>;
-  }
-  if (state === 'not_monitored') {
-    return <span className={styles.badgeNotConfigured}>{t('nf_health_state_not_configured')}</span>;
-  }
-  return <span className={styles.badgeUnknown}>{t('nf_health_state_unknown')}</span>;
-}
-
-/* A matrix cell renders the measured state and keeps the evidence one hover
- * away. not_configured stays neutral: an interface that was never declared is
- * not a failure. */
-function matrixCell(cell: InterfaceCell, t: (key: string) => string): React.ReactElement {
-  const detail = [
-    cell.httpStatus ? `HTTP ${cell.httpStatus}` : null,
-    cell.responseMs != null ? `${cell.responseMs} ms` : null,
-    cell.reason ?? null,
-    cell.measuredAt ? formatTimestamp(cell.measuredAt) : null,
-  ]
-    .filter(Boolean)
-    .join(' - ');
-  const badge = layerBadge(cell.state, t, styles);
-  return detail ? <span title={detail}>{badge}</span> : badge;
-}
-
-/* Coverage is a measurement fact, not a health verdict: an established
- * measurement keeps the neutral evidence tone, an attempted-but-absent
- * measurement says unknown, and a layer with no exporter says not configured. */
-function coverageBadge(
-  available: boolean,
-  measured: boolean,
-  t: (key: string) => string,
-  stylesRecord: Record<string, string>,
-  labelPrefix?: string,
-): React.ReactElement {
-  const state: LayerState | 'measured' = !available ? 'not_configured' : measured ? 'measured' : 'unknown';
-  return layerBadge(state, t, stylesRecord, labelPrefix);
-}
-
-function layerBadge(
-  state: LayerState | 'measured',
-  t: (key: string) => string,
-  stylesRecord: Record<string, string>,
-  labelPrefix?: string,
-): React.ReactElement {
-  const className =
-    state === 'measured'
-      ? stylesRecord.badgeMeasured
-      : state === 'healthy'
-        ? stylesRecord.badgeHealthy
-        : state === 'degraded'
-          ? stylesRecord.badgeDegraded
-          : state === 'unhealthy'
-            ? stylesRecord.badgeUnhealthy
-            : state === 'not_configured'
-              ? stylesRecord.badgeNotConfigured
-              : state === 'stale'
-                ? stylesRecord.badgeStale
-                : stylesRecord.badgeUnknown;
-
-  const labelKey =
-    state === 'measured'
-      ? 'nf_health_layer_measured'
-      : state === 'healthy' || state === 'degraded' || state === 'unhealthy' ||
-          state === 'stale' || state === 'not_configured'
-        ? `nf_health_state_${state}`
-        : 'nf_health_state_unknown';
-
-  return <span className={className}>{labelPrefix ? `${labelPrefix} · ${t(labelKey)}` : t(labelKey)}</span>;
-}
-
-function UtilizationBar({
-  label,
-  available,
-  percent,
-}: {
-  label: string;
-  available: boolean;
-  percent: number | null;
-}): React.ReactElement {
-  const { t } = useI18n();
-  if (!available || percent == null || !Number.isFinite(percent)) {
-    return (
-      <div className={styles.utilRow}>
-        <span className={styles.utilLabel}>{label}</span>
-        <span className={styles.utilValue}>{t('ops_metric_unavailable')}</span>
-      </div>
-    );
-  }
-  const clamped = Math.max(0, Math.min(100, percent));
-  const tone = clamped >= 90 ? styles.utilBarDanger : clamped >= 75 ? styles.utilBarWarn : styles.utilBarOk;
-  return (
-    <div className={styles.utilRow}>
-      <span className={styles.utilLabel}>{label}</span>
-      <div
-        className={styles.utilTrack}
-        role="meter"
-        aria-valuenow={Math.round(clamped)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={label}
-      >
-        <span className={`${styles.utilBar} ${tone}`} style={{ width: `${clamped}%` }} />
-      </div>
-      <span className={styles.utilValue}>{`${Math.round(clamped)}%`}</span>
-    </div>
-  );
-}
-
-function formatTimestamp(value?: string): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 function describeLoadError(
