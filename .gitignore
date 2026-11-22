@@ -94,3 +94,5 @@ backend/server
 backend/bin/
 *.exe
 backend/xcloud-server
+
+.runtime/demo-exporter/

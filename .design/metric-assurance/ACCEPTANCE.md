@@ -60,3 +60,18 @@ targets=100 hours=720 docs=72000 p50=68.9ms p95=94.1ms index=true heap_delta_kb=
 ## 未覆盖的现场条件
 
 真实 exporter 数据量、Mongo 部署规格（索引是否已 apply）、Nginx 边缘、以及聚合开关打开后的长时间运行表现。
+
+## 现场演示环境（一次性，可回滚）
+
+为验证真实采集→聚合链路，在本地栈上搭了一套演示环境：
+
+- exporter：`.runtime/demo-exporter/exporter.py`，监听 `0.0.0.0:9101`，只暴露自身进程的 `process_resident_memory_bytes`、`process_start_time_seconds`、`process_open_fds`（真读 `/proc`）。
+- `.env`：新增 `NF_HEALTH_ALLOWED_TARGETS=192.168.64.128:9101` 与 `NF_METRIC_AGGREGATES_ENABLED=true`；原文件备份为 `.env.bak.metric-demo`。
+- Inventory：新增 `DEMO-EXPORTER`（network_function / 5gc / amf，labels.purpose=metric-assurance-acceptance）。原因是每个资源只能挂一个监测目标，且平台类资源不支持监测关联。
+- 目标：`DEMO-EXPORTER RSS`（`ad205224-9d90-4982-8773-2959df664a9b`，http_metrics，60s，endpoint `http://192.168.64.128:9101/metrics`）。
+
+现场结果：采集成功（sample 含三个指标，`thresholdPreview=measured`），worker 产出小时桶/日桶/counter 桶与分析记录；详情页三个面板正常渲染，分析显示 `insufficient_data / current_bucket_incomplete`（该小时无样本），趋势显示 `0 / 8` 与「待确认」。原始趋势图可见 15:09 起的真实采样点。
+
+时间预期：第一个带真实样本的小时桶在 16:05 左右出现（15:00 小时闭合 + 5 分钟宽限）；基线偏离需要 48 小时中的 39 个合格小时，趋势需要连续两次同向评估，因此短期内仍是「数据不足」，这是设计预期而非故障。
+
+回滚：`cp .env.bak.metric-demo .env`，停掉 exporter 进程，删除目标与 `DEMO-EXPORTER` 资源（或 retire），重启本地栈。
