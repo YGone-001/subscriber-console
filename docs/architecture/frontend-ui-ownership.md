@@ -364,3 +364,30 @@ union of these files, and
 `npm --prefix frontend run acceptance:topology-workspace` proves the browser
 behaviour - including an out-of-order read, the three governed mutations, a 409
 conflict and a read-only session - against the production build.
+
+## Shared operations URL patches
+
+Several bindings write the same route. On `/topology` alone, the page owns `view`
+and the ledger filters, `useTopologyViewState` owns `source`, `scope` and `cursor`,
+and `useLiveTopologyViewState` owns `q`, `domain`, `focus` and `edge`. They all go
+through one composition rule, implemented in
+`features/operations/url-patch-coordinator.ts`.
+
+| Concern | Contract |
+|---|---|
+| Ownership | `useUrlPatchWriter` is the only writer. It exposes `baseSearch()`, `hasPendingPatch()` and `commit(search, { replace? })`; no consumer calls `setSearchParams` directly. |
+| Same-turn composition | A writer composes against `baseSearch()`, which is the search the previous write in this turn produced. Two patches dispatched before the router commits therefore compose instead of overwriting each other. React Router's functional `setSearchParams` form does **not** provide this: the installed version composes from the render closure. |
+| Cross-hook composition | The pending search is keyed by location key and pathname, not by hook instance, so two different bindings on the same route see each other's pending write. |
+| Pending scope | The pending value is transient: it is replaced by the next write and ignored as soon as the location key changes. It is never read for display - the UI still renders from the committed location, so this is a composition base, not a second URL authority. |
+| Browser navigation | Back/Forward, a new explicit location or a route change produces a new location key, so a patch based on an obsolete location can never be applied. |
+| History policy | A filter or cursor change pushes; a canonicalization replaces. A second write inside the same turn replaces the entry the first one created, so one logical transaction produces exactly one history entry and Back returns to the pre-transaction URL. |
+| Cursor invalidation | `applyOperationsPatch` drops `cursor` inside the same write that changes a non-cursor key, so the composed result never carries a cursor that belongs to a discarded filter set. |
+| Canonicalization precedence | The normalization effects rewrite the **newest logical search**, not the committed one, so a replace cannot undo a user patch issued in the same turn. Canonicalization itself stays replace-mode and allow-listed. |
+| Preservation | A writer must not delete keys it does not own: the topology view-state writer preserves the live graph's `q`/`domain`/`focus`/`edge`, and the live writer merges rather than rebuilding. |
+| Display | Reads stay on the committed location (`useSearchParams`), so the visible filters and the address bar never disagree. |
+
+Pure contract tests live in `frontend/tests/operations-url-atomicity.test.ts` (the
+pending store's scoping and the composition chain). The behaviour is proven in
+`frontend/tests/operations-url-atomicity-smoke.mjs`, which dispatches two writes in
+a single JavaScript turn across Topology, Inventory, NF Health and Discovery, and
+fails against the pre-fix implementation.
