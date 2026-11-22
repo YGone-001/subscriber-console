@@ -156,6 +156,10 @@ func BuildMetricAnalysis(target *HealthTarget, current MetricAggregateBucket, ba
 	if !current.Start.UTC().Equal(current.Start.UTC().Truncate(time.Hour)) || current.End.After(now.UTC().Add(-MetricAggregateGrace)) {
 		return fail(AnalysisUnavailable, "bucket_not_closed")
 	}
+	// An hour without a segment is empty evidence, not an ambiguous identity.
+	if len(current.Segments) == 0 {
+		return fail(AnalysisInsufficientData, "current_bucket_incomplete")
+	}
 	if len(current.Segments) != 1 {
 		return fail(AnalysisInsufficientData, "identity_ambiguous")
 	}

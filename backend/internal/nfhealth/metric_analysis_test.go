@@ -116,6 +116,12 @@ func TestMetricAnalysisRefusesAmbiguousOrUnsupportedInputs(t *testing.T) {
 	if got := BuildMetricAnalysis(target, ambiguous, baseline, now); got.State != AnalysisInsufficientData || got.Reason != "identity_ambiguous" {
 		t.Fatalf("ambiguous current hour accepted: %+v", got)
 	}
+	// An hour with no usable observation is incomplete evidence, never an
+	// ambiguous identity and never a silent recovery.
+	empty := aggregateHourBucket(start, "epoch-a", nil, true)
+	if got := BuildMetricAnalysis(target, empty, baseline, now); got.State != AnalysisInsufficientData || got.Reason != "current_bucket_incomplete" {
+		t.Fatalf("empty hour misreported: %+v", got)
+	}
 	counter := BuildMetricCounterHour(target, start, MetricOutcomeBatch{}, now)
 	if got := BuildMetricAnalysis(target, counter, baseline, now); got.State != AnalysisUnavailable || got.Reason != "metric_not_analyzable" {
 		t.Fatalf("counter analyzed: %+v", got)
