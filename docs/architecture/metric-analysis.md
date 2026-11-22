@@ -162,10 +162,13 @@ alert record but never emits a notification, which keeps a backfill or a
 replay from paging an operator. Alerts use the existing lifecycle, permissions,
 deduplication and notification chain.
 
-The rule form does not offer `metric_analysis` yet. The condition type, its
-validation and its evaluation are implemented server-side and gated as above,
-so the remaining work is the form fields plus the capability advertisement in
-`GET /api/nf-alerts/meta`.
+`GET /api/nf-alerts/meta` advertises the capability only while the flag is on:
+`analysisEnabled` plus the approved metric, the record kinds, the directions and
+the exact algorithm and policy versions, together with the freshness window and
+the recovery confirmations. The rule form renders its kind and direction selects
+from that advertisement and never hardcodes a version; while the capability is
+absent the option is not offered at all. Editing keeps the condition type fixed,
+so an existing rule cannot silently change partition.
 
 ## Rollback
 
