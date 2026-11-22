@@ -1333,6 +1333,12 @@ baseline is never treated as normal. It is a measurement comparison, never a
 failure probability, and changes no health layer, alert state or collection. The
 read route is `GET /api/nf-health/targets/{targetId}/metric-analysis`
 (core.read, hour-aligned window up to 90 days, cursor, `kind=baseline|trend`).
+Deployment is staged and default-off: indexes come only from the explicit
+migration, aggregation and analysis are gated by `NF_METRIC_AGGREGATES_ENABLED`,
+and `metric_analysis` rules by `NF_METRIC_ANALYSIS_ALERTS_ENABLED`, which also
+stops evaluation of existing rules. Rollback pauses analysis rules and the
+worker, keeps every collection and index, and never fabricates recovery; an
+older binary must not run while new rule types are still evaluated. Authority:/n`docs/operations/metric-assurance-deployment.md`.
 The same collection also stores a sustained-trend record: an eight-hour
 least-squares fit that requires seven usable hours with a continuous newest pair,
 an 8 MiB fitted-change floor and `R² >= 0.7`, and becomes a confirmed event only

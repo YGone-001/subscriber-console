@@ -77,6 +77,7 @@ Canonical frontend SPA source     -> frontend/src/
 - [Configuration observation operations](operations/configuration-observations.md) - declaration, private key, explicit indexes, acceptance and rollback.
 
 - [Deployment](operations/deployment.md)
+- [Metric assurance deployment](operations/metric-assurance-deployment.md) - staged activation, verification queries and the rollback drill for aggregation, analysis and analysis alerts.
 - [Authentication model](operations/authentication-model.md)
 - [User management model](operations/user-management-model.md)
 - [RBAC model](operations/rbac-model.md)

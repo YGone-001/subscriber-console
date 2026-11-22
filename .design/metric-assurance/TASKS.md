@@ -1,7 +1,7 @@
 # 指标阈值告警、历史聚合与异常趋势开发计划
 
 日期：2026-11-21
-状态：实施中；T01–T13 已实现指标阈值闭环、小时/日聚合、保留期、有界补算、小时 P95/报表分区、counter 区间扩展、基线偏离分析、持续趋势事件与显式分析告警接入，后续未勾选项仍为提案。当前事实见 docs/architecture/metric-threshold-alerts.md 与 docs/architecture/metric-history.md。
+状态：实施中；T01–T13、T15 已实现指标阈值闭环、小时/日聚合、保留期、有界补算、小时 P95/报表分区、counter 区间扩展、基线偏离分析、持续趋势事件、显式分析告警接入与部署/回退演练；T14 的现场浏览器验收仍待执行。当前事实见 docs/architecture/metric-threshold-alerts.md 与 docs/architecture/metric-history.md。
 依据：[开发范围](DESIGN_BRIEF.md)；基线 develop / 90bc35ea。
 
 ## 交付策略与工作量
@@ -90,7 +90,9 @@ T14 进展：新增 `TestMetricPipelineEndToEnd`（采集→小时桶→日汇�
 ## 验收与回退
 
 - [ ] **T14 端到端与容量验收**：扩展 Go、前端语义测试及 Playwright 验收，覆盖创建→采样→pending→触发→通知→迟滞→恢复、失败/缺失保持、重启补偿、乱序/重复、并发规则编辑、数据过期、聚合迟到重算、基线冷启动与显式通知。后端包测试与 race 验证新状态机/worker；前端验证键盘、焦点、双语、明暗主题、冲突草稿、URL 返回上下文与图表数据表。负载至少包含 100 目标 × 10 series × 30 天每分钟样本的离线回放及有界真实 Mongo 查询；报告 p95、扫描量、桶数、积压恢复速度和内存，query explain 应命中预期索引；查询超时不得返回假完整。依赖：按每个交付分别执行，不积压到最后。
-- [ ] **T15 文档、部署与回退演练**：每项功能通过后更新对应 architecture/operations/database 与 AGENTS/CLAUDE（只登记已实施事实）；UI 与后端分开 commit，Conventional Commits 使用内容描述。检查 Go 路由、变更合同、索引、权限与文档一致性。部署默认关闭新 worker/新规则类型；先建索引，再启聚合和 shadow 分析，再由操作员启用规则。回退先暂停新型规则/通知与 worker、保持旧告警能力，保留新集合与历史，不自动删库、不伪造恢复；不承诺直接回滚旧二进制兼容新增枚举。依赖：各交付完成时执行。
+- [x] **T15 文档、部署与回退演练**：每项功能通过后更新对应 architecture/operations/database 与 AGENTS/CLAUDE（只登记已实施事实）；UI 与后端分开 commit，Conventional Commits 使用内容描述。检查 Go 路由、变更合同、索引、权限与文档一致性。部署默认关闭新 worker/新规则类型；先建索引，再启聚合和 shadow 分析，再由操作员启用规则。回退先暂停新型规则/通知与 worker、保持旧告警能力，保留新集合与历史，不自动删库、不伪造恢复；不承诺直接回滚旧二进制兼容新增枚举。依赖：各交付完成时执行。
+
+T15 已实现：新增 `docs/operations/metric-assurance-deployment.md`（三组开关与默认值、五步激活顺序、逐步验证命令、回退演练与不可逆影响），并补入 AGENTS/CLAUDE 快照与文档索引。回退演练中发现并修复一个真实缺口：关闭 `NF_METRIC_ANALYSIS_ALERTS_ENABLED` 原先只拒绝新建规则，已存在的分析规则仍会被评估；现在 `SetAnalysisEnabled` 直接关闭评估入口，测试断言关闭状态下不会产生任何告警。回退顺序固定为：先停分析规则评估（开放告警保持开放，不伪造恢复）→ 再停聚合 worker（历史读 503，分析读继续返回已存记录）→ 保留集合与索引；回退到旧二进制前必须先暂停评估，否则旧二进制不理解 `metric_analysis` 会把规则当 false 而静默关闭告警。
 
 对应代码门禁：Go go test ./...、go test -race ./...、go vet ./...、go build ./...；frontend npm run check；根目录架构、文档、API ownership、前后端边界、agent-docs-parity 门禁；变更端点运行对应真实 Mongo 合同测试及 acceptance:nf-alerts，补充聚合/分析场景。纯计划提交只运行文档完整性与配对检查，不以通过文档门禁声称功能已验收。
 
