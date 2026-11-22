@@ -1,52 +1,55 @@
 /*
- * Topology relationship explorer (/topology).
+ * Topology workspace (/topology).
  *
- * The operator-facing relationship management workspace. It renders inside the
- * shared operations page frame (one title, one refresh entry), uses the shared
- * dialog / state primitives, and reads only from the seven Topology APIs plus the
- * Inventory read authority for resource selection. No totals or KPI values are
- * fabricated: the panel reports exactly what the server returned.
+ * The operator-facing workspace for the three topology questions:
  *
- * UX-1: `state`, `relationship`, `from`, `to` and `cursor` live in the URL, so a
- * filtered relationship ledger survives reload, back/forward and a copied link.
- * A filter change drops the cursor through the shared URL contract, which means
- * page N of a discarded filter set can never be requested.
+ *   graph         the environment topology (evidence layer: declared / runtime)
+ *   ledger        the declared-relationship ledger
+ *   architecture  the static 3GPP reference skeleton projected onto live
+ *                 Inventory / Health / Topology / runtime authorities
+ *
+ * This module is the single orchestration owner of the route:
+ *
+ *   - the three-mode navigation contract and the graph evidence source, through
+ *     `useTopologyViewState` and `useOperationsUrlState`;
+ *   - the ledger query's URL state (lifecycle, relationship, endpoints, cursor);
+ *   - the Inventory endpoint directory that names ledger endpoints;
+ *   - the composition of the ledger toolbar, body and governed workflows.
+ *
+ * The ledger read lifecycle lives in `useTopologyLedger`, the mutation workflows
+ * in `useTopologyEdgeWorkflows`, and the presentation in
+ * `TopologyLedgerToolbar` / `TopologyLedgerPanel`. The three graph engines remain
+ * their own modules and are not re-implemented here.
+ *
+ * Evidence boundaries this route must keep visible: a declared relationship is an
+ * operator decision, runtime configuration is observed configuration evidence, and
+ * the reference architecture is an illustration - never a measurement.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { GitBranch, Plus, Search, X } from 'lucide-react';
+import { GitBranch, Plus } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { currentListLocation, withReturnTo } from '../../lib/return-to';
-import { MutationApiError } from '../../lib/api/mutation-client';
-import { createLatestRequestGuard } from '../../lib/api/latest-request';
-import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
-import { ErrorState } from '../../components/ui/StatePanel';
-import { Dialog } from '../../components/ui/Dialog';
-import { Field } from '../../components/ui/Field';
 import { ViewSwitch, type ViewSwitchOption } from '../../components/ui/ViewSwitch';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import {
   createTopologyEdge,
-  fetchTopologyEdges,
   fetchTopologyMeta,
   retireTopologyEdge,
   updateTopologyEdge,
 } from './topology-api';
-import type {
-  CreateEdgeRequest,
-  RegisterRelationshipDraft,
-  TopologyEdge,
-  TopologyMetaResponse,
-  UpdateEdgeRequest,
-} from './topology-types';
+import type { TopologyEdge, TopologyMetaResponse } from './topology-types';
 import { RELATIONSHIP_PRESENTATION } from './topology-types';
 import { useResourceDirectory } from './use-resource-directory';
-import { TopologyFreshnessChip } from './components/TopologyFreshnessChip';
-import { TopologyEdgeTable } from './components/TopologyEdgeTable';
-import { TopologyEdgeForm } from './components/TopologyEdgeForm';
-import { TopologyResourcePicker } from './components/TopologyResourcePicker';
-import { buildCreateEdgeRequest } from './topology-builders';
+import { useTopologyLedger, type TopologyLedgerQuery } from './use-topology-ledger';
+import {
+  useTopologyEdgeWorkflows,
+  type TopologyEdgeExecutors,
+} from './use-topology-edge-workflows';
+import { TopologyLedgerToolbar, type TopologyActiveFilter } from './components/TopologyLedgerToolbar';
+import { TopologyLedgerPanel } from './components/TopologyLedgerPanel';
+import { TopologyEdgeWorkflowDialogs } from './components/TopologyEdgeWorkflowDialogs';
 import styles from '../../styles/modules/topology.module.css';
 import { RuntimeHierarchy } from '../runtime/RuntimeHierarchy';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
@@ -64,8 +67,6 @@ import {
   type TopologyPrimaryView,
   type TopologyRuntimeScope,
 } from './topology-view-state';
-
-const PAGE_LIMIT = 20;
 
 /* Three exclusive modes share one canonical `/topology` route. The graph keeps
  * the legacy `actual` URL alias; the ledger adds `ledger`; the static 3GPP
@@ -104,9 +105,6 @@ export function TopologyPage() {
   const listLocation = currentListLocation('/topology', location.search);
 
   const [meta, setMeta] = useState<TopologyMetaResponse | null>(null);
-  const [edges, setEdges] = useState<TopologyEdge[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const topology = useTopologyViewState(['state', 'relationship', 'from', 'to']);
   const primary = topology.primary;
@@ -124,34 +122,19 @@ export function TopologyPage() {
 
   /* `active` stays the effective default without being written into the URL, so
    * an untouched page keeps a clean, shareable address. */
-  const lifecycleState = url.filters.state || 'active';
-  const relationshipType = url.filters.relationship || '';
-  const fromResourceId = url.filters.from || '';
-  const toResourceId = url.filters.to || '';
+  const ledgerQuery = useMemo<TopologyLedgerQuery>(() => ({
+    lifecycleState: url.filters.state || 'active',
+    relationshipType: url.filters.relationship || '',
+    fromResourceId: url.filters.from || '',
+    toResourceId: url.filters.to || '',
+  }), [url.filters.state, url.filters.relationship, url.filters.from, url.filters.to]);
 
-  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  /* Read time of the ledger, not a server side timestamp: the list response
-     carries page state only, so the surface states when it last read it. */
-  const [ledgerReadAt, setLedgerReadAt] = useState('');
-  /* The endpoint pickers start collapsed unless the link already carries one. */
-  const [advancedOpen, setAdvancedOpen] = useState(Boolean(fromResourceId || toResourceId));
-  const queryKeyRef = useRef('');
-  /* The ledger is read imperatively on every filter change, so a slow earlier
-   * response would otherwise overwrite the list the operator is now looking at.
-   * The newest read wins; superseded reads are aborted and their result dropped
-   * without being reported as an error. */
-  const readGuard = useRef(createLatestRequestGuard());
-  const readAbort = useRef<AbortController | null>(null);
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<TopologyEdge | null>(null);
-  const [retireTarget, setRetireTarget] = useState<TopologyEdge | null>(null);
-  const [retireReason, setRetireReason] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [conflictNotice, setConflictNotice] = useState<string | null>(null);
+  const ledger = useTopologyLedger({
+    enabled: primary === 'ledger',
+    query: ledgerQuery,
+    cursor: url.cursor,
+    onCursorChange: url.setCursor,
+  });
 
   const canConfigure = hasPermission(user, 'core.configure');
 
@@ -163,67 +146,13 @@ export function TopologyPage() {
       });
   }, []);
 
-  const loadEdges = useCallback(
-    async (activeCursor?: string) => {
-      const token = readGuard.current.begin();
-      readAbort.current?.abort();
-      const controller = new AbortController();
-      readAbort.current = controller;
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetchTopologyEdges({
-          fromResourceId: fromResourceId || undefined,
-          toResourceId: toResourceId || undefined,
-          relationshipType: relationshipType || undefined,
-          lifecycleState: lifecycleState || undefined,
-          cursor: activeCursor,
-          limit: PAGE_LIMIT,
-        }, controller.signal);
-        if (!readGuard.current.isCurrent(token)) return;
-        setEdges(res.edges || []);
-        setNextCursor(res.page?.nextCursor ?? null);
-        setHasMore(Boolean(res.page?.hasMore));
-        setLedgerReadAt(new Date().toISOString());
-      } catch (err) {
-        if (!readGuard.current.isCurrent(token)) return;
-        setError(err instanceof Error && err.message ? err.message : t('topology_err_load'));
-        setEdges([]);
-      } finally {
-        if (readGuard.current.isCurrent(token)) setLoading(false);
-      }
-    },
-    [fromResourceId, toResourceId, relationshipType, lifecycleState, t],
-  );
-
-  /* A superseded read is already dropped by the guard; aborting the socket on
-   * unmount keeps a detached page from resolving in the background. */
-  useEffect(() => () => readAbort.current?.abort(), []);
-
-  /* The relationship ledger is only read on its own view: the graph sources
-   * must not pay for a query they do not show. */
-  useEffect(() => {
-    if (primary !== 'ledger') return;
-    const queryKey = `${lifecycleState}|${relationshipType}|${fromResourceId}|${toResourceId}`;
-    if (queryKeyRef.current !== queryKey) {
-      queryKeyRef.current = queryKey;
-      setCursorHistory([]);
-    }
-    void loadEdges(url.cursor);
-  }, [primary, loadEdges, url.cursor, lifecycleState, relationshipType, fromResourceId, toResourceId]);
-
-  /* Applying an endpoint filter from anywhere must reveal the picker that owns it. */
-  useEffect(() => {
-    if (fromResourceId || toResourceId) setAdvancedOpen(true);
-  }, [fromResourceId, toResourceId]);
-
   const endpointIds = useMemo(
     () => [
-      ...edges.flatMap((edge) => [edge.fromResourceId, edge.toResourceId]),
-      fromResourceId,
-      toResourceId,
+      ...ledger.edges.flatMap((edge) => [edge.fromResourceId, edge.toResourceId]),
+      ledgerQuery.fromResourceId,
+      ledgerQuery.toResourceId,
     ].filter(Boolean),
-    [edges, fromResourceId, toResourceId],
+    [ledger.edges, ledgerQuery.fromResourceId, ledgerQuery.toResourceId],
   );
   const directory = useResourceDirectory(endpointIds);
 
@@ -245,125 +174,75 @@ export function TopologyPage() {
     [t],
   );
 
-  const clearFilters = () => {
-    url.clearFilters();
-    setCursorHistory([]);
-  };
-
-  const activeFilters = useMemo(() => {
-    const chips: Array<{ key: string; label: string; clear: () => void }> = [];
-    if (fromResourceId) {
+  const activeFilters = useMemo<TopologyActiveFilter[]>(() => {
+    const chips: TopologyActiveFilter[] = [];
+    if (ledgerQuery.fromResourceId) {
       chips.push({
         key: 'from',
-        label: `${t('topology_from_resource')}: ${endpointLabel(fromResourceId)}`,
+        label: `${t('topology_from_resource')}: ${endpointLabel(ledgerQuery.fromResourceId)}`,
         clear: () => url.setFilter('from', ''),
       });
     }
-    if (toResourceId) {
+    if (ledgerQuery.toResourceId) {
       chips.push({
         key: 'to',
-        label: `${t('topology_to_resource')}: ${endpointLabel(toResourceId)}`,
+        label: `${t('topology_to_resource')}: ${endpointLabel(ledgerQuery.toResourceId)}`,
         clear: () => url.setFilter('to', ''),
       });
     }
-    if (relationshipType) {
+    if (ledgerQuery.relationshipType) {
       chips.push({
         key: 'rel',
-        label: `${t('topology_relationship')}: ${relationshipLabel(relationshipType)}`,
+        label: `${t('topology_relationship')}: ${relationshipLabel(ledgerQuery.relationshipType)}`,
         clear: () => url.setFilter('relationship', ''),
       });
     }
     return chips;
-  }, [fromResourceId, toResourceId, relationshipType, relationshipLabel, endpointLabel, t, url]);
+  }, [ledgerQuery, relationshipLabel, endpointLabel, t, url]);
 
-  const handleNextPage = () => {
-    if (!nextCursor) return;
-    setCursorHistory((prev) => [...prev, url.cursor ?? '']);
-    url.setCursor(nextCursor);
+  const clearFilters = () => {
+    url.clearFilters();
+    ledger.resetCursorHistory();
   };
 
-  const handlePrevPage = () => {
-    if (cursorHistory.length === 0) return;
-    const history = [...cursorHistory];
-    const previous = history.pop() ?? '';
-    setCursorHistory(history);
-    url.setCursor(previous || undefined);
-  };
+  /* The governed request boundary stays named here; the workflow owner receives
+   * it so the page remains the one module that wires the three operations. */
+  const executors = useMemo<TopologyEdgeExecutors>(() => ({
+    create: createTopologyEdge,
+    update: updateTopologyEdge,
+    retire: retireTopologyEdge,
+  }), []);
 
-  const handleCreate = async (req: CreateEdgeRequest) => {
-    setSubmitting(true);
-    setFormError(null);
-    setConflictNotice(null);
-    try {
-      const created = await createTopologyEdge(req);
-      setCreateOpen(false);
-      await loadEdges(url.cursor);
-      navigate(withReturnTo(`/topology/${encodeURIComponent(created.fromResourceId)}`, listLocation));
-    } catch (err) {
-      setFormError(describeMutationError(err, t));
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const handleCreated = useCallback(
+    (edge: TopologyEdge) => {
+      navigate(withReturnTo(`/topology/${encodeURIComponent(edge.fromResourceId)}`, listLocation));
+    },
+    [navigate, listLocation],
+  );
 
-  const handleUpdate = async (req: UpdateEdgeRequest) => {
-    if (!editTarget) return;
-    setSubmitting(true);
-    setFormError(null);
-    try {
-      await updateTopologyEdge(editTarget.edgeId, req);
-      setEditTarget(null);
-      await loadEdges(url.cursor);
-    } catch (err) {
-      if (err instanceof MutationApiError && err.status === 409) {
-        setFormError(t('topology_stale_revision_body'));
-        setConflictNotice(t('topology_stale_revision_body'));
-      } else {
-        setFormError(describeMutationError(err, t));
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const workflows = useTopologyEdgeWorkflows({
+    executors,
+    reload: ledger.reload,
+    cursor: url.cursor,
+    onCreated: handleCreated,
+  });
 
-  /* Registers one configured link in the declared ledger. The operator already
-   * confirmed the specific link in the inspector, so this path opens no dialog;
-   * a duplicate or a retired endpoint comes back as an inline error. */
-  const registerFromEvidence = async (draft: RegisterRelationshipDraft): Promise<string | null> => {
-    try {
-      await createTopologyEdge(buildCreateEdgeRequest(draft));
-      await loadEdges(url.cursor);
-      return null;
-    } catch (err) {
-      return describeMutationError(err, t);
-    }
-  };
+  const handleViewResource = useCallback(
+    (resourceId: string) => navigate(withReturnTo(`/topology/${encodeURIComponent(resourceId)}`, listLocation)),
+    [navigate, listLocation],
+  );
 
-  const handleRetire = async () => {
-    if (!retireTarget) return;
-    setSubmitting(true);
-    setFormError(null);
-    try {
-      await retireTopologyEdge(retireTarget.edgeId, {
-        expectedRevision: retireTarget.revision,
-        reason: retireReason,
-      });
-      setRetireTarget(null);
-      setRetireReason('');
-      await loadEdges(url.cursor);
-    } catch (err) {
-      if (err instanceof MutationApiError && err.status === 409) {
-        setFormError(t('topology_stale_revision_body'));
-      } else {
-        setFormError(describeMutationError(err, t));
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const handleActivateRow = useCallback(
+    (edgeId: string) => {
+      const edge = ledger.edges.find((item) => item.edgeId === edgeId);
+      if (edge) handleViewResource(edge.fromResourceId);
+    },
+    [ledger.edges, handleViewResource],
+  );
 
-  const hasFilters = Boolean(fromResourceId || toResourceId || relationshipType);
-  const pageIndex = cursorHistory.length + 1;
+  const hasFilters = Boolean(
+    ledgerQuery.fromResourceId || ledgerQuery.toResourceId || ledgerQuery.relationshipType,
+  );
 
   return (
     <OperationsPageFrame
@@ -383,17 +262,10 @@ export function TopologyPage() {
           ariaLabel={t('topology_primary_view_label')}
         />
       )}
-      onRefresh={primary === 'ledger' ? () => loadEdges(url.cursor) : undefined}
+      onRefresh={primary === 'ledger' ? () => void ledger.reload(url.cursor) : undefined}
       actions={
         primary === 'ledger' && canConfigure ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              setFormError(null);
-              setCreateOpen(true);
-            }}
-          >
+          <button type="button" className="btn btn-primary" onClick={workflows.beginCreate}>
             <Plus size={16} />
             {t('topology_create_relationship')}
           </button>
@@ -457,7 +329,7 @@ export function TopologyPage() {
               </section>
             ) : (
               <LiveTopologyView
-                onRegisterRelationship={canConfigure ? registerFromEvidence : undefined}
+                onRegisterRelationship={canConfigure ? workflows.registerFromEvidence : undefined}
               />
             )
           ) : null}
@@ -468,323 +340,49 @@ export function TopologyPage() {
 
       {primary === 'ledger' ? (
         <>
-      {conflictNotice ? (
-        <div className={styles.conflictBanner} role="alert">
-          <span>{conflictNotice}</span>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => {
-              setConflictNotice(null);
-              void loadEdges(url.cursor);
-            }}
-          >
-            {t('topology_reload')}
-          </button>
-        </div>
-      ) : null}
+          <TopologyEdgeWorkflowDialogs workflows={workflows} meta={meta} />
 
-      <section className="dash-card">
-        <div className={styles.toolbar}>
-          <div className={styles.filterGroup}>
-            <select
-              className="form-input"
-              aria-label={t('topology_relationship')}
-              value={relationshipType}
-              onChange={(event) => url.setFilter('relationship', event.target.value)}
-            >
-              <option value="">{t('topology_all_relationships')}</option>
-              {(meta?.relationshipTypes ?? []).map((value) => (
-                <option key={value} value={value}>
-                  {relationshipLabel(value)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              aria-label={t('topology_lifecycle')}
-              value={lifecycleState}
-              onChange={(event) => url.setFilter('state', event.target.value === 'active' ? '' : event.target.value)}
-            >
-              {(meta?.lifecycleStates ?? ['active', 'retired']).map((value) => (
-                <option key={value} value={value}>
-                  {value === 'retired' ? t('topology_state_retired') : t('topology_state_active')}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="btn btn-ghost" onClick={clearFilters} disabled={loading}>
-              <X size={14} aria-hidden="true" />
-              {t('topology_clear_filters')}
-            </button>
-          </div>
-          {/* The ledger is read on demand; state when it was last read. This is
-              ledger status, not a page action, so it stays out of the header. */}
-          <TopologyFreshnessChip mode="read" sourceTime={ledgerReadAt || undefined} />
-        </div>
-
-        {/* Source and target pickers are the heaviest controls on this page, so they
-            live behind a disclosure. The row above keeps the common filters, and an
-            applied endpoint filter re-opens this section so the value stays visible. */}
-        <details
-          className={styles.advancedFilters}
-          data-ledger-advanced-filters="true"
-          open={advancedOpen}
-          onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
-        >
-          <summary>{t('topology_advanced_filters')}</summary>
-          <div className={styles.resourceFilters}>
-            <TopologyResourcePicker
-              id="topology-filter-from"
-              label={t('topology_filter_from')}
-              value={fromResourceId}
-              onChange={(resource) => url.setFilter('from', resource?.resourceId ?? '')}
-              excludeResourceId={toResourceId || undefined}
+          <section className="dash-card">
+            <TopologyLedgerToolbar
+              meta={meta}
+              relationshipType={ledgerQuery.relationshipType}
+              lifecycleState={ledgerQuery.lifecycleState}
+              fromResourceId={ledgerQuery.fromResourceId}
+              toResourceId={ledgerQuery.toResourceId}
+              readAt={ledger.readAt}
+              loading={ledger.loading}
+              activeFilters={activeFilters}
+              onRelationshipChange={(value) => url.setFilter('relationship', value)}
+              onLifecycleChange={(value) => url.setFilter('state', value)}
+              onFromChange={(resourceId) => url.setFilter('from', resourceId)}
+              onToChange={(resourceId) => url.setFilter('to', resourceId)}
+              onClearFilters={clearFilters}
             />
-            <TopologyResourcePicker
-              id="topology-filter-to"
-              label={t('topology_filter_to')}
-              value={toResourceId}
-              onChange={(resource) => url.setFilter('to', resource?.resourceId ?? '')}
-              excludeResourceId={fromResourceId || undefined}
+
+            <TopologyLedgerPanel
+              edges={ledger.edges}
+              directory={directory}
+              loading={ledger.loading}
+              error={ledger.error}
+              canPageForward={ledger.canPageForward}
+              pageIndex={ledger.pageIndex}
+              canConfigure={canConfigure}
+              hasFilters={hasFilters}
+              caption={t('topology_table_caption')}
+              onRetry={() => void ledger.reload(url.cursor)}
+              onNextPage={ledger.nextPage}
+              onPrevPage={ledger.prevPage}
+              onCreate={workflows.beginCreate}
+              onActivateRow={handleActivateRow}
+              onEdit={workflows.beginEdit}
+              onRetire={workflows.beginRetire}
+              onViewResource={handleViewResource}
             />
-          </div>
-        </details>
-
-        {activeFilters.length > 0 ? (
-          <div className={styles.filterTags}>
-            <span className={styles.filterTagsLabel}>{t('topology_filter_active')}</span>
-            {activeFilters.map((chip) => (
-              <button key={chip.key} type="button" onClick={chip.clear}>
-                {chip.label}
-                <X size={12} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {error ? (
-          <div className={styles.errorWrap}>
-            <ErrorState
-              title={t('error')}
-              message={error}
-              retryLabel={t('retry')}
-              onRetry={() => void loadEdges(url.cursor)}
-            />
-          </div>
-        ) : loading && edges.length === 0 ? (
-          <LoadingRows columns={9} rows={5} />
-        ) : edges.length === 0 ? (
-          <div className={styles.stateWrap}>
-            <EmptyState
-              icon={<Search size={44} />}
-              title={hasFilters ? t('topology_empty_search_title') : t('topology_empty_title')}
-              description={hasFilters ? t('topology_empty_search_body') : t('topology_empty_body')}
-              action={
-                canConfigure && !hasFilters ? (
-                  <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
-                    <Plus size={16} />
-                    {t('topology_create_relationship')}
-                  </button>
-                ) : undefined
-              }
-            />
-          </div>
-        ) : (
-          <TopologyEdgeTable
-            edges={edges}
-            directory={directory}
-            caption={t('topology_table_caption')}
-            surface="ledger"
-            canConfigure={canConfigure}
-            onActivateRow={(edgeId) => {
-              const edge = edges.find((item) => item.edgeId === edgeId);
-              if (edge) navigate(withReturnTo(`/topology/${encodeURIComponent(edge.fromResourceId)}`, listLocation));
-            }}
-            onEdit={(edge) => {
-              setFormError(null);
-              setEditTarget(edge);
-            }}
-            onRetire={(edge) => {
-              setFormError(null);
-              setRetireReason('');
-              setRetireTarget(edge);
-            }}
-            onViewResource={(resourceId) => navigate(withReturnTo(`/topology/${encodeURIComponent(resourceId)}`, listLocation))}
-          />
-        )}
-
-        {!error && edges.length > 0 ? (
-          <nav className={styles.pager} aria-label={t('topology_title')}>
-            <div className={styles.pagerSummary} aria-live="polite">
-              {t('topology_showing_edges', { count: edges.length })}
-            </div>
-            <div className={styles.pagerControls}>
-              <button type="button" onClick={handlePrevPage} disabled={pageIndex === 1 || loading}>
-                {t('topology_prev_page')}
-              </button>
-              <span className={styles.pageNumber}>{t('topology_page_indicator', { page: pageIndex })}</span>
-              <button
-                type="button"
-                onClick={handleNextPage}
-                disabled={!hasMore || !nextCursor || loading}
-              >
-                {t('next')}
-              </button>
-            </div>
-          </nav>
-        ) : null}
-      </section>
-
-      <Dialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        overlayClassName={`modal-overlay ${styles.modalOverlay}`}
-        className={`modal-content animate-fade-in ${styles.modalContent}`}
-        labelledBy="topology-create-title"
-        closeOnOverlay={!submitting}
-        closeOnEscape={!submitting}
-      >
-        <div className={styles.modalHeader}>
-          <h2 id="topology-create-title">{t('topology_create_relationship')}</h2>
-        </div>
-        <div className={styles.modalBody}>
-          <p className={styles.modalIntro}>{t('topology_create_intro')}</p>
-          <TopologyEdgeForm
-            mode="create"
-            relationshipTypes={meta?.relationshipTypes ?? []}
-            interfaceCatalog={meta?.interfaceCatalog ?? []}
-            submitting={submitting}
-            serverError={formError}
-            onCancel={() => setCreateOpen(false)}
-            onCreate={handleCreate}
-          />
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={editTarget !== null}
-        onClose={() => setEditTarget(null)}
-        overlayClassName={`modal-overlay ${styles.modalOverlay}`}
-        className={`modal-content animate-fade-in ${styles.modalContent}`}
-        labelledBy="topology-edit-title"
-        closeOnOverlay={!submitting}
-        closeOnEscape={!submitting}
-      >
-        <div className={styles.modalHeader}>
-          <h2 id="topology-edit-title">{t('topology_edit_relationship')}</h2>
-        </div>
-        <div className={styles.modalBody}>
-          {editTarget ? (
-            <TopologyEdgeForm
-              mode="edit"
-              relationshipTypes={meta?.relationshipTypes ?? []}
-              interfaceCatalog={meta?.interfaceCatalog ?? []}
-              initialEdge={editTarget}
-              submitting={submitting}
-              serverError={formError}
-              onCancel={() => setEditTarget(null)}
-              onUpdate={handleUpdate}
-            />
-          ) : null}
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={retireTarget !== null}
-        onClose={() => setRetireTarget(null)}
-        overlayClassName={`modal-overlay ${styles.modalOverlay}`}
-        className={`modal-content animate-fade-in ${styles.modalContent}`}
-        labelledBy="topology-retire-title"
-        closeOnOverlay={!submitting}
-        closeOnEscape={!submitting}
-      >
-        <div className={styles.modalHeader}>
-          <h2 id="topology-retire-title">{t('topology_retire_title')}</h2>
-        </div>
-        <div className={styles.modalBody}>
-          {retireTarget ? (
-            <>
-              <dl className={styles.identityReadonly}>
-                <div>
-                  <dt>{t('topology_from_resource')}</dt>
-                  <dd><code className={styles.uuid}>{retireTarget.fromResourceId}</code></dd>
-                </div>
-                <div>
-                  <dt>{t('topology_relationship')}</dt>
-                  <dd>{relationshipLabel(retireTarget.relationshipType)}</dd>
-                </div>
-                <div>
-                  <dt>{t('topology_to_resource')}</dt>
-                  <dd><code className={styles.uuid}>{retireTarget.toResourceId}</code></dd>
-                </div>
-                <div>
-                  <dt>{t('topology_revision')}</dt>
-                  <dd>r{retireTarget.revision}</dd>
-                </div>
-              </dl>
-              <p className={styles.retireWarning}>{t('topology_retire_warning')}</p>
-              <Field htmlFor="topology-retire-reason" label={t('topology_retire_reason')}>
-                <textarea
-                  id="topology-retire-reason"
-                  className="form-input"
-                  rows={2}
-                  value={retireReason}
-                  onChange={(event) => setRetireReason(event.target.value)}
-                  disabled={submitting}
-                  aria-invalid={!retireReason.trim() && formError ? true : undefined}
-                />
-              </Field>
-              {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
-              <div className={styles.formActions}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setRetireTarget(null)}
-                  disabled={submitting}
-                >
-                  {t('cancel')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={handleRetire}
-                  disabled={submitting || !retireReason.trim()}
-                >
-                  {submitting ? t('topology_submitting') : t('topology_retire_confirm')}
-                </button>
-              </div>
-            </>
-          ) : null}
-        </div>
-      </Dialog>
+          </section>
         </>
       ) : null}
     </OperationsPageFrame>
   );
-}
-
-function describeMutationError(err: unknown, t: (key: string, params?: Record<string, string | number>) => string): string {
-  if (err instanceof MutationApiError) {
-    switch (err.code) {
-      case 'TOPOLOGY_DUPLICATE_ACTIVE_EDGE':
-        return t('topology_duplicate_edge');
-      case 'TOPOLOGY_SELF_EDGE':
-        return t('topology_self_edge');
-      case 'TOPOLOGY_ENDPOINT_RETIRED':
-        return t('topology_endpoint_retired');
-      case 'TOPOLOGY_ENDPOINT_NOT_FOUND':
-        return t('topology_endpoint_not_found');
-      case 'TOPOLOGY_REVISION_CONFLICT':
-        return t('topology_stale_revision_body');
-      case 'TOPOLOGY_EDGE_RETIRED':
-        return t('topology_edge_retired');
-      default:
-        break;
-    }
-    if (err.status === 403) return t('topology_permission_denied');
-    return err.message;
-  }
-  return err instanceof Error ? err.message : String(err);
 }
 
 export default TopologyPage;
