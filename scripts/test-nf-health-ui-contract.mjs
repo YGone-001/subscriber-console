@@ -74,6 +74,12 @@ const featureFiles = [
   'features/nf-health/NfHealthPage.tsx',
   'features/nf-health/NfHealthDetailPage.tsx',
   'features/nf-health/NfHealthTargetDialog.tsx',
+  'features/nf-health/NfHealthTargetDrawer.tsx',
+  'features/nf-health/NfHealthTargetCards.tsx',
+  'features/nf-health/NfHealthTargetsTable.tsx',
+  'features/nf-health/NfHealthInterfaceMatrix.tsx',
+  'features/nf-health/NfHealthFilterToolbar.tsx',
+  'features/nf-health/nf-health-badges.tsx',
   'features/nf-health/nf-health-api.ts',
   'features/nf-health/nf-health-types.ts',
 ];
@@ -165,7 +171,14 @@ check(
   'contract_api_permissions=match_access_class',
 );
 check('NFH-UI-34', contract.collectorProfiles?.[0] === 'http_metrics', 'collector_profile=http_metrics');
-check('NFH-UI-62', /data-nf-health-matrix/.test(read('features/nf-health/NfHealthPage.tsx')), 'matrix_view_source=present');
+// The matrix markup lives in the component that owns it; the page only decides
+// which view is active.
+check(
+  'NFH-UI-62',
+  /data-nf-health-matrix/.test(read('features/nf-health/NfHealthInterfaceMatrix.tsx')) &&
+    !/data-nf-health-matrix/.test(read('features/nf-health/NfHealthTargetCards.tsx')),
+  'matrix_view_source=owned_by_matrix_component',
+);
 check('NFH-UI-63', localeEn.includes('nf_health_probe_family_sbi') && localeZh.includes('nf_health_probe_family_sbi'), 'matrix_locale=bilingual');
 
 // 7. Responsive layout guardrails
@@ -200,7 +213,20 @@ check(
 );
 
 // 9. Freshness is server-derived and surfaced consistently.
-const listSource = read('features/nf-health/NfHealthPage.tsx');
+//
+// The list surface is an orchestrator plus its presentation components, so the
+// list-level invariants are asserted against the union of those files. That
+// union is exactly the source these checks used to cover when everything lived
+// in one page, so moving markup between the two cannot weaken a check.
+const listSurfaceFiles = [
+  'features/nf-health/NfHealthPage.tsx',
+  'features/nf-health/NfHealthTargetCards.tsx',
+  'features/nf-health/NfHealthTargetsTable.tsx',
+  'features/nf-health/NfHealthInterfaceMatrix.tsx',
+  'features/nf-health/NfHealthFilterToolbar.tsx',
+  'features/nf-health/nf-health-badges.tsx',
+];
+const listSource = listSurfaceFiles.map((file) => read(file)).join('\n');
 const detailSource = read('features/nf-health/NfHealthDetailPage.tsx');
 const typesSource = read('features/nf-health/nf-health-types.ts');
 const fixtureSource = readFileSync(resolve(root, 'frontend/tests/nf-health-fixtures.mjs'), 'utf8');

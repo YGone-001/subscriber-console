@@ -430,6 +430,92 @@ const INTERFACE_MATRIX_ROWS = [
   },
 ];
 
+/*
+ * Opt-in wider population.
+ *
+ * TEST-ONLY. `startFixtureServer({ population: 'wide' })` serves these instead of
+ * TARGETS so the workspace acceptance can exercise a queue that is larger than
+ * one bounded page and that carries one target per freshness bucket. Every state
+ * here is a value the backend projection can produce; none of it is invented by
+ * the UI under test.
+ */
+function wideTarget(index) {
+  const id = String(index).padStart(2, '0');
+  const targetId = `wide-0000-4000-8000-0000000000${id}`;
+  const freshness = index <= 10 ? 'fresh' : index <= 16 ? 'stale' : index <= 21 ? 'unknown' : 'not_monitored';
+  const measured = freshness !== 'not_monitored';
+  // Targets 1-4 have a failed latest attempt. Target 1 keeps a fresh accepted
+  // measurement at the same time: the two facts are independent.
+  const failed = index <= 4;
+  return {
+    targetId,
+    schemaVersion: 1,
+    resourceId: `wide-res-0000-4000-8000-0000000000${id}`,
+    name: `WIDE-${id} monitoring target`,
+    collectorProfile: 'http_metrics',
+    metricsEndpoint: `http://127.0.0.5:909${index % 10}/metrics`,
+    serviceUnit: 'amfd',
+    serviceKind: 'process',
+    collectionMode: index % 2 === 0 ? 'scheduled' : 'manual',
+    intervalSeconds: 120,
+    enabled: index % 7 !== 0,
+    domain: index <= 18 ? '5gc' : 'ims',
+    nfType: index <= 18 ? 'AMF' : 'PCSCF',
+    identityState: 'inventory_authoritative',
+    revision: 1,
+    createdAt: TS.t1,
+    createdBy: 'operator1',
+    updatedAt: TS.t5,
+    updatedBy: 'operator1',
+    lastAttemptAt: TS.t6,
+    lastSuccessAt: failed ? TS.t5 : TS.t6,
+    lastMeasuredAt: measured ? TS.t6 : undefined,
+    lastError: failed ? 'connection refused' : undefined,
+    coverage: {
+      l1Measured: true,
+      l2Measured: index % 5 !== 0,
+      l3Measured: index % 6 !== 0,
+      // Target 3 declares no L3 exporter at all: an unsupported layer, which is
+      // never a healthy one and never a failed one.
+      l3Available: index !== 3,
+    },
+    freshness: {
+      state: freshness,
+      policySeconds: 600,
+      basis: measured ? 'measurement_age' : 'no_policy',
+      evaluatedAt: TS.t7,
+    },
+    overallState: index <= 8 ? 'healthy' : index <= 12 ? 'degraded' : index <= 14 ? 'unhealthy' : index <= 17 ? 'stale' : index <= 21 ? 'unknown' : 'not_configured',
+  };
+}
+
+export const WIDE_TARGETS = Array.from({ length: 24 }, (_unused, position) => wideTarget(position + 1));
+
+const WIDE_MATRIX_ROWS = WIDE_TARGETS.map((target, position) => ({
+  targetId: target.targetId,
+  resourceId: target.resourceId,
+  name: target.name,
+  nfType: target.nfType,
+  domain: target.domain,
+  overallState: target.overallState,
+  freshness: target.freshness.state,
+  lastMeasuredAt: target.lastMeasuredAt,
+  cells: {
+    metrics: { state: position % 4 === 0 ? 'degraded' : 'healthy', httpStatus: 200, responseMs: 10 + position, measuredAt: TS.t6 },
+    sbi: position % 3 === 0 ? { state: 'not_configured' } : { state: 'healthy', httpStatus: 200, responseMs: 5, measuredAt: TS.t6 },
+    oam: { state: 'not_configured' },
+    health: { state: 'not_configured' },
+  },
+}));
+
+/** Offset cursor used only by the wide population; the default page has one page. */
+function offsetPage(items, limit, cursor) {
+  const offset = Number(String(cursor ?? '').replace(/^o:/, '')) || 0;
+  const slice = items.slice(offset, offset + limit);
+  const next = offset + limit < items.length ? `o:${offset + limit}` : null;
+  return { items: slice, page: { limit, nextCursor: next, hasMore: Boolean(next) } };
+}
+
 export const RUNS = [
   {
     runId: 'aa3e4f50-0031-4c31-9e31-000000000031',
@@ -665,6 +751,15 @@ function lastRunFor(targetId) {
   return RUNS.find((run) => run.targetId === targetId) ?? null;
 }
 
+/** The population this fixture server was started with. */
+function populationTargets(context) {
+  return context.population === 'wide' ? WIDE_TARGETS : TARGETS;
+}
+
+function populationMatrixRows(context) {
+  return context.population === 'wide' ? WIDE_MATRIX_ROWS : INTERFACE_MATRIX_ROWS;
+}
+
 function overallStateFor(sample) {
   if (!sample) return 'unknown';
   const states = [sample.layers.process.state, sample.layers.interface.state, sample.layers.service.state];
@@ -733,7 +828,7 @@ function handleNfHealth(req, res, url, context) {
     const enabled = url.searchParams.get('enabled');
     const freshness = (url.searchParams.get('freshness') ?? '').trim();
     const collection = (url.searchParams.get('collection') ?? '').trim();
-    let items = TARGETS.map(summarize);
+    let items = populationTargets(context).map(summarize);
     if (q) items = items.filter((item) => item.name.toLowerCase().includes(q));
     if (enabled === 'true') items = items.filter((item) => item.enabled);
     if (enabled === 'false') items = items.filter((item) => !item.enabled);
@@ -743,21 +838,23 @@ function handleNfHealth(req, res, url, context) {
     }
     if (collection === 'failed') items = items.filter((item) => Boolean(item.lastError));
     if (collection === 'succeeded') items = items.filter((item) => !item.lastError);
-    return sendJson(res, 200, { targets: items.slice(0, limit), page: page(limit) });
+    const paged = offsetPage(items, limit, url.searchParams.get('cursor'));
+    return sendJson(res, 200, { targets: paged.items, page: paged.page });
   }
 
   if (pathname === '/api/nf-health/interfaces' && req.method === 'GET') {
     const limit = Number(url.searchParams.get('limit') ?? 20) || 20;
     const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
     const domain = (url.searchParams.get('domain') ?? '').trim();
-    let rows = INTERFACE_MATRIX_ROWS;
+    let rows = populationMatrixRows(context);
     if (q) rows = rows.filter((row) => row.name.toLowerCase().includes(q));
     if (domain) rows = rows.filter((row) => row.domain === domain);
+    const paged = offsetPage(rows, limit, url.searchParams.get('cursor'));
     return sendJson(res, 200, {
       generatedAt: TS.t7,
       columns: ['metrics', 'sbi', 'oam', 'health'],
-      rows: rows.slice(0, limit),
-      page: page(limit),
+      rows: paged.items,
+      page: paged.page,
     });
   }
 
@@ -1076,7 +1173,7 @@ function handleApi(req, res, url, context) {
       : ['inventory', 'discovery', 'health', 'alerts', 'topology'];
     const body = { generatedAt: '2026-10-05T12:00:00Z', sections };
     if (sections.includes('health')) {
-      const summaries = TARGETS.map(summarize);
+      const summaries = populationTargets(context).map(summarize);
       const freshnessByState = {};
       const overallByState = {};
       for (const summary of summaries) {
@@ -1086,7 +1183,7 @@ function handleApi(req, res, url, context) {
         overallByState[overall] = (overallByState[overall] ?? 0) + 1;
       }
       body.health = {
-        completeness: 'complete',
+        completeness: context.healthCompleteness ?? 'complete',
         scope: 'full_collection',
         targets: {
           configured: summaries.length,
@@ -1135,10 +1232,16 @@ function handleApi(req, res, url, context) {
   return sendJson(res, 404, { error: 'not found', code: 'NOT_FOUND' });
 }
 
-export async function startFixtureServer({ distDir, sessionKey = 'operator' }) {
+export async function startFixtureServer({
+  distDir,
+  sessionKey = 'operator',
+  population = 'default',
+  healthCompleteness = 'complete',
+}) {
   const unexpected = [];
   const requestLog = [];
   const openStreams = new Set();
+  const context = { sessionKey, population, healthCompleteness, unexpected, openStreams };
 
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
@@ -1146,7 +1249,7 @@ export async function startFixtureServer({ distDir, sessionKey = 'operator' }) {
 
     if (pathname.startsWith('/api/')) {
       requestLog.push(`${req.method} ${pathname}`);
-      return handleApi(req, res, url, { sessionKey, unexpected, openStreams });
+      return handleApi(req, res, url, context);
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') {
