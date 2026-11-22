@@ -114,12 +114,11 @@ func (r *Repository) MetricAnalyses(ctx context.Context, q MetricAnalysisQuery, 
 	}
 	version, policy, _ := metricAnalysisKindScope(kind)
 	filter := bson.M{"targetId": q.TargetID, "metric": q.Metric, "series": "unlabeled", "algorithmVersion": version, "bucketStart": bson.M{"$gte": q.From, "$lt": q.To}}
-	if kind == "baseline" {
-		// Records written before the trend kind existed carry no kind at all.
-		filter["kind"] = bson.M{"$in": bson.A{"baseline", nil}}
-	} else {
-		filter["kind"] = kind
-	}
+	// An exact kind keeps the index able to provide the bucketStart sort. A
+	// multi-point kind would force a collection scan plus a blocking sort, so a
+	// record written before the kind field existed is not returned by this
+	// partition; the same hour is rewritten with a kind on the next analysis.
+	filter["kind"] = kind
 	rows, err := r.metricAnalyses().Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "bucketStart", Value: -1}, {Key: "_id", Value: 1}}).SetLimit(int64(expected+1)).SetProjection(bson.M{"_id": 1, "revision": 1, "bucketStart": 1}))
 	if err != nil {
 		return nil, err
