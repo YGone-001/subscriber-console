@@ -67,6 +67,11 @@ func TestMetricAggregateMongoWorkerHistoryAndRawExpiry(t *testing.T) {
 	if bucket.Period != MetricHourPeriod || bucket.ExpiresAt.IsZero() || bucket.ExpiresAt.Sub(bucket.End) != time.Duration(DefaultMetricHourRetentionDays)*24*time.Hour {
 		t.Fatalf("hourly retention not stamped: %+v", bucket)
 	}
+	// The exact percentile survives the round trip; 30 samples of 10..39 give
+	// the 29th smallest value.
+	if bucket.P95State != P95Complete || bucket.Segments[0].P95 == nil || *bucket.Segments[0].P95 != 38 {
+		t.Fatalf("hourly p95 not persisted: %+v", bucket.Segments[0])
+	}
 	// The same tick rolls the published hour up into its UTC day. An hour whose
 	// only evidence is a boundary point may also be published as an empty hour,
 	// so the invariant is that every slot is either present or counted missing.

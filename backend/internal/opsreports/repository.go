@@ -151,7 +151,11 @@ func (r *Repository) Generate(ctx context.Context, q Query, wanted string) *Repo
 		return out
 	}
 	if wanted == "" || wanted == "metrics" {
-		out.Metrics, out.MetricRows, out.RowsLimited["metrics"] = r.metrics(ctx, q, filter, now)
+		if q.Source == "aggregate" {
+			out.Metrics, out.MetricRows, out.RowsLimited["metrics"] = r.aggregateMetrics(ctx, q, filter)
+		} else {
+			out.Metrics, out.MetricRows, out.RowsLimited["metrics"] = r.metrics(ctx, q, filter, now)
+		}
 	}
 	if wanted == "" || wanted == "config" {
 		out.Config, out.ConfigRows, out.RowsLimited["config"] = r.config(ctx, q, filter)
@@ -296,6 +300,111 @@ func (r *Repository) metrics(ctx context.Context, q Query, scope bson.M, now tim
 	}
 	return Section{Completeness: completeness, Scope: "retained_samples", Reason: reason, Data: coverage}, rows, len(rows) > 10000
 }
+
+// aggregateMetrics reports published hourly or daily buckets as a separate
+// partition from the raw sample report. One row is one identity segment, so a
+// percentile or mean is never mixed across populations, and the section never
+// falls back to raw samples (nor the reverse).
+func (r *Repository) aggregateMetrics(ctx context.Context, q Query, scope bson.M) (Section, []map[string]any, bool) {
+	period, version := nfhealth.MetricHourPeriod, nfhealth.MetricAggregateVersion
+	if q.Resolution == nfhealth.MetricDayPeriod {
+		period, version = nfhealth.MetricDayPeriod, nfhealth.MetricDayAggregateVersion
+	}
+	filter := bson.M{
+		"metric":           nfhealth.MetricAggregateMetric,
+		"series":           "unlabeled",
+		"period":           period,
+		"algorithmVersion": version,
+		"bucketStart":      bson.M{"$gte": q.From, "$lt": q.To},
+	}
+	for k, v := range scope {
+		filter[k] = v
+	}
+	readCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	cursor, e := r.db.Collection("app_nf_metric_aggregates").Find(readCtx, filter, options.Find().SetSort(bson.D{{Key: "bucketStart", Value: 1}, {Key: "targetId", Value: 1}}).SetLimit(1001))
+	if e != nil {
+		return Section{Completeness: "unavailable", Scope: "retained_aggregates", Reason: "source_unavailable"}, nil, false
+	}
+	defer cursor.Close(readCtx)
+	var buckets []nfhealth.MetricAggregateBucket
+	if e := cursor.All(readCtx, &buckets); e != nil {
+		return Section{Completeness: "unavailable", Scope: "retained_aggregates", Reason: "source_unavailable"}, nil, false
+	}
+	budget := len(buckets) > 1000
+	if budget {
+		buckets = buckets[:1000]
+	}
+	coverage := map[string]any{
+		"source": "aggregate", "metric": nfhealth.MetricAggregateMetric, "unit": "bytes",
+		"resolution": period, "algorithmVersion": version,
+		"ownershipBasis": "canonical_resource_id_at_aggregation", "nameBasis": "not_stored", "domainBasis": "current_inventory",
+		"buckets": len(buckets), "emptyBuckets": 0, "segments": 0, "samples": int64(0),
+		"p95Available": 0, "p95Unavailable": 0,
+	}
+	rows := []map[string]any{}
+	incomplete := 0
+	for _, bucket := range buckets {
+		if !bucket.SourceComplete {
+			incomplete++
+		}
+		if len(bucket.Segments) == 0 {
+			coverage["emptyBuckets"] = coverage["emptyBuckets"].(int) + 1
+			continue
+		}
+		for _, segment := range bucket.Segments {
+			if len(rows) >= 10000 {
+				budget = true
+				break
+			}
+			if segment.P95 == nil {
+				coverage["p95Unavailable"] = coverage["p95Unavailable"].(int) + 1
+			} else {
+				coverage["p95Available"] = coverage["p95Available"].(int) + 1
+			}
+			coverage["segments"] = coverage["segments"].(int) + 1
+			coverage["samples"] = coverage["samples"].(int64) + int64(segment.Count)
+			rows = append(rows, map[string]any{
+				"rowId":            rowID(bucket.TargetID + "|" + bucket.Metric + "|" + bucket.Series + "|" + bucket.Period + "|" + bucket.Start.UTC().Format(time.RFC3339) + "|" + segment.Epoch),
+				"resourceId":       bucket.ResourceID,
+				"targetId":         bucket.TargetID,
+				"metric":           bucket.Metric,
+				"unit":             "bytes",
+				"resolution":       bucket.Period,
+				"algorithmVersion": bucket.Version,
+				"bucketStart":      bucket.Start,
+				"identityEpoch":    segment.Epoch,
+				"quality":          bucket.Quality,
+				"sourceComplete":   bucket.SourceComplete,
+				"p95State":         bucket.P95State,
+				"sampleCount":      segment.Count,
+				"min":              segment.Min,
+				"max":              segment.Max,
+				"mean":             segment.Mean,
+				"p95":              segment.P95,
+				"coveredSeconds":   segment.CoveredSeconds,
+			})
+		}
+		if len(rows) >= 10000 {
+			budget = true
+			break
+		}
+	}
+	sortRows(rows)
+	coverage["series"] = len(rows)
+	completeness, reason := "complete", ""
+	if incomplete > 0 {
+		completeness, reason = "partial", "aggregate_source_incomplete"
+	}
+	if coverage["p95Unavailable"].(int) > 0 && completeness == "complete" {
+		completeness, reason = "partial", "p95_budget_exceeded"
+	}
+	if budget {
+		completeness, reason = "partial", "aggregate_budget_exceeded"
+	}
+	return Section{Completeness: completeness, Scope: "retained_aggregates", Reason: reason, Data: coverage}, rows, budget
+}
+
 func firstKey(v any) bson.M {
 	switch m := v.(type) {
 	case bson.M:

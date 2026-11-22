@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"subscriber/internal/nfhealth"
 	"subscriber/internal/operationsview"
 )
 
@@ -20,6 +21,8 @@ type Query struct {
 	ResourceID       string    `json:"resourceId"`
 	Domain           string    `json:"domain"`
 	Severity         string    `json:"severity"`
+	Source           string    `json:"source,omitempty"`
+	Resolution       string    `json:"resolution,omitempty"`
 	Cursor           string    `json:"-"`
 	Limit            int       `json:"-"`
 	NetworkKey       string    `json:"networkKey,omitempty"`
@@ -75,7 +78,7 @@ func ParseQuery(values url.Values, now time.Time) (Query, error) {
 			return q, fmt.Errorf("duplicate query parameter")
 		}
 		switch k {
-		case "from", "to", "period", "resourceId", "domain", "severity", "cursor", "limit", "section", "networkKey", "siteResourceId", "hostResourceId", "operatorName", "plmn", "includeRetired", "scopeFingerprint":
+		case "from", "to", "period", "resourceId", "domain", "severity", "source", "resolution", "cursor", "limit", "section", "networkKey", "siteResourceId", "hostResourceId", "operatorName", "plmn", "includeRetired", "scopeFingerprint":
 		default:
 			return q, fmt.Errorf("unsupported query parameter")
 		}
@@ -147,6 +150,26 @@ func ParseQuery(values url.Values, now time.Time) (Query, error) {
 		if e != nil || q.Limit < 1 || q.Limit > 200 {
 			return q, fmt.Errorf("invalid page limit")
 		}
+	}
+	// The metric report has two partitions that never mix: retained raw samples
+	// and published aggregates. Resolution is meaningless for raw samples, so
+	// supplying it there is rejected instead of being ignored.
+	q.Source = values.Get("source")
+	if q.Source == "" {
+		q.Source = "raw"
+	}
+	if q.Source != "raw" && q.Source != "aggregate" {
+		return q, fmt.Errorf("invalid metric source")
+	}
+	q.Resolution = values.Get("resolution")
+	if q.Resolution == "" {
+		q.Resolution = nfhealth.MetricHourPeriod
+	}
+	if q.Resolution != nfhealth.MetricHourPeriod && q.Resolution != nfhealth.MetricDayPeriod {
+		return q, fmt.Errorf("invalid metric resolution")
+	}
+	if q.Source == "raw" && values.Has("resolution") {
+		return q, fmt.Errorf("resolution applies to aggregate metrics only")
 	}
 	return q, nil
 }

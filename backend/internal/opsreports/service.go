@@ -174,7 +174,13 @@ func (s *Service) Export(ctx context.Context, q Query, section string) ([]byte, 
 	columns := []string{"ruleName", "resourceId", "targetId", "targetName", "severity", "state", "firstTriggeredAt", "acknowledgedAt", "resolvedAt", "resolvedReason"}
 	if section == "metrics" {
 		rows, status = r.MetricRows, r.Metrics
-		columns = []string{"resourceId", "targetId", "key", "type", "unit", "category", "label_nf", "label_nftype", "label_nf_type", "label_function", "label_instance", "sampleCount", "first", "lastAt", "last", "min", "max", "mean"}
+		if r.Query.Source == "aggregate" {
+			// Aggregate rows never share a column set with raw sample rows, so a
+			// spreadsheet cannot silently compare two partitions.
+			columns = []string{"resourceId", "targetId", "metric", "unit", "resolution", "algorithmVersion", "bucketStart", "identityEpoch", "quality", "sourceComplete", "p95State", "sampleCount", "min", "max", "mean", "p95", "coveredSeconds"}
+		} else {
+			columns = []string{"resourceId", "targetId", "key", "type", "unit", "category", "label_nf", "label_nftype", "label_nf_type", "label_function", "label_instance", "sampleCount", "first", "lastAt", "last", "min", "max", "mean"}
+		}
 	}
 	if section == "config" {
 		rows, status = r.ConfigRows, r.Config

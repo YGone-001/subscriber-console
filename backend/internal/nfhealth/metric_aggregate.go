@@ -6,7 +6,10 @@ import (
 	"time"
 )
 
-const MetricAggregateVersion = "rss-hour-v1"
+// rss-hour-v2 adds the exact per-segment P95. The version is part of the bucket
+// identity, so buckets produced without that statistic keep their own version
+// and are never reinterpreted as if they had it.
+const MetricAggregateVersion = "rss-hour-v2"
 const MetricDayAggregateVersion = "rss-day-v1"
 const MetricAggregateMetric = "process_resident_memory_bytes"
 const MaxAggregateSegments = 32
@@ -17,6 +20,9 @@ const (
 	// Buckets are published only after this grace so late recordings inside a
 	// closed interval can still be observed before statistics are finalized.
 	MetricAggregateGrace = 5 * time.Minute
+	// MaxP95Samples bounds the exact percentile sort per segment. A segment that
+	// exceeds it reports no P95 instead of being sampled or truncated.
+	MaxP95Samples = 2048
 	// Retention bounds how long published buckets survive. Raw samples keep
 	// their own shorter retention and are never extended by aggregation.
 	DefaultMetricHourRetentionDays = 30
@@ -32,6 +38,15 @@ const (
 	MaxMetricHoursPerTick     = 3
 )
 
+// Percentile availability per bucket. A daily bucket never derives a
+// percentile from hourly percentiles, so it always reports not_provided.
+const (
+	P95Complete    = "complete"
+	P95Budget      = "budget"
+	P95Unavailable = "unavailable"
+	P95NotProvided = "not_provided"
+)
+
 // Segments never join across failed observations, gaps or exporter incarnations.
 // Epoch is an opaque digest; no private process/endpoint proof is exposed.
 type MetricAggregateSegment struct {
@@ -44,6 +59,10 @@ type MetricAggregateSegment struct {
 	First          time.Time `json:"firstObservedAt" bson:"firstObservedAt"`
 	Last           time.Time `json:"lastObservedAt" bson:"lastObservedAt"`
 	CoveredSeconds float64   `json:"coveredSeconds" bson:"coveredSeconds"`
+	// P95 is the exact nearest-rank 95th percentile of this segment's samples.
+	// It is absent when the segment exceeded the sort budget; it is never
+	// approximated and never merged across segments.
+	P95 *float64 `json:"p95,omitempty" bson:"p95,omitempty"`
 }
 
 type MetricAggregateBucket struct {
@@ -58,13 +77,15 @@ type MetricAggregateBucket struct {
 	// SourceVersion and SourceDigest describe the input buckets a derived
 	// period consumed. A changed digest is the only staleness signal a later
 	// analysis may bind to; publishing never rewrites the source evidence.
-	SourceVersion string    `json:"sourceAlgorithmVersion,omitempty" bson:"sourceAlgorithmVersion,omitempty"`
-	SourceDigest  string    `json:"sourceDigest,omitempty" bson:"sourceDigest,omitempty"`
-	Start         time.Time `json:"from" bson:"bucketStart"`
-	End           time.Time `json:"to" bson:"bucketEnd"`
-	ExpiresAt     time.Time `json:"expiresAt,omitempty" bson:"expiresAt,omitempty"`
-	Revision      int64     `json:"revision" bson:"revision"`
-	GeneratedAt   time.Time `json:"generatedAt" bson:"generatedAt"`
+	SourceVersion string `json:"sourceAlgorithmVersion,omitempty" bson:"sourceAlgorithmVersion,omitempty"`
+	SourceDigest  string `json:"sourceDigest,omitempty" bson:"sourceDigest,omitempty"`
+	// P95State reports whether every segment carries an exact percentile.
+	P95State    string    `json:"p95State" bson:"p95State"`
+	Start       time.Time `json:"from" bson:"bucketStart"`
+	End         time.Time `json:"to" bson:"bucketEnd"`
+	ExpiresAt   time.Time `json:"expiresAt,omitempty" bson:"expiresAt,omitempty"`
+	Revision    int64     `json:"revision" bson:"revision"`
+	GeneratedAt time.Time `json:"generatedAt" bson:"generatedAt"`
 	// Hours and MissingHours describe a daily bucket: how many closed hourly
 	// buckets contributed and how many expected hours were absent.
 	Hours        int `json:"hours,omitempty" bson:"hours,omitempty"`
@@ -83,12 +104,28 @@ func aggregateBucketID(targetID string, start time.Time) string {
 	return windowHash(MetricAggregateVersion, targetID, MetricAggregateMetric, "unlabeled", start.UTC().Format(time.RFC3339))
 }
 
+// nearestRankP95 returns the exact 95th percentile by nearest rank:
+// sorted[ceil(0.95*n)-1]. The input slice is sorted in place. No interpolation
+// and no sampling are applied, so a caller that cannot afford the sort must not
+// call this at all.
+func nearestRankP95(values []float64) float64 {
+	sort.Float64s(values)
+	rank := int(math.Ceil(0.95*float64(len(values)))) - 1
+	if rank < 0 {
+		rank = 0
+	}
+	if rank >= len(values) {
+		rank = len(values) - 1
+	}
+	return values[rank]
+}
+
 // BuildMetricHour counts observations only in [start,end). A leading point or
 // a point exactly at end supplies continuity only. Covered intervals are disjoint,
 // clipped adjacent pairs; no forward extrapolation or sample-count coverage.
 func BuildMetricHour(target *HealthTarget, start time.Time, batch MetricOutcomeBatch, now time.Time) MetricAggregateBucket {
 	start = start.UTC()
-	out := MetricAggregateBucket{ID: aggregateBucketID(target.TargetID, start), TargetID: target.TargetID, ResourceID: target.ResourceID, Metric: MetricAggregateMetric, Series: "unlabeled", Period: MetricHourPeriod, Version: MetricAggregateVersion, Start: start, End: start.Add(time.Hour), GeneratedAt: now.UTC(), SourceComplete: !batch.More && batch.Gaps == 0, Quality: "unavailable", Excluded: map[string]int{}, Segments: []MetricAggregateSegment{}}
+	out := MetricAggregateBucket{ID: aggregateBucketID(target.TargetID, start), TargetID: target.TargetID, ResourceID: target.ResourceID, Metric: MetricAggregateMetric, Series: "unlabeled", Period: MetricHourPeriod, Version: MetricAggregateVersion, P95State: P95Unavailable, Start: start, End: start.Add(time.Hour), GeneratedAt: now.UTC(), SourceComplete: !batch.More && batch.Gaps == 0, Quality: "unavailable", Excluded: map[string]int{}, Segments: []MetricAggregateSegment{}}
 	if !start.Equal(start.Truncate(time.Hour)) || out.End.After(now.Add(-MetricAggregateGrace)) {
 		out.Reason = "hour_not_closed"
 		out.SourceComplete = false
@@ -108,6 +145,8 @@ func BuildMetricHour(target *HealthTarget, start time.Time, batch MetricOutcomeB
 	var previous time.Time
 	previousEpoch := ""
 	segment := -1
+	// samples[i] holds the bounded raw values of segment i for the exact sort.
+	samples := [][]float64{}
 	gap := time.Duration(ThresholdMaxGapSeconds(target)) * time.Second
 	excluded := func(reason string) { out.Excluded[reason]++; previous = time.Time{}; previousEpoch = ""; segment = -1 }
 	for i, row := range rows {
@@ -153,6 +192,7 @@ func BuildMetricHour(target *HealthTarget, start time.Time, batch MetricOutcomeB
 					return out
 				}
 				out.Segments = append(out.Segments, MetricAggregateSegment{Epoch: identity, Min: *value, Max: *value, First: at})
+				samples = append(samples, []float64{})
 				segment = len(out.Segments) - 1
 			}
 			s := &out.Segments[segment]
@@ -162,6 +202,11 @@ func BuildMetricHour(target *HealthTarget, start time.Time, batch MetricOutcomeB
 			s.Max = math.Max(s.Max, *value)
 			s.Last = at
 			s.Mean = s.Sum / float64(s.Count)
+			// Keep at most the sort budget. Beyond it the percentile is reported
+			// as unavailable rather than approximated.
+			if len(samples[segment]) < MaxP95Samples {
+				samples[segment] = append(samples[segment], *value)
+			}
 			if math.IsInf(s.Sum, 0) || math.IsNaN(s.Sum) {
 				out.Segments = []MetricAggregateSegment{}
 				out.CoveredSeconds = 0
@@ -190,6 +235,15 @@ func BuildMetricHour(target *HealthTarget, start time.Time, batch MetricOutcomeB
 	}
 	if len(out.Segments) > 0 {
 		out.Quality = "measured"
+		out.P95State = P95Complete
+		for i := range out.Segments {
+			if len(samples[i]) != out.Segments[i].Count {
+				out.P95State = P95Budget
+				continue
+			}
+			p95 := nearestRankP95(samples[i])
+			out.Segments[i].P95 = &p95
+		}
 	} else {
 		out.Reason = "no_valid_observations"
 	}
