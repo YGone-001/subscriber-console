@@ -75,3 +75,9 @@ targets=100 hours=720 docs=72000 p50=68.9ms p95=94.1ms index=true heap_delta_kb=
 时间预期：第一个带真实样本的小时桶在 16:05 左右出现（15:00 小时闭合 + 5 分钟宽限）；基线偏离需要 48 小时中的 39 个合格小时，趋势需要连续两次同向评估，因此短期内仍是「数据不足」，这是设计预期而非故障。
 
 回滚：`cp .env.bak.metric-demo .env`，停掉 exporter 进程，删除目标与 `DEMO-EXPORTER` 资源（或 retire），重启本地栈。
+
+## 索引迁移执行记录
+
+- 2026-11-22 15:2x，在本地 `xcloud_ops` 执行 `node scripts/migrate-nf-metric-aggregate-indexes.mjs --apply`：`READY` 三个集合，`ABSENT uniq_nf_metric_hour`（该库从未创建过旧索引），`NF_METRIC_AGGREGATE_INDEXES_READY`。
+- 结果索引：`app_nf_metric_aggregates` = `_id_`, `uniq_nf_metric_bucket`(unique), `ttl_nf_metric_bucket`(ttl=0)；`app_nf_metric_analysis` = `_id_`, `nf_metric_analysis_read`, `ttl_nf_metric_analysis`(ttl=0)；`app_nf_health_targets` = `nf_metric_aggregate_targets`。
+- 验证：同一读查询 `plan_index=uniq_nf_metric_bucket`，`examined=2 returned=2`；迁移后 worker 继续正常写入（5 个聚合文档 / 2 条分析记录）。
