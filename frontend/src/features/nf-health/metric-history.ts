@@ -1,6 +1,9 @@
 export interface MetricHourSegment {
   identityEpoch: string; count: number; sum: number; min: number; max: number; mean: number;
   firstObservedAt: string; lastObservedAt: string; coveredSeconds: number;
+  // Exact nearest-rank P95 of this segment. Absent when the segment exceeded
+  // the sort budget, and never provided for a daily bucket.
+  p95?: number | null;
 }
 export type MetricResolution = '1h' | '1d';
 export interface MetricBucket {
@@ -8,6 +11,7 @@ export interface MetricBucket {
   coveredSeconds: number; sourceComplete: boolean; quality: string; reason?: string; excluded: Record<string, number>;
   segments: MetricHourSegment[];
   hours?: number; missingHours?: number; sourceDigest?: string; sourceAlgorithmVersion?: string;
+  p95State?: 'complete' | 'budget' | 'unavailable' | 'not_provided';
 }
 // Retained name: hourly buckets and daily buckets share one read shape.
 export type MetricHourBucket = MetricBucket;

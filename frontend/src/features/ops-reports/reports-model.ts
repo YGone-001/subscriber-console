@@ -1,5 +1,5 @@
 export const REPORT_GROUP_KEYS = ['networkKey', 'siteResourceId', 'hostResourceId', 'operatorName', 'plmn', 'scopeFingerprint'] as const;
-export type ReportQuery = { from: string; to: string; resourceId?: string; domain?: string; severity?: string; networkKey?: string; siteResourceId?: string; hostResourceId?: string; operatorName?: string; plmn?: string; scopeFingerprint?: string; includeRetired?: string | boolean };
+export type ReportQuery = { from: string; to: string; resourceId?: string; domain?: string; severity?: string; source?: string; resolution?: string; networkKey?: string; siteResourceId?: string; hostResourceId?: string; operatorName?: string; plmn?: string; scopeFingerprint?: string; includeRetired?: string | boolean };
 export type ReportRequest = Partial<ReportQuery> & { period?: string };
 export type ReportSection = { completeness: string; scope: string; reason: string; data: Record<string, unknown> | null };
 export type OperationsReport = { generatedAt: string; query: ReportQuery; consistency: string; alerts: ReportSection; metrics: ReportSection; config: ReportSection; agents: ReportSection };
@@ -10,7 +10,12 @@ export function reportQuery(params: URLSearchParams, _defaultTo?: string): Repor
   const groups: ReportRequest = {};
   for (const key of REPORT_GROUP_KEYS) if (params.has(key)) groups[key] = params.get(key)!;
   if (params.has('includeRetired')) groups.includeRetired = params.get('includeRetired')!;
-  return { ...window, ...groups, ...(params.get('resourceId') ? { resourceId: params.get('resourceId')! } : {}), ...(params.get('domain') ? { domain: params.get('domain')! } : {}), ...(params.get('severity') ? { severity: params.get('severity')! } : {}) };
+  // The metric report has two partitions. Only the aggregate one carries a
+  // resolution, so a raw request never sends one.
+  const partition: ReportRequest = params.get('source') === 'aggregate'
+    ? { source: 'aggregate', resolution: params.get('resolution') === '1d' ? '1d' : '1h' }
+    : {};
+  return { ...window, ...groups, ...partition, ...(params.get('resourceId') ? { resourceId: params.get('resourceId')! } : {}), ...(params.get('domain') ? { domain: params.get('domain')! } : {}), ...(params.get('severity') ? { severity: params.get('severity')! } : {}) };
 }
 export function reportSearch(query: ReportRequest) { return new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined && value !== '' && value !== false).map(([key, value]) => [key, value === true ? '1' : String(value)])).toString(); }
 export function finiteMeasurement(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) ? value : null; }

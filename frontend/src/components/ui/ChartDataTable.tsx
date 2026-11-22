@@ -22,13 +22,16 @@ interface ChartDataTableProps {
   caption: ReactNode;
   columns: readonly ChartDataColumn[];
   rows: readonly ChartDataRow[];
+  /** Visible provenance for the table: unit, resolution and algorithm version. */
+  note?: ReactNode;
 }
 
-export function ChartDataTable({ label, caption, columns, rows }: ChartDataTableProps) {
+export function ChartDataTable({ label, caption, columns, rows, note }: ChartDataTableProps) {
   return (
     <details className={styles.root}>
       <summary className={styles.summary}>{label}</summary>
       <div className={styles.scroller}>
+        {note ? <p className={styles.note}>{note}</p> : null}
         <table className={styles.table}>
           <caption className="sr-only">{caption}</caption>
           <thead>

@@ -42,6 +42,22 @@ test('capture request IDs work without the HTTPS-only randomUUID helper', () => 
   const ids = new Set(Array.from({ length: 100 }, captureRequestId)); assert.equal(ids.size, 100);
   for (const id of ids) assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
+test('aggregate metric section declares its own partition metadata', () => {
+  const html = renderToStaticMarkup(createElement(I18nProvider, null, createElement(ReportSectionCard, { name: 'metrics', section: { completeness: 'partial', scope: 'retained_aggregates', reason: 'p95_budget_exceeded', data: { source: 'aggregate', unit: 'bytes', resolution: '1h', algorithmVersion: 'rss-hour-v2', samples: 30, segments: 2, buckets: 2, p95Available: 1, p95Unavailable: 1 } } })));
+  assert.match(html, /rss-hour-v2/);
+  assert.match(html, /P95/);
+  assert.doesNotMatch(html, /<dd>0</);
+});
+test('report query carries the aggregate partition and never sends a raw resolution', () => {
+  const aggregate = reportQuery(new URLSearchParams('source=aggregate&resolution=1d'));
+  assert.equal(aggregate.source, 'aggregate');
+  assert.equal(aggregate.resolution, '1d');
+  assert.equal(new URLSearchParams(reportSearch(aggregate)).get('source'), 'aggregate');
+  const raw = reportQuery(new URLSearchParams('source=raw&resolution=1d'));
+  assert.equal(raw.source, undefined);
+  assert.equal(raw.resolution, undefined);
+  assert.equal(new URLSearchParams(reportSearch(raw)).get('resolution'), null);
+});
 test('the feature contract excludes raw configuration, browser file paths and report writes', () => {
   const contract = JSON.parse(readFileSync(new URL('../evidence-contract.json', import.meta.url), 'utf8'));
   assert.equal(contract.rawConfigurationStored, false); assert.equal(contract.browserPathsAccepted, false); assert.equal(contract.reportWrites, false); assert.equal(contract.freshActorRequired, true);

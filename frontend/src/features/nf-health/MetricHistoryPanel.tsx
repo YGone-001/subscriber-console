@@ -7,7 +7,7 @@ import { ErrorState } from '../../components/ui/StatePanel';
 import { LoadingRows } from '../../components/ui/OperationFeedback';
 import { useI18n } from '../../providers/I18nProvider';
 import { fetchNfMetricHistory } from './nf-health-api';
-import { METRIC_HISTORY_RANGES, metricHistoryPoints, metricHistoryResolutions, metricHistoryScope, metricHistoryWindow, type MetricHistory, type MetricHistoryRange, type MetricResolution } from './metric-history';
+import { METRIC_HISTORY_RANGES, metricHistoryPoints, metricHistoryResolutions, metricHistoryScope, metricHistoryWindow, type MetricBucket, type MetricHistory, type MetricHistoryRange, type MetricHourSegment, type MetricResolution } from './metric-history';
 import styles from '../../styles/modules/nf-health.module.css';
 
 export function MetricHistoryPanel({ targetId, refresh }: { targetId: string; refresh: number }) {
@@ -41,6 +41,11 @@ export function MetricHistoryPanel({ targetId, refresh }: { targetId: string; re
   };
   const daily = scope.resolution === '1d';
   const coveragePercent = (seconds: number) => `${(seconds / (daily ? 864 : 36)).toFixed(1)}% (${Math.round(seconds)}s)`;
+  // A missing percentile is explained, never rendered as zero: the segment may
+  // have exceeded the exact sort budget, and daily buckets never provide one.
+  const p95Cell = (bucket: MetricBucket, segment: MetricHourSegment) => segment.p95 === undefined || segment.p95 === null
+    ? t(bucket.p95State === 'not_provided' ? 'nf_metric_history_p95_not_provided' : 'nf_metric_history_p95_unavailable')
+    : segment.p95;
   return <section className="dash-card" aria-label={t('nf_metric_history_title')}>
     <div className={styles.sectionHead}><h2>{t('nf_metric_history_title')}</h2></div>
     <p className={styles.semanticNote}>{t('nf_metric_history_note')}</p>
@@ -69,17 +74,18 @@ export function MetricHistoryPanel({ targetId, refresh }: { targetId: string; re
           <Tooltip labelFormatter={value => formatDateTime(Number(value))} /><Scatter data={points} fill="var(--primary)" isAnimationActive={false} />
         </ScatterChart></ResponsiveContainer>
       </div> : <p>{t('nf_metric_history_no_points')}</p>}
-      <ChartDataTable label={t('nf_metric_history_table')} caption={t('nf_metric_history_title')} columns={[
+      <ChartDataTable label={t('nf_metric_history_table')} caption={t('nf_metric_history_title')} note={`${data.unit} · ${t(daily ? 'nf_metric_history_resolution_day' : 'nf_metric_history_resolution_hour')} · ${data.algorithmVersion}`} columns={[
         { key: 'bucket', label: t(daily ? 'nf_metric_history_day' : 'nf_metric_history_hour') }, { key: 'epoch', label: t('nf_metric_history_epoch') },
         { key: 'mean', label: t('nf_metric_history_mean'), numeric: true }, { key: 'range', label: t('nf_metric_history_range') },
         { key: 'count', label: t('nf_metric_history_count'), numeric: true }, { key: 'coverage', label: t('nf_metric_history_coverage'), numeric: true },
         ...(daily ? [{ key: 'hours', label: t('nf_metric_history_hours'), numeric: true }] : []),
+        { key: 'p95', label: t('nf_metric_history_p95'), numeric: true },
         { key: 'quality', label: t('nf_metric_history_quality') },
       ]} rows={data.buckets.flatMap(bucket => bucket.segments.length ? bucket.segments.map((segment, index) => ({ key: `${bucket.from}:${index}`, cells: [
         formatDateTime(bucket.from), `${segment.identityEpoch.slice(0, 8)} / ${index + 1}`, segment.mean, `${segment.min} / ${segment.max} bytes`, segment.count,
-        coveragePercent(segment.coveredSeconds), ...(daily ? [`${bucket.hours ?? 0} / 24`] : []),
+        coveragePercent(segment.coveredSeconds), ...(daily ? [`${bucket.hours ?? 0} / 24`] : []), p95Cell(bucket, segment),
         `${t(`nf_metric_history_${bucket.quality}`)}${bucket.reason ? ` / ${t(`nf_metric_history_${bucket.reason}`)}` : ''}`,
-      ] })) : [{ key: bucket.from, cells: [formatDateTime(bucket.from), '-', '-', '-', '-', bucket.sourceComplete ? coveragePercent(bucket.coveredSeconds) : '-', ...(daily ? [`${bucket.hours ?? 0} / 24`] : []), t(`nf_metric_history_${bucket.reason ?? bucket.quality}`)] }])} />
+      ] })) : [{ key: bucket.from, cells: [formatDateTime(bucket.from), '-', '-', '-', '-', bucket.sourceComplete ? coveragePercent(bucket.coveredSeconds) : '-', ...(daily ? [`${bucket.hours ?? 0} / 24`] : []), '-', t(`nf_metric_history_${bucket.reason ?? bucket.quality}`)] }])} />
       <div className={styles.trendControls}><button type="button" className="btn btn-secondary" onClick={restart}>{t('nf_metric_history_restart')}</button>
         <button type="button" className="btn btn-secondary" disabled={!data.page.hasMore} onClick={() => setCursor(data.page.nextCursor ?? undefined)}>{t('nf_metric_history_next')}</button></div>
     </> : null}
