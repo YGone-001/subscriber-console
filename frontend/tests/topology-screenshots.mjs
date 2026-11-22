@@ -728,10 +728,19 @@ async function main() {
       await page.locator('#xcloud-primary-sidebar').getByRole('link', { name: /Topology/i }).first().click();
       await page.waitForURL(/\/topology$/, { timeout: 15000 });
       await settle(page);
+      /* The declared canvas is the observable business state: it only renders
+       * after the edge read resolves, so waiting for it is a barrier rather than
+       * a delay. A missing canvas is still a failure. */
+      const canvasVisible = await page
+        .locator('[data-actual-canvas]')
+        .first()
+        .waitFor({ state: 'visible', timeout: 20000 })
+        .then(() => true)
+        .catch(() => false);
       check(
         'sidebar_topology_navigation',
-        page.url().endsWith('/topology') && await page.locator('[data-actual-canvas]').first().isVisible(),
-        `url=${page.url()}`,
+        page.url().endsWith('/topology') && canvasVisible,
+        `url=${page.url()} canvas=${canvasVisible}`,
       );
       await context.close();
     }

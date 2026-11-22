@@ -666,6 +666,48 @@ function handleApi(req, res, url, context) {
     });
   }
 
+  /* ------------------------------------------------- containment projection -- */
+  /* The declared graph states how many resources are referenced by no active
+   * edge. The real endpoint composes Inventory with active `contains` edges; the
+   * fixture derives the same facts from its own resources and edges, so the
+   * projection stays truthful instead of being a fixed stub. */
+  if (pathname === '/api/operations/containment') {
+    const parentId = (url.searchParams.get('parentId') ?? '').trim();
+    const active = context.edges.filter((edge) => edge.lifecycleState === 'active');
+    const containsEdges = active.filter((edge) => edge.relationshipType === 'contains');
+    const childCount = new Map();
+    for (const edge of containsEdges) {
+      childCount.set(edge.fromResourceId, (childCount.get(edge.fromResourceId) ?? 0) + 1);
+    }
+    const parentOf = new Map(containsEdges.map((edge) => [edge.toResourceId, edge.fromResourceId]));
+    const referenced = new Set(active.flatMap((edge) => [edge.fromResourceId, edge.toResourceId]));
+    const toDto = (resource) => ({
+      resourceId: resource.resourceId,
+      name: resource.name,
+      displayName: resource.displayName,
+      domain: resource.domain,
+      kind: resource.kind,
+      role: resource.role,
+      lifecycleState: resource.lifecycleState,
+      childCount: childCount.get(resource.resourceId) ?? 0,
+    });
+    const unlinked = RESOURCES.filter((resource) => !referenced.has(resource.resourceId));
+    const level = parentId
+      ? RESOURCES.filter((resource) => parentOf.get(resource.resourceId) === parentId)
+      : RESOURCES.filter((resource) => !parentOf.has(resource.resourceId));
+    return sendJson(res, 200, {
+      generatedAt: TS.t5,
+      coverage: 'complete',
+      truncated: false,
+      unlinkedCount: unlinked.length,
+      unlinkedResources: unlinked.map(toDto),
+      resources: level.map(toDto),
+      edges: parentId
+        ? []
+        : active.map((edge) => ({ fromResourceId: edge.fromResourceId, toResourceId: edge.toResourceId })),
+    });
+  }
+
   /* ------------------------------------------------------------- topology -- */
   if (pathname === '/api/topology/meta') {
     return sendJson(res, 200, {
