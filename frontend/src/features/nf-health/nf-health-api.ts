@@ -153,6 +153,6 @@ export async function collectNfHealthTarget(targetId: string): Promise<CollectRe
   return postJson<CollectResult>(`/api/nf-health/targets/${encodeURIComponent(targetId)}/collect`, {});
 }
 
-export function fetchNfMetricHistory(targetId: string, params: {from: string; to: string; resolution?: MetricResolution; cursor?: string}, signal: AbortSignal): Promise<MetricHistory> {
-  return getJsonWithSignal<MetricHistory>(withQuery(`/api/nf-health/targets/${encodeURIComponent(targetId)}/metric-history`, { ...params, metric: 'process_resident_memory_bytes', series: 'unlabeled', resolution: params.resolution ?? '1h', limit: 200 }), signal);
+export function fetchNfMetricHistory(targetId: string, params: {from: string; to: string; resolution?: MetricResolution; metric?: string; cursor?: string}, signal: AbortSignal): Promise<MetricHistory> {
+  return getJsonWithSignal<MetricHistory>(withQuery(`/api/nf-health/targets/${encodeURIComponent(targetId)}/metric-history`, { ...params, metric: params.metric ?? 'process_resident_memory_bytes', series: 'unlabeled', resolution: params.resolution ?? '1h', limit: 200 }), signal);
 }
