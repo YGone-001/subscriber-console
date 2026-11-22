@@ -191,11 +191,16 @@ func analysisStateID(ruleID, targetID, series string) string {
 	return analysisKey("analysis-state", ruleID, targetID, series)
 }
 
+// SetAnalysisEnabled gates evaluation itself, not only rule authoring. Turning
+// the deployment flag off must stop existing rules from firing, otherwise a
+// rollback would keep paging operators.
+func (m *MongoEvaluatorRepository) SetAnalysisEnabled(enabled bool) { m.analysisEnabled = enabled }
+
 // PublishMetricAnalysis evaluates every enabled analysis rule of the target
 // against one published record. It never reads raw samples and never creates an
 // alert for a rule the operator did not author.
 func (m *MongoEvaluatorRepository) PublishMetricAnalysis(ctx context.Context, target *nfhealth.HealthTarget, record nfhealth.MetricAnalysis) error {
-	if m == nil || target == nil || m.repo == nil {
+	if m == nil || target == nil || m.repo == nil || !m.analysisEnabled {
 		return nil
 	}
 	cursor, err := m.rules.Find(ctx, bson.M{"enabled": true, "conditionType": ConditionTypeMetricAnalysis, "targetId": target.TargetID})

@@ -72,6 +72,15 @@ func TestAnalysisRuleFiresHoldsAndRecovers(t *testing.T) {
 		t.Fatal(err)
 	}
 	evaluator := NewMongoEvaluatorRepository(repo)
+	// The deployment flag gates evaluation, so a disabled deployment cannot fire
+	// an existing rule during a rollback.
+	if err := evaluator.PublishMetricAnalysis(ctx, target, trendRecord(time.Now().UTC(), nfhealth.TrendRising, "rising", true)); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := db.Collection("app_nf_alerts").CountDocuments(ctx, bson.M{}); err != nil || value != 0 {
+		t.Fatalf("disabled analysis alerts evaluated a rule: %d %v", value, err)
+	}
+	evaluator.SetAnalysisEnabled(true)
 	now := time.Now().UTC()
 	bucket := now.Add(-10 * time.Minute).Truncate(time.Hour)
 	countAlerts := func() int64 {

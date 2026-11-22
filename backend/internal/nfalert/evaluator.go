@@ -303,11 +303,12 @@ var errInvalidTimestamp error = timestampError{}
 
 // MongoEvaluatorRepository is the production EvaluationRepository.
 type MongoEvaluatorRepository struct {
-	repo          *Repository
-	metricTargets MetricTargetReader
-	metricSource  MetricOutcomeSource
-	rules         *mongo.Collection
-	alerts        *mongo.Collection
+	repo            *Repository
+	metricTargets   MetricTargetReader
+	metricSource    MetricOutcomeSource
+	analysisEnabled bool
+	rules           *mongo.Collection
+	alerts          *mongo.Collection
 }
 
 // NewMongoEvaluatorRepository constructs the production evaluation repository.

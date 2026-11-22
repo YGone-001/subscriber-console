@@ -386,6 +386,7 @@ func main() {
 	nfMetricRepo := nfalert.NewMongoEvaluatorRepository(nfAlertRepo)
 	nfMetricRepo.SetMetricTargetReader(metricTargets)
 	nfMetricRepo.SetMetricOutcomeSource(nfHealthRepo)
+	nfMetricRepo.SetAnalysisEnabled(cfg.NFMetricAnalysisAlertsEnabled)
 	aggregateWorker.SetAnalysisSink(nfMetricRepo)
 	nfAlertEvaluator := nfalert.NewEvaluator(nfMetricRepo)
 	nfAlertEvaluator.SetMetricEnabled(cfg.NFMetricAlertsEnabled)
