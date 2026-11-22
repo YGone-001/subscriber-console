@@ -316,3 +316,51 @@ rendering contract, `scripts/test-nf-health-ui-contract.mjs` asserts the
 list-surface invariants against the union of these files, and
 `npm --prefix frontend run acceptance:nf-health-workspace` proves the browser
 behaviour against the production build.
+
+## Topology workspace ownership
+
+`/topology` keeps one orchestration owner and one owner per concern. The split is
+a composition change: no endpoint, relationship type, evidence semantic or
+permission changed with it.
+
+| File | Owns | Never does |
+|---|---|---|
+| `features/topology/TopologyPage.tsx` | The three-mode navigation contract and the graph evidence source (through `useTopologyViewState` and `useOperationsUrlState`), the ledger query's URL state, the Inventory endpoint directory, and the composition of toolbar, body and workflows | Read the ledger itself, page it, or submit a mutation |
+| `features/topology/use-topology-ledger.ts` | The ledger read lifecycle: request token, abort, returned page, pagination metadata, read time, cursor walk, and the query identity that invalidates the cursor trail | Write the URL, choose the view, or mutate |
+| `features/topology/use-topology-edge-workflows.ts` | The create/edit/retire state machines: target capture, revision binding, in-flight state, validation and conflict feedback | Name a transport, navigate, or retry a conflict |
+| `features/topology/components/TopologyLedgerToolbar.tsx` | The relationship/lifecycle selects, the endpoint pickers behind their disclosure, the active-filter chips and the read-time chip | Own query state, write the URL, or start a read |
+| `features/topology/components/TopologyLedgerPanel.tsx` | The four exclusive ledger states (failed read, first read in flight, no rows, rows) and the cursor pager | Fetch, page on its own, or turn a failed read into an empty ledger |
+| `features/topology/components/TopologyEdgeWorkflowDialogs.tsx` | The three governed dialogs and the revision-conflict banner | Submit without an explicit action |
+| `features/topology/components/TopologyEdgeTable.tsx` | The relationship table, also the accessible equivalent of the one-hop graph | Own a request |
+
+Rules that hold across the split:
+
+- **One ledger read owner.** The page decides which view is active; the ledger
+  hook reads only when that view is the ledger. A superseded read is aborted and
+  its result dropped, so a slow earlier response can never overwrite a newer one,
+  and a failed read is reported as a failure rather than as an empty ledger.
+- **One URL registry.** `useTopologyViewState` owns `view`, `source`, `scope` and
+  `cursor`; `useOperationsUrlState` owns the ledger filters. Legacy aliases
+  (`view=actual`, `view=runtime`, `view=relationships`, `source=reference`) stay
+  readable and are canonicalised on mount. A filter change drops the cursor, and a
+  cursor belongs to exactly one query identity.
+- **Targets are captured, never looked up.** A workflow binds the edge it was
+  opened with, including its revision. A later query or view change cannot
+  substitute another relationship, and a revision conflict is surfaced with an
+  explicit reload instead of being retried.
+- **The transport stays named in the page.** The workflow owner receives the three
+  governed operations, so the page remains the single module that wires them and
+  the frozen request contract keeps pointing at real code.
+- **Evidence stays separated.** A declared relationship is an operator decision, a
+  runtime configured link is observed configuration evidence, and the reference
+  architecture is an illustration. The ledger never presents configured evidence
+  as a declaration, and no surface infers a protocol connection from a discovered
+  process or a configuration endpoint.
+
+Verification: `frontend/tests/topology-ledger.test.tsx` pins the query identity,
+the cursor walk, the failure classification and both presentation contracts,
+`scripts/test-topology-ui-contract.mjs` asserts the ledger invariants against the
+union of these files, and
+`npm --prefix frontend run acceptance:topology-workspace` proves the browser
+behaviour - including an out-of-order read, the three governed mutations, a 409
+conflict and a read-only session - against the production build.
