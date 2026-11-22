@@ -421,6 +421,7 @@ export function NfHealthDetailPage() {
           {target.collectorProfile === 'http_metrics' ? <ServiceWindowPanel report={detail?.serviceWindows} /> : null}
           {meta?.metricHistory?.enabled && target.collectorProfile === 'http_metrics' ? <MetricHistoryPanel key={`${targetId}:${historyRefresh}`} targetId={targetId} refresh={historyRefresh} /> : null}
           {meta?.metricHistory?.enabled && target.collectorProfile === 'http_metrics' ? <MetricAnalysisPanel key={`analysis:${targetId}:${historyRefresh}`} targetId={targetId} refresh={historyRefresh} /> : null}
+          {meta?.metricHistory?.enabled && target.collectorProfile === 'http_metrics' ? <MetricAnalysisPanel key={`trend:${targetId}:${historyRefresh}`} targetId={targetId} resourceId={target.resourceId} refresh={historyRefresh} kind="trend" /> : null}
 
           <section className="dash-card">
             <div className={styles.sectionHead}>

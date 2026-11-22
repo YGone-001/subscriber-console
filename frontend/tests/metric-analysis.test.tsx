@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { metricAnalysisCounts, metricAnalysisWindow, type MetricAnalysisItem } from '../src/features/nf-health/metric-analysis';
+import { metricAnalysisCounts, metricAnalysisWindow, metricTrendCounts, type MetricAnalysisItem } from '../src/features/nf-health/metric-analysis';
 import { metricAnalysisEn, metricAnalysisZh } from '../src/lib/locales/metric-analysis';
 
 test('analysis window ends at the last closed UTC hour', () => {
@@ -16,5 +16,10 @@ test('analysis summary counts states instead of inventing a score', () => {
   });
   assert.deepEqual(metricAnalysisCounts([item('anomaly'), item('ok'), item('ok'), item('insufficient_data'), item('unavailable')]), { anomaly: 1, ok: 2, insufficient_data: 1, unavailable: 1 });
   assert.deepEqual(metricAnalysisCounts([]), { anomaly: 0, ok: 0, insufficient_data: 0, unavailable: 0 });
+  const trend = (state: string, confirmed = false): MetricAnalysisItem => ({ ...item('ok'), state, confirmed });
+  assert.deepEqual(metricTrendCounts([trend('rising', true), trend('rising'), trend('stable'), trend('insufficient_data'), trend('unavailable')]),
+    { rising: 2, falling: 0, stable: 1, insufficient_data: 1, unavailable: 1, confirmed: 1 });
+  // A trend record is an event only when it is confirmed.
+  assert.equal(metricTrendCounts([trend('rising')]).confirmed, 0);
   assert.deepEqual(Object.keys(metricAnalysisEn).sort(), Object.keys(metricAnalysisZh).sort());
 });

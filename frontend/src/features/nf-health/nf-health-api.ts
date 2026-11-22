@@ -154,7 +154,7 @@ export async function collectNfHealthTarget(targetId: string): Promise<CollectRe
   return postJson<CollectResult>(`/api/nf-health/targets/${encodeURIComponent(targetId)}/collect`, {});
 }
 
-export function fetchNfMetricAnalysis(targetId: string, params: {from: string; to: string; cursor?: string}, signal: AbortSignal): Promise<MetricAnalysisView> {
+export function fetchNfMetricAnalysis(targetId: string, params: {from: string; to: string; kind?: 'baseline' | 'trend'; cursor?: string}, signal: AbortSignal): Promise<MetricAnalysisView> {
   return getJsonWithSignal<MetricAnalysisView>(withQuery(`/api/nf-health/targets/${encodeURIComponent(targetId)}/metric-analysis`, { metric: 'process_resident_memory_bytes', limit: 200, ...params }), signal);
 }
 
