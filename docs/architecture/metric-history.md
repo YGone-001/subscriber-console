@@ -1,11 +1,11 @@
 # Metric history
 
 NF Health owns an opt-in aggregation worker and a pure historical read endpoint
-for exporter RSS statistics. It shares the existing recording and measurement
-identity checks. It does not change alert decisions, NF Health/L3 states,
-collection scheduling or notification delivery. Daily percentiles, counter
-rates, capacity forecasting and anomaly or trend detection are not implemented
-by this module.
+for exporter RSS and exporter CPU-time statistics. It shares the existing
+recording and measurement identity checks. It does not change alert decisions,
+NF Health/L3 states, collection scheduling or notification delivery. Daily
+percentiles, daily counter rollups, capacity forecasting and anomaly or trend
+detection are not implemented by this module.
 
 ## Activation and storage
 
@@ -93,6 +93,31 @@ is part of the bucket identity, so this release publishes hourly buckets as
 `rss-hour-v2`; buckets written as `rss-hour-v1` keep their own identity and are
 not reinterpreted as if they had a percentile.
 
+## Counter rate semantics
+
+The approved counter is `process_cpu_seconds_total`, the exporter process's
+cumulative CPU seconds. Its cumulative total is never averaged. For each hour a
+separate bucket records, per identity segment, the sum of positive deltas, the
+number of valid intervals, the covered seconds and the rate
+`deltaSum / coveredSeconds`. The unit is `seconds_per_second`: CPU seconds
+consumed per wall-clock second by the exporter process. It is not a percentage
+of capacity and may exceed 1.
+
+A delta is counted only when both endpoints fall inside the hour, so an interval
+crossing the hour boundary belongs to neither hour and is never counted twice.
+A negative delta is a reset or restart: it is excluded and starts a new segment
+instead of producing a negative increment. Duplicate instants, identity changes,
+gaps beyond the collection-derived allowance and ambiguous label sets are
+excluded. A zero delta over a valid interval is measured zero traffic and stays
+distinct from a missing measurement; an hour with fewer than two inside
+observations reports `no_valid_intervals` instead of a zero rate.
+
+Counter buckets use their own algorithm version `rss-counter-hour-v1` in the same
+collection. They are never merged into the daily gauge rollup, never carry a
+percentile, and are never threshold candidates: `ThresholdMetricApproved` still
+accepts only the RSS gauge. Counter reads are hourly only, and a repair slot with
+no recorded evidence publishes no empty counter document.
+
 ## Daily rollup semantics
 
 A day is the half-open UTC interval `[00:00,24:00)`. Daily buckets are derived
@@ -162,9 +187,11 @@ evidence of a complete measurement population.
 `GET /api/nf-health/targets/{targetId}/metric-history` requires `core.read`, an
 existing UUID target and the existing authenticated identity. It has a per-user
 60/minute rate limit and does not write, collect, repair or backfill. The
-parameters are `metric=process_resident_memory_bytes`, `series=unlabeled`,
-`resolution=1h|1d`, explicit UTC-aligned `from` and `to`, optional `limit`
-(1-200, default 200) and `cursor`.
+parameters are `metric=process_resident_memory_bytes|process_cpu_seconds_total`,
+`series=unlabeled`, `resolution=1h|1d`, explicit UTC-aligned `from` and `to`,
+optional `limit` (1-200, default 200) and `cursor`. A counter read is hourly
+only: `resolution=1d` is rejected for it instead of silently returning the
+gauge.
 
 Hourly reads require hour-aligned bounds, exclude the still-open hour and are
 limited to 30 days. Daily reads require day-aligned bounds, are limited to 90
@@ -184,8 +211,10 @@ clients restart the read. The bounded read queries share a two-second request
 budget and do not promise an atomic snapshot. Invalid cursors return 400;
 database failures return 503 rather than pretending the history is empty.
 
-The existing target detail offers 24-hour/7-day/30-day hourly ranges and
-7-day/30-day/90-day daily ranges when meta advertises the feature. The data
+The existing target detail offers a metric selector (exporter RSS or exporter
+CPU rate) plus 24-hour/7-day/30-day hourly ranges and 7-day/30-day/90-day daily
+ranges for the gauge when meta advertises the feature. The counter view offers
+hourly ranges only and plots the rate. The data
 table carries a visible unit/resolution/algorithm-version note and a P95 column
 that states why a value is absent instead of showing zero.
 `metricRange` and `metricResolution` are URL state; older `metricHours` links are

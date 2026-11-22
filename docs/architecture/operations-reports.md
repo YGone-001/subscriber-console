@@ -51,7 +51,9 @@ Domains describe current Inventory association, not historical ownership.
   resolution, algorithm version, quality, sample count, min/max/mean, an exact
   P95 (absent above the sort budget) and observed coverage. Aggregate resource
   ids are the canonical ids recorded at aggregation time; historical names are
-  not stored, so any name shown elsewhere is a current Inventory name.
+  not stored, so any name shown elsewhere is a current Inventory name. The
+  partition currently covers the approved RSS gauge; counter rates are exposed
+  through the NF Health metric history, not through this report.
 - Configuration events use collection/observation time, not an unknown actual
   modification time. Their rows contain metadata, not configuration fields.
 - Agent counts describe remote collectors now and exclude the local controller.
