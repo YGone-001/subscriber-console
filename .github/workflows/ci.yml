@@ -373,6 +373,11 @@ jobs:
         working-directory: frontend
         run: node tests/performance-rendering-smoke.mjs
 
+      - name: NF Health workspace acceptance
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+        working-directory: frontend
+        run: node tests/nf-health-workspace-smoke.mjs
+
       - name: Bounded read cancellation and remount acceptance
         if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
         working-directory: frontend
