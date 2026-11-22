@@ -129,6 +129,44 @@ for the resource. Both state that this is a comparison with the metric's own
 history, not a failure probability, and a missing number is never rendered as
 zero.
 
+## Alert integration
+
+Analysis records are shadow evidence by default: nothing evaluates them and
+nothing notifies. Turning them into alerts requires all three of the following,
+so a deployment cannot start paging by accident.
+
+1. `NF_METRIC_AGGREGATES_ENABLED` publishes records.
+2. `NF_METRIC_ANALYSIS_ALERTS_ENABLED` (default false) accepts `metric_analysis`
+   rules at all; with the flag off, rule creation and update are rejected with
+   `NF_ALERT_ANALYSIS_DISABLED`.
+3. An operator authors an explicit rule. No rule means no alert.
+
+A rule pins one target, the approved gauge, the record kind (`baseline` or
+`trend`), an optional direction for deviations (a mandatory one for trends) and
+the exact algorithm and policy version it was written against. A later policy
+change therefore cannot silently reinterpret an existing rule.
+
+Evaluation happens when the aggregation worker publishes a record. The
+classification has exactly three outcomes. `fire` requires a confirmed trend in
+the rule's direction, or a baseline anomaly matching the rule's direction.
+`recover` requires a valid normal record (`ok` or `stable`). Everything else —
+insufficient data, unavailable, an unconfirmed trend, a different direction or a
+record from another policy version — `hold`s, so missing analysis can never
+close an open alert. An open alert closes only after two consecutive valid
+normal records, and no maximum-hold timer exists: holding is not recovery.
+
+Alert identity is deterministic per rule, target, series, kind, algorithm,
+policy and analyzed hour, so replaying or repairing the same hour cannot create
+a second instance. An event whose hour is older than two hours still becomes an
+alert record but never emits a notification, which keeps a backfill or a
+replay from paging an operator. Alerts use the existing lifecycle, permissions,
+deduplication and notification chain.
+
+The rule form does not offer `metric_analysis` yet. The condition type, its
+validation and its evaluation are implemented server-side and gated as above,
+so the remaining work is the form fields plus the capability advertisement in
+`GET /api/nf-alerts/meta`.
+
 ## Rollback
 
 Set `NF_METRIC_AGGREGATES_ENABLED` false to stop both aggregation and analysis
