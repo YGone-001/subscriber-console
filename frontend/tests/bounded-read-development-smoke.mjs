@@ -201,12 +201,29 @@ try {
     const { page, base } = await openPage();
     await page.click('#slow');
     await waitUntil(() => requests.slice(base).some((item) => item.scope === 'slow'), 'slow request to start');
+    const firstReadsBeforeReturn = requests.slice(base).filter((item) => item.scope === 'first').length;
     await page.click('#next');
     await page.click('#first');
     await waitData(page, 'primary', 'first');
     await waitData(page, 'secondary', 'first');
     check('BR-12', await page.locator('#primary').getAttribute('data-state') === 'data', 'rapid A -> B -> A keeps the final key readable');
     await waitUntil(() => requests.slice(base).find((item) => item.scope === 'slow')?.aborted === true, 'superseded slow request');
+    /* Returning to a key that is already cached renders the cached value with
+     * isValidating=false before SWR registers the revalidation, so a settled
+     * predicate can sample that window and prove nothing about the final read.
+     * The final key's own request is the only evidence that it has settled: wait
+     * for that read to start and cross a boundary before trusting the state. */
+    await waitUntil(
+      () => requests.slice(base).filter((item) => item.scope === 'first').length > firstReadsBeforeReturn,
+      'final key revalidation to start',
+    );
+    await waitUntil(
+      () => {
+        const lastFirstRead = requests.slice(base).filter((item) => item.scope === 'first').at(-1);
+        return Boolean(lastFirstRead && (lastFirstRead.completed || lastFirstRead.aborted));
+      },
+      'final key revalidation to settle',
+    );
     await waitSettled(page, 'primary');
     check('BR-13', await page.locator('#primary').getAttribute('data-validating') === 'false', 'rapid key transitions settle without a retained pending read');
     await page.close();
