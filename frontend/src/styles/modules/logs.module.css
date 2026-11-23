@@ -94,6 +94,13 @@
   outline: none;
 }
 
+/* The field owns the ring through its container: the input has no border and
+ * removes its own outline, so without this a keyboard user has no focus cue. */
+.search:focus-within {
+  border-color: var(--sys-color-action-primary);
+  box-shadow: var(--focus-ring);
+}
+
 .searchIcon {
   color: var(--text-muted);
 }
@@ -117,6 +124,14 @@
   border-radius: 999px;
   border: 1px solid currentColor;
   font-weight: 600;
+}
+
+/* The announced part of the bar: the connection verdict and its reason. */
+.statusRegion {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 .statusLive {

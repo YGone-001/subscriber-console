@@ -34,12 +34,20 @@ export type LogSourcesResponse = {
 };
 
 export type LogLine = {
+  /* Client-side render identity. The server's `seq` restarts at 1 on every
+   * new stream (a reconnect is a new tail), so it cannot identify a row across
+   * reconnects; this counter can. Optional only for values built by tests. */
+  id?: number;
   seq: number;
   level: string;
   text: string;
 };
 
 export type LogStreamStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'closed' | 'unavailable';
+
+/* Why the workspace will not open a stream. The page renders the localized
+ * label; the hook never builds user-facing prose. */
+export type LogStreamUnavailable = 'unreadable' | 'unknown_source';
 
 export const DEFAULT_TAIL_LINES = 100;
 export const DEFAULT_LEVEL = '';

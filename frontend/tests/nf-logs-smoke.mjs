@@ -116,6 +116,22 @@ function startServer() {
     }
     if (pathname === '/api/alerts') return sendJson(res, 200, { alerts: [] });
 
+    /* The shared header reads the platform alert posture on every route. It is
+     * an application-shell read, not a Log Center request, but the fixture must
+     * still answer it: otherwise "no unexpected API requests" stops being a
+     * statement about the log workspace. */
+    if (pathname === '/api/operations/summary') {
+      return sendJson(res, 200, {
+        generatedAt: '2026-10-19T12:00:00Z',
+        sections: ['alerts'],
+        alerts: {
+          completeness: 'complete',
+          scope: 'full_collection',
+          alerts: { totalRules: 0, enabledRules: 0, alertsByState: {}, openBySeverity: {} },
+        },
+      });
+    }
+
     if (pathname === '/api/nf-logs/sources') {
       const resourceId = url.searchParams.get('resourceId');
       const sources = resourceId

@@ -23,6 +23,7 @@ import {
   MAX_VIEW_LINES,
   type LogCapabilities,
   type LogSource,
+  type LogStreamUnavailable,
 } from './logs-types';
 import styles from '../../styles/modules/logs.module.css';
 
@@ -35,6 +36,12 @@ const STATUS_LABEL_KEY: Record<string, string> = {
   reconnecting: 'logs_status_reconnecting',
   closed: 'logs_status_closed',
   unavailable: 'logs_status_unavailable',
+};
+const ERROR_LABEL_KEY: Record<string, string> = {
+  unsupported: 'logs_stream_error_unsupported',
+  unreadable: 'logs_stream_error_unreadable',
+  unknown_source: 'logs_stream_error_unknown_source',
+  reconnect_failed: 'logs_stream_error_reconnect_failed',
 };
 
 export function LogCenterPage() {
@@ -103,13 +110,28 @@ export function LogCenterPage() {
     [sources, sourceId],
   );
 
+  /* The registry is the only authority on whether a source can be read. An id
+   * the deployment does not offer is equally unreadable: opening it would only
+   * be a request the server rejects and the browser retries. While the list is
+   * still loading nothing is concluded, and the stream waits for it: a deep link
+   * that arrives first must not ask the server to read a source the deployment
+   * has already declared unreadable. */
+  const unavailable: LogStreamUnavailable | null = useMemo(() => {
+    if (sourcesLoading || sourcesError || !sourceId) return null;
+    if (selectedSource) return selectedSource.readable ? null : 'unreadable';
+    return 'unknown_source';
+  }, [sourcesLoading, sourcesError, sourceId, selectedSource]);
+
+  const streamSourceId = sourcesLoading ? '' : sourceId;
+
   const stream = useLogStream({
-    sourceId,
+    sourceId: streamSourceId,
     tailLines,
     level,
     keyword,
     follow: true,
     paused,
+    unavailable,
   });
 
   const totalLines = stream.lines.length;
@@ -276,13 +298,27 @@ export function LogCenterPage() {
           </div>
         </div>
 
-        <div className={styles.statusBar} role="status" aria-live="polite">
-          <span className={`${styles.statusPill} ${statusTone(stream.status)}`} data-logs-status={stream.status}>
-            {t(STATUS_LABEL_KEY[stream.status] ?? 'logs_status_idle')}
-          </span>
+        <div className={styles.statusBar}>
+          {/* Only the connection verdict is announced. The counters change on
+           * every frame; wrapping them in a live region turns a chatty source
+           * into a screen-reader flood. */}
+          <div className={styles.statusRegion} role="status" aria-live="polite">
+            <span className={`${styles.statusPill} ${statusTone(stream.status)}`} data-logs-status={stream.status}>
+              {t(STATUS_LABEL_KEY[stream.status] ?? 'logs_status_idle')}
+            </span>
+            {stream.error ? (
+              <span className={styles.statusWarn} data-logs-error={stream.error}>
+                <AlertTriangle size={13} aria-hidden="true" />
+                {t(ERROR_LABEL_KEY[stream.error] ?? 'logs_stream_error_reconnect_failed')}
+              </span>
+            ) : null}
+          </div>
           <span className={styles.statusMeta}>
             {selectedSource ? selectedSource.name : t('logs_no_source')}
           </span>
+          {selectedSource?.note ? (
+            <span className={styles.statusMeta} data-logs-source-note="true">{selectedSource.note}</span>
+          ) : null}
           <span className={styles.statusMeta}>{t('logs_filter_scope', {
             level: level ? t(`logs_level_${level}`) : t('logs_level_all'),
             keyword: keyword || t('logs_keyword_none'),
@@ -341,11 +377,17 @@ export function LogCenterPage() {
             data-logs-viewport="true"
           >
             {stream.lines.length === 0 ? (
-              <p className={styles.dim}>{stream.status === 'live' ? t('logs_empty_lines') : t('logs_waiting')}</p>
+              <p className={styles.dim}>
+                {stream.status === 'live'
+                  ? t('logs_empty_lines')
+                  : stream.status === 'unavailable'
+                    ? t('logs_unavailable_lines')
+                    : t('logs_waiting')}
+              </p>
             ) : (
               <ol className={styles.lines}>
-                {stream.lines.map((line) => (
-                  <li key={`${line.seq}-${line.text.slice(0, 24)}`} className={styles.line}>
+                {stream.lines.map((line, index) => (
+                  <li key={line.id ?? `${line.seq}-${index}`} className={styles.line}>
                     <span className={styles.lineLevel} data-level={line.level}>
                       {line.level}
                     </span>

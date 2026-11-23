@@ -32,10 +32,11 @@
     "acceptance:dialogs": "node tests/dialogs-interaction-smoke.mjs",
     "acceptance:bounded-read": "node tests/bounded-read-development-smoke.mjs",
     "acceptance:lazy-routes": "node tests/lazy-routes-smoke.mjs",
-    "acceptance:performance": "node tests/performance-rendering-smoke.mjs && node tests/bounded-read-development-smoke.mjs && node tests/subscribers-render-benchmark.mjs && node tests/log-center-stream-benchmark.mjs",
+    "acceptance:performance": "node tests/performance-rendering-smoke.mjs && node tests/bounded-read-development-smoke.mjs && node tests/subscribers-render-benchmark.mjs && node tests/log-center-stream-benchmark.mjs && node tests/log-center-lifecycle-smoke.mjs",
     "measure:bundle": "node ../scripts/measure-spa-bundle.mjs",
     "acceptance:render-benchmark": "node tests/subscribers-render-benchmark.mjs",
     "acceptance:log-benchmark": "node tests/log-center-stream-benchmark.mjs",
+    "acceptance:log-center-lifecycle": "node tests/log-center-lifecycle-smoke.mjs",
     "acceptance:inspections": "node tests/inspections-smoke.mjs"
   },
   "dependencies": {

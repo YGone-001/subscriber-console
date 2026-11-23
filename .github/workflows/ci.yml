@@ -408,6 +408,11 @@ jobs:
         working-directory: frontend
         run: node tests/log-center-stream-benchmark.mjs
 
+      - name: Log Center lifecycle acceptance
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+        working-directory: frontend
+        run: node tests/log-center-lifecycle-smoke.mjs
+
   direct-operations:
     name: Direct operations integration
     if: github.event_name == 'workflow_dispatch'

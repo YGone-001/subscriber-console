@@ -42,8 +42,9 @@ test('the keyword is sent as literal text, never as a pattern', () => {
   );
 });
 
-test('the view ring keeps the newest lines', () => {
+test('the view ring keeps the newest lines and their render identity', () => {
   const lines: LogLine[] = Array.from({ length: MAX_VIEW_LINES + 5 }, (_unused, index) => ({
+    id: index + 1,
     seq: index + 1,
     level: 'info',
     text: `line-${index + 1}`,
@@ -52,6 +53,10 @@ test('the view ring keeps the newest lines', () => {
   assert.equal(trimmed.length, MAX_VIEW_LINES);
   assert.equal(trimmed[0].text, 'line-6');
   assert.equal(trimmed[trimmed.length - 1].text, `line-${MAX_VIEW_LINES + 5}`);
+  /* `seq` restarts on every new stream, so identity must come from the client
+   * counter; trimming must not lose it. */
+  assert.equal(trimmed[0].id, 6);
+  assert.equal(new Set(trimmed.map((line) => line.id)).size, MAX_VIEW_LINES);
 });
 
 test('the page renders its source picker without opening a connection', () => {
@@ -99,6 +104,11 @@ test('both locales define the log workspace vocabulary', () => {
     'logs_discarded',
     'logs_empty_sources_bound',
     'logs_view_for_resource',
+    'logs_stream_error_unsupported',
+    'logs_stream_error_unreadable',
+    'logs_stream_error_unknown_source',
+    'logs_stream_error_reconnect_failed',
+    'logs_unavailable_lines',
   ]) {
     assert.ok(key in en, `en locale must define ${key}`);
     assert.ok(key in zh, `zh locale must define ${key}`);
