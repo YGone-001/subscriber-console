@@ -79,6 +79,15 @@ export function matrixCell(cell: InterfaceCell, t: (key: string) => string): Rea
   return detail ? <span title={detail}>{badge}</span> : badge;
 }
 
+/* Availability is a server fact, not a client guess: a layer the server marked
+ * not_configured has no exporter at all, while every other state means the layer
+ * is configured and coverage is a separate measurement question. Summaries that
+ * predate the layer projection fall back to the caller's assumption, so the list
+ * surfaces never invent an availability the server did not report. */
+export function layerAvailable(state: LayerState | undefined, fallback = true): boolean {
+  return state === undefined ? fallback : state !== 'not_configured';
+}
+
 /* Coverage is a measurement fact, not a health verdict: an established
  * measurement keeps the neutral evidence tone, an attempted-but-absent
  * measurement says unknown, and a layer with no exporter says not configured. */

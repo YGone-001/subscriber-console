@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom';
 import { useI18n } from '../../providers/I18nProvider';
 import type { RuntimeComponent } from '../runtime/runtime-types';
 import type { HealthTargetSummary } from './nf-health-types';
-import { UtilizationBar, coverageBadge, formatTimestamp, overallBadge } from './nf-health-badges';
+import { UtilizationBar, coverageBadge, formatTimestamp, layerAvailable, overallBadge } from './nf-health-badges';
 import styles from '../../styles/modules/nf-health.module.css';
 
 /** One server-derived domain and the targets it owns, in server order. */
@@ -68,8 +68,8 @@ export function NfHealthTargetCards({
                     </header>
                     <div className={styles.targetCardStatus}>{overallBadge(target, t)}</div>
                     <div className={styles.targetCardBadges}>
-                      {coverageBadge(true, target.coverage.l1Measured, t, 'L1')}
-                      {coverageBadge(true, target.coverage.l2Measured, t, 'L2')}
+                      {coverageBadge(layerAvailable(target.layers?.process?.state), target.coverage.l1Measured, t, 'L1')}
+                      {coverageBadge(layerAvailable(target.layers?.interface?.state), target.coverage.l2Measured, t, 'L2')}
                       {coverageBadge(target.coverage.l3Available, target.coverage.l3Measured, t, 'L3')}
                     </div>
                     <UtilizationBar

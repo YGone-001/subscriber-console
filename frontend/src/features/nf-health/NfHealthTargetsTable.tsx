@@ -15,6 +15,7 @@ import { useI18n } from '../../providers/I18nProvider';
 import type { HealthTargetSummary } from './nf-health-types';
 import {
   coverageBadge,
+  layerAvailable,
   formatTimestamp,
   freshnessBadge,
 } from './nf-health-badges';
@@ -112,8 +113,8 @@ export function NfHealthTargetsTable({
                       : t('nf_health_mode_scheduled')}
                   </code>
                 </td>
-                <td>{coverageBadge(true, target.coverage.l1Measured, t)}</td>
-                <td>{coverageBadge(true, target.coverage.l2Measured, t)}</td>
+                <td>{coverageBadge(layerAvailable(target.layers?.process?.state), target.coverage.l1Measured, t)}</td>
+                <td>{coverageBadge(layerAvailable(target.layers?.interface?.state), target.coverage.l2Measured, t)}</td>
                 <td>{coverageBadge(target.coverage.l3Available, target.coverage.l3Measured, t)}</td>
                 <td>{formatTimestamp(target.lastMeasuredAt)}</td>
                 <td>{freshnessBadge(target, t)}</td>

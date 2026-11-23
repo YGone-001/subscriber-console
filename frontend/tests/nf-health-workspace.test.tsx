@@ -200,6 +200,56 @@ test('an unsupported layer is not configured and an unmeasured layer is unknown'
   );
 });
 
+test('a layer the server marked not configured is never shown as unknown', () => {
+  /* The server projects one layer state per target. A layer with no exporter is
+   * not_configured, which is a configuration fact an operator can act on; an
+   * unknown layer means a configured measurement produced no evidence. Collapsing
+   * the first into the second hides a configuration gap behind a measurement gap,
+   * and it contradicted the detail page for the same target. */
+  const layers = {
+    process: { state: 'healthy' as const, evidenceKind: 'process' as const, measured: true },
+    interface: { state: 'not_configured' as const, evidenceKind: 'none' as const, reason: 'not_configured', measured: false },
+    service: { state: 'not_configured' as const, evidenceKind: 'none' as const, reason: 'not_configured', measured: false },
+  };
+  const target = summary({
+    collectorProfile: 'process_only',
+    coverage: { l1Measured: true, l2Measured: false, l3Measured: false, l3Available: false },
+    layers,
+  });
+
+  const cards = render(
+    createElement(NfHealthTargetCards, {
+      groups: [{ domain: '5gc', label: '5GC', targets: [target] }],
+      detailHref: identityHref,
+      onOpenTarget: noop,
+      resolveRuntimeComponent: noop,
+    }),
+  );
+  assert.ok(
+    cards.includes(`L2 · ${en.nf_health_state_not_configured}`),
+    'the card wall repeats the server layer state instead of guessing',
+  );
+  assert.ok(
+    !cards.includes(`L2 · ${en.nf_health_state_unknown}`),
+    'a layer with no exporter is never reported as an unknown measurement',
+  );
+
+  const table = render(
+    createElement(NfHealthTargetsTable, {
+      targets: [target],
+      canConfigure: true,
+      collectingId: null,
+      onCollect: noop,
+      targetHref: identityHref,
+      onOpenDetail: noop,
+    }),
+  );
+  assert.ok(
+    table.includes(en.nf_health_state_not_configured),
+    'the audit table speaks the same layer vocabulary as the detail page',
+  );
+});
+
 test('an unavailable utilization measurement is never rendered as zero', () => {
   const markup = render(
     createElement(NfHealthTargetCards, {
