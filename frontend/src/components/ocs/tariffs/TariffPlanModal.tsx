@@ -205,7 +205,7 @@ export default function TariffPlanModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="ocs-modal-body">
             {error && (
               <div className="ocs-feedback-error ocs-feedback-spaced" role="alert">

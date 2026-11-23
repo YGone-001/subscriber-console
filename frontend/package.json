@@ -29,6 +29,7 @@
     "acceptance:subscriber-actions": "npm run typecheck && node tests/subscriber-actions-smoke.mjs",
     "acceptance:subscriber-state": "node tests/subscribers-state-smoke.mjs",
     "acceptance:ocs-balance": "node tests/ocs-balance-interaction-smoke.mjs",
+    "acceptance:ocs-workspace": "node tests/ocs-workspace-smoke.mjs",
     "acceptance:dialogs": "node tests/dialogs-interaction-smoke.mjs",
     "acceptance:bounded-read": "node tests/bounded-read-development-smoke.mjs",
     "acceptance:lazy-routes": "node tests/lazy-routes-smoke.mjs",

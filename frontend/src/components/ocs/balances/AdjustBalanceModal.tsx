@@ -691,7 +691,7 @@ export default function AdjustBalanceModal({
       )}
 
       {step === 'editing' && (
-        <form onSubmit={handleProceedToReview}>
+        <form onSubmit={handleProceedToReview} noValidate>
           <div className="ocs-form-group">
             <label className="ocs-form-label" htmlFor="adjust-bucket">
               {t('ocs_balance_bucket')}

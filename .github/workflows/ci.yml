@@ -413,6 +413,11 @@ jobs:
         working-directory: frontend
         run: node tests/log-center-lifecycle-smoke.mjs
 
+      - name: OCS workspace acceptance
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+        working-directory: frontend
+        run: node tests/ocs-workspace-smoke.mjs
+
   direct-operations:
     name: Direct operations integration
     if: github.event_name == 'workflow_dispatch'

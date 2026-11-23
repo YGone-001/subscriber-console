@@ -294,6 +294,10 @@
   border-collapse: collapse;
   text-align: left;
   font-size: var(--ref-font-size-body-small);
+  /* Design rule: identifiers, amounts, volumes, dates and counts use tabular
+   * numerals. Every OCS table cell carries a measurable value or an identifier
+   * (IMSI, MSISDN, plan id), so the rule is applied once at the table. */
+  font-variant-numeric: tabular-nums;
 }
 
 .ocs-table th {
@@ -338,77 +342,11 @@
   line-height: 1;
 }
 
-.ocs-badge.status-active {
-  background: var(--status-success-soft);
-  color: var(--status-success);
-  border: 1px solid var(--status-success-border);
-}
-
-.ocs-badge.status-closing {
-  background: var(--status-warning-soft);
-  color: var(--status-warning);
-  border: 1px solid var(--status-warning-border);
-}
-
-.ocs-badge.status-closed {
-  background: var(--neutral-soft);
-  color: var(--text-muted);
-  border: 1px solid var(--surface-border);
-}
-
-.ocs-badge.status-settled {
-  background: var(--status-info-soft);
-  color: var(--status-info);
-  border: 1px solid var(--status-info-border);
-}
-
-.ocs-badge.status-released {
-  background: var(--selection-soft);
-  color: var(--primary);
-  border: 1px solid var(--selection-border);
-}
-
-.ocs-badge.status-orphaned {
-  background: var(--status-danger-soft);
-  color: var(--status-danger);
-  border: 1px solid var(--status-danger-border);
-}
-
-.ocs-badge.invariant-valid {
-  background: var(--status-success-soft);
-  color: var(--status-success);
-  border: 1px solid var(--status-success-border);
-}
-
-.ocs-badge.invariant-broken {
-  background: var(--status-danger-soft);
-  color: var(--status-danger);
-  border: 1px solid var(--status-danger-border);
-}
-
-.ocs-badge.interface-gy {
-  background: var(--status-info-soft);
-  color: var(--status-info);
-  border: 1px solid var(--status-info-border);
-}
-
-.ocs-badge.interface-ro {
-  background: color-mix(in srgb, var(--primary) 14%, transparent);
-  color: var(--primary);
-  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
-}
-
-.ocs-badge.result-2001 {
-  background: var(--status-success-soft);
-  color: var(--status-success);
-  border: 1px solid var(--status-success-border);
-}
-
-.ocs-badge.result-error {
-  background: var(--status-danger-soft);
-  color: var(--status-danger);
-  border: 1px solid var(--status-danger-border);
-}
+/* Status and invariant badges are one vocabulary: `.ocs-status-badge` +
+ * `.ocs-status-*` (OcsStatusBadge) and `.ocs-invariant-badge` +
+ * `.ocs-invariant-*` (OcsInvariantBadge). The historical `.ocs-badge.status-*`
+ * variants were removed with FE-C2: no component could emit them, and keeping a
+ * second mapping would silently colour a future badge from the wrong rule. */
 
 /* Multi-Segment Usage Bar */
 .ocs-quota-bar-wrap {
@@ -608,12 +546,6 @@
   padding: 0.35rem 0.65rem;
   font-size: var(--ref-font-size-label-strong);
 }
-
-.ocs-badge--neutral {
-  background: var(--neutral-soft);
-  color: var(--text-secondary);
-}
-
 /* ── Mobile table transforms ── */
 
 @media (max-width: 980px) {
@@ -1019,6 +951,7 @@
   font-size: var(--ref-font-size-data-relaxed);
   text-align: right;
   word-break: break-all;
+  font-variant-numeric: tabular-nums;
 }
 
 .ocs-detail-value-strong {
