@@ -6,11 +6,17 @@ import { useI18n } from '../../providers/I18nProvider';
 import { getVisibleNavigation } from '../../lib/navigation';
 import { isSuperAdmin } from '../../lib/permissions';
 
+const PANEL_ID = 'xcloud-user-menu-panel';
+
 /**
  * Restored header user menu.
  *
- * Exposes current session facts only (username, role) plus the current logout
- * transport and links to routes the current navigation authority already grants.
+ * This is a disclosure of a small set of navigation and action buttons, not an
+ * application menu: there is no roving focus, no menu command model and every
+ * item is a native button that is reachable with ordinary Tab. It therefore uses
+ * the disclosure/popover ARIA pattern (`aria-expanded` + `aria-controls`) rather
+ * than the application-menu roles, which would promise keyboard interaction
+ * (arrow keys, Home/End, type-ahead) the surface does not implement.
  */
 export function UserMenu({ onLogout }: { onLogout: () => void }) {
   const { user } = useAuth();
@@ -18,11 +24,16 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!open) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') {
+        setOpen(false);
+        /* Return focus to the control that owns the panel. */
+        triggerRef.current?.focus();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -57,10 +68,11 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
     <div className="user-menu" ref={containerRef}>
       <button
         type="button"
+        ref={triggerRef}
         className="avatar-button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        aria-haspopup="menu"
+        aria-controls={PANEL_ID}
       >
         <span className="avatar-circle" aria-hidden="true"><User size={20} /></span>
         <span className="avatar-meta">
@@ -73,7 +85,7 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
       {open ? (
         <>
           <div className="dropdown-backdrop" onClick={() => setOpen(false)} />
-          <div className="user-dropdown" role="menu">
+          <div className="user-dropdown" id={PANEL_ID} role="group" aria-label={displayName}>
             <div className="dropdown-profile">
               <span className="avatar-circle large" aria-hidden="true"><User size={22} /></span>
               <div>
@@ -83,14 +95,14 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
             </div>
             <div className="dropdown-actions">
               {settingsRoute ? (
-                <button type="button" className="dropdown-item" role="menuitem" onClick={() => go(settingsRoute.targetRoute)}>
-                  <Settings size={16} />
+                <button type="button" className="dropdown-item" onClick={() => go(settingsRoute.targetRoute)}>
+                  <Settings size={16} aria-hidden="true" />
                   {t('profile_settings')}
                 </button>
               ) : null}
               {helpRoute ? (
-                <button type="button" className="dropdown-item" role="menuitem" onClick={() => go(helpRoute.targetRoute)}>
-                  <HelpCircle size={16} />
+                <button type="button" className="dropdown-item" onClick={() => go(helpRoute.targetRoute)}>
+                  <HelpCircle size={16} aria-hidden="true" />
                   {t('help_support')}
                 </button>
               ) : null}
@@ -98,10 +110,9 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
               <button
                 type="button"
                 className="dropdown-item text-danger"
-                role="menuitem"
                 onClick={() => { setOpen(false); onLogout(); }}
               >
-                <LogOut size={16} />
+                <LogOut size={16} aria-hidden="true" />
                 {t('logout')}
               </button>
             </div>

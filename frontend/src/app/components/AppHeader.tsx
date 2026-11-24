@@ -1,4 +1,5 @@
 import { Command, Menu } from 'lucide-react';
+import type { Ref } from 'react';
 import { useI18n } from '../../providers/I18nProvider';
 import { CommandPalette } from './CommandPalette';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -17,6 +18,7 @@ import { UserMenu } from './UserMenu';
 export function AppHeader({
   sidebarOpen,
   onToggleSidebar,
+  toggleRef,
   paletteOpen,
   onOpenPalette,
   onClosePalette,
@@ -24,6 +26,7 @@ export function AppHeader({
 }: {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  toggleRef?: Ref<HTMLButtonElement>;
   paletteOpen: boolean;
   onOpenPalette: () => void;
   onClosePalette: () => void;
@@ -47,6 +50,7 @@ export function AppHeader({
 
           <button
             type="button"
+            ref={toggleRef}
             className="icon-button"
             onClick={onToggleSidebar}
             title={sidebarOpen ? t('sidebar_collapse_hint') : t('sidebar_expand_hint')}

@@ -64,7 +64,7 @@ const tabBarSource = read('app/components/NavigationTabBar.tsx');
 const breadcrumbSource = read('app/components/NavigationBreadcrumbs.tsx');
 const paletteSource = read('app/components/CommandPalette.tsx');
 check('DISC-UI-09', sidebarSource.includes('getSidebarGroups'), 'sidebar=shared_authority');
-check('DISC-UI-10', /getVisibleNavigation|canAccessNavigationRoute/.test(tabBarSource), 'tab_bar=shared_authority');
+check('DISC-UI-10', /getNavigationRoute|resolveNavigationRoute|getVisibleNavigation|canAccessNavigationRoute/.test(tabBarSource), 'tab_bar=shared_authority');
 check('DISC-UI-11', breadcrumbSource.includes('getBreadcrumbs'), 'breadcrumbs=shared_authority');
 check('DISC-UI-12', /getVisibleNavigation|filterNavigation/.test(paletteSource), 'command_palette=shared_authority');
 

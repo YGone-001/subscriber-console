@@ -1924,12 +1924,25 @@
   .brand-lockup .brand-name,
     .noc-sentinel,
     .approval-menu,
-    .header-right > .hover-glass {
+    .header-right > .hover-glass:not(#lang-switcher-btn) {
       display: none;
     }
   .nav-breadcrumbs-right .nav-crumb-tool-btn:not(.icon-only) {
       display: none;
     }
+}
+
+/*
+ * Below 480px the 3-way theme segment plus the language and account controls no
+ * longer fit one header row; without this the flex row overlapped the language
+ * button and the command button. The language control is the primary bilingual
+ * affordance and stays visible; the theme preference remains reachable from the
+ * command palette (the header command button opens it on touch devices too).
+ */
+@media (max-width: 480px) {
+  .theme-switcher {
+    display: none;
+  }
 }
 
 .skip-link {

@@ -300,7 +300,7 @@ try {
   const baseUrl = fixture.origin;
   console.log(`[acceptance:cross-route-ux] Fixture host on ${baseUrl}`);
 
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: process.env.XCLOUD_ACCEPTANCE_HEADED !== '1' });
 
   /* ---------------------------------------------------------------------- */
   /* Layer 1: the complete route contract                                   */
@@ -470,33 +470,66 @@ try {
   const paletteInput = await keyboard.page.waitForSelector('.cp-search-input', { timeout: 10000 }).catch(() => null);
   check('L2-KEY-03', Boolean(paletteInput), 'Control+K opens the command palette');
   if (paletteInput) {
-    const paletteFocus = await keyboard.page.evaluate(() => ({
-      tag: document.activeElement?.tagName.toLowerCase() ?? '',
-      className: String((document.activeElement)?.className || ''),
-    }));
-    check(
-      'L2-KEY-04',
-      paletteFocus.className.includes('cp-search-input'),
-      `the command palette moves initial focus into its search field (${paletteFocus.className})`,
-    );
+    /*
+     * The dialog moves focus in a requestAnimationFrame so the overlay is laid
+     * out first. Sampling instantly can observe the pre-open focus, so wait for
+     * the documented focus landing instead of racing the frame.
+     */
+    const focusLanded = await keyboard.page.waitForFunction(
+      () => document.activeElement?.classList.contains('cp-search-input') ?? false,
+      undefined,
+      { timeout: 5000 },
+    ).then(() => true).catch(() => false);
+    check('L2-KEY-04', focusLanded, 'the command palette moves initial focus into its search field');
     await keyboard.page.keyboard.type('subscribers');
     await keyboard.page.waitForTimeout(400);
     const resultCount = await keyboard.page.locator('.cp-item-row').count();
     check('L2-KEY-05', resultCount > 0, `the command palette returns search results (${resultCount} rows)`);
+    const announcement = (await keyboard.page.locator('.cp-modal [role="status"]').first().textContent().catch(() => ''))?.trim() ?? '';
+    check(
+      'L2-KEY-05-ANNOUNCE',
+      announcement.length > 0,
+      `the command palette announces the active result (${announcement || 'nothing announced'})`,
+    );
     await keyboard.page.keyboard.press('Escape');
     const paletteClosed = await keyboard.page.locator('.cp-search-input').count();
     check('L2-KEY-06', paletteClosed === 0, 'Escape dismisses the command palette');
   }
 
-  /* The user menu must open, expose menu items and close on Escape. */
+  /*
+   * The user menu is a disclosure/popover of native action buttons, not an
+   * application menu. It must expose the disclosure contract and must not
+   * advertise menu keyboard behaviour it does not implement.
+   */
+  const userMenuTrigger = keyboard.page.locator('.avatar-button');
+  const disclosure = await userMenuTrigger.evaluate((button) => ({
+    expanded: button.getAttribute('aria-expanded'),
+    controls: button.getAttribute('aria-controls'),
+    haspopup: button.getAttribute('aria-haspopup'),
+  }));
+  check(
+    'L2-KEY-07-DISCLOSURE',
+    disclosure.expanded === 'false' && Boolean(disclosure.controls) && disclosure.haspopup === null,
+    `the user menu trigger is a disclosure (expanded=${disclosure.expanded} controls=${disclosure.controls})`,
+  );
   await keyboard.page.click('.avatar-button');
   const userMenuOpen = await keyboard.page.locator('.user-dropdown').count();
   check('L2-KEY-07', userMenuOpen === 1, 'the user menu opens');
-  const menuItems = await keyboard.page.locator('.user-dropdown [role="menuitem"]').count();
-  check('L2-KEY-08', menuItems > 0, `the user menu exposes menu items (${menuItems})`);
+  const menuItems = await keyboard.page.locator('.user-dropdown .dropdown-item').count();
+  const inappropriateMenuRole = await keyboard.page.locator('.user-dropdown [role="menu"], .user-dropdown [role="menuitem"]').count();
+  check('L2-KEY-08', menuItems > 0, `the user menu exposes native action buttons (${menuItems})`);
+  check(
+    'L2-KEY-08-SEMANTICS',
+    inappropriateMenuRole === 0,
+    inappropriateMenuRole === 0
+      ? 'the user menu carries no menu/menuitem roles it does not honour'
+      : `${inappropriateMenuRole} inappropriate menu role(s) remain`,
+  );
   await keyboard.page.keyboard.press('Escape');
   const userMenuClosed = await keyboard.page.locator('.user-dropdown').count();
   check('L2-KEY-09', userMenuClosed === 0, 'Escape closes the user menu');
+  const focusBackOnTrigger = await keyboard.page.evaluate(() => document.activeElement?.classList.contains('avatar-button') ?? false);
+  check('L2-KEY-09-FOCUS', focusBackOnTrigger, 'Escape returns focus to the user menu trigger');
 
   /* The notification centre must open and expose its state. */
   await keyboard.page.click('.notif-bell-button');
@@ -718,6 +751,140 @@ try {
   await narrow.context.close();
 
   /* ---------------------------------------------------------------------- */
+  /* Layer 2h: hidden mobile drawer inertness contract                     */
+  /* ---------------------------------------------------------------------- */
+  console.log('\n--- Layer 2h: hidden mobile drawer inertness ---');
+  const drawer = await openPage(browser, { width: 375, height: 812 });
+  await gotoAndSettle(drawer.page, `${baseUrl}/`);
+
+  const readDrawerState = () => drawer.page.evaluate(() => {
+    const sidebar = document.querySelector('#xcloud-primary-sidebar');
+    if (!sidebar) return null;
+    return {
+      inert: sidebar.inert === true,
+      inertAttribute: sidebar.hasAttribute('inert'),
+      ariaHidden: sidebar.getAttribute('aria-hidden'),
+      collapsed: sidebar.classList.contains('collapsed'),
+    };
+  });
+
+  const closedState = await readDrawerState();
+  check(
+    'L2-INERT-01',
+    Boolean(closedState && closedState.inert && closedState.inertAttribute && closedState.ariaHidden === 'true' && closedState.collapsed),
+    `the closed mobile drawer is inert and aria-hidden (inert=${closedState?.inert} aria-hidden=${closedState?.ariaHidden})`,
+  );
+
+  /* Programmatic focus cannot enter an inert subtree. */
+  const forcedFocus = await drawer.page.evaluate(() => {
+    const link = document.querySelector('#xcloud-primary-sidebar a');
+    if (!link) return { hasLink: false, inside: false };
+    link.focus();
+    return { hasLink: true, inside: Boolean(document.activeElement?.closest('#xcloud-primary-sidebar')) };
+  });
+  check(
+    'L2-INERT-02',
+    !forcedFocus.inside,
+    forcedFocus.hasLink
+      ? 'focus() cannot move into the closed drawer'
+      : 'the closed drawer still renders its links (they exist but are unreachable)',
+  );
+
+  /* Tab must never land inside the hidden navigation. */
+  let tabEnteredSidebar = false;
+  await drawer.page.evaluate(() => document.body.focus());
+  for (let step = 0; step < 60; step += 1) {
+    await drawer.page.keyboard.press('Tab');
+    const inside = await drawer.page.evaluate(() => Boolean(document.activeElement?.closest('#xcloud-primary-sidebar')));
+    if (inside) { tabEnteredSidebar = true; break; }
+  }
+  check('L2-INERT-03', !tabEnteredSidebar, 'Tab alone never enters the hidden navigation');
+
+  /* Shift+Tab from the workspace must also skip the hidden drawer. */
+  await drawer.page.evaluate(() => {
+    const target = document.querySelector('#main-content input, #main-content button, #main-content a, #main-content [tabindex]');
+    (target ?? document.querySelector('#main-content')).focus();
+  });
+  let shiftTabEnteredSidebar = false;
+  for (let step = 0; step < 20; step += 1) {
+    await drawer.page.keyboard.press('Shift+Tab');
+    const inside = await drawer.page.evaluate(() => Boolean(document.activeElement?.closest('#xcloud-primary-sidebar')));
+    if (inside) { shiftTabEnteredSidebar = true; break; }
+  }
+  check('L2-INERT-04', !shiftTabEnteredSidebar, 'Shift+Tab never enters the hidden navigation');
+
+  /* Opening the drawer makes the navigation keyboard reachable. */
+  await drawer.page.click('.app-header .icon-button');
+  const openState = await readDrawerState();
+  const openFocusable = await drawer.page.evaluate(() => {
+    const link = document.querySelector('#xcloud-primary-sidebar a, #xcloud-primary-sidebar button');
+    if (!link) return false;
+    link.focus();
+    return Boolean(document.activeElement?.closest('#xcloud-primary-sidebar'));
+  });
+  check(
+    'L2-INERT-05',
+    Boolean(openState && !openState.inert && !openState.inertAttribute && openState.ariaHidden === null && openFocusable),
+    `the open drawer removes inert and accepts keyboard focus (inert=${openState?.inert} aria-hidden=${openState?.ariaHidden})`,
+  );
+
+  /* Escape closes the drawer and restores focus to the header trigger. */
+  await drawer.page.keyboard.press('Escape');
+  const escapeState = await readDrawerState();
+  const focusRestored = await drawer.page.waitForFunction(
+    () => document.activeElement?.matches('.app-header .icon-button') ?? false,
+    undefined,
+    { timeout: 5000 },
+  ).then(() => true).catch(() => false);
+  check(
+    'L2-INERT-06',
+    Boolean(escapeState && escapeState.collapsed && escapeState.inert && escapeState.ariaHidden === 'true' && focusRestored),
+    `Escape closes the drawer, re-applies inert and restores focus to the header trigger (focusRestored=${focusRestored})`,
+  );
+
+  /* Selecting a navigation entry closes the drawer and leaves no stale state. */
+  await drawer.page.click('.app-header .icon-button');
+  await drawer.page.click('[data-group-key="nav_business"]');
+  await drawer.page.click('a[href="/subscribers"]');
+  await drawer.page.waitForFunction(() => window.location.pathname === '/subscribers', undefined, { timeout: 15000 });
+  const afterNavState = await readDrawerState();
+  const focusAfterNav = await drawer.page.waitForFunction(
+    () => document.activeElement?.matches('.app-header .icon-button') ?? false,
+    undefined,
+    { timeout: 5000 },
+  ).then(() => true).catch(() => false);
+  check(
+    'L2-INERT-07',
+    Boolean(afterNavState && afterNavState.collapsed && afterNavState.inert && afterNavState.ariaHidden === 'true'),
+    `selecting a navigation entry closes the drawer with no stale inert state (collapsed=${afterNavState?.collapsed} inert=${afterNavState?.inert})`,
+  );
+  check('L2-INERT-08', focusAfterNav, 'closing after navigation restores focus to the header trigger');
+
+  /* The drawer state must follow the actual breakpoint, with no stale inert. */
+  await drawer.page.setViewportSize({ width: 1440, height: 900 });
+  const desktopState = await drawer.page.waitForFunction(() => {
+    const sidebar = document.querySelector('#xcloud-primary-sidebar');
+    return Boolean(sidebar && !sidebar.classList.contains('collapsed') && !sidebar.inert);
+  }, undefined, { timeout: 5000 }).then(() => readDrawerState()).catch(() => null);
+  check(
+    'L2-INERT-09',
+    Boolean(desktopState && !desktopState.inert && !desktopState.collapsed && desktopState.ariaHidden === null),
+    `switching to desktop leaves the rail interactive (inert=${desktopState?.inert} collapsed=${desktopState?.collapsed})`,
+  );
+
+  await drawer.page.setViewportSize({ width: 375, height: 812 });
+  const mobileAgainState = await drawer.page.waitForFunction(() => {
+    const sidebar = document.querySelector('#xcloud-primary-sidebar');
+    return Boolean(sidebar && sidebar.classList.contains('collapsed') && sidebar.inert);
+  }, undefined, { timeout: 5000 }).then(() => readDrawerState()).catch(() => null);
+  check(
+    'L2-INERT-10',
+    Boolean(mobileAgainState && mobileAgainState.inert && mobileAgainState.collapsed && mobileAgainState.ariaHidden === 'true'),
+    `switching back to mobile re-applies the hidden-drawer contract (inert=${mobileAgainState?.inert})`,
+  );
+  await drawer.context.close();
+
+  /* ---------------------------------------------------------------------- */
   /* Layer 2g: read-only and expired-session journeys                       */
   /* ---------------------------------------------------------------------- */
   console.log('\n--- Layer 2g: read-only and expired session ---');
@@ -759,7 +926,7 @@ try {
   const evidenceDirectory = path.resolve(frontendRoot, '..', 'reports');
   await mkdir(evidenceDirectory, { recursive: true });
   await writeFile(
-    path.join(evidenceDirectory, 'FE-C3-CROSS-ROUTE-EVIDENCE.json'),
+    path.join(evidenceDirectory, 'FE-C4-CROSS-ROUTE-EVIDENCE.json'),
     `${JSON.stringify({
       generatedAt: new Date().toISOString(),
       bundle: built.facts,
@@ -772,7 +939,7 @@ try {
     }, null, 2)}\n`,
     'utf8',
   );
-  console.log(`\n[acceptance:cross-route-ux] evidence written to reports/FE-C3-CROSS-ROUTE-EVIDENCE.json`);
+  console.log(`\n[acceptance:cross-route-ux] evidence written to reports/FE-C4-CROSS-ROUTE-EVIDENCE.json`);
 
   check(
     'SUITE-01',

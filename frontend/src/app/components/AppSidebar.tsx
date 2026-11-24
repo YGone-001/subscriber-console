@@ -98,6 +98,14 @@ export function AppSidebar({
       className={`app-sidebar ${sidebarOpen ? 'expanded' : 'collapsed'}`}
       aria-label={t('navigation')}
       aria-hidden={isMobileShell && !sidebarOpen ? true : undefined}
+      /*
+       * A closed mobile drawer is translated off-screen but stays in the DOM, so
+       * its navigation controls would otherwise remain tabbable. `inert` removes
+       * the whole subtree from focus, selection and the accessibility tree for as
+       * long as the drawer is closed. The desktop collapsed rail stays interactive
+       * (it is only narrowed, not hidden), so inertness is scoped to mobile.
+       */
+      inert={isMobileShell && !sidebarOpen}
     >
       {sidebarOpen ? (
         <div className="sidebar-filter-wrap">

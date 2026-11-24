@@ -172,6 +172,7 @@ export function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProp
   }, [activeCategory, actionItems, navItems, query, remoteItems]);
 
   const activeSelectedIndex = Math.min(selectedIndex, Math.max(0, filteredItems.length - 1));
+  const activeItem = filteredItems[activeSelectedIndex];
 
   const handleSelect = useCallback((item: PaletteItem) => {
     onClose();
@@ -262,6 +263,15 @@ export function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProp
       className="cp-modal"
       onKeyDown={handleKeyDown}
     >
+      {/*
+       * Arrow keys only move a visual highlight while focus stays in the search
+       * field, so a screen-reader user has no focus change to follow. This live
+       * region announces which result Enter will execute. It is the button-list
+       * model's selection announcement, not a substitute for a listbox.
+       */}
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {activeItem ? t('cp_active_result').replace('{label}', activeItem.label) : ''}
+      </span>
       <div className="cp-search-header">
         <Search size={20} aria-hidden="true" />
         <input

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../providers/AuthProvider';
 import { useI18n } from '../providers/I18nProvider';
@@ -29,6 +29,24 @@ export function AppShell() {
   const [desktop, setDesktop] = useState(() => window.matchMedia(DESKTOP_SHELL_QUERY).matches);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia(DESKTOP_SHELL_QUERY).matches);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const headerToggleRef = useRef<HTMLButtonElement | null>(null);
+  const previousShell = useRef({ desktop, open: sidebarOpen });
+
+  /*
+   * Closing the mobile drawer returns focus to the header toggle. Without this
+   * the focus ring is stranded on a control inside the now-inert sidebar, which
+   * a keyboard user cannot recover from with Tab. The transition is only acted
+   * on when the shell was already mobile, so a desktop <-> mobile breakpoint
+   * change does not steal focus.
+   */
+  useEffect(() => {
+    const previous = previousShell.current;
+    const wasOpenMobileDrawer = previous.desktop === false && previous.open;
+    if (!desktop && !sidebarOpen && wasOpenMobileDrawer) {
+      headerToggleRef.current?.focus();
+    }
+    previousShell.current = { desktop, open: sidebarOpen };
+  }, [desktop, sidebarOpen]);
 
   useEffect(() => {
     const media = window.matchMedia(DESKTOP_SHELL_QUERY);
@@ -85,6 +103,7 @@ export function AppShell() {
       <AppHeader
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        toggleRef={headerToggleRef}
         paletteOpen={paletteOpen}
         onOpenPalette={() => setPaletteOpen(true)}
         onClosePalette={() => setPaletteOpen(false)}
