@@ -35,7 +35,7 @@ import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
 import { loadEnv } from './lib/load-env.mjs';
 import bcrypt from 'bcryptjs';
-import { knowledgeSandbox, waitForGoServer } from './lib/go-backend.mjs';
+import { knowledgeStorageEnv, waitForGoServer } from './lib/go-backend.mjs';
 
 loadEnv(process.cwd());
 
@@ -211,7 +211,7 @@ async function main() {
         MONGODB_XCLOUD_DB: xcloudDbName,
         MONGODB_APP_DB: appDbName,
         JWT_SECRET: JWT_SECRET_STRING,
-        KNOWLEDGE_UPLOAD_DIR: knowledgeSandbox(),
+        ...knowledgeStorageEnv(),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });

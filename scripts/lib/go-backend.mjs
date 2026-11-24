@@ -12,7 +12,7 @@
  *     to report nothing but "failed to become ready".
  */
 
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -22,14 +22,24 @@ const POLL_INTERVAL_MS = 250;
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
- * A writable attachment store for one spawned server.
+ * Isolated knowledge attachment storage for one spawned server.
  *
- * The product default lives under /srv, which an unprivileged CI runner cannot
- * create; the server fails closed when the directory is absent, so every gate
- * that starts the backend must own this path rather than inherit the default.
+ * The product defaults live under /srv, which an unprivileged CI runner cannot
+ * create; the server fails closed when either root is absent, so every harness
+ * that starts the backend must own both paths rather than inherit the default.
+ * Both roots live in one temporary root, and each call creates a new root, so
+ * suites that run concurrently cannot observe each other's files.
  */
-export function knowledgeSandbox() {
-  return mkdtempSync(join(tmpdir(), 'xcloud-knowledge-'));
+export function knowledgeStorageEnv() {
+  const root = mkdtempSync(join(tmpdir(), 'xcloud-knowledge-'));
+  const uploadDir = join(root, 'uploads');
+  const trashDir = join(root, 'trash');
+  mkdirSync(uploadDir, { recursive: true });
+  mkdirSync(trashDir, { recursive: true });
+  return {
+    KNOWLEDGE_UPLOAD_DIR: uploadDir,
+    KNOWLEDGE_TRASH_DIR: trashDir,
+  };
 }
 
 /**

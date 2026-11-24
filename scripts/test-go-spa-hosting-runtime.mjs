@@ -8,7 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync, spawn } from 'node:child_process';
 import { deriveGoRegistrations, EXPECTED_GO_REGISTRATIONS } from './lib/go-registrations.mjs';
-import { knowledgeSandbox, waitForGoServer } from './lib/go-backend.mjs';
+import { knowledgeStorageEnv, waitForGoServer } from './lib/go-backend.mjs';
 
 function rawHttpGet(host, port, rawPath) {
   return new Promise((resolve, reject) => {
@@ -127,7 +127,7 @@ async function main() {
       MONGODB_XCLOUD_DB: xcloudDbName,
       MONGODB_APP_DB: appDbName,
       JWT_SECRET: JWT_SECRET_STRING,
-      KNOWLEDGE_UPLOAD_DIR: knowledgeSandbox(),
+      ...knowledgeStorageEnv(),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

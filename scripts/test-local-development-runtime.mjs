@@ -38,7 +38,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveGoToolchain } from './lib/project-paths.mjs';
-import { knowledgeSandbox } from './lib/go-backend.mjs';
+import { knowledgeStorageEnv } from './lib/go-backend.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -141,7 +141,13 @@ function loadEnv() {
     }
   }
   if (!env.JWT_SECRET) env.JWT_SECRET = 'ci-only-placeholder-secret-with-at-least-32-bytes';
-  if (!env.KNOWLEDGE_UPLOAD_DIR) env.KNOWLEDGE_UPLOAD_DIR = knowledgeSandbox();
+  // Explicitly configured storage is preserved; anything missing falls back to
+  // one isolated writable root so the harness never creates or writes /srv.
+  if (!env.KNOWLEDGE_UPLOAD_DIR || !env.KNOWLEDGE_TRASH_DIR) {
+    const fallback = knowledgeStorageEnv();
+    if (!env.KNOWLEDGE_UPLOAD_DIR) env.KNOWLEDGE_UPLOAD_DIR = fallback.KNOWLEDGE_UPLOAD_DIR;
+    if (!env.KNOWLEDGE_TRASH_DIR) env.KNOWLEDGE_TRASH_DIR = fallback.KNOWLEDGE_TRASH_DIR;
+  }
   delete env.HTTP_ADDR;
   return env;
 }

@@ -31,7 +31,7 @@ import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
 import bcrypt from 'bcryptjs';
 import { loadEnv } from './lib/load-env.mjs';
-import { knowledgeSandbox, waitForGoServer } from './lib/go-backend.mjs';
+import { knowledgeStorageEnv, waitForGoServer } from './lib/go-backend.mjs';
 
 loadEnv(process.cwd());
 
@@ -447,7 +447,7 @@ async function main() {
         MONGODB_XCLOUD_DB: xcloudDbName,
         MONGODB_APP_DB: appDbName,
         JWT_SECRET: JWT_SECRET_STRING,
-        KNOWLEDGE_UPLOAD_DIR: knowledgeSandbox(),
+        ...knowledgeStorageEnv(),
         NF_HEALTH_ALLOWED_TARGETS: `127.0.0.1:${mockPort}`,
         NF_HEALTH_SERVICE_UNITS: 'mockd,amfd',
         // Server-owned local bindings: only these Inventory resources may
