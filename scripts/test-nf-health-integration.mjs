@@ -925,7 +925,10 @@ async function main() {
       const approvedBin = path.join(procDir, 'mockd');
       fs.copyFileSync('/bin/sleep', approvedBin);
       fs.chmodSync(approvedBin, 0o755);
-      const probe = spawnSync(approvedBin, ['0'], { encoding: 'utf8' });
+      // Ubuntu >= 26.04 ships coreutils as a multicall binary that dispatches
+      // on argv[0]; the copy must keep the sleep personality while its file
+      // name stays "mockd" for the kernel comm/exe identity the server checks.
+      const probe = spawnSync(approvedBin, ['0'], { encoding: 'utf8', argv0: 'sleep' });
       assert.equal(
         probe.status,
         0,
@@ -937,14 +940,14 @@ async function main() {
         child.on('exit', (code, signal) => childEvents.push(`${label}:exit:${code}:${signal}`));
         child.stderr?.on('data', (chunk) => childEvents.push(`${label}:stderr:${String(chunk).trim()}`));
       };
-      const approved = spawn(approvedBin, ['120'], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+      const approved = spawn(approvedBin, ['120'], { stdio: ['ignore', 'pipe', 'pipe'], detached: true, argv0: 'sleep' });
       localProcesses.push(approved);
       track(approved, 'approved');
       // A lookalike process that must never satisfy strict identity.
       const lookalikeBin = path.join(procDir, 'mockd-test');
       fs.copyFileSync('/bin/sleep', lookalikeBin);
       fs.chmodSync(lookalikeBin, 0o755);
-      const lookalike = spawn(lookalikeBin, ['120'], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+      const lookalike = spawn(lookalikeBin, ['120'], { stdio: ['ignore', 'pipe', 'pipe'], detached: true, argv0: 'sleep' });
       localProcesses.push(lookalike);
       track(lookalike, 'lookalike');
       const describe = () => {
