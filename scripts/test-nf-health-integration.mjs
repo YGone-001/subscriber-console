@@ -93,6 +93,41 @@ async function verifyAsync(description, fn) {
   }
 }
 
+/*
+ * A shared /proc scan that mirrors the strict identity rule under test: the
+ * exact comm value plus an executable basename that resolves to the same name.
+ * The suite owns the processes it measures, so the assertion starts only after
+ * the child is observable; when it never appears the message reports what the
+ * kernel actually exposed instead of a bare state mismatch.
+ */
+async function waitForOwnedProcess(name, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  let visible = [];
+  while (Date.now() < deadline) {
+    visible = [];
+    for (const entry of fs.readdirSync('/proc')) {
+      if (!/^\d+$/.test(entry)) continue;
+      let comm = '';
+      try {
+        comm = fs.readFileSync(`/proc/${entry}/comm`, 'utf8').trim();
+      } catch {
+        continue;
+      }
+      if (!comm.includes('mock')) continue;
+      let exe = '';
+      try {
+        exe = fs.readlinkSync(`/proc/${entry}/exe`);
+      } catch {
+        exe = '';
+      }
+      visible.push(`${entry}:${comm}:${exe || 'exe-unreadable'}`);
+      if (comm === name && exe && path.basename(exe) === name) return entry;
+    }
+    await new Promise((resolve) => { setTimeout(resolve, 100); });
+  }
+  throw new Error(`${name} never became observable in /proc; candidates: ${visible.join(' | ') || 'none'}`);
+}
+
 const CANDIDATE_ID = '9b2d3c40-0011-4b11-9d11-000000000011';
 // Separate Discovery candidates back separate monitoring targets so each
 // collection scenario can run without hitting the per-target cooldown.
@@ -903,6 +938,9 @@ async function main() {
       const lookalike = spawn(lookalikeBin, ['120'], { stdio: 'ignore', detached: true });
       localProcesses.push(lookalike);
 
+      await waitForOwnedProcess('mockd');
+      await waitForOwnedProcess('mockd-test');
+
       const created = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
         resourceId: RESOURCE_IMS_PROC,
         name: 'P-CSCF local process',
@@ -924,7 +962,7 @@ async function main() {
       const sample = res.json.sample;
       assert.ok(sample, 'L1 evidence must be recorded');
       assert.equal(sample.layers.process.measured, true);
-      assert.equal(sample.layers.process.state, 'healthy');
+      assert.equal(sample.layers.process.state, 'healthy', JSON.stringify(sample.layers.process));
       assert.equal(sample.layers.interface.measured, false);
       assert.equal(sample.layers.interface.state, 'not_configured');
       assert.equal(sample.layers.service.measured, false);
