@@ -438,6 +438,7 @@ export function DiscoveryPage() {
         labelledBy="discovery-create-title"
         closeOnOverlay={!submitting}
         closeOnEscape={!submitting}
+        portal
       >
         <div className={styles.modalHeader}>
           <h2 id="discovery-create-title">{t('discovery_create_source')}</h2>
