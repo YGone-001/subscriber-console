@@ -734,6 +734,105 @@ function handleApi(req, res, url, context) {
     return sendJson(res, 200, projectOperationsResources(url));
   }
 
+  /* ---------------------------------------------- operations containment -- */
+  /* The real endpoint composes the Inventory tree population with active
+   * `contains` edges. This fixture graph declares no containment edge, so the
+   * honest projection is a flat root level with no scoped edges; the declared
+   * `registers_with` edge still references both resources, which is why none of
+   * them is unlinked. */
+  if (pathname === '/api/operations/containment') {
+    const parentId = (url.searchParams.get('parentId') ?? '').trim();
+    const activeContains = TOPOLOGY_EDGES.filter(
+      (edge) => edge.lifecycleState === 'active' && edge.relationshipType === 'contains',
+    );
+    const referenced = new Set(TOPOLOGY_EDGES
+      .filter((edge) => edge.lifecycleState === 'active')
+      .flatMap((edge) => [edge.fromResourceId, edge.toResourceId]));
+    const childrenOf = new Map();
+    for (const edge of activeContains) {
+      childrenOf.set(edge.fromResourceId, [...(childrenOf.get(edge.fromResourceId) ?? []), edge.toResourceId]);
+    }
+    const toDto = (resource) => ({
+      resourceId: resource.resourceId,
+      name: resource.name,
+      displayName: resource.displayName,
+      domain: resource.domain,
+      kind: resource.kind,
+      role: resource.role,
+      lifecycleState: resource.lifecycleState,
+      childCount: childrenOf.get(resource.resourceId)?.length ?? 0,
+    });
+    const levelIds = new Set(parentId
+      ? (childrenOf.get(parentId) ?? [])
+      : INVENTORY_RESOURCES
+          .filter((resource) => !activeContains.some((edge) => edge.toResourceId === resource.resourceId))
+          .map((resource) => resource.resourceId));
+    const level = INVENTORY_RESOURCES.filter((resource) => levelIds.has(resource.resourceId));
+    const unlinked = INVENTORY_RESOURCES.filter(
+      (resource) =>
+        resource.lifecycleState !== 'retired' &&
+        ['network_function_instance', 'network_element'].includes(resource.kind) &&
+        !referenced.has(resource.resourceId),
+    );
+    return sendJson(res, 200, {
+      generatedAt: TS.t5,
+      coverage: 'complete',
+      truncated: false,
+      unlinkedCount: unlinked.length,
+      unlinkedResources: unlinked.map(toDto),
+      resources: level.map(toDto),
+      edges: activeContains
+        .filter((edge) => levelIds.has(edge.fromResourceId))
+        .map((edge) => ({ fromResourceId: edge.fromResourceId, toResourceId: edge.toResourceId })),
+    });
+  }
+
+  /* ------------------------------------------- nf health association read -- */
+  /* The shared operations shell resolves "which of these Inventory resources
+   * have a monitoring target". The fixture answers only for resources it
+   * declares a target for; an unmatched identifier is a completed lookup with
+   * no target, never a failed read. */
+  if (pathname === '/api/nf-health/targets' && url.searchParams.has('resourceIds')) {
+    const requested = (url.searchParams.get('resourceIds') ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const knownTargets = {
+      [RESOURCE_IDS.amf]: {
+        targetId: TARGET_IDS.amf,
+        schemaVersion: 1,
+        resourceId: RESOURCE_IDS.amf,
+        name: 'amf-01',
+        collectorProfile: 'http_metrics',
+        enabled: true,
+        domain: '5gc',
+        nfType: 'AMF',
+        identityState: 'inventory_authoritative',
+        revision: 1,
+        createdAt: TS.t1,
+        createdBy: 'fixture',
+        updatedAt: TS.t4,
+        updatedBy: 'fixture',
+        lastMeasuredAt: TS.t4,
+        coverage: { l1Measured: true, l2Measured: true, l3Measured: false, l3Available: false },
+        freshness: {
+          state: 'fresh',
+          ageSeconds: 24,
+          policySeconds: 300,
+          basis: 'lastMeasuredAt',
+          evaluatedAt: TS.t5,
+        },
+        overallState: 'healthy',
+        latestSampleAt: TS.t4,
+        lastRunStatus: 'success',
+        lastRunAt: TS.t4,
+        statusComplete: true,
+      },
+    };
+    const targets = requested.map((resourceId) => knownTargets[resourceId]).filter(Boolean);
+    return sendJson(res, 200, { targets, page: { limit: 200, nextCursor: null, hasMore: false } });
+  }
+
   /* ----------------------------------------------------------- discovery -- */
 
   if (pathname === '/api/discovery/meta') {
