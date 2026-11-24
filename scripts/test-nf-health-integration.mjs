@@ -26,7 +26,7 @@ import net from 'node:net';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { execSync, spawn } from 'node:child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
 import bcrypt from 'bcryptjs';
@@ -94,38 +94,34 @@ async function verifyAsync(description, fn) {
 }
 
 /*
- * A shared /proc scan that mirrors the strict identity rule under test: the
- * exact comm value plus an executable basename that resolves to the same name.
  * The suite owns the processes it measures, so the assertion starts only after
- * the child is observable; when it never appears the message reports what the
- * kernel actually exposed instead of a bare state mismatch.
+ * the spawned child is observable with the exact comm and executable identity
+ * the server requires. The failure message reports what the kernel actually
+ * exposed for that PID (and the child's lifecycle events) instead of a bare
+ * state mismatch.
  */
-async function waitForOwnedProcess(name, timeoutMs = 10000) {
+async function waitForOwnedProcess(child, name, describe, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
-  let visible = [];
   while (Date.now() < deadline) {
-    visible = [];
-    for (const entry of fs.readdirSync('/proc')) {
-      if (!/^\d+$/.test(entry)) continue;
-      let comm = '';
+    if (child.exitCode !== null || child.signalCode !== null) break;
+    let comm = '';
+    let exe = '';
+    try {
+      comm = fs.readFileSync(`/proc/${child.pid}/comm`, 'utf8').trim();
+    } catch {
+      comm = '';
+    }
+    if (comm) {
       try {
-        comm = fs.readFileSync(`/proc/${entry}/comm`, 'utf8').trim();
-      } catch {
-        continue;
-      }
-      if (!comm.includes('mock')) continue;
-      let exe = '';
-      try {
-        exe = fs.readlinkSync(`/proc/${entry}/exe`);
+        exe = fs.readlinkSync(`/proc/${child.pid}/exe`);
       } catch {
         exe = '';
       }
-      visible.push(`${entry}:${comm}:${exe || 'exe-unreadable'}`);
-      if (comm === name && exe && path.basename(exe) === name) return entry;
+      if (comm === name && exe && path.basename(exe) === name) return child.pid;
     }
     await new Promise((resolve) => { setTimeout(resolve, 100); });
   }
-  throw new Error(`${name} never became observable in /proc; candidates: ${visible.join(' | ') || 'none'}`);
+  throw new Error(`${name} never became observable in /proc: ${describe()}`);
 }
 
 const CANDIDATE_ID = '9b2d3c40-0011-4b11-9d11-000000000011';
@@ -929,17 +925,47 @@ async function main() {
       const approvedBin = path.join(procDir, 'mockd');
       fs.copyFileSync('/bin/sleep', approvedBin);
       fs.chmodSync(approvedBin, 0o755);
-      const approved = spawn(approvedBin, ['120'], { stdio: 'ignore', detached: true });
+      const probe = spawnSync(approvedBin, ['0'], { encoding: 'utf8' });
+      assert.equal(
+        probe.status,
+        0,
+        `copied executable probe failed: error=${probe.error?.code ?? ''} status=${probe.status} signal=${probe.signal ?? ''} stderr=${probe.stderr ?? ''}`,
+      );
+      const childEvents = [];
+      const track = (child, label) => {
+        child.on('error', (err) => childEvents.push(`${label}:error:${err.code || err.message}`));
+        child.on('exit', (code, signal) => childEvents.push(`${label}:exit:${code}:${signal}`));
+        child.stderr?.on('data', (chunk) => childEvents.push(`${label}:stderr:${String(chunk).trim()}`));
+      };
+      const approved = spawn(approvedBin, ['120'], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
       localProcesses.push(approved);
+      track(approved, 'approved');
       // A lookalike process that must never satisfy strict identity.
       const lookalikeBin = path.join(procDir, 'mockd-test');
       fs.copyFileSync('/bin/sleep', lookalikeBin);
       fs.chmodSync(lookalikeBin, 0o755);
-      const lookalike = spawn(lookalikeBin, ['120'], { stdio: 'ignore', detached: true });
+      const lookalike = spawn(lookalikeBin, ['120'], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
       localProcesses.push(lookalike);
+      track(lookalike, 'lookalike');
+      const describe = () => {
+        const state = (child, label) => {
+          let comm = '';
+          let exe = '';
+          try { comm = fs.readFileSync(`/proc/${child.pid}/comm`, 'utf8').trim(); } catch { comm = ''; }
+          try { exe = fs.readlinkSync(`/proc/${child.pid}/exe`); } catch { exe = ''; }
+          return `${label}(pid=${child.pid}) comm=${comm || 'gone'} exe=${exe || '-'} exit=${child.exitCode} signal=${child.signalCode}`;
+        };
+        return [
+          `tmpdir=${os.tmpdir()}`,
+          `binary=${approvedBin}`,
+          state(approved, 'approved'),
+          state(lookalike, 'lookalike'),
+          `events=${childEvents.join(',') || 'none'}`,
+        ].join(' | ');
+      };
 
-      await waitForOwnedProcess('mockd');
-      await waitForOwnedProcess('mockd-test');
+      await waitForOwnedProcess(approved, 'mockd', describe);
+      await waitForOwnedProcess(lookalike, 'mockd-test', describe);
 
       const created = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
         resourceId: RESOURCE_IMS_PROC,
