@@ -13,6 +13,14 @@
   min-width: 0;
 }
 
+/* The page-size <label> wraps a sr-only caption and the <select>; the class was
+ * referenced by the component but never defined, so the label had no rule. */
+.pageSize {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .controls {
   display: flex;
   align-items: center;

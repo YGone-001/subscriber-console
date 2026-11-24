@@ -29,7 +29,14 @@
 }
 
 .button:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  /*
+   * --focus-ring is a box-shadow value (`0 0 0 3px ...`), not a colour: used in
+   * the `outline` shorthand it makes the whole declaration invalid, so the
+   * header rendered no keyboard focus indicator at all. The sanctioned 2px
+   * primary outline (design-tokens.md, "Hover / Focus") keeps the inset ring
+   * inside the cell without overflowing the table.
+   */
+  outline: 2px solid var(--sys-color-action-primary);
   outline-offset: -3px;
 }
 

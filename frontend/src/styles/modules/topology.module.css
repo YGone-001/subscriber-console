@@ -580,6 +580,10 @@
   font-size: var(--ref-font-size-data);
 }
 
+.pagerSummary {
+  min-width: 0;
+}
+
 .pagerControls {
   display: flex;
   align-items: center;

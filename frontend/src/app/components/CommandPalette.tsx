@@ -227,6 +227,13 @@ export function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProp
         key={item.id}
         onClick={() => handleSelect(item)}
         onMouseEnter={() => setSelectedIndex(index)}
+        /*
+         * Arrow-key navigation only moves a visual highlight; focus stays in
+         * the search field. aria-current is the valid way to tell a screen
+         * reader which row Enter will activate, since aria-selected is not
+         * permitted on a button.
+         */
+        aria-current={selected ? 'true' : undefined}
         className={`cp-item-row ${selected ? 'cp-item-row-selected' : ''}`}
       >
         <span className="cp-item-icon-box">
@@ -278,6 +285,7 @@ export function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProp
             key={category}
             type="button"
             className={`cp-category-tab ${activeCategory === category ? 'active' : ''}`}
+            aria-pressed={activeCategory === category}
             onClick={() => { setActiveCategory(category); setSelectedIndex(0); }}
           >
             {t(`cp_cat_${category}`)}

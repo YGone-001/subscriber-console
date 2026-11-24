@@ -655,7 +655,7 @@ export default function AdjustBalanceModal({
               >
                 {reconciling ? (
                   <>
-                    <RefreshCw size={14} className="ocs-spin" aria-hidden="true" /> {t('refreshing')}
+                    <RefreshCw size={14} className="ocs-spin" aria-hidden="true" /> {t('ocs_balance_review_refreshing')}
                   </>
                 ) : (
                   <>
@@ -909,7 +909,7 @@ export default function AdjustBalanceModal({
             <table className="ocs-review-table">
               <thead>
                 <tr>
-                  <th>{t('metric')}</th>
+                  <th>{t('ocs_balance_review_metric')}</th>
                   <th>{t('ocs_balance_current_total')}</th>
                   <th>{t('ocs_balance_signed_delta')}</th>
                   <th>{t('ocs_balance_expected_total')}</th>
@@ -918,7 +918,7 @@ export default function AdjustBalanceModal({
               <tbody>
                 <tr>
                   <td>
-                    <strong>{t('total')}</strong>
+                    <strong>{t('ocs_balance_review_total')}</strong>
                   </td>
                   <td className="ocs-mono">
                     {projection ? formatBucketDisplay(bucket, projection.beforeTotal) : '\u2014'}
@@ -938,7 +938,7 @@ export default function AdjustBalanceModal({
                 </tr>
                 <tr>
                   <td>
-                    <strong>{t('available')}</strong>
+                    <strong>{t('ocs_balance_review_available')}</strong>
                   </td>
                   <td className="ocs-mono">
                     {projection ? formatBucketDisplay(bucket, projection.beforeAvailable) : '\u2014'}

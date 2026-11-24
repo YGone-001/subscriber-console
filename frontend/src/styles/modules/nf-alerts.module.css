@@ -266,6 +266,9 @@
 .badgeCritical,
 .badgeWarning,
 .badgeInfo,
+.badgeHealthy,
+.badgeDegraded,
+.badgeNotConfigured,
 .badgeEnabled,
 .badgeDisabled,
 .badgeAcknowledged,
@@ -299,6 +302,23 @@
   background: var(--surface-hover);
 }
 
+.badgeHealthy {
+  color: var(--success, var(--primary));
+  border-color: color-mix(in srgb, var(--success, var(--primary)) 35%, var(--surface-border));
+  background: color-mix(in srgb, var(--success, var(--primary)) 10%, transparent);
+}
+
+.badgeDegraded {
+  color: var(--warning, var(--text-secondary));
+  border-color: color-mix(in srgb, var(--warning, var(--text-secondary)) 35%, var(--surface-border));
+  background: color-mix(in srgb, var(--warning, var(--text-secondary)) 10%, transparent);
+}
+
+.badgeNotConfigured {
+  color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
 .badgeUnhealthy {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 35%, var(--surface-border));
@@ -320,6 +340,17 @@
 .badgeDisabled {
   color: var(--text-muted);
   background: var(--surface-hover);
+}
+
+/*
+ * Neutral inline note used by the notification settings dialog for empty,
+ * pending and inline-error copy. The two nf-alerts files reference this class,
+ * so it has to live in this module rather than only in nf-health.
+ */
+.probeEditorEmpty {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-support);
 }
 
 .spin {

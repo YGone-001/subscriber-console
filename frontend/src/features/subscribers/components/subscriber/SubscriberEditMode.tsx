@@ -133,13 +133,16 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
         <div className="dash-card-body">
           <div className="quick-grid">
             <div>
-              <label className="form-label"><span className="form-asterisk">*</span>IMSI</label>
+              <label className="form-label" htmlFor="sub-edit-imsi"><span className="form-asterisk">*</span>IMSI</label>
               {imsi ? (
-                <input type="text" className="form-input input-imsi-readonly" value={imsi} readOnly />
+                <input id="sub-edit-imsi" type="text" className="form-input input-imsi-readonly" value={imsi} readOnly />
               ) : (
                 <>
                   <input
                     type="text"
+                    id="sub-edit-imsi"
+                    aria-invalid={Boolean(inputImsi && !/^\d{15}$/.test(inputImsi) || inputImsiExists) || undefined}
+                    aria-describedby={inputImsiExists ? 'sub-edit-imsi-duplicate' : inputImsi && !/^\d{15}$/.test(inputImsi) ? 'sub-edit-imsi-error' : undefined}
                     className={`form-input hover-glass input-imsi-edit ${(inputImsi && !/^\d{15}$/.test(inputImsi)) || inputImsiExists ? 'border-danger error-shake' : ''}`}
                     placeholder={t("sub_imsi_placeholder")}
                     value={inputImsi}
@@ -147,12 +150,12 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                     maxLength={15}
                   />
                   {inputImsi && !/^\d{15}$/.test(inputImsi) && (
-                    <div className="warning-text">
+                    <div className="warning-text" id="sub-edit-imsi-error">
                       {t("sub_err_imsi_15")}
                     </div>
                   )}
                   {inputImsiExists && (
-                    <div className="warning-text">
+                    <div className="warning-text" id="sub-edit-imsi-duplicate">
                       {duplicateImsiWarning}
                     </div>
                   )}
@@ -165,16 +168,19 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               )}
             </div>
             <div>
-            <label className="form-label"><span className="form-asterisk">*</span>MSISDN</label>
+            <label className="form-label" htmlFor="sub-edit-msisdn"><span className="form-asterisk">*</span>MSISDN</label>
               <input
                 type="text"
+                id="sub-edit-msisdn"
+                aria-invalid={Boolean(inputMsisdnExists || (msisdn && !/^\d+$/.test(msisdn))) || undefined}
+                aria-describedby={inputMsisdnExists ? 'sub-edit-msisdn-duplicate' : undefined}
                 className={`form-input input-msisdn ${inputMsisdnExists || (msisdn && !/^\d+$/.test(msisdn)) ? 'border-danger error-shake' : ''}`}
                 value={msisdn}
                 onChange={(e) => setMsisdn(e.target.value.replace(/\D/g, ""))}
                 placeholder={t("sub_ph_msisdn")}
               />
               {inputMsisdnExists && (
-                <div className="warning-text">
+                <div className="warning-text" id="sub-edit-msisdn-duplicate">
                   {duplicateMsisdnWarning}
                 </div>
               )}
@@ -189,8 +195,9 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               * never a client-side merge of template content into the draft. */}
             {isNewSubscriber && (
               <div>
-                <label className="form-label">{t("profile_template")}</label>
+                <label className="form-label" htmlFor="sub-edit-profile-template">{t("profile_template")}</label>
                 <select
+                  id="sub-edit-profile-template"
                   className="form-input"
                   defaultValue=""
                   onChange={(e) => { loadFromProfile(e.target.value); e.target.value = ''; }}
@@ -227,22 +234,23 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </p>
           )}
           <div className="auth-edit-full">
-            <label className="form-label">{!authReadOnly && <span className="form-asterisk">*</span>}{t("sub_key_k")}</label>
-            <input type="text" className="form-input auth-input-large" value={auth4GData.k} onChange={(e) => setAuth4GData({...auth4GData, k: e.target.value})} placeholder={t("sub_ph_hex")} readOnly={authReadOnly} disabled={authReadOnly} />
+            <label className="form-label" htmlFor="sub-edit-k">{!authReadOnly && <span className="form-asterisk">*</span>}{t("sub_key_k")}</label>
+            <input id="sub-edit-k" type="text" className="form-input auth-input-large" value={auth4GData.k} onChange={(e) => setAuth4GData({...auth4GData, k: e.target.value})} placeholder={t("sub_ph_hex")} readOnly={authReadOnly} disabled={authReadOnly} />
           </div>
           <div className="auth-edit-full">
-            <label className="form-label">{!authReadOnly && <span className="form-asterisk">*</span>}{t("sub_key_op")} ({usimType === "op" ? "OP" : "OPc"})</label>
+            <label className="form-label" htmlFor="sub-edit-op">{!authReadOnly && <span className="form-asterisk">*</span>}{t("sub_key_op")} ({usimType === "op" ? "OP" : "OPc"})</label>
             <div className="auth-op-container">
-              <select className="form-input auth-op-select" value={usimType} onChange={(e) => setUsimType(e.target.value as "opc" | "op")} disabled={authReadOnly}>
+              <select className="form-input auth-op-select" aria-label={t("sub_key_op")} value={usimType} onChange={(e) => setUsimType(e.target.value as "opc" | "op")} disabled={authReadOnly}>
                 <option value="opc">OPc</option>
                 <option value="op">OP</option>
               </select>
-              <input type="text" className="form-input auth-input-large auth-op-input" value={auth4GData.opValue} onChange={(e) => setAuth4GData({...auth4GData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} readOnly={authReadOnly} disabled={authReadOnly} />
+              <input id="sub-edit-op" type="text" className="form-input auth-input-large auth-op-input" value={auth4GData.opValue} onChange={(e) => setAuth4GData({...auth4GData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} readOnly={authReadOnly} disabled={authReadOnly} />
             </div>
           </div>
           <div>
-            <label className="form-label">{t("sub_sqn")}</label>
+            <label className="form-label" htmlFor="sub-edit-sqn">{t("sub_sqn")}</label>
             <input
+              id="sub-edit-sqn"
               type="number"
               className="form-input"
               value={auth4GData.sqn ?? ""}
@@ -253,8 +261,8 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             />
           </div>
           <div>
-            <label className="form-label">{!authReadOnly && <span className="form-asterisk">*</span>}{t("sub_amf")}</label>
-            <input type="text" className="form-input input-auth" value={auth4GData.amf} onChange={(e) => setAuth4GData({...auth4GData, amf: e.target.value})} placeholder={t("sub_ph_amf")} readOnly={authReadOnly} disabled={authReadOnly} />
+            <label className="form-label" htmlFor="sub-edit-amf">{!authReadOnly && <span className="form-asterisk">*</span>}{t("sub_amf")}</label>
+            <input id="sub-edit-amf" type="text" className="form-input input-auth" value={auth4GData.amf} onChange={(e) => setAuth4GData({...auth4GData, amf: e.target.value})} placeholder={t("sub_ph_amf")} readOnly={authReadOnly} disabled={authReadOnly} />
           </div>
         </div>
       </div>
@@ -267,29 +275,33 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
         </div>
         <div className="dash-card-body network-edit-grid">
             <div>
-              <label className="form-label network-label"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_dl")}</label>
+              <label className="form-label network-label" htmlFor="sub-edit-ambr-dl"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_dl")}</label>
               <div className="input-composite">
                 <input
+                  id="sub-edit-ambr-dl"
+                  aria-label={t("sub_lbl_ambr_dl")}
                   type="number"
                   value={ueAmbr.downlink?.value ?? ""}
                   onFocus={(e) => e.target.select()}
                   onChange={(e) => setUeAmbr({ ...ueAmbr, downlink: { ...ueAmbr.downlink, value: e.target.value === "" ? 0 : Number(e.target.value) } })}
                 />
-                <select value={ueAmbr.downlink?.unit || 1} onChange={(e) => setUeAmbr({...ueAmbr, downlink: { ...ueAmbr.downlink, unit: Number(e.target.value) }})}>
+                <select aria-label={t("sub_lbl_ambr_dl") + " " + t("ocs_unit_label")} value={ueAmbr.downlink?.unit || 1} onChange={(e) => setUeAmbr({...ueAmbr, downlink: { ...ueAmbr.downlink, unit: Number(e.target.value) }})}>
                   {AMBR_UNITS.map(u => <option key={u.val} value={u.val}>{u.label}</option>)}
                 </select>
               </div>
             </div>
             <div>
-              <label className="form-label network-label"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_ul")}</label>
+              <label className="form-label network-label" htmlFor="sub-edit-ambr-ul"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_ul")}</label>
               <div className="input-composite">
                 <input
+                  id="sub-edit-ambr-ul"
+                  aria-label={t("sub_lbl_ambr_ul")}
                   type="number"
                   value={ueAmbr.uplink?.value ?? ""}
                   onFocus={(e) => e.target.select()}
                   onChange={(e) => setUeAmbr({ ...ueAmbr, uplink: { ...ueAmbr.uplink, value: e.target.value === "" ? 0 : Number(e.target.value) } })}
                 />
-                <select value={ueAmbr.uplink?.unit || 1} onChange={(e) => setUeAmbr({...ueAmbr, uplink: { ...ueAmbr.uplink, unit: Number(e.target.value) }})}>
+                <select aria-label={t("sub_lbl_ambr_ul") + " " + t("ocs_unit_label")} value={ueAmbr.uplink?.unit || 1} onChange={(e) => setUeAmbr({...ueAmbr, uplink: { ...ueAmbr.uplink, unit: Number(e.target.value) }})}>
                   {AMBR_UNITS.map(u => <option key={u.val} value={u.val}>{u.label}</option>)}
                 </select>
               </div>
@@ -397,16 +409,18 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </p>
           )}
           <div>
-            <label className="form-label form-label-flex">
+            <label className="form-label form-label-flex" htmlFor="sub-edit-plmn">
               <span><span className="form-asterisk">*</span>PLMN</span>
               <span className="auto-linked-text">{t("sub_auto_linked")}</span>
             </label>
-            <input type="text" className="form-input plmn-readonly" value={ocsPlmn} readOnly placeholder="e.g. 45400" />
+            <input id="sub-edit-plmn" type="text" className="form-input plmn-readonly" value={ocsPlmn} readOnly placeholder="e.g. 45400" />
           </div>
           <div>
-            <label className="form-label">{t("sub_traffic_total_quota")}</label>
+            <label className="form-label" htmlFor="sub-edit-traffic-total">{t("sub_traffic_total_quota")}</label>
             <div className="input-composite">
               <input
+                id="sub-edit-traffic-total"
+                aria-label={t("sub_traffic_total_quota")}
                 type="number"
                 min="0"
                 step="any"
@@ -415,6 +429,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                 onChange={(e) => setOcsTrafficTotalStr(composeByteInput(e.target.value, totalTrafficInput.unit))}
               />
               <select
+                aria-label={t("sub_traffic_total_quota") + " " + t("ocs_unit_label")}
                 value={totalTrafficInput.unit}
                 onChange={(e) => setOcsTrafficTotalStr(composeByteInput(totalTrafficInput.value, e.target.value))}
               >
@@ -423,9 +438,11 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </div>
           </div>
           <div>
-            <label className="form-label">{t("sub_traffic_balance")}</label>
+            <label className="form-label" htmlFor="sub-edit-traffic-balance">{t("sub_traffic_balance")}</label>
             <div className="input-composite">
               <input
+                id="sub-edit-traffic-balance"
+                aria-label={t("sub_traffic_balance")}
                 type="number"
                 min="0"
                 step="any"
@@ -434,6 +451,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                 onChange={(e) => setOcsTrafficBalanceStr(composeByteInput(e.target.value, balanceTrafficInput.unit))}
               />
               <select
+                aria-label={t("sub_traffic_balance") + " " + t("ocs_unit_label")}
                 value={balanceTrafficInput.unit}
                 onChange={(e) => setOcsTrafficBalanceStr(composeByteInput(balanceTrafficInput.value, e.target.value))}
               >
@@ -442,8 +460,9 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </div>
           </div>
           <div>
-            <label className="form-label">{t("sub_360_tariff_plan")}</label>
+            <label className="form-label" htmlFor="sub-edit-plan">{t("sub_360_tariff_plan")}</label>
             <select
+              id="sub-edit-plan"
               className="form-input plan-id-select"
               value={ocsPlanId}
               onChange={(e) => setOcsPlanId(e.target.value)}
@@ -458,16 +477,16 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </select>
           </div>
           <div>
-            <label className="form-label">{t("sub_360_plan_status")}</label>
-            <input type="text" className="form-input plan-status-readonly" value={planStatusLabel(t, ocsPlanStatus)} readOnly />
+            <label className="form-label" htmlFor="sub-edit-plan-status">{t("sub_360_plan_status")}</label>
+            <input id="sub-edit-plan-status" type="text" className="form-input plan-status-readonly" value={planStatusLabel(t, ocsPlanStatus)} readOnly />
           </div>
           <div>
-            <label className="form-label">{t("sub_contract_status")}</label>
-            <input type="text" className="form-input plan-status-readonly" value={contractStatusLabel(t, ocsContractStatus)} readOnly />
+            <label className="form-label" htmlFor="sub-edit-contract-status">{t("sub_contract_status")}</label>
+            <input id="sub-edit-contract-status" type="text" className="form-input plan-status-readonly" value={contractStatusLabel(t, ocsContractStatus)} readOnly />
           </div>
           <div>
-            <label className="form-label">{t("sub_360_balance_threshold")}</label>
-            <input type="text" className="form-input plan-status-readonly" value={thresholdDisplay} readOnly />
+            <label className="form-label" htmlFor="sub-edit-balance-threshold">{t("sub_360_balance_threshold")}</label>
+            <input id="sub-edit-balance-threshold" type="text" className="form-input plan-status-readonly" value={thresholdDisplay} readOnly />
           </div>
           <RatingRuleLinkPanel
             planId={ocsPlanId}
@@ -477,9 +496,11 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             t={t}
           />
           <div>
-            <label className="form-label">{t("sub_360_voice_quota")}</label>
+            <label className="form-label" htmlFor="sub-edit-voice-quota">{t("sub_360_voice_quota")}</label>
             <div className="input-composite">
               <input
+                id="sub-edit-voice-quota"
+                aria-label={t("sub_360_voice_quota")}
                 type="number"
                 min="0"
                 step="any"
@@ -488,6 +509,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                 onChange={(e) => setOcsVoiceTotalStr(composeSecondsInput(e.target.value, totalVoiceInput.unit))}
               />
               <select
+                aria-label={t("sub_360_voice_quota") + " " + t("ocs_unit_label")}
                 value={totalVoiceInput.unit}
                 onChange={(e) => setOcsVoiceTotalStr(composeSecondsInput(totalVoiceInput.value, e.target.value))}
               >
@@ -496,9 +518,11 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </div>
           </div>
           <div>
-            <label className="form-label">{t("sub_360_voice_balance")}</label>
+            <label className="form-label" htmlFor="sub-edit-voice-balance">{t("sub_360_voice_balance")}</label>
             <div className="input-composite">
               <input
+                id="sub-edit-voice-balance"
+                aria-label={t("sub_360_voice_balance")}
                 type="number"
                 min="0"
                 step="any"
@@ -507,6 +531,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                 onChange={(e) => setOcsVoiceBalanceStr(composeSecondsInput(e.target.value, balanceVoiceInput.unit))}
               />
               <select
+                aria-label={t("sub_360_voice_balance") + " " + t("ocs_unit_label")}
                 value={balanceVoiceInput.unit}
                 onChange={(e) => setOcsVoiceBalanceStr(composeSecondsInput(balanceVoiceInput.value, e.target.value))}
               >
@@ -515,8 +540,9 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </div>
           </div>
           <div>
-            <label className="form-label">{t("sub_360_sms_quota")}</label>
+            <label className="form-label" htmlFor="sub-edit-sms-quota">{t("sub_360_sms_quota")}</label>
             <input
+              id="sub-edit-sms-quota"
               type="number"
               className="form-input"
               min="0"
@@ -527,8 +553,9 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             />
           </div>
           <div>
-            <label className="form-label">{t("sub_360_sms_balance")}</label>
+            <label className="form-label" htmlFor="sub-edit-sms-balance">{t("sub_360_sms_balance")}</label>
             <input
+              id="sub-edit-sms-balance"
               type="number"
               className="form-input"
               min="0"

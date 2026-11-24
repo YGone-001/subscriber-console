@@ -110,10 +110,28 @@ export function NotificationCenter() {
                     </div>
                     <p className="notif-card-msg">{item.message}</p>
                     {item.link ? (
-                      <div className="notif-card-link">
+                      /*
+                       * The whole card is a pointer convenience, but keyboard
+                       * focus must land on a real control (design-system-rules
+                       * 2.4): making an entire row tabbable would put a
+                       * meaningless stop in the Tab order. This button is the
+                       * explicit affordance and carries the notification title
+                       * so its purpose is not just "View details".
+                       */
+                      <button
+                        type="button"
+                        className="notif-card-link"
+                        aria-label={`${t('notif_view_details')}: ${item.title}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          markAsRead(item.id);
+                          setOpen(false);
+                          navigate(item.link as string);
+                        }}
+                      >
                         <span>{t('notif_view_details')}</span>
-                        <ExternalLink size={12} />
-                      </div>
+                        <ExternalLink size={12} aria-hidden="true" />
+                      </button>
                     ) : null}
                   </div>
                   {item.read ? null : <span className="notif-unread-dot" />}

@@ -1405,6 +1405,21 @@
   color: var(--primary);
   font-weight: 600;
   margin-top: 0.25rem;
+  /* This is a real <button>: the whole card is only a pointer convenience, so
+   * the keyboard entry point has to be the control itself. */
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.notif-card-link:focus-visible {
+  outline: 2px solid var(--sys-color-action-primary);
+  outline-offset: 2px;
+  border-radius: var(--ref-radius-compact);
 }
 
 .notif-unread-dot {

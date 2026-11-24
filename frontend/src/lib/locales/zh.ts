@@ -1712,6 +1712,10 @@ export const zh: Record<string, string> = {
     ocs_balance_btn_confirm: "确认调整",
     ocs_balance_btn_back: "返回编辑",
     ocs_balance_canonical_amount: "标准数值",
+    ocs_balance_review_refreshing: "正在刷新…",
+    ocs_balance_review_metric: "指标",
+    ocs_balance_review_total: "总量",
+    ocs_balance_review_available: "可用",
     ocs_balance_signed_delta: "调整增减量",
     ocs_balance_current_total: "当前总量",
     ocs_balance_current_available: "当前可用",
@@ -1935,6 +1939,7 @@ export const zh: Record<string, string> = {
     ocs_clone_desc: "将复制 {planId} 的配额与规则，新计划初始为启用状态。",
     ocs_clone_target_id: "新计划 ID",
     ocs_clone_target_invalid: "计划 ID 只能包含字母、数字、下划线或连字符，长度 3-80。",
+    ocs_clone_target_exists: "目标计划 ID 已存在。",
 
     // Navigation helpers
     ocs_back_to_list: "返回列表",
