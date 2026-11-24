@@ -37,7 +37,7 @@ const VIEWPORT = { width: 1440, height: 900 };
 const TEXT = {
   kpiUnavailable: 'unavailable',
   selectorError: 'Source list failed to load; candidates remain readable.',
-  onboardingUnavailable: 'Local runtime observation is unavailable; candidate reads are unaffected.',
+  onboardingUnavailable: 'Host observation is unavailable; candidate reads are unaffected.',
   unresolvedNote: 'The monitoring association lookup failed; unresolved is not unmonitored.',
   unmonitored: 'Not monitored',
   identity: 'Candidate identity',
